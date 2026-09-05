@@ -4,6 +4,7 @@ import accountAdminService from '@/service/accountAdmin';
 import connectionService from '@/service/connection';
 import historyService from '@/service/history';
 import mysqlServer from '@/service/sql';
+import tablespaceService from '@/service/tablespace';
 import { useTreeStore } from '@/store/tree';
 import { IConnectionDetails, TreeNodeData } from '@/typings';
 import { getDatabaseSupport } from '@/utils/database';
@@ -48,6 +49,14 @@ export const switchIcon: Partial<{
   },
   [TreeNodeType.DATABASE_ACCOUNT]: {
     icon: 'icon-users',
+  },
+  [TreeNodeType.TABLESPACES]: {
+    icon: fileIcon,
+    iconExistDark: true,
+    unfoldIcon: unfoldFileIcon,
+  },
+  [TreeNodeType.TABLESPACE]: {
+    icon: 'icon-database',
   },
   [TreeNodeType.SCHEMAS]: {
     icon: fileIcon,
@@ -284,6 +293,19 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
               extraParams,
             }
           : null;
+        const tablespaceNode: TreeNodeData | null = isDatabaseCapabilitySupported(
+          databaseType,
+          DatabaseCapability.TABLESPACE_MANAGEMENT,
+        )
+          ? {
+              key: treeConfig[TreeNodeType.TABLESPACES].createTreeNodeKey!({ dataSourceId }),
+              originalTitle: i18n('workspace.tablespace.title'),
+              title: null,
+              treeNodeType: TreeNodeType.TABLESPACES,
+              isLeaf: false,
+              extraParams,
+            }
+          : null;
         const monitorNode = MONITOR_TREE_ITEMS.some(({ capability }) =>
           isDatabaseCapabilitySupported(databaseType, capability),
         )
@@ -295,6 +317,9 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
           }
           if (accountNode) {
             data.push(accountNode);
+          }
+          if (tablespaceNode) {
+            data.push(tablespaceNode);
           }
           return data;
         };
@@ -475,6 +500,52 @@ export const treeConfig: { [key in TreeNodeType]: ITreeConfigItem } = {
       return `dataSource_${dataSourceId}-databaseAccount_${encodeURIComponent(user || '')}_${encodeURIComponent(
         host || '',
       )}`;
+    },
+  },
+
+  [TreeNodeType.TABLESPACES]: {
+    getChildren: (extraParams: any) => {
+      return Promise.all([
+        tablespaceService.list({ dataSourceId: extraParams.dataSourceId, refresh: extraParams.refresh }),
+        tablespaceService.capability({ dataSourceId: extraParams.dataSourceId }).catch(() => undefined),
+      ]).then(([tablespaces, capability]) => {
+          return (tablespaces || []).map((tablespace) => {
+            const key = treeConfig[TreeNodeType.TABLESPACE].createTreeNodeKey!({
+              dataSourceId: extraParams.dataSourceId,
+              tablespaceName: tablespace.name,
+            });
+            return {
+              key,
+              originalTitle: tablespace.name,
+              title: null,
+              treeNodeType: TreeNodeType.TABLESPACE,
+              isLeaf: true,
+              extraParams: {
+                ...extraParams,
+                tablespaceName: tablespace.name,
+                tablespaceManageSupported: capability?.manageSupported,
+                tablespaceRenameSupported: capability?.renameSupported,
+                tablespaceServerVersion: capability?.serverVersion,
+              },
+            };
+          });
+        });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId } = formatObject(params);
+      return `dataSource_${dataSourceId}-tablespaces`;
+    },
+  },
+
+  [TreeNodeType.TABLESPACE]: {
+    getChildren: () => {
+      return new Promise((r: (value: TreeNodeData[]) => void) => {
+        r([]);
+      });
+    },
+    createTreeNodeKey: (params) => {
+      const { dataSourceId, tablespaceName } = formatObject(params);
+      return `dataSource_${dataSourceId}-tablespace_${encodeURIComponent(tablespaceName || '')}`;
     },
   },
 

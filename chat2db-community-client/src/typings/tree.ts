@@ -16,6 +16,10 @@ export interface IExtraParams {
   supportSchema?: boolean;
   databaseName?: string;
   schemaName?: string;
+  tablespaceName?: string;
+  tablespaceManageSupported?: boolean;
+  tablespaceRenameSupported?: boolean;
+  tablespaceServerVersion?: string;
   tableName?: string;
   viewName?: string;
   functionName?: string;

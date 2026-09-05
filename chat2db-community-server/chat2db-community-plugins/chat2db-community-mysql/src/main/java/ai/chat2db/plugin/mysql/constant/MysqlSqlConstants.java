@@ -13,6 +13,8 @@ public final class MysqlSqlConstants {
     public static final String SQL_ACCOUNT_UNLOCK = " ACCOUNT UNLOCK";
     public static final String SQL_ALGORITHM = "ALGORITHM = ";
     public static final String SQL_AFTER = " AFTER ";
+    public static final String SQL_ALTER_TABLESPACE_RENAME_TEMPLATE =
+            "ALTER TABLESPACE %s RENAME TO %s";
     public static final String SQL_ALTER_USER = "ALTER USER ";
     public static final String SQL_AUTO_INCREMENT_ASSIGNMENT = "AUTO_INCREMENT=";
     public static final String SQL_COLLATE_ASSIGNMENT = "COLLATE=";
@@ -23,6 +25,8 @@ public final class MysqlSqlConstants {
     public static final String SQL_COPY_TABLE_DATA_TEMPLATE = "CREATE TABLE %s AS SELECT * FROM %s";
     public static final String SQL_COPY_TABLE_STRUCTURE_TEMPLATE = "CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0";
     public static final String SQL_CREATE = "create ";
+    public static final String SQL_CREATE_TABLESPACE_TEMPLATE =
+            "CREATE TABLESPACE %s ADD DATAFILE '%s'%s ENGINE = InnoDB";
     public static final String SQL_CREATE_USER = "CREATE USER ";
     public static final String SQL_DEFAULT_CHARACTER_SET_ASSIGNMENT = "DEFAULT CHARACTER SET=";
     public static final String SQL_DEFINER = "DEFINER = ";
@@ -32,6 +36,7 @@ public final class MysqlSqlConstants {
     public static final String SQL_DROP_INDEX_BACK_QUOTE = "DROP INDEX `";
     public static final String SQL_DROP_PRIMARY_KEY = "DROP PRIMARY KEY";
     public static final String SQL_DROP_PROCEDURE_TEMPLATE = "DROP PROCEDURE %s";
+    public static final String SQL_DROP_TABLESPACE_TEMPLATE = "DROP TABLESPACE %s ENGINE = InnoDB";
     public static final String SQL_DROP_TABLE_TEMPLATE = "DROP TABLE %s";
     public static final String SQL_DROP_USER = "DROP USER ";
     public static final String SQL_DROP_VIEW_TEMPLATE = "DROP VIEW %s";
@@ -65,6 +70,8 @@ public final class MysqlSqlConstants {
     public static final String SQL_SHOW_INDEX_FROM = "SHOW INDEX FROM ";
     public static final String SQL_SHOW_PROCEDURE_STATUS = "SHOW PROCEDURE STATUS WHERE Db = DATABASE()";
     public static final String SQL_SHOW_TRIGGERS = "SHOW TRIGGERS";
+    public static final String SQL_TABLESPACE = " TABLESPACE ";
+    public static final String SQL_TABLESPACE_FILE_BLOCK_SIZE_ASSIGNMENT = " FILE_BLOCK_SIZE = %s ";
     public static final String SQL_TRUNCATE_TABLE_TEMPLATE = "TRUNCATE TABLE %s";
     public static final String SQL_UNDEFINED = "undefined";
     public static final String SQL_WITH_GRANT_OPTION = " WITH GRANT OPTION";

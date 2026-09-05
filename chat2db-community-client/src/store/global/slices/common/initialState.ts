@@ -51,6 +51,7 @@ export interface CommonState {
     inputConfirmLabel?: React.ReactNode;
     inputConfirmPlaceholder?: string;
     inputConfirmMismatchTip?: string;
+    okButtonDisabled?: boolean;
     width?: number | string;
     headerIconCode?: string;
   } | null;

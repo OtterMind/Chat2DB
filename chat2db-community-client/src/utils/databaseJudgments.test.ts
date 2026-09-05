@@ -48,6 +48,9 @@ assertCapability('mysql', DatabaseCapability.ROUTINE_OPERATION, true);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.ROUTINE_OPERATION, false);
 assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ACCOUNT_MANAGEMENT, true);
 assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.ACCOUNT_MANAGEMENT, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.TABLESPACE_MANAGEMENT, true);
+assertCapability('mysql', DatabaseCapability.TABLESPACE_MANAGEMENT, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.TABLESPACE_MANAGEMENT, false);
 assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ACTIVE_TRANSACTION_INSPECTION, true);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.ACTIVE_TRANSACTION_INSPECTION, false);
 

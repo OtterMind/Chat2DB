@@ -53,7 +53,11 @@ export default memo<IProps>(() => {
             <Button
               danger
               loading={loading}
-              disabled={(!userChecked && !!unifiedConfirmationModalInfo?.needDoubleConfirmText) || !inputConfirmed}
+              disabled={
+                !!unifiedConfirmationModalInfo?.okButtonDisabled
+                || (!userChecked && !!unifiedConfirmationModalInfo?.needDoubleConfirmText)
+                || !inputConfirmed
+              }
               onClick={() => {
                 setLoading(true);
                 unifiedConfirmationModalInfo

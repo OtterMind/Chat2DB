@@ -50,6 +50,7 @@ export interface IDatabaseSupportField {
   indexTypes: IOption[];
   defaultValues: IOption[];
   engineTypes: IOption[];
+  tablespaces: IOption[];
 }
 
 export default memo((props: IProps) => {
@@ -100,6 +101,7 @@ export default memo((props: IProps) => {
     indexTypes: [],
     defaultValues: [],
     engineTypes: [],
+    tablespaces: [],
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { styles, cx } = useStyles();
@@ -177,6 +179,14 @@ export default memo((props: IProps) => {
             };
           }) || [];
 
+        const tablespaces =
+          res?.tablespaces?.map((i) => {
+            return {
+              value: i.name,
+              label: i.name,
+            };
+          }) || [];
+
         setDatabaseSupportField({
           columnTypes,
           charsets,
@@ -184,6 +194,7 @@ export default memo((props: IProps) => {
           indexTypes,
           defaultValues,
           engineTypes,
+          tablespaces,
         });
       });
   };

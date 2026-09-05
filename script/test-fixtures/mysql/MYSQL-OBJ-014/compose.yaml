@@ -1,0 +1,23 @@
+services:
+  mysql80:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: chat2db
+    ports:
+      - "127.0.0.1:33080:3306"
+    volumes:
+      - mysql80-data:/var/lib/mysql
+
+  mysql57:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: chat2db
+    ports:
+      - "127.0.0.1:33057:3306"
+    volumes:
+      - mysql57-data:/var/lib/mysql
+
+volumes:
+  mysql80-data:
+  mysql57-data:

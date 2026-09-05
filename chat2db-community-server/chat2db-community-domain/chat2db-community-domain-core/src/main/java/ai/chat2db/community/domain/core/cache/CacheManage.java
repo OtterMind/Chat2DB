@@ -54,6 +54,10 @@ public class CacheManage {
         CACHE_STORE.fuzzyDelete(key);
     }
 
+    public static void remove(String key) {
+        CACHE_STORE.remove(key);
+    }
+
 
     public static void close() {
         CACHE_STORE.close();
@@ -139,6 +143,10 @@ public class CacheManage {
                 FileUtil.del(PATH);
                 state = initialize();
             }
+        }
+
+        void remove(String key) {
+            currentCache().ifPresent(cache -> remove(cache, key));
         }
 
         void close() {

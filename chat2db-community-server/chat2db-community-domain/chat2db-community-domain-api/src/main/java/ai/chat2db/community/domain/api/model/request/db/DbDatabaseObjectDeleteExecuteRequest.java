@@ -13,5 +13,7 @@ public class DbDatabaseObjectDeleteExecuteRequest {
 
     private String schemaName;
 
+    private String tablespaceName;
+
     private String confirmName;
 }

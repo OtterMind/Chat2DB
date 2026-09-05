@@ -22,5 +22,14 @@ export const useStyles = createStyles(({ css, token }) => {
       border-radius: 6px;
       background: ${token.colorBgContainer};
     `,
+    occupyingTables: css`
+      max-height: 112px;
+      margin: 0;
+      padding-left: 20px;
+      overflow: auto;
+      color: ${token.colorError};
+      font-size: 13px;
+      line-height: 22px;
+    `,
   };
 });

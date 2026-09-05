@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseDeletePrepareRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDatabaseObjectDeleteExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbSchemaDeletePrepareRequest;
+import ai.chat2db.community.domain.api.model.request.db.DbTablespaceDeletePrepareRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.McpConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbObjectsQueryRequest;
@@ -23,6 +24,9 @@ import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.metadata.Schema;
+import ai.chat2db.community.domain.api.model.metadata.Tablespace;
+import ai.chat2db.community.domain.core.cache.CacheManage;
+import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import org.junit.jupiter.api.AfterEach;
@@ -34,6 +38,9 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static ai.chat2db.community.domain.core.cache.CacheKey.getTablespacesKey;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -53,6 +60,7 @@ class DatabaseObjectDeleteServiceImplTest {
     @AfterEach
     void tearDown() {
         Chat2DBContext.removeContext();
+        CacheManage.remove(getTablespacesKey(7L));
         Chat2DBContext.PLUGIN_MAP.clear();
         Chat2DBContext.PLUGIN_MAP.putAll(originalPlugins);
     }
@@ -218,8 +226,53 @@ class DatabaseObjectDeleteServiceImplTest {
         assertEquals("app_db", connectionContextService.currentProfile().getDatabaseName());
     }
 
+    @Test
+    void tablespaceDeleteInvalidatesTheExactPersistentListCacheEntry() {
+        RecordingDBManager dbManager = registerTablespacePlugin(List.of(tablespace("ts_empty", List.of())));
+        DbDatabaseObjectDeleteServiceImpl service = newService("MYSQL");
+        AtomicInteger fallbackCalls = new AtomicInteger();
+        String key = getTablespacesKey(7L);
+        CacheManage.getList(key, String.class, ignored -> false, ignored -> {
+            fallbackCalls.incrementAndGet();
+            return List.of("before");
+        });
+
+        service.executeTablespaceDelete(tablespaceExecute("ts_empty", "ts_empty"));
+        List<String> refreshed = CacheManage.getList(key, String.class, ignored -> false, ignored -> {
+            fallbackCalls.incrementAndGet();
+            return List.of("after");
+        });
+
+        assertEquals(List.of("after"), refreshed);
+        assertEquals(2, fallbackCalls.get());
+        assertEquals(List.of("ts_empty"), dbManager.droppedTablespaces);
+    }
+
+    @Test
+    void tablespaceDeletePreviewFiltersUnauthorizedOccupyingTables() {
+        registerTablespacePlugin(List.of(tablespace("ts_shared",
+                List.of("app.visible_table", "app.secret_table"))));
+        MetadataAccessPolicyManager policyManager = new MetadataAccessPolicyManager(List.of(resources -> resources
+                .stream()
+                .map(resource -> "visible_table".equals(resource.getTableName()))
+                .toList()));
+        DbDatabaseObjectDeleteServiceImpl service = new DbDatabaseObjectDeleteServiceImpl(
+                new RecordingConnectionContextService("MYSQL"), policyManager);
+
+        DatabaseObjectDeletePrepare prepared = service.prepareTablespaceDelete(tablespacePrepare("ts_shared"));
+
+        assertEquals(List.of("app.visible_table"), prepared.getOccupyingTables());
+    }
+
     private static DbDatabaseObjectDeleteServiceImpl newService(String dbType) {
         return new DbDatabaseObjectDeleteServiceImpl(new RecordingConnectionContextService(dbType));
+    }
+
+    private static DbTablespaceDeletePrepareRequest tablespacePrepare(String tablespaceName) {
+        DbTablespaceDeletePrepareRequest request = new DbTablespaceDeletePrepareRequest();
+        request.setDataSourceId(7L);
+        request.setTablespaceName(tablespaceName);
+        return request;
     }
 
     private static DbDatabaseDeletePrepareRequest databasePrepare(String databaseName) {
@@ -255,6 +308,15 @@ class DatabaseObjectDeleteServiceImplTest {
         return request;
     }
 
+    private static DbDatabaseObjectDeleteExecuteRequest tablespaceExecute(String tablespaceName,
+                                                                           String confirmName) {
+        DbDatabaseObjectDeleteExecuteRequest request = new DbDatabaseObjectDeleteExecuteRequest();
+        request.setDataSourceId(7L);
+        request.setTablespaceName(tablespaceName);
+        request.setConfirmName(confirmName);
+        return request;
+    }
+
     private static RecordingDBManager registerPlugin(String dbType, boolean supportDatabase, boolean supportSchema,
                                                     List<Database> databases, List<Schema> schemas) {
         DBConfig dbConfig = new DBConfig();
@@ -268,6 +330,17 @@ class DatabaseObjectDeleteServiceImplTest {
         return dbManager;
     }
 
+    private static RecordingDBManager registerTablespacePlugin(List<Tablespace> tablespaces) {
+        DBConfig dbConfig = new DBConfig();
+        dbConfig.setDbType("MYSQL");
+        dbConfig.setDefaultDriverConfig(new DriverConfig());
+        dbConfig.setSupportTablespace(true);
+        RecordingDBManager dbManager = new RecordingDBManager();
+        IDbMetaData metaData = new StaticMetaData("MYSQL", List.of(), List.of(), tablespaces);
+        Chat2DBContext.PLUGIN_MAP.put("MYSQL", new StaticPlugin(dbConfig, metaData, dbManager));
+        return dbManager;
+    }
+
     private static Database database(String name) {
         Database database = new Database();
         database.setName(name);
@@ -278,6 +351,10 @@ class DatabaseObjectDeleteServiceImplTest {
         Schema schema = new Schema();
         schema.setName(name);
         return schema;
+    }
+
+    private static Tablespace tablespace(String name, List<String> occupyingTables) {
+        return Tablespace.builder().name(name).occupyingTables(occupyingTables).build();
     }
 
     private static class RecordingConnectionContextService implements IDbConnectionContextService {
@@ -449,11 +526,18 @@ class DatabaseObjectDeleteServiceImplTest {
         private final String dbType;
         private final List<Database> databases;
         private final List<Schema> schemas;
+        private final List<Tablespace> tablespaces;
 
         private StaticMetaData(String dbType, List<Database> databases, List<Schema> schemas) {
+            this(dbType, databases, schemas, List.of());
+        }
+
+        private StaticMetaData(String dbType, List<Database> databases, List<Schema> schemas,
+                               List<Tablespace> tablespaces) {
             this.dbType = dbType;
             this.databases = databases;
             this.schemas = schemas;
+            this.tablespaces = tablespaces;
         }
 
         @Override
@@ -467,6 +551,11 @@ class DatabaseObjectDeleteServiceImplTest {
                         default -> super.quoteIdentifier(identifier);
                     };
                 }
+
+                @Override
+                public String buildDropTablespace(String tablespaceName) {
+                    return "DROP TABLESPACE `" + tablespaceName + "` ENGINE = InnoDB";
+                }
             };
         }
 
@@ -479,11 +568,20 @@ class DatabaseObjectDeleteServiceImplTest {
         public List<Schema> schemas(Connection connection, String databaseName) {
             return schemas;
         }
+
+        @Override
+        public Tablespace tablespace(Connection connection, String tablespaceName) {
+            return tablespaces.stream()
+                    .filter(tablespace -> tablespaceName.equals(tablespace.getName()))
+                    .findFirst()
+                    .orElse(null);
+        }
     }
 
     private static class RecordingDBManager extends DefaultDBManager {
         private final List<String> droppedDatabases = new ArrayList<>();
         private final List<String> droppedSchemas = new ArrayList<>();
+        private final List<String> droppedTablespaces = new ArrayList<>();
 
         @Override
         public void dropDatabase(Connection connection, String databaseName) {
@@ -493,6 +591,16 @@ class DatabaseObjectDeleteServiceImplTest {
         @Override
         public void dropSchema(Connection connection, String databaseName, String schemaName) {
             droppedSchemas.add(databaseName + "." + schemaName);
+        }
+
+        @Override
+        public boolean supportsTablespaceManagement() {
+            return true;
+        }
+
+        @Override
+        public void dropTablespace(Connection connection, String tablespaceName) {
+            droppedTablespaces.add(tablespaceName);
         }
     }
 }

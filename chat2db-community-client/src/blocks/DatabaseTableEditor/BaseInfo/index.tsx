@@ -34,6 +34,7 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
       charset: tableDetails.charset,
       engine: tableDetails.engine,
       incrementValue: tableDetails.incrementValue,
+      tablespace: tableDetails.tablespace,
     });
   }, [tableDetails]);
 
@@ -62,6 +63,9 @@ const BaseInfo = forwardRef((props: IProps, ref: ForwardedRef<IBaseInfoRef>) => 
               </Form.Item>
               <Form.Item label={`${i18n('editTable.label.engine')}:`} name="engine">
                 <CustomSelect options={databaseSupportField.engineTypes} />
+              </Form.Item>
+              <Form.Item label={`${i18n('editTable.label.tablespace')}:`} name="tablespace">
+                <CustomSelect options={databaseSupportField.tablespaces} />
               </Form.Item>
               <Form.Item label={`${i18n('editTable.label.incrementValue')}:`} name="incrementValue">
                 <Input autoComplete="off" />

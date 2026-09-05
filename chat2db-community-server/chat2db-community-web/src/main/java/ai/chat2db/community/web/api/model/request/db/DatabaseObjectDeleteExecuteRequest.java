@@ -15,6 +15,8 @@ public class DatabaseObjectDeleteExecuteRequest implements IDataSourceBaseReques
 
     private String schemaName;
 
+    private String tablespaceName;
+
     @NotBlank
     private String confirmName;
 }

@@ -33,6 +33,7 @@ export default {
   'editTable.label.autoIncrement': '是否自增',
   'editTable.label.engine': '引擎',
   'editTable.label.incrementValue': '自增值',
+  'editTable.label.tablespace': '表空间',
   'editTable.label.order': '排序',
   'editTable.label.primaryKey': '键',
   'editTable.title.sqlPreview': 'sql预览',

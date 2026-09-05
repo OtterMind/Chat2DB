@@ -9,6 +9,7 @@ import ai.chat2db.community.web.api.converter.db.DbWebConverter;
 import ai.chat2db.community.web.api.model.request.db.DatabaseDeletePrepareRequest;
 import ai.chat2db.community.web.api.model.request.db.DatabaseObjectDeleteExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.SchemaDeletePrepareRequest;
+import ai.chat2db.community.web.api.model.request.db.TablespaceDeletePrepareRequest;
 import ai.chat2db.community.web.api.model.response.db.DatabaseObjectDeletePrepareResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,6 +89,31 @@ public class DbDatabaseObjectDeleteController {
     @PostMapping("/schema/execute")
     public ActionResult executeSchemaDelete(@Valid @RequestBody DatabaseObjectDeleteExecuteRequest request) {
         databaseObjectDeleteService.executeSchemaDelete(dbWebConverter.request2param(request));
+        return ActionResult.isSuccess();
+    }
+
+    /**
+     * Prepares tablespace deletion, surfacing occupying tables so the UI can block a non-empty
+     * tablespace and require name-typing for an empty one.
+     * <p>
+     * Endpoint: {@code POST /api/rdb/delete/tablespace/prepare}.
+     */
+    @PostMapping("/tablespace/prepare")
+    public DataResult<DatabaseObjectDeletePrepareResponse> prepareTablespaceDelete(
+            @Valid @RequestBody TablespaceDeletePrepareRequest request) {
+        DatabaseObjectDeletePrepare result = databaseObjectDeleteService.prepareTablespaceDelete(
+                dbWebConverter.request2param(request));
+        return DataResult.of(dbWebConverter.databaseObjectDeletePrepare2response(result));
+    }
+
+    /**
+     * Executes a prepared tablespace deletion (empty tablespace only).
+     * <p>
+     * Endpoint: {@code POST /api/rdb/delete/tablespace/execute}.
+     */
+    @PostMapping("/tablespace/execute")
+    public ActionResult executeTablespaceDelete(@Valid @RequestBody DatabaseObjectDeleteExecuteRequest request) {
+        databaseObjectDeleteService.executeTablespaceDelete(dbWebConverter.request2param(request));
         return ActionResult.isSuccess();
     }
 

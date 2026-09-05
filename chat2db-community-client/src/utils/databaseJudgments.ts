@@ -26,6 +26,10 @@ const databaseJudgments: Record<DatabaseCapability, DatabaseCapabilityJudgment> 
     implementedBy: [DatabaseTypeCode.MYSQL],
     normalizeDatabaseType: true,
   },
+  [DatabaseCapability.TABLESPACE_MANAGEMENT]: {
+    implementedBy: [DatabaseTypeCode.MYSQL],
+    normalizeDatabaseType: true,
+  },
   [DatabaseCapability.ACTIVE_TRANSACTION_INSPECTION]: {
     implementedBy: [DatabaseTypeCode.MYSQL],
   },

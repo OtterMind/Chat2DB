@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.model.response.db;
 
+import java.util.List;
+
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,4 +20,10 @@ public class DatabaseObjectDeletePrepareResponse {
     private String objectType;
 
     private String dbType;
+
+    /**
+     * Objects occupying the target (qualified {@code schema.table} for a non-empty tablespace);
+     * {@code null} for databases/schemas.
+     */
+    private List<String> occupyingTables;
 }
