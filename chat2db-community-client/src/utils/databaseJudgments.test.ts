@@ -50,6 +50,8 @@ assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ACCOUNT_MANAGEMENT, 
 assertCapability(DatabaseTypeCode.ORACLE, DatabaseCapability.ACCOUNT_MANAGEMENT, false);
 assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.ACTIVE_TRANSACTION_INSPECTION, true);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.ACTIVE_TRANSACTION_INSPECTION, false);
+assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.LOCK_INSPECTION, true);
+assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.LOCK_INSPECTION, false);
 
 assertCapability(DatabaseTypeCode.MYSQL, DatabaseCapability.DATABASE_DELETE, true);
 assertCapability(DatabaseTypeCode.POSTGRESQL, DatabaseCapability.DATABASE_DELETE, true);

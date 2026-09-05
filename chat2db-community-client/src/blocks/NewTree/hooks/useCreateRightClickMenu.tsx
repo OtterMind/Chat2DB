@@ -53,6 +53,7 @@ import { resolveDataSourceAuthorization } from '@/utils/dataSourceAuthorization'
 import accountAdminService, { AccountActionType, formatAccountExecuteMessage } from '@/service/accountAdmin';
 import CreateAccountContent, { CreateAccountValues } from '../components/CreateAccountContent';
 import DeleteDatabaseSchemaConfirmContent from '../components/DeleteDatabaseSchemaConfirmContent';
+import LockWaitsContent, { type LockSessionNavigationTarget } from '../components/LockWaitsContent';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { allowsResourceOperations } from '@/client-extension/resourceOperationCapabilities';
 import type { ResourceOperation, ResourceOperationCapabilities } from '@/client-extension/types';
@@ -240,6 +241,28 @@ export const useCreateRightClickMenu = () => {
     };
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
+    const openLockSession = (target: LockSessionNavigationTarget) => {
+      const sessionId = target.sessionId.trim();
+      if (!/^\d+$/.test(sessionId)) {
+        staticMessage.warning(i18n('workspace.ops.sessionNavigationUnavailable'));
+        return;
+      }
+      addWorkspaceTab({
+        id: ['mysql-lock-session', target.dataSourceId, sessionId].join('-'),
+        type: WorkspaceTabType.CONSOLE,
+        title: i18n('workspace.ops.sessionConsoleTitle', sessionId),
+        uniqueData: {
+          ...extraParams,
+          dataSourceId: target.dataSourceId,
+          databaseName: target.databaseName || databaseName,
+          ddl: [
+            `SELECT * FROM information_schema.PROCESSLIST WHERE ID = ${sessionId};`,
+            `SELECT * FROM performance_schema.threads WHERE PROCESSLIST_ID = ${sessionId};`,
+          ].join('\n\n'),
+        },
+      });
+    };
+
     const handelOpenCreateDatabaseModal = (type: 'database' | 'schema') => {
       const relyOnParams = {
         databaseType: treeNodeData.extraParams.databaseType!,
@@ -402,6 +425,31 @@ export const useCreateRightClickMenu = () => {
             uniqueData: {
               ...extraParams,
             },
+          });
+        },
+      },
+
+      [OperationColumn.LockWaits]: {
+        text: i18n('workspace.ops.lockWaits'),
+        icon: 'icon-lock',
+        discard:
+          !hasPermission || !isDatabaseCapabilitySupported(databaseType, DatabaseCapability.LOCK_INSPECTION),
+        requiredOperations: ['SELECT'],
+        handle: () => {
+          const modal = staticModal.confirm({
+            title: i18n('workspace.ops.lockWaits'),
+            content: (
+              <LockWaitsContent
+                dataSourceId={dataSourceId!}
+                onOpenSession={(target) => {
+                  openLockSession(target);
+                  modal.destroy();
+                }}
+              />
+            ),
+            footer: null,
+            width: 1100,
+            closable: true,
           });
         },
       },

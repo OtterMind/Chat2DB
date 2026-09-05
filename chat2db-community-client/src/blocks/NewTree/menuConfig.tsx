@@ -161,6 +161,7 @@ export const dropMenuConfig = {
       OperationColumn.Divider,
       // Management
       OperationColumn.MoveToGroup,
+      OperationColumn.LockWaits,
       OperationColumn.Refresh,
       OperationColumn.Divider,
       OperationColumn.RemoveDataSource,

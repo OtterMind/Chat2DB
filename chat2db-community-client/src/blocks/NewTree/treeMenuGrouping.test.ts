@@ -18,6 +18,11 @@ function splitGroups(operations: readonly OperationColumn[]): OperationColumn[][
 }
 
 const defaultTableMenu = dropMenuConfig.DEFAULT[TreeNodeType.TABLE];
+assert.equal(dropMenuConfig.DEFAULT[TreeNodeType.DATA_SOURCE].includes(OperationColumn.LockWaits), true);
+assert.equal(
+  dropMenuConfig[DatabaseTypeCode.REDIS][TreeNodeType.DATA_SOURCE].includes(OperationColumn.LockWaits),
+  false,
+);
 assert.deepEqual(splitGroups(defaultTableMenu), [
   [OperationColumn.OpenTable, OperationColumn.EditTable],
   [OperationColumn.CreateConsole, OperationColumn.Pin],

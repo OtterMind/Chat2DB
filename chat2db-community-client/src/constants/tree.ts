@@ -52,6 +52,7 @@ export enum OperationColumn {
   // Universal
   DeleteTreeNode = 'deleteTreeNode', // delete tree node
   Refresh = 'refresh', // Refresh menus at all levels
+  LockWaits = 'lockWaits', // Lock waits and blocking chains (MYSQL-OPS-003)
   ActiveTransactions = 'activeTransactions', // Active InnoDB transactions (MYSQL-OPS-002)
   CreateConsole = 'createConsole', // Create a new console
   Rename = 'rename', // Rename
