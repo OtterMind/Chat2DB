@@ -12,6 +12,8 @@ import { keyboardKey } from '../../helper/utils';
 import { useZoerStore } from '@/store/zoer';
 import { isTemporaryId } from '@/utils';
 import { buildConsoleDefaultTabName } from '@/store/workspace/utils/consoleTabName';
+import type { IExplainCapability } from '@/service/sql';
+import { isExplainActionDisabled } from '../../helper/explainPlan';
 
 interface OperationLineProps {
   active: boolean;
@@ -22,6 +24,8 @@ interface OperationLineProps {
   action: (type: SQLOptType, params?: any) => void;
   isConsole?: boolean;
   contentDiffEnabled?: boolean;
+  explainCapability?: IExplainCapability | null;
+  explainLoading?: boolean;
 }
 
 const OperationLine = ({
@@ -33,6 +37,8 @@ const OperationLine = ({
   action,
   isConsole = true,
   contentDiffEnabled = false,
+  explainCapability,
+  explainLoading = false,
 }: OperationLineProps) => {
   const { styles, cx } = useStyles();
 
@@ -43,6 +49,13 @@ const OperationLine = ({
   const showRunButton = useMemo(() => {
     return [WorkspaceTabType.CONSOLE, WorkspaceTabType.LocalSQLFile].includes(type);
   }, [type]);
+
+  const showMysqlExplainButtons = useMemo(() => {
+    return showRunButton && dbInfo.databaseType?.toUpperCase() === 'MYSQL';
+  }, [dbInfo.databaseType, showRunButton]);
+
+  const disableExplainJson = explainCapability?.explainJsonSupported === false;
+  const disableExplainAnalyze = explainCapability?.explainAnalyzeSupported === false;
 
   const showRoutineButtons = useMemo(() => {
     return (
@@ -152,6 +165,34 @@ const OperationLine = ({
               action(SQLOptType.EXECUTE_SINGLE_SQL);
             }}
           />
+        )}
+        {showMysqlExplainButtons && (
+          <>
+            <IconButton
+              className={styles.operatingButtonIcon}
+              code="icon-sort-ascending1"
+              size="sm"
+              disabled={isExplainActionDisabled(hasEditorContent, disableExplainJson, explainLoading)}
+              title={
+                disableExplainJson
+                  ? i18n('common.explain.jsonUnsupported')
+                  : i18n('common.button.explainJson')
+              }
+              onClick={() => action(SQLOptType.EXPLAIN_JSON)}
+            />
+            <IconButton
+              className={styles.operatingButtonIcon}
+              code="icon-play1"
+              size="sm"
+              disabled={isExplainActionDisabled(hasEditorContent, disableExplainAnalyze, explainLoading)}
+              title={
+                disableExplainAnalyze
+                  ? i18n('common.explain.analyzeUnsupported')
+                  : i18n('common.button.explainAnalyze')
+              }
+              onClick={() => action(SQLOptType.EXPLAIN_ANALYZE)}
+            />
+          </>
         )}
         {showRunButton && (
           <IconButton

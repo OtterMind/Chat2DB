@@ -118,6 +118,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional execution plan manager for this plugin.
+     *
+     * @return execution plan manager when supported; otherwise {@code null}.
+     */
+    default IExplainManager getExplainManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.
