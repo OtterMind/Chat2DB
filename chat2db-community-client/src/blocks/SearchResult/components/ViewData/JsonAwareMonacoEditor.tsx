@@ -6,6 +6,7 @@ import MonacoEditor, { IEditorIns } from '@/components/MonacoEditor';
 interface IProps {
   id: string;
   value: string;
+  resetViewRevision: number;
   readOnly: boolean;
   onChange: (value: string) => void;
   onJsonChange: (isJson: boolean) => void;
@@ -16,7 +17,7 @@ interface JsonValidationWorker {
   parseJSONDocument: (uri: string) => Promise<monaco.languages.json.JSONDocument | null>;
 }
 
-const JsonAwareMonacoEditor = ({ id, value, readOnly, onChange, onJsonChange }: IProps) => {
+const JsonAwareMonacoEditor = ({ id, value, resetViewRevision, readOnly, onChange, onJsonChange }: IProps) => {
   const editorRef = useRef<IEditorIns | null>(null);
   const changeDisposerRef = useRef<{ dispose: () => void } | null>(null);
   const validationModelRef = useRef<monaco.editor.ITextModel | null>(null);
@@ -106,6 +107,15 @@ const JsonAwareMonacoEditor = ({ id, value, readOnly, onChange, onJsonChange }: 
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly });
   }, [readOnly]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    editor.setPosition({ lineNumber: 1, column: 1 });
+    editor.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
+  }, [resetViewRevision]);
 
   useEffect(() => {
     return () => {

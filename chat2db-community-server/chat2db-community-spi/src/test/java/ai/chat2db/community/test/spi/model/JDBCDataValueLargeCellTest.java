@@ -66,6 +66,24 @@ class JDBCDataValueLargeCellTest {
     }
 
     @Test
+    void truncatesJsonValuesLargerThanTenKbForLazyLoading() {
+        String json = "{\"payload\":\"" + "x".repeat(11 * 1024) + "\"}";
+        JDBCDataValue value = new JDBCDataValue(resultSet(), metaData("jsonb", Types.OTHER), 1, true);
+
+        ResultCell cell = value.buildResultCell(json);
+
+        assertTrue(cell.isLargeValue());
+        assertTrue(cell.isTruncated());
+        assertEquals("JSON", cell.getValueType());
+        assertEquals(200, cell.getValue().length());
+        assertEquals(json, cell.getRawValue());
+        assertEquals((long) json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, cell.getSizeBytes());
+        assertEquals((long) json.length(), cell.getSizeChars());
+        assertEquals(200L, cell.getLoadedBytes());
+        assertEquals(200L, cell.getLoadedChars());
+    }
+
+    @Test
     void nullClobReturnsNullInsteadOfDereferencingClob() {
         ResultSet resultSet = resultSet("getClob", null, "getString", null);
         JDBCDataValue value = new JDBCDataValue(resultSet, metaData("CLOB", Types.CLOB), 1, true);
