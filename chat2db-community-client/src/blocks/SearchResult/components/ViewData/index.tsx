@@ -429,7 +429,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
       const formatted = JSON.stringify(parsed, null, 2);
       applyJsonPresentation(formatted);
     } catch (err) {
-      console.error('无效的 JSON 格式，请检查语法', err);
+      console.error('Invalid JSON format. Check the syntax.', err);
     }
   };
 
@@ -439,7 +439,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
       const compressed = JSON.stringify(parsed);
       applyJsonPresentation(compressed);
     } catch (err) {
-      console.error('无效的 JSON 格式，请检查语法', err);
+      console.error('Invalid JSON format. Check the syntax.', err);
     }
   };
 
