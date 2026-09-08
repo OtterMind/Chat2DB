@@ -64,11 +64,18 @@ public final class CsvManifestImporter {
         if (parent == null) {
             throw new IllegalStateException("Database context is unavailable for manifest import");
         }
-        int requested = Integer.getInteger("chat2db.task.import.manifest-parallelism", 0);
-        int concurrency = requested > 0 ? requested : Runtime.getRuntime().availableProcessors();
-        concurrency = Math.max(1, Math.min(MAX_CONCURRENCY, Math.min(concurrency, manifest.getShards().size())));
+        int concurrency = effectiveParallelism(manifest.getShards().size());
         scheduler.execute(manifest, concurrency, context::checkCancelled,
                 shard -> executeShard(original, context, parent, manifest, shard));
+    }
+
+    static int effectiveParallelism(int shardCount) {
+        if (shardCount <= 0) {
+            throw new IllegalArgumentException("Manifest must contain at least one shard");
+        }
+        int admitted = ImportParallelAdmission.requestedParallelism();
+        int requested = Integer.getInteger("chat2db.task.import.manifest-parallelism", admitted);
+        return Math.max(1, Math.min(MAX_CONCURRENCY, Math.min(requested, shardCount)));
     }
 
     ImportManifestScheduler.ShardResult executeShard(ImportTaskSpec original, TaskExecutionContext context,

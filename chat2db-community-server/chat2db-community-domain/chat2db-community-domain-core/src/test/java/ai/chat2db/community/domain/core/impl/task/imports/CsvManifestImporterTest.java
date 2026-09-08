@@ -33,6 +33,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CsvManifestImporterTest {
 
+    @Test
+    void inheritsAdmissionParallelismUnlessManifestOverrideIsExplicit() {
+        String previousAdmission = System.getProperty("chat2db.task.import.parallelism");
+        String previousManifest = System.getProperty("chat2db.task.import.manifest-parallelism");
+        try {
+            System.setProperty("chat2db.task.import.parallelism", "4");
+            System.clearProperty("chat2db.task.import.manifest-parallelism");
+            assertEquals(4, CsvManifestImporter.effectiveParallelism(20));
+            assertEquals(1, CsvManifestImporter.effectiveParallelism(1));
+
+            System.setProperty("chat2db.task.import.manifest-parallelism", "2");
+            assertEquals(2, CsvManifestImporter.effectiveParallelism(20));
+        } finally {
+            restore("chat2db.task.import.parallelism", previousAdmission);
+            restore("chat2db.task.import.manifest-parallelism", previousManifest);
+        }
+    }
+
     @AfterEach
     void clearContext() {
         Chat2DBContext.removeContext();
@@ -218,6 +236,14 @@ class CsvManifestImporterTest {
             return 0L;
         }
         return null;
+    }
+
+    private static void restore(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     private static final class JdbcProbe {
