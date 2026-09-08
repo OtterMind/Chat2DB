@@ -21,9 +21,16 @@ class ImportFileStagingServiceTest {
 
     private final String originalUserHome = System.getProperty("user.home");
 
+    private final String originalMaxSize = System.getProperty("chat2db.task.import.staging.max-bytes");
+
     @AfterEach
     void restoreUserHome() {
         System.setProperty("user.home", originalUserHome);
+        if (originalMaxSize == null) {
+            System.clearProperty("chat2db.task.import.staging.max-bytes");
+        } else {
+            System.setProperty("chat2db.task.import.staging.max-bytes", originalMaxSize);
+        }
     }
 
     @Test
@@ -72,5 +79,18 @@ class ImportFileStagingServiceTest {
         File source = Files.writeString(tempDirectory.resolve("source.zip"), "test").toFile();
 
         assertThrows(BusinessException.class, () -> new ImportFileStagingService().stage(source, "input.zip"));
+    }
+
+    @Test
+    void appliesTheConfigurableImportSizeLimit() throws Exception {
+        System.setProperty("user.home", tempDirectory.toString());
+        System.setProperty("chat2db.task.import.staging.max-bytes", "16");
+        ImportFileStagingService stagingService = new ImportFileStagingService();
+        File accepted = Files.writeString(tempDirectory.resolve("accepted.csv"), "abcdefghijklmnop").toFile();
+        File rejected = Files.writeString(tempDirectory.resolve("rejected.csv"), "abcdefghijklmnopq").toFile();
+
+        String fileId = stagingService.stage(accepted, "accepted.csv");
+        assertThrows(BusinessException.class, () -> stagingService.stage(rejected, "rejected.csv"));
+        stagingService.release(fileId);
     }
 }

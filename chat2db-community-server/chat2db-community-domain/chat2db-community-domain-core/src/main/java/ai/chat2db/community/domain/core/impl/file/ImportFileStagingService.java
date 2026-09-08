@@ -37,7 +37,8 @@ public class ImportFileStagingService implements IImportFileStagingService {
             TaskFileFormat.SQL.name().toLowerCase(Locale.ROOT));
     private static final Duration MAX_AGE = Duration.ofHours(24);
     private static final Duration CLAIMED_MAX_AGE = Duration.ofDays(7);
-    private static final long MAX_SIZE_BYTES = 50L * 1024 * 1024;
+    private static final String MAX_SIZE_PROPERTY = "chat2db.task.import.staging.max-bytes";
+    private static final long DEFAULT_MAX_SIZE_BYTES = 1024L * 1024L * 1024L;
 
     private final Map<String, Instant> claimedFiles = new ConcurrentHashMap<>();
 
@@ -105,10 +106,15 @@ public class ImportFileStagingService implements IImportFileStagingService {
     }
 
     private static void validateSource(File file, String originalFileName) {
-        if (file == null || !file.isFile() || !file.canRead() || file.length() > MAX_SIZE_BYTES
+        if (file == null || !file.isFile() || !file.canRead() || file.length() > maxSizeBytes()
                 || !ALLOWED_EXTENSIONS.contains(extension(originalFileName))) {
             throw new BusinessException("import.preview.fileUnreadable");
         }
+    }
+
+    private static long maxSizeBytes() {
+        long configured = Long.getLong(MAX_SIZE_PROPERTY, DEFAULT_MAX_SIZE_BYTES);
+        return configured > 0L ? configured : DEFAULT_MAX_SIZE_BYTES;
     }
 
     private static String extension(String fileName) {
