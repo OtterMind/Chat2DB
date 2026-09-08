@@ -532,6 +532,65 @@ public abstract class AbstractTaskStorageContractTest {
     }
 
     @Test
+    void resumeShardTransitionUsesAtomicCompareAndSet() {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "task").getId();
+        storage.saveResumeState(taskId, shardState(4, "PENDING", 0L));
+
+        assertTrue(storage.compareAndSetResumeState(taskId, 4, "PENDING",
+                shardState(4, "RUNNING", 0L)));
+        assertFalse(storage.compareAndSetResumeState(taskId, 4, "PENDING",
+                shardState(4, "RUNNING", 0L)));
+        assertTrue(storage.compareAndSetResumeState(taskId, 4, "RUNNING",
+                shardState(4, "DONE", 125L)));
+
+        ResumeState completed = storage.listResumeStates(taskId).get(0);
+        assertEquals("DONE", completed.getKind());
+        assertEquals(125L, completed.getRowsDone());
+        assertEquals("{\"manifest\":\"abc\",\"shardId\":\"orders-4\"}", completed.getCursorJson());
+    }
+
+    @Test
+    void resumeShardTransitionRejectsIdentityChangesAndMissingStates() {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "task").getId();
+
+        assertFalse(storage.compareAndSetResumeState(taskId, 7, "PENDING",
+                shardState(7, "RUNNING", 0L)));
+        assertThrows(IllegalArgumentException.class, () -> storage.compareAndSetResumeState(
+                taskId, 7, "PENDING", shardState(8, "RUNNING", 0L)));
+    }
+
+    @Test
+    void concurrentWorkersCannotClaimTheSameResumeShard() throws Exception {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "task").getId();
+        storage.saveResumeState(taskId, shardState(3, "PENDING", 0L));
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        int claims = 0;
+        try {
+            List<Future<Integer>> attempts = LongStream.range(0, 2).mapToObj(worker -> workers.submit(() -> {
+                ready.countDown();
+                start.await();
+                return storage.compareAndSetResumeState(taskId, 3, "PENDING",
+                        shardState(3, "RUNNING", 0L)) ? 1 : 0;
+            })).toList();
+            ready.await();
+            start.countDown();
+            for (Future<Integer> attempt : attempts) {
+                claims += attempt.get();
+            }
+        } finally {
+            workers.shutdownNow();
+        }
+
+        assertEquals(1, claims);
+        assertEquals("RUNNING", storage.listResumeStates(taskId).get(0).getKind());
+    }
+
+    @Test
     void runningTaskCannotBeRequeuedWithoutTheResumingStage() {
         TaskStorage storage = storage();
         Long taskId = create(storage, "task").getId();
@@ -617,6 +676,17 @@ public abstract class AbstractTaskStorageContractTest {
                 .cursorJson("{\"lastKey\":" + rowsDone + "}")
                 .rowsDone(rowsDone)
                 .bytesDone(rowsDone * 10L)
+                .updatedAt(new Date())
+                .build();
+    }
+
+    protected ResumeState shardState(int shardNo, String kind, long rowsDone) {
+        return ResumeState.builder()
+                .shardNo(shardNo)
+                .kind(kind)
+                .cursorJson("{\"manifest\":\"abc\",\"shardId\":\"orders-4\"}")
+                .rowsDone(rowsDone)
+                .bytesDone(0L)
                 .updatedAt(new Date())
                 .build();
     }

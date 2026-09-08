@@ -71,6 +71,15 @@ public interface TaskStorage {
      */
     void saveResumeState(Long taskId, ResumeState state);
 
+    /**
+     * Atomically replaces one persisted shard state when its current kind matches the expected
+     * kind. Manifest schedulers use this as their durable claim/complete primitive.
+     */
+    default boolean compareAndSetResumeState(Long taskId, Integer shardNo, String expectedKind,
+            ResumeState targetState) {
+        return false;
+    }
+
     List<ResumeState> listResumeStates(Long taskId);
 
     void clearResumeStates(Long taskId);

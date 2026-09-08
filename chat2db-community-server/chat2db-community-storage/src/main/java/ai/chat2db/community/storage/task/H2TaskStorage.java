@@ -315,6 +315,29 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
     }
 
     @Override
+    public boolean compareAndSetResumeState(Long taskId, Integer shardNo, String expectedKind,
+            ResumeState targetState) {
+        requireResumeTransition(taskId, shardNo, expectedKind, targetState);
+        return transact(connection -> {
+            requireTask(connection, taskId, "resume state");
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE resume_state SET kind = ?, cursor_json = ?, rows_done = ?, bytes_done = ?,"
+                            + " updated_at = ? WHERE task_id = ? AND shard_no = ? AND kind = ?")) {
+                statement.setString(1, targetState.getKind());
+                statement.setString(2, targetState.getCursorJson());
+                setNullableLong(statement, 3, targetState.getRowsDone());
+                setNullableLong(statement, 4, targetState.getBytesDone());
+                statement.setLong(5, (targetState.getUpdatedAt() == null
+                        ? new Date() : targetState.getUpdatedAt()).getTime());
+                statement.setLong(6, taskId);
+                statement.setInt(7, shardNo);
+                statement.setString(8, expectedKind);
+                return statement.executeUpdate() == 1;
+            }
+        });
+    }
+
+    @Override
     public List<ResumeState> listResumeStates(Long taskId) {
         if (taskId == null) {
             return List.of();
@@ -503,6 +526,14 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
             statement.setNull(index, Types.BIGINT);
         } else {
             statement.setLong(index, value);
+        }
+    }
+
+    private void requireResumeTransition(Long taskId, Integer shardNo, String expectedKind,
+            ResumeState targetState) {
+        if (taskId == null || shardNo == null || expectedKind == null || targetState == null
+                || targetState.getKind() == null || !shardNo.equals(targetState.getShardNo())) {
+            throw new IllegalArgumentException("resume state transition must preserve task and shard identity");
         }
     }
 

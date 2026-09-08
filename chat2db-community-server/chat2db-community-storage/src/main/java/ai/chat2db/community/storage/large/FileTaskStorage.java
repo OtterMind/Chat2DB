@@ -440,6 +440,37 @@ public class FileTaskStorage implements TaskStorage {
     }
 
     @Override
+    public synchronized boolean compareAndSetResumeState(Long taskId, Integer shardNo, String expectedKind,
+            ResumeState targetState) {
+        if (taskId == null || shardNo == null || expectedKind == null || targetState == null
+                || targetState.getKind() == null || !shardNo.equals(targetState.getShardNo())) {
+            throw new IllegalArgumentException("resume state transition must preserve task and shard identity");
+        }
+        Task current = snapshots.find(taskId);
+        if (current == null) {
+            throw new IllegalArgumentException("resume state must reference an existing task");
+        }
+        ResumeState existing = current.getResumeStates() == null ? null : current.getResumeStates().stream()
+                .filter(state -> shardNo.equals(state.getShardNo()))
+                .findFirst().orElse(null);
+        if (existing == null || !expectedKind.equals(existing.getKind())) {
+            return false;
+        }
+        ResumeState replacement = JSON.parseObject(JSON.toJSONString(targetState), ResumeState.class);
+        if (replacement.getUpdatedAt() == null) {
+            replacement.setUpdatedAt(new Date());
+        }
+        mutateTask(taskId, "resume state", updated -> {
+            List<ResumeState> states = new ArrayList<>(updated.getResumeStates());
+            states.removeIf(state -> shardNo.equals(state.getShardNo()));
+            states.add(replacement);
+            states.sort(Comparator.comparing(ResumeState::getShardNo));
+            updated.setResumeStates(states);
+        });
+        return true;
+    }
+
+    @Override
     public synchronized List<ResumeState> listResumeStates(Long taskId) {
         Task task = taskId == null ? null : snapshots.find(taskId);
         return task == null || task.getResumeStates() == null ? List.of() : List.copyOf(task.getResumeStates());
