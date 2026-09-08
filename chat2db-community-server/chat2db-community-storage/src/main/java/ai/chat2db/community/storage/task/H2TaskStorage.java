@@ -2,6 +2,8 @@ package ai.chat2db.community.storage.task;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
@@ -243,6 +245,8 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
             executeUpdate(connection, "DELETE FROM task_artifact WHERE task_id = ?",
                     statement -> statement.setLong(1, taskId));
             executeUpdate(connection, "DELETE FROM resume_state WHERE task_id = ?",
+                    statement -> statement.setLong(1, taskId));
+            executeUpdate(connection, "DELETE FROM import_manifest WHERE task_id = ?",
                     statement -> statement.setLong(1, taskId));
             executeUpdate(connection, "DELETE FROM task WHERE id = ?", statement -> statement.setLong(1, taskId));
             if (commitAction != null) {
@@ -527,6 +531,61 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
         } else {
             statement.setLong(index, value);
         }
+    }
+
+    @Override
+    public void saveImportManifest(Long taskId, ImportManifest manifest) {
+        validateManifest(taskId, manifest);
+        transact(connection -> {
+            if (readStoredTask(connection, taskId, true) == null) {
+                throw new IllegalArgumentException("manifest must reference an existing task");
+            }
+            ImportManifest existing = readImportManifest(connection, taskId);
+            if (existing != null) {
+                if (!manifest.getManifestFingerprint().equals(existing.getManifestFingerprint())) {
+                    throw new IllegalStateException("Import manifest fingerprint cannot change after persistence");
+                }
+                return null;
+            }
+            TaskRows.insertImportManifest(connection, taskId, manifest);
+            return null;
+        });
+    }
+
+    @Override
+    public Optional<ImportManifest> loadImportManifest(Long taskId) {
+        if (taskId == null) {
+            return Optional.empty();
+        }
+        return transact(connection -> Optional.ofNullable(readImportManifest(connection, taskId)));
+    }
+
+    private ImportManifest readImportManifest(Connection connection, Long taskId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT fingerprint, manifest_json FROM import_manifest WHERE task_id = ?")) {
+            statement.setLong(1, taskId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    return null;
+                }
+                ImportManifest manifest = JSON.parseObject(rows.getString("manifest_json"), ImportManifest.class);
+                String fingerprint = rows.getString("fingerprint");
+                if (manifest == null || !fingerprint.equals(manifest.getManifestFingerprint())) {
+                    throw new IllegalStateException("Stored import manifest fingerprint is inconsistent");
+                }
+                ImportManifestIntegrity.requireValid(manifest);
+                return manifest;
+            }
+        }
+    }
+
+    private void validateManifest(Long taskId, ImportManifest manifest) {
+        if (taskId == null || manifest == null || manifest.getTaskId() == null
+                || !taskId.equals(manifest.getTaskId()) || manifest.getManifestFingerprint() == null
+                || manifest.getManifestFingerprint().isBlank()) {
+            throw new IllegalArgumentException("manifest must preserve task identity and fingerprint");
+        }
+        ImportManifestIntegrity.requireValid(manifest);
     }
 
     private void requireResumeTransition(Long taskId, Integer shardNo, String expectedKind,

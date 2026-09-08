@@ -1,6 +1,7 @@
 package ai.chat2db.community.storage.task;
 
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -83,6 +84,18 @@ final class TaskRows {
     static void insertEvent(Connection connection, TaskEvent event) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(INSERT_EVENT)) {
             bindEvent(statement, event);
+            statement.executeUpdate();
+        }
+    }
+
+    static void insertImportManifest(Connection connection, Long taskId, ImportManifest manifest)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO import_manifest (task_id, fingerprint, manifest_json, created_at) VALUES (?, ?, ?, ?)")) {
+            statement.setLong(1, taskId);
+            statement.setString(2, manifest.getManifestFingerprint());
+            statement.setString(3, JSON.toJSONString(manifest));
+            statement.setLong(4, System.currentTimeMillis());
             statement.executeUpdate();
         }
     }

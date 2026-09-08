@@ -2,6 +2,10 @@ package ai.chat2db.community.storage;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
+import ai.chat2db.community.domain.api.model.task.ImportManifestShard;
+import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
@@ -462,6 +466,7 @@ public abstract class AbstractTaskStorageContractTest {
         assertTrue(start(storage, taskId));
         storage.saveArtifact(taskId, artifact("artifact-1", TaskArtifactRole.OUTPUT, "text/csv", 10L));
         storage.saveResumeState(taskId, resumeState(0, 100L));
+        storage.saveImportManifest(taskId, manifest(taskId, "source-a"));
         assertTrue(storage.compareAndSetStatus(taskId, TaskStatus.RUNNING.name(), TaskStatus.SUCCESS.name(),
                 TaskStatusPatch.builder().artifactIds(List.of("artifact-1")).finishedAt(new Date()).build(),
                 event(TaskEventCode.TASK_SUCCEEDED.name())));
@@ -472,6 +477,78 @@ public abstract class AbstractTaskStorageContractTest {
         TaskStorage reloaded = storage();
         assertTrue(reloaded.listArtifacts(taskId).isEmpty());
         assertTrue(reloaded.listResumeStates(taskId).isEmpty());
+        assertTrue(reloaded.loadImportManifest(taskId).isEmpty());
+    }
+
+    @Test
+    void importManifestIsImmutableAndSurvivesRestart() {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "manifest").getId();
+        ImportManifest manifest = manifest(taskId, "source-a");
+
+        storage.saveImportManifest(taskId, manifest);
+        storage.saveImportManifest(taskId, manifest);
+
+        ImportManifest reloaded = storage().loadImportManifest(taskId).orElseThrow();
+        assertEquals(manifest.getManifestFingerprint(), reloaded.getManifestFingerprint());
+        assertEquals("orders-0.csv", reloaded.getShards().get(0).getSourcePath());
+        reloaded.getShards().get(0).setSourcePath("mutated.csv");
+        assertEquals("orders-0.csv", storage().loadImportManifest(taskId).orElseThrow()
+                .getShards().get(0).getSourcePath());
+    }
+
+    @Test
+    void importManifestRejectsIdentityContentAndFingerprintChanges() {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "manifest").getId();
+        ImportManifest manifest = manifest(taskId, "source-a");
+        storage.saveImportManifest(taskId, manifest);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> storage.saveImportManifest(-1L, manifest));
+        assertThrows(IllegalStateException.class,
+                () -> storage.saveImportManifest(taskId, manifest(taskId, "source-b")));
+
+        manifest.getShards().get(0).setSourcePath("tampered.csv");
+        assertThrows(IllegalStateException.class,
+                () -> storage.saveImportManifest(taskId, manifest));
+    }
+
+    @Test
+    void concurrentWritersCannotReplaceAnImportManifest() throws Exception {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "manifest-race").getId();
+        ImportManifest first = manifest(taskId, "source-a");
+        ImportManifest second = manifest(taskId, "source-b");
+        ExecutorService writers = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<String>> attempts = List.of(first, second).stream().map(candidate -> writers.submit(() -> {
+                ready.countDown();
+                start.await();
+                try {
+                    storage.saveImportManifest(taskId, candidate);
+                    return candidate.getManifestFingerprint();
+                } catch (IllegalStateException conflict) {
+                    return null;
+                }
+            })).toList();
+            ready.await();
+            start.countDown();
+
+            List<String> winners = new ArrayList<>();
+            for (Future<String> attempt : attempts) {
+                if (attempt.get() != null) {
+                    winners.add(attempt.get());
+                }
+            }
+            assertEquals(1, winners.size());
+            assertEquals(winners.get(0), storage.loadImportManifest(taskId).orElseThrow()
+                    .getManifestFingerprint());
+        } finally {
+            writers.shutdownNow();
+        }
     }
 
     @Test
@@ -678,6 +755,32 @@ public abstract class AbstractTaskStorageContractTest {
                 .bytesDone(rowsDone * 10L)
                 .updatedAt(new Date())
                 .build();
+    }
+
+    private ImportManifest manifest(Long taskId, String sourceFingerprint) {
+        ImportManifest manifest = ImportManifest.builder()
+                .schemaVersion(1)
+                .taskId(taskId)
+                .mode(ImportPlanMode.PARALLEL_LAYER)
+                .admissionVerdict("SAFE")
+                .sourceFingerprint(sourceFingerprint)
+                .totalEstimatedRows(25L)
+                .dependencies(List.of())
+                .shards(List.of(ImportManifestShard.builder()
+                        .shardId("orders-0")
+                        .tableName("orders")
+                        .layer(0)
+                        .shardKey("id")
+                        .lowerBound("0")
+                        .upperBound("100")
+                        .sourcePath("orders-0.csv")
+                        .estimatedRows(25L)
+                        .expectedChecksum("sha256:abc")
+                        .dependencyShardIds(List.of())
+                        .build()))
+                .build();
+        manifest.setManifestFingerprint(ImportManifestIntegrity.calculate(manifest));
+        return manifest;
     }
 
     protected ResumeState shardState(int shardNo, String kind, long rowsDone) {

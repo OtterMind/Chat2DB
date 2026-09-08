@@ -1,6 +1,7 @@
 package ai.chat2db.community.storage.task;
 
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -165,6 +166,11 @@ public class TaskStorageMigrator {
                     }
                     for (TaskArtifact artifact : migratedArtifacts(entry.task())) {
                         TaskRows.upsertArtifact(connection, entry.task().getId(), artifact);
+                    }
+                    if (entry.task().getImportManifest() != null) {
+                        ImportManifestIntegrity.requireValid(entry.task().getImportManifest());
+                        TaskRows.insertImportManifest(connection, entry.task().getId(),
+                                entry.task().getImportManifest());
                     }
                 }
                 markMigrated(connection, imported.size());

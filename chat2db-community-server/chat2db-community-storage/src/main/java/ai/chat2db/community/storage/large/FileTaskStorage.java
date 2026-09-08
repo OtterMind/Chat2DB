@@ -2,6 +2,8 @@ package ai.chat2db.community.storage.large;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
@@ -482,6 +484,39 @@ public class FileTaskStorage implements TaskStorage {
             return;
         }
         mutateTask(taskId, "resume state", updated -> updated.setResumeStates(null));
+    }
+
+    @Override
+    public synchronized void saveImportManifest(Long taskId, ImportManifest manifest) {
+        if (taskId == null || manifest == null || manifest.getTaskId() == null
+                || !taskId.equals(manifest.getTaskId()) || manifest.getManifestFingerprint() == null
+                || manifest.getManifestFingerprint().isBlank()) {
+            throw new IllegalArgumentException("manifest must preserve task identity and fingerprint");
+        }
+        ImportManifestIntegrity.requireValid(manifest);
+        Task current = snapshots.find(taskId);
+        if (current == null) {
+            throw new IllegalArgumentException("manifest must reference an existing task");
+        }
+        ImportManifest existing = current.getImportManifest();
+        if (existing != null) {
+            if (!manifest.getManifestFingerprint().equals(existing.getManifestFingerprint())) {
+                throw new IllegalStateException("Import manifest fingerprint cannot change after persistence");
+            }
+            return;
+        }
+        mutateTask(taskId, "manifest", updated -> updated.setImportManifest(
+                JSON.parseObject(JSON.toJSONString(manifest), ImportManifest.class)));
+    }
+
+    @Override
+    public synchronized Optional<ImportManifest> loadImportManifest(Long taskId) {
+        Task task = taskId == null ? null : snapshots.find(taskId);
+        if (task == null || task.getImportManifest() == null) {
+            return Optional.empty();
+        }
+        ImportManifestIntegrity.requireValid(task.getImportManifest());
+        return Optional.of(JSON.parseObject(JSON.toJSONString(task.getImportManifest()), ImportManifest.class));
     }
 
     /**

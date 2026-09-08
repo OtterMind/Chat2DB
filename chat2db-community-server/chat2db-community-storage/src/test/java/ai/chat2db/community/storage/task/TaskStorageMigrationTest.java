@@ -1,6 +1,10 @@
 package ai.chat2db.community.storage.task;
 
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
+import ai.chat2db.community.domain.api.model.task.ImportManifestShard;
+import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
@@ -49,6 +53,7 @@ class TaskStorageMigrationTest {
     void importsEveryTaskAndEventAndRetiresTheLegacyDirectory() {
         FileTaskStorage file = new FileTaskStorage(baseDir.getAbsolutePath());
         Long pendingId = file.create(task("pending"), event(TaskEventCode.TASK_CREATED.name())).getId();
+        file.saveImportManifest(pendingId, manifest(pendingId));
         Long finishedId = file.create(task("finished"), event(TaskEventCode.TASK_CREATED.name())).getId();
         assertTrue(file.compareAndSetStatus(finishedId, TaskStatus.PENDING.name(), TaskStatus.RUNNING.name(),
                 TaskStatusPatch.builder().progress(TaskConstants.STARTED_PROGRESS).stage("started").build(),
@@ -68,6 +73,8 @@ class TaskStorageMigrationTest {
         H2TaskStorage migrated = new H2TaskStorage(database());
         assertEquals(List.of(pendingId, finishedId), ids(migrated.listTasksForRecovery()));
         assertEquals(TaskStatus.PENDING.name(), migrated.get(pendingId).orElseThrow().getStatus());
+        assertEquals("orders-0.csv", migrated.loadImportManifest(pendingId).orElseThrow()
+                .getShards().get(0).getSourcePath());
 
         Task finished = migrated.get(finishedId).orElseThrow();
         assertEquals(TaskStatus.SUCCESS.name(), finished.getStatus());
@@ -146,6 +153,28 @@ class TaskStorageMigrationTest {
                 .userId(3L)
                 .organizationId(4L)
                 .build();
+    }
+
+    private ImportManifest manifest(Long taskId) {
+        ImportManifest manifest = ImportManifest.builder()
+                .schemaVersion(1)
+                .taskId(taskId)
+                .mode(ImportPlanMode.PARALLEL_LAYER)
+                .admissionVerdict("SAFE")
+                .sourceFingerprint("source-a")
+                .totalEstimatedRows(25L)
+                .dependencies(List.of())
+                .shards(List.of(ImportManifestShard.builder()
+                        .shardId("orders-0")
+                        .tableName("orders")
+                        .layer(0)
+                        .sourcePath("orders-0.csv")
+                        .estimatedRows(25L)
+                        .dependencyShardIds(List.of())
+                        .build()))
+                .build();
+        manifest.setManifestFingerprint(ImportManifestIntegrity.calculate(manifest));
+        return manifest;
     }
 
     private TaskEvent event(String code) {

@@ -2,14 +2,12 @@ package ai.chat2db.community.domain.core.impl.task.imports;
 
 import ai.chat2db.community.domain.api.model.task.ImportDependencyPlan;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
 import ai.chat2db.community.domain.api.model.task.ImportManifestShard;
 import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
 import ai.chat2db.community.domain.api.model.task.ImportTableDependency;
 import org.apache.commons.lang3.StringUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,9 +55,7 @@ public final class ImportManifestBuilder {
         }
         List<ImportTableDependency> frozenDependencies = dependencies == null ? List.of()
                 : dependencies.stream().map(ImportManifestBuilder::copy).toList();
-        String fingerprint = fingerprint(taskId, admissionVerdict, sourceFingerprint, plan.getMode(),
-                frozenDependencies, shards);
-        return ImportManifest.builder()
+        ImportManifest manifest = ImportManifest.builder()
                 .schemaVersion(SCHEMA_VERSION)
                 .taskId(taskId)
                 .mode(plan.getMode())
@@ -68,8 +64,9 @@ public final class ImportManifestBuilder {
                 .totalEstimatedRows(totalRows)
                 .dependencies(List.copyOf(frozenDependencies))
                 .shards(List.copyOf(shards))
-                .manifestFingerprint(fingerprint)
                 .build();
+        manifest.setManifestFingerprint(ImportManifestIntegrity.calculate(manifest));
+        return manifest;
     }
 
     private static Map<String, Integer> plannedLayers(ImportDependencyPlan plan) {
@@ -161,34 +158,4 @@ public final class ImportManifestBuilder {
                 .logical(source.isLogical()).build();
     }
 
-    private static String fingerprint(Long taskId, String verdict, String sourceFingerprint, ImportPlanMode mode,
-            List<ImportTableDependency> dependencies, List<ImportManifestShard> shards) {
-        StringBuilder canonical = new StringBuilder().append(SCHEMA_VERSION).append('|').append(taskId)
-                .append('|').append(StringUtils.defaultString(verdict)).append('|').append(sourceFingerprint)
-                .append('|').append(mode.name());
-        dependencies.stream().sorted(Comparator.comparing(ImportTableDependency::getParentTable)
-                .thenComparing(ImportTableDependency::getParentColumn,
-                        Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparing(ImportTableDependency::getChildTable)
-                .thenComparing(ImportTableDependency::getChildColumn,
-                        Comparator.nullsFirst(Comparator.naturalOrder())))
-                .forEach(edge -> canonical.append("|D:").append(edge.getParentTable()).append('.')
-                        .append(edge.getParentColumn()).append('>').append(edge.getChildTable()).append('.')
-                        .append(edge.getChildColumn()).append(':').append(edge.isLogical()));
-        shards.forEach(shard -> canonical.append("|S:").append(shard.getShardId()).append(':')
-                .append(shard.getTableName()).append(':').append(shard.getLayer()).append(':')
-                .append(StringUtils.defaultString(shard.getShardKey())).append(':')
-                .append(StringUtils.defaultString(shard.getLowerBound())).append(':')
-                .append(StringUtils.defaultString(shard.getUpperBound())).append(':')
-                .append(shard.getSourcePath()).append(':').append(shard.getEstimatedRows()).append(':')
-                .append(StringUtils.defaultString(shard.getExpectedChecksum())).append(':')
-                .append(String.join(",", shard.getDependencyShardIds())));
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is unavailable", impossible);
-        }
-    }
 }

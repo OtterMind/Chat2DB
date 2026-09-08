@@ -55,6 +55,12 @@ public class Task {
      */
     private List<ResumeState> resumeStates;
 
+    /**
+     * Carrier used by the legacy file task store for the immutable execution manifest. H2 keeps
+     * manifests in a dedicated table; callers must use {@code TaskStorage.loadImportManifest}.
+     */
+    private ImportManifest importManifest;
+
     private Long userId;
 
     private Long organizationId;

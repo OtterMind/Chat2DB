@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.api.service.task;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -83,4 +84,17 @@ public interface TaskStorage {
     List<ResumeState> listResumeStates(Long taskId);
 
     void clearResumeStates(Long taskId);
+
+    /**
+     * Persists a task's immutable import plan. Repeating the same manifest is idempotent; replacing
+     * it with a different fingerprint must fail so a restart cannot silently execute new shards
+     * against old checkpoints.
+     */
+    default void saveImportManifest(Long taskId, ImportManifest manifest) {
+        throw new UnsupportedOperationException("Import manifest storage is unavailable");
+    }
+
+    default Optional<ImportManifest> loadImportManifest(Long taskId) {
+        return Optional.empty();
+    }
 }

@@ -19,7 +19,7 @@ import java.sql.Statement;
 @Slf4j
 final class TaskDatabase implements AutoCloseable {
 
-    static final int SCHEMA_VERSION = 3;
+    static final int SCHEMA_VERSION = 4;
 
     /**
      * Sibling of the {@code task-v2} directory written by {@code FileTaskStorage}, so every task
@@ -79,6 +79,11 @@ final class TaskDatabase implements AutoCloseable {
                     + "bytes_done BIGINT,"
                     + "updated_at BIGINT,"
                     + "PRIMARY KEY (task_id, shard_no))",
+            "CREATE TABLE IF NOT EXISTS import_manifest ("
+                    + "task_id BIGINT PRIMARY KEY,"
+                    + "fingerprint VARCHAR(64) NOT NULL,"
+                    + "manifest_json CLOB NOT NULL,"
+                    + "created_at BIGINT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS schema_meta ("
                     + "meta_key VARCHAR(64) PRIMARY KEY,"
                     + "meta_value CLOB)",
