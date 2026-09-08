@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
+import ai.chat2db.spi.sql.Chat2DBContext;
 
 /**
  * Mandatory read-only admission gate for imports. It deliberately separates facts from mode
@@ -45,6 +47,11 @@ public final class ImportParallelAdmission {
     }
 
     public static ImportAdmissionReport assess(ImportTaskSpec spec, List<TableColumn> tableColumns) {
+        return assess(spec, tableColumns, null);
+    }
+
+    public static ImportAdmissionReport assess(ImportTaskSpec spec, List<TableColumn> tableColumns,
+            ImportResourceSnapshot resources) {
         File source = new File(StringUtils.defaultString(spec.getSourceFile()));
         String format = StringUtils.upperCase(StringUtils.trimToEmpty(spec.getFormat()), Locale.ROOT);
         boolean requestedParallel = TaskExecutionMode.isUltraFast(spec.getMode());
@@ -88,6 +95,9 @@ public final class ImportParallelAdmission {
         if (requestedParallel && StringUtils.isBlank(spec.getImportFileId())) {
             blocker(findings, "G7", "Parallel input has not completed mandatory staging",
                     "No opaque staged-file identity is attached to the task", "Select the source through the import file picker and retry.");
+        }
+        if (requestedParallel && resources != null) {
+            assessResources(resources, relationshipAccepted, findings);
         }
 
         long minBytes = Long.getLong("chat2db.task.import.parallel.min-bytes", DEFAULT_MIN_BYTES);
@@ -133,7 +143,10 @@ public final class ImportParallelAdmission {
 
     public static ImportAdmissionReport enforce(ImportTaskSpec spec, List<TableColumn> tableColumns,
             TaskExecutionContext context) {
-        ImportAdmissionReport report = assess(spec, tableColumns);
+        ImportResourceSnapshot resources = Chat2DBContext.getDbManager().probeImportResources(
+                Chat2DBContext.getConnection(), spec.getTarget().getDatabaseName(),
+                spec.getTarget().getSchemaName());
+        ImportAdmissionReport report = assess(spec, tableColumns, resources);
         Map<String, Object> details = details(report);
         if (TaskExecutionMode.isUltraFast(spec.getMode()) && FORBIDDEN.equals(report.getVerdict())) {
             context.logError("IMPORT_PARALLEL_ADMISSION", "Parallel import rejected before execution", details);
@@ -160,6 +173,58 @@ public final class ImportParallelAdmission {
                     "Operator confirmed that the target has no strong relationship or ordering dependency", details);
         }
         return report;
+    }
+
+    public static int requestedParallelism() {
+        return Math.max(2, Integer.getInteger("chat2db.task.import.parallelism",
+                Math.min(16, Math.max(2, Runtime.getRuntime().availableProcessors()))));
+    }
+
+    private static void assessResources(ImportResourceSnapshot resources, boolean relationshipAccepted,
+            List<ImportAdmissionFinding> findings) {
+        int requiredConnections = requestedParallelism() + 2;
+        if (resources.connectionCapacityKnown()) {
+            int available = Math.max(0, resources.maxConnections() - resources.activeConnections());
+            if (available < requiredConnections) {
+                blocker(findings, "E2", "The target does not have enough connection headroom",
+                        available + " available; " + requiredConnections + " required including reserve",
+                        "Lower import parallelism or free database connections before retrying.");
+            }
+        } else {
+            degradation(findings, "E2U", "Connection headroom could not be verified",
+                    resources.evidence(), "Verify max_connections and current usage before a large import.");
+        }
+        long lagLimit = Long.getLong("chat2db.task.import.max-replication-lag-seconds", 30L);
+        if (!resources.replicationStatusKnown()) {
+            degradation(findings, "E3U", "Replication status could not be verified",
+                    resources.evidence(), "Verify replica health and lag before applying import load.");
+        } else if (resources.replica()
+                && (resources.replicationLagSeconds() == null || resources.replicationLagSeconds() > lagLimit)) {
+            blocker(findings, "E3", "The target replica is delayed or has unknown apply progress",
+                    "Seconds behind source: " + resources.replicationLagSeconds() + "; limit: " + lagLimit,
+                    "Wait for replication to recover or select a healthy test target.");
+        }
+        if (!resources.triggerStatusKnown()) {
+            degradation(findings, "A6U", "Target triggers could not be verified",
+                    resources.evidence(), "Review target triggers before enabling parallel import.");
+        } else if (resources.triggerCount() > 0) {
+            if (relationshipAccepted) {
+                degradation(findings, "A6", "Target triggers require operator-verified ordering safety",
+                        resources.triggerCount() + " trigger(s) found in the target database",
+                        "Keep trigger effects enabled and run full relationship validation after import.");
+            } else {
+                blocker(findings, "A6", "Target triggers may introduce cross-row ordering dependencies",
+                        resources.triggerCount() + " trigger(s) found in the target database",
+                        "Review trigger behavior and confirm it is independent, or use STANDARD mode.");
+            }
+        }
+        if (!resources.diskCapacityKnown()) {
+            degradation(findings, "E1U", "Server disk capacity could not be verified through SQL metadata",
+                    resources.evidence(), "Verify at least 1.5 times the estimated import size on the database host.");
+        } else if (!resources.diskCapacitySufficient()) {
+            blocker(findings, "E1", "The target does not have enough verified disk capacity",
+                    resources.evidence(), "Free disk space or reduce the import batch before retrying.");
+        }
     }
 
     private static CsvFacts scanCsv(File source, ImportTaskSpec spec, List<ImportAdmissionFinding> findings) {

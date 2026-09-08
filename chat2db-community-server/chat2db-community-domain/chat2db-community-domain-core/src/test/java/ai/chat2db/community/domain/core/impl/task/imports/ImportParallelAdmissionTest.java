@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.task.ImportAdmissionReport;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,6 +28,7 @@ class ImportParallelAdmissionTest {
     void clearThresholdOverrides() {
         System.clearProperty("chat2db.task.import.parallel.min-bytes");
         System.clearProperty("chat2db.task.import.parallel.min-rows");
+        System.clearProperty("chat2db.task.import.parallelism");
     }
 
     @Test
@@ -97,6 +99,61 @@ class ImportParallelAdmissionTest {
         assertEquals("PARALLEL_FORBIDDEN", report.getVerdict());
         assertTrue(hasFinding(report, "P0", "BLOCKER"));
         assertTrue(hasFinding(report, "A4", "BLOCKER"));
+    }
+
+    @Test
+    void blocksWhenMysqlConnectionHeadroomCannotCoverWorkersAndReserve() throws Exception {
+        useOneUnitThresholds();
+        System.setProperty("chat2db.task.import.parallelism", "4");
+        ImportResourceSnapshot resources = new ImportResourceSnapshot(
+                true, 10, 5, true, false, null, true, 0, true, true, "fixture");
+
+        ImportAdmissionReport report = ImportParallelAdmission.assess(
+                csvSpec("ID,NAME\n1,Alice\n", true, true), columns(), resources);
+
+        assertTrue(hasFinding(report, "E2", "BLOCKER"));
+        assertEquals("PARALLEL_FORBIDDEN", report.getVerdict());
+    }
+
+    @Test
+    void recordsAcceptedTriggerRiskAndUnknownHostDiskAsDegradations() throws Exception {
+        useOneUnitThresholds();
+        ImportResourceSnapshot resources = new ImportResourceSnapshot(
+                true, 100, 2, true, false, null, true, 3, false, false, "disk unavailable");
+
+        ImportAdmissionReport report = ImportParallelAdmission.assess(
+                csvSpec("ID,NAME\n1,Alice\n", true, true), columns(), resources);
+
+        assertTrue(hasFinding(report, "A6", "DEGRADATION"));
+        assertTrue(hasFinding(report, "E1U", "DEGRADATION"));
+        assertEquals("PARALLEL_DEGRADED", report.getVerdict());
+        assertTrue(report.isParallelAllowed());
+    }
+
+    @Test
+    void blocksAReplicaWhoseLagExceedsTheConfiguredLimit() throws Exception {
+        useOneUnitThresholds();
+        ImportResourceSnapshot resources = new ImportResourceSnapshot(
+                true, 100, 2, true, true, 31L, true, 0, true, true, "fixture");
+
+        ImportAdmissionReport report = ImportParallelAdmission.assess(
+                csvSpec("ID,NAME\n1,Alice\n", true, true), columns(), resources);
+
+        assertTrue(hasFinding(report, "E3", "BLOCKER"));
+    }
+
+    @Test
+    void degradesWhenTriggerMetadataCannotBeVerified() throws Exception {
+        useOneUnitThresholds();
+        ImportResourceSnapshot resources = new ImportResourceSnapshot(
+                true, 100, 2, true, false, null, false, 0, true, true,
+                "trigger metadata unavailable");
+
+        ImportAdmissionReport report = ImportParallelAdmission.assess(
+                csvSpec("ID,NAME\n1,Alice\n", true, true), columns(), resources);
+
+        assertTrue(hasFinding(report, "A6U", "DEGRADATION"));
+        assertEquals("PARALLEL_DEGRADED", report.getVerdict());
     }
 
     private ImportTaskSpec csvSpec(String content, boolean confirmed, boolean mapGeneratedKey) throws Exception {

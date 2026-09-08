@@ -37,6 +37,7 @@ import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
 import com.alibaba.fastjson2.JSON;
 import com.google.common.util.concurrent.Striped;
 import lombok.extern.slf4j.Slf4j;
@@ -115,25 +116,31 @@ public class TaskServiceImpl implements TaskService {
         }
         String format = StringUtils.upperCase(StringUtils.trimToEmpty(spec.getFormat()),
                 java.util.Locale.ROOT);
-        List<TableColumn> tableColumns = loadTableColumns(spec);
+        ImportPreviewTarget previewTarget = loadImportTarget(spec);
         return switch (format) {
-            case "CSV" -> previewCsv(source, spec, tableColumns);
-            case "XLSX", "XLS" -> previewExcel(source, spec, tableColumns, format);
+            case "CSV" -> previewCsv(source, spec, previewTarget.tableColumns(), previewTarget.resources());
+            case "XLSX", "XLS" -> previewExcel(source, spec, previewTarget.tableColumns(),
+                    previewTarget.resources(), format);
             default -> throw new BusinessException("task.import.preview.unsupportedFormat", null);
         };
     }
 
-    private List<TableColumn> loadTableColumns(ImportTaskSpec spec) {
+    private ImportPreviewTarget loadImportTarget(ImportTaskSpec spec) {
         return withTargetConnection(spec, connectInfo -> {
             TaskTargetSnapshot target = spec.getTarget();
             TableMetadataRequest trusted = ai.chat2db.community.domain.core.impl.db.TrustedMetadataRequestResolver
                     .table(target.getDataSourceId(), target.getDatabaseName(), target.getSchemaName(),
                             target.getTableName());
-            return Chat2DBContext.getDbMetaData().columns(Chat2DBContext.getConnection(), trusted);
+            java.sql.Connection connection = Chat2DBContext.getConnection();
+            List<TableColumn> columns = Chat2DBContext.getDbMetaData().columns(connection, trusted);
+            ImportResourceSnapshot resources = Chat2DBContext.getDbManager().probeImportResources(
+                    connection, target.getDatabaseName(), target.getSchemaName());
+            return new ImportPreviewTarget(columns, resources);
         });
     }
 
-    private ImportPreview previewCsv(java.io.File source, ImportTaskSpec spec, List<TableColumn> tableColumns) {
+    private ImportPreview previewCsv(java.io.File source, ImportTaskSpec spec, List<TableColumn> tableColumns,
+            ImportResourceSnapshot resources) {
         try {
             java.nio.charset.Charset charset = ImportFileProbe.effectiveCharset(source,
                     spec.getOptions() == null ? null : spec.getOptions().getCharset());
@@ -144,25 +151,27 @@ public class TaskServiceImpl implements TaskService {
             CSVFormat format = ImportFileProbe.csvFormat(delimiter, quote);
             List<List<String>> rows = ImportFileProbe.readSample(source, charset, format,
                     ImportFileProbe.sampleRows());
-            return buildPreview(rows, tableColumns, spec, charset.name(), String.valueOf(delimiter));
+            return buildPreview(rows, tableColumns, spec, charset.name(), String.valueOf(delimiter),
+                    resources);
         } catch (java.io.IOException e) {
             throw new BusinessException("task.import.preview.failed", null, e);
         }
     }
 
     private ImportPreview previewExcel(java.io.File source, ImportTaskSpec spec, List<TableColumn> tableColumns,
-            String format) {
+            ImportResourceSnapshot resources, String format) {
         ImportPreviewListener listener = new ImportPreviewListener();
         EasyExcel.read(source, listener)
                 .excelType("XLS".equals(format) ? ExcelTypeEnum.XLS : ExcelTypeEnum.XLSX)
                 .sheet()
                 .headRowNumber(1)
                 .doRead();
-        return buildPreview(listener.rows(), tableColumns, spec, null, null);
+        return buildPreview(listener.rows(), tableColumns, spec, null, null, resources);
     }
 
     private ImportPreview buildPreview(List<List<String>> rows, List<TableColumn> tableColumns,
-            ImportTaskSpec spec, String detectedCharset, String detectedDelimiter) {
+            ImportTaskSpec spec, String detectedCharset, String detectedDelimiter,
+            ImportResourceSnapshot resources) {
         List<String> headers = rows.isEmpty() ? List.of() : rows.get(0);
         ImportColumnResolver.Resolution resolution =
                 ImportColumnResolver.resolveForSpec(tableColumns, headers, spec);
@@ -180,8 +189,12 @@ public class TaskServiceImpl implements TaskService {
                         : rows.subList(1, rows.size()).stream().map(row -> (List<String>) row).toList())
                 .detectedCharset(detectedCharset)
                 .detectedDelimiter(detectedDelimiter)
-                .parallelAdmission(ImportParallelAdmission.assess(spec, tableColumns))
+                .parallelAdmission(ImportParallelAdmission.assess(spec, tableColumns, resources))
                 .build();
+    }
+
+
+    private record ImportPreviewTarget(List<TableColumn> tableColumns, ImportResourceSnapshot resources) {
     }
 
     @Override

@@ -17,6 +17,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.Date;
 
 import static cn.hutool.core.date.DatePattern.NORM_DATETIME_PATTERN;
@@ -40,6 +41,96 @@ import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_SHOW_TRIGGE
 import static ai.chat2db.plugin.mysql.constant.MysqlDBManagerConstants.*;
 @Slf4j
 public class MysqlDBManager extends DefaultDBManager implements IDbManager {
+
+    @Override
+    public ai.chat2db.spi.model.imports.ImportResourceSnapshot probeImportResources(
+            Connection connection, String databaseName, String schemaName) {
+        int maxConnections = 0;
+        int activeConnections = 0;
+        boolean connectionCapacityKnown = false;
+        StringBuilder evidence = new StringBuilder();
+        try (Statement statement = connection.createStatement();
+             ResultSet limits = statement.executeQuery("SELECT @@max_connections")) {
+            if (limits.next()) {
+                maxConnections = limits.getInt(1);
+            }
+        } catch (SQLException failure) {
+            evidence.append("max_connections unavailable; ");
+        }
+        try (Statement statement = connection.createStatement();
+             ResultSet status = statement.executeQuery("SHOW GLOBAL STATUS LIKE 'Threads_connected'")) {
+            if (status.next()) {
+                activeConnections = status.getInt(2);
+                connectionCapacityKnown = maxConnections > 0;
+            }
+        } catch (SQLException failure) {
+            evidence.append("Threads_connected unavailable; ");
+        }
+
+        int triggerCount = 0;
+        boolean triggerStatusKnown = false;
+        try (PreparedStatement triggers = connection.prepareStatement(
+                "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = ?")) {
+            triggers.setString(1, databaseName);
+            try (ResultSet rows = triggers.executeQuery()) {
+                if (rows.next()) {
+                    triggerCount = rows.getInt(1);
+                    triggerStatusKnown = true;
+                }
+            }
+        } catch (SQLException failure) {
+            evidence.append("trigger metadata unavailable; ");
+        }
+
+        ReplicationStatus replication = replicationStatus(connection, evidence);
+        evidence.append("server disk free space is not exposed reliably by MySQL SQL metadata");
+        return new ai.chat2db.spi.model.imports.ImportResourceSnapshot(
+                connectionCapacityKnown, maxConnections, activeConnections,
+                replication.known(), replication.replica(), replication.lagSeconds(),
+                triggerStatusKnown, triggerCount, false, false, evidence.toString());
+    }
+
+    private ReplicationStatus replicationStatus(Connection connection, StringBuilder evidence) {
+        try {
+            return queryReplicationStatus(connection, "SHOW REPLICA STATUS", "Seconds_Behind_Source");
+        } catch (SQLException modernFailure) {
+            try {
+                return queryReplicationStatus(connection, "SHOW SLAVE STATUS", "Seconds_Behind_Master");
+            } catch (SQLException legacyFailure) {
+                evidence.append("replication status unavailable; ");
+                return new ReplicationStatus(false, false, null);
+            }
+        }
+    }
+
+    private ReplicationStatus queryReplicationStatus(Connection connection, String sql, String lagColumn)
+            throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet status = statement.executeQuery(sql)) {
+            if (!status.next()) {
+                return new ReplicationStatus(true, false, null);
+            }
+            long lag = status.getLong(lagColumn);
+            return new ReplicationStatus(true, true, status.wasNull() ? null : lag);
+        }
+    }
+
+    private record ReplicationStatus(boolean known, boolean replica, Long lagSeconds) {
+    }
+
+    @Override
+    public ai.chat2db.spi.model.export.ExportCapability getExportCapability() {
+        return ai.chat2db.spi.model.export.ExportCapability.KEYSET_SHARDING;
+    }
+
+    @Override
+    public boolean startConsistentExportSnapshot(Connection connection) throws SQLException {
+        try (PreparedStatement isolation = connection.prepareStatement(SQL_SET_REPEATABLE_READ);
+             PreparedStatement snapshot = connection.prepareStatement(SQL_START_CONSISTENT_SNAPSHOT)) {
+            isolation.execute();
+            snapshot.execute();
+            return true;
+        }
+    }
 
     @Override
     public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
