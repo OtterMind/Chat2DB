@@ -31,9 +31,18 @@ import java.util.concurrent.CompletionStage;
 final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
 
     private final AgentRuntimeDescriptor descriptor;
+    private final AgentRuntimeEnvironmentStatus environmentStatus;
     private String deletedSessionId;
+    private int openSessionCount;
 
     FakeAgentRuntimeAdapter(AgentRuntimeType runtimeType) {
+        this(runtimeType, AgentRuntimeEnvironmentStatus.READY);
+    }
+
+    FakeAgentRuntimeAdapter(
+            AgentRuntimeType runtimeType,
+            AgentRuntimeEnvironmentStatus environmentStatus) {
+        this.environmentStatus = environmentStatus;
         this.descriptor = new AgentRuntimeDescriptor(
                 runtimeType,
                 runtimeType.name(),
@@ -53,7 +62,7 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
     public AgentRuntimeEnvironmentReport inspectEnvironment(AgentRuntimeEnvironmentRequest request) {
         return new AgentRuntimeEnvironmentReport(
                 descriptor.type(),
-                AgentRuntimeEnvironmentStatus.READY,
+                environmentStatus,
                 descriptor.version(),
                 request.operatingSystem(),
                 request.architecture(),
@@ -66,6 +75,7 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
     public AgentRuntimeSessionHandle openSession(
             AgentRuntimeSessionOpenRequest request,
             AgentRuntimeEventSink eventSink) {
+        openSessionCount++;
         return new FakeSessionHandle(request.sessionId(), request.externalSessionId(), null, eventSink);
     }
 
@@ -87,6 +97,10 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
 
     String deletedSessionId() {
         return deletedSessionId;
+    }
+
+    int openSessionCount() {
+        return openSessionCount;
     }
 
     private static final class FakeSessionHandle implements AgentRuntimeSessionHandle {
