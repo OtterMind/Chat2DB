@@ -28,9 +28,15 @@ public final class ImportManifestScheduler {
     static final String FAILED = "MANIFEST_FAILED";
 
     private final TaskStorage storage;
+    private final ImportShardRetryPolicy retryPolicy;
 
     public ImportManifestScheduler(TaskStorage storage) {
+        this(storage, new ImportShardRetryPolicy());
+    }
+
+    ImportManifestScheduler(TaskStorage storage, ImportShardRetryPolicy retryPolicy) {
         this.storage = storage;
+        this.retryPolicy = retryPolicy;
     }
 
     public void execute(ImportManifest manifest, int maxConcurrency, Runnable cancellationCheck,
@@ -93,7 +99,7 @@ public final class ImportManifestScheduler {
             throw new IllegalStateException("Manifest shard could not be claimed: " + shard.getShardId());
         }
         try {
-            ShardResult result = executor.execute(shard);
+            ShardResult result = retryPolicy.execute(() -> executor.execute(shard));
             ShardResult committed = result == null ? new ShardResult(0L, 0L) : result;
             if (!storage.compareAndSetResumeState(manifest.getTaskId(), state.index(), RUNNING,
                     resume(state.index(), DONE, cursor(manifest, shard), committed.rows(), committed.bytes()))) {

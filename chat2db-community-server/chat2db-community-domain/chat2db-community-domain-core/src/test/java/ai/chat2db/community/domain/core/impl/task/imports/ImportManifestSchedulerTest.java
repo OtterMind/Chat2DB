@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -105,6 +106,25 @@ class ImportManifestSchedulerTest {
 
         assertThrows(IllegalStateException.class, () -> new ImportManifestScheduler(memory.proxy())
                 .execute(manifest, 2, null, shard -> new ImportManifestScheduler.ShardResult(0, 0)));
+    }
+
+    @Test
+    void retriesADeadlockedShardBeforePersistingDone() {
+        MemoryResumeStorage memory = new MemoryResumeStorage();
+        ImportManifest manifest = manifest();
+        AtomicInteger attempts = new AtomicInteger();
+        ImportShardRetryPolicy retry = new ImportShardRetryPolicy(1, 0L, 0L,
+                ignored -> { }, ignored -> 0L);
+
+        new ImportManifestScheduler(memory.proxy(), retry).execute(manifest, 2, null, shard -> {
+            if ("orders-1".equals(shard.getShardId()) && attempts.incrementAndGet() == 1) {
+                throw new SQLException("deadlock", "40001", 1213);
+            }
+            return new ImportManifestScheduler.ShardResult(shard.getEstimatedRows(), 10L);
+        });
+
+        assertEquals(2, attempts.get());
+        assertEquals(ImportManifestScheduler.DONE, memory.states().get(0).getKind());
     }
 
     private ImportManifest manifest() {
