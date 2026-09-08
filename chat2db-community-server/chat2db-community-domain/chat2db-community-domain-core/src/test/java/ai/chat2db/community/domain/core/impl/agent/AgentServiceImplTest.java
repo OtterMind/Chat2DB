@@ -39,7 +39,8 @@ class AgentServiceImplTest {
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
-                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                () -> "session-one", CLOCK);
 
         AgentSession session = service.createSession(command());
 
@@ -60,7 +61,8 @@ class AgentServiceImplTest {
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
-                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
 
@@ -73,7 +75,8 @@ class AgentServiceImplTest {
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of());
         AgentServiceImpl service = new AgentServiceImpl(
-                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
 
@@ -89,12 +92,32 @@ class AgentServiceImplTest {
                 registry,
                 storage,
                 unusedCoordinator(registry, storage),
+                new UnusedAgentEventStorage(),
                 () -> "session-one",
                 CLOCK);
         service.createSession(command());
 
         assertNull(service.getSession("session-one", 2L));
         assertEquals(List.of(), service.listSessions(2L));
+    }
+
+    @Test
+    void eventQueriesEnforceOwnershipAndBounds() {
+        FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
+        MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
+        AgentServiceImpl service = new AgentServiceImpl(
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                () -> "session-one", CLOCK);
+        service.createSession(command());
+
+        assertEquals(List.of(), service.listEvents("session-one", 1L, 0, 200));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.listEvents("session-one", 2L, 0, 200));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.listEvents("session-one", 1L, -1, 200));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.listEvents("session-one", 1L, 0, 1001));
     }
 
     private AgentSessionCreateCommand command() {

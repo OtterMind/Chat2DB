@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.api.service.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
@@ -20,4 +21,6 @@ public interface AgentService {
     CompletionStage<AgentRun> startRun(AgentRunStartCommand command);
 
     CompletionStage<AgentRun> cancelRun(AgentRunCancelCommand command);
+
+    List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit);
 }

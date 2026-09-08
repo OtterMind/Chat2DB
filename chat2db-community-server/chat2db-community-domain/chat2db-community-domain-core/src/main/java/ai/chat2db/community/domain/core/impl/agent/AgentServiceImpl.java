@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
@@ -11,6 +12,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCom
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
+import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
@@ -30,14 +32,16 @@ public class AgentServiceImpl implements AgentService {
     private final AgentRuntimeRegistry runtimeRegistry;
     private final AgentSessionStorage sessionStorage;
     private final AgentRunCoordinator runCoordinator;
+    private final AgentEventStorage eventStorage;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
     public AgentServiceImpl(
             AgentRuntimeRegistry runtimeRegistry,
             AgentSessionStorage sessionStorage,
-            AgentRunCoordinator runCoordinator) {
-        this(runtimeRegistry, sessionStorage, runCoordinator,
+            AgentRunCoordinator runCoordinator,
+            AgentEventStorage eventStorage) {
+        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -45,11 +49,13 @@ public class AgentServiceImpl implements AgentService {
             AgentRuntimeRegistry runtimeRegistry,
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
+            AgentEventStorage eventStorage,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.sessionStorage = Objects.requireNonNull(sessionStorage, "sessionStorage");
         this.runCoordinator = Objects.requireNonNull(runCoordinator, "runCoordinator");
+        this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -110,6 +116,20 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public CompletionStage<AgentRun> cancelRun(AgentRunCancelCommand command) {
         return runCoordinator.cancel(command);
+    }
+
+    @Override
+    public List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit) {
+        if (sessionStorage.get(sessionId, userId) == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        if (afterSequence < 0) {
+            throw new IllegalArgumentException("afterSequence must not be negative");
+        }
+        if (limit < 1 || limit > 1000) {
+            throw new IllegalArgumentException("limit must be between 1 and 1000");
+        }
+        return eventStorage.list(sessionId, userId, afterSequence, limit);
     }
 
     private String requireGeneratedId(String id) {
