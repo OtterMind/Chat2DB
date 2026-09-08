@@ -24,36 +24,34 @@ class AgentContractTest {
     void agentDefinitionKeepsRuntimeSelectionExplicit() {
         AgentDefinition definition = new AgentDefinition(
                 "default", "Default agent", null, "You are a database assistant.",
-                new AgentRuntimeId("pi"), "model-config", 1);
+                AgentRuntimeType.PI, "model-config", 1);
 
-        assertEquals(new AgentRuntimeId("pi"), definition.runtimeId());
+        assertEquals(AgentRuntimeType.PI, definition.runtimeType());
         assertThrows(IllegalArgumentException.class, () -> new AgentDefinition(
                 "default", "Default agent", null, null,
-                new AgentRuntimeId("pi"), "model-config", 0));
+                AgentRuntimeType.PI, "model-config", 0));
     }
 
     @Test
     void agentSessionIsExplicitlyV2() {
         LocalDateTime now = LocalDateTime.now();
         AgentRuntimeBinding binding = new AgentRuntimeBinding(
-                new AgentRuntimeId("pi"), "0.85.1", "jsonl-rpc", "external-session", null, 1);
+                AgentRuntimeType.PI, "0.85.1", "jsonl-rpc", "external-session", null, 1);
         AgentSession session = new AgentSession(
                 AgentSession.SCHEMA_VERSION, "session", 1L, "default", 1, binding, AgentSessionStatus.CREATED,
                 "New session", 0, now, now);
 
         assertEquals(2, session.schemaVersion());
-        assertEquals(new AgentRuntimeId("pi"), session.runtimeBinding().runtimeId());
+        assertEquals(AgentRuntimeType.PI, session.runtimeBinding().runtimeType());
         assertThrows(IllegalArgumentException.class, () -> new AgentSession(
                 1, "session", 1L, "default", 1, binding, AgentSessionStatus.CREATED,
                 "New session", 0, now, now));
     }
 
     @Test
-    void runtimeIdUsesStableLowercaseIdentifiers() {
-        assertEquals("pi", new AgentRuntimeId("pi").value());
-        assertEquals("remote-runtime", new AgentRuntimeId("remote-runtime").value());
-        assertThrows(IllegalArgumentException.class, () -> new AgentRuntimeId("PI"));
-        assertThrows(IllegalArgumentException.class, () -> new AgentRuntimeId("pi_runtime"));
+    void runtimeTypesArePlatformControlled() {
+        assertEquals(List.of(AgentRuntimeType.PI, AgentRuntimeType.CODEX, AgentRuntimeType.DSH),
+                List.of(AgentRuntimeType.values()));
     }
 
     @Test
@@ -89,7 +87,7 @@ class AgentContractTest {
         List<String> checks = new ArrayList<>(List.of("binary"));
         Map<String, String> diagnostics = new HashMap<>(Map.of("architecture", "arm64"));
         AgentRuntimeEnvironmentReport report = new AgentRuntimeEnvironmentReport(
-                new AgentRuntimeId("pi"), AgentRuntimeEnvironmentStatus.READY, "0.85.1",
+                AgentRuntimeType.PI, AgentRuntimeEnvironmentStatus.READY, "0.85.1",
                 "macos", "arm64", checks, diagnostics, LocalDateTime.now());
 
         checks.add("rpc");

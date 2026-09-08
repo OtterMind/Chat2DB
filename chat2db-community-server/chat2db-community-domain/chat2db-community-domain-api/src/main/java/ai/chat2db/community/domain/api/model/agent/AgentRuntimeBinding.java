@@ -3,7 +3,7 @@ package ai.chat2db.community.domain.api.model.agent;
 import java.util.Objects;
 
 public record AgentRuntimeBinding(
-        AgentRuntimeId runtimeId,
+        AgentRuntimeType runtimeType,
         String runtimeVersion,
         String protocolVersion,
         String externalSessionId,
@@ -11,7 +11,7 @@ public record AgentRuntimeBinding(
         long revision) {
 
     public AgentRuntimeBinding {
-        Objects.requireNonNull(runtimeId, "runtimeId");
+        Objects.requireNonNull(runtimeType, "runtimeType");
         requireText(runtimeVersion, "runtimeVersion");
         requireText(protocolVersion, "protocolVersion");
         requireText(externalSessionId, "externalSessionId");

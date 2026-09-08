@@ -7,14 +7,14 @@ public record AgentDefinition(
         String name,
         String description,
         String systemPrompt,
-        AgentRuntimeId runtimeId,
+        AgentRuntimeType runtimeType,
         String modelConfigId,
         long revision) {
 
     public AgentDefinition {
         requireText(id, "id");
         requireText(name, "name");
-        Objects.requireNonNull(runtimeId, "runtimeId");
+        Objects.requireNonNull(runtimeType, "runtimeType");
         requireText(modelConfigId, "modelConfigId");
         if (revision < 1) {
             throw new IllegalArgumentException("revision must be greater than zero");
