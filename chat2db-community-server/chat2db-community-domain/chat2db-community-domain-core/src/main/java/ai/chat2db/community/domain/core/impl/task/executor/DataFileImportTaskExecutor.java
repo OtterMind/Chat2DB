@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFactory;
 import ai.chat2db.community.domain.core.impl.task.imports.CsvManifestImporter;
+import ai.chat2db.community.domain.core.impl.task.imports.CsvManifestPreparer;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -41,6 +42,8 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
     @Override
     public void execute(ImportTaskSpec spec, TaskExecutionContext context) {
         boolean completed = false;
+        ImportManifest manifest = null;
+        CsvManifestPreparer manifestPreparer = null;
         try {
             TaskExecutorSupport.requireReadableSource(spec.getSourceFile());
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
@@ -49,8 +52,13 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                         "Unsupported data import format");
             }
             context.reportProgress(5, TaskStage.READING.name(), "Preparing data import");
-            ImportManifest manifest = context.taskId() == null || taskStorage == null ? null
+            manifest = context.taskId() == null || taskStorage == null ? null
                     : taskStorage.loadImportManifest(context.taskId()).orElse(null);
+            if (manifest == null && TaskFileFormat.CSV.name().equals(format)
+                    && TaskExecutionMode.isUltraFast(spec.getMode())) {
+                manifestPreparer = new CsvManifestPreparer(taskStorage);
+                manifest = manifestPreparer.prepare(spec, context);
+            }
             if (manifest != null) {
                 if (!TaskFileFormat.CSV.name().equals(format) || !TaskExecutionMode.isUltraFast(spec.getMode())) {
                     throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
@@ -74,6 +82,10 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
             // Interrupted imports still need the exact staged source to resume from checkpoints.
             if (completed && spec.getImportFileId() != null) {
                 importFileStagingService.release(spec.getImportFileId());
+            }
+            if (completed && manifest != null) {
+                (manifestPreparer == null ? new CsvManifestPreparer(taskStorage) : manifestPreparer)
+                        .cleanup(manifest);
             }
         }
     }
