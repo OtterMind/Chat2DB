@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
@@ -21,6 +22,8 @@ import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
+import ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
@@ -43,6 +46,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -198,6 +202,7 @@ class MySQLTaskRoundTripIT {
         System.clearProperty("chat2db.task.import.parallelism");
         System.clearProperty("chat2db.task.import.parallel.min-bytes");
         System.clearProperty("chat2db.task.import.parallel.min-rows");
+        System.clearProperty("chat2db.task.import.csv-shard-target-bytes");
         if (connection != null) {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("DROP DATABASE IF EXISTS " + database);
@@ -328,6 +333,57 @@ class MySQLTaskRoundTripIT {
             assertTrue(distinct.next());
             assertEquals(ROWS * 2, distinct.getLong(1), "no duplicated ids");
         }
+    }
+
+    @Test
+    void manifestExecutorImportsAndCleansMysqlShards() throws Exception {
+        System.setProperty("chat2db.task.import.parallelism", "4");
+        System.setProperty("chat2db.task.import.csv-shard-target-bytes", "4096");
+        Path csv = tempDirectory.resolve("manifest.csv");
+        StringBuilder content = new StringBuilder("ID,NAME,VAL\n");
+        for (int id = 1; id <= ROWS * 2; id++) {
+            content.append(id).append(",manifest-").append(id).append(',').append(id * 5).append('\n');
+        }
+        Files.writeString(csv, content.toString(), StandardCharsets.UTF_8);
+        createCopyTable("C2D_MANIFEST");
+
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .taskType("DATA_FILE_IMPORT").sourceFile(csv.toString()).importFileId("mysql-manifest-staged")
+                .format("CSV").mode("ULTRA_FAST").confirmedNoStrongRelations(true)
+                .target(TaskTargetSnapshot.builder().dataSourceId(1L).databaseName(database)
+                        .tableName("C2D_MANIFEST").build())
+                .options(ImportOptions.builder().charset("UTF-8").delimiter(",").onError("ABORT")
+                        .columnMappings(List.of(new ImportColumnMapping("ID", "ID"),
+                                new ImportColumnMapping("NAME", "NAME"),
+                                new ImportColumnMapping("VAL", "VAL"))).build())
+                .build();
+        TaskExecutionContextImpl context = contextFor();
+        DataFileImportTaskExecutor executor = new DataFileImportTaskExecutor();
+        setField(executor, "taskStorage", storage);
+        setField(executor, "importFileStagingService",
+                (IImportFileStagingService) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                        new Class<?>[]{IImportFileStagingService.class}, (proxy, method, args) -> null));
+
+        executor.execute(spec, context);
+
+        ImportManifest manifest = storage.manifest.orElseThrow();
+        assertTrue(manifest.getShards().size() > 1, "small target size must create multiple manifest shards");
+        assertEquals(ROWS * 2, countRows("C2D_MANIFEST"));
+        try (Statement statement = connection.createStatement();
+             ResultSet distinct = statement.executeQuery("SELECT COUNT(DISTINCT ID) FROM C2D_MANIFEST")) {
+            assertTrue(distinct.next());
+            assertEquals(ROWS * 2, distinct.getLong(1), "manifest shards must not duplicate ids");
+        }
+        assertEquals(manifest.getShards().size(), storage.states.stream()
+                .filter(state -> "MANIFEST_DONE".equals(state.getKind())).count());
+        assertTrue(manifest.getShards().stream().noneMatch(shard -> Files.exists(Path.of(shard.getSourcePath()))),
+                "successful execution must remove generated shard files");
+    }
+
+    private static void setField(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     @Test
@@ -477,6 +533,7 @@ class MySQLTaskRoundTripIT {
         private final List<Task> tasks = new ArrayList<>();
         private final List<TaskEvent> events = new ArrayList<>();
         private final List<ResumeState> states = new ArrayList<>();
+        private Optional<ImportManifest> manifest = Optional.empty();
         private long sequence;
 
         @Override
@@ -558,18 +615,46 @@ class MySQLTaskRoundTripIT {
         }
 
         @Override
-        public void saveResumeState(Long taskId, ResumeState state) {
+        public synchronized void saveResumeState(Long taskId, ResumeState state) {
             states.add(state);
         }
 
         @Override
-        public List<ResumeState> listResumeStates(Long taskId) {
+        public synchronized boolean compareAndSetResumeState(Long taskId, Integer shardNo, String expectedKind,
+                ResumeState targetState) {
+            for (int index = 0; index < states.size(); index++) {
+                ResumeState current = states.get(index);
+                if (java.util.Objects.equals(shardNo, current.getShardNo())
+                        && java.util.Objects.equals(expectedKind, current.getKind())) {
+                    states.set(index, targetState);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public synchronized List<ResumeState> listResumeStates(Long taskId) {
             return List.copyOf(states);
         }
 
         @Override
         public void clearResumeStates(Long taskId) {
             states.clear();
+        }
+
+        @Override
+        public synchronized void saveImportManifest(Long taskId, ImportManifest importManifest) {
+            if (manifest.isPresent() && !manifest.get().getManifestFingerprint()
+                    .equals(importManifest.getManifestFingerprint())) {
+                throw new IllegalStateException("manifest replacement");
+            }
+            manifest = Optional.of(importManifest);
+        }
+
+        @Override
+        public synchronized Optional<ImportManifest> loadImportManifest(Long taskId) {
+            return manifest;
         }
     }
 }
