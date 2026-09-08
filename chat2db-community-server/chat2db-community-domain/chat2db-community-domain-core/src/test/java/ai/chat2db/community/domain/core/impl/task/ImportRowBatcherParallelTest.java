@@ -58,6 +58,8 @@ class ImportRowBatcherParallelTest {
     private static final String DB_TYPE = "PARALLEL_IMPORT_TEST";
 
     private static final String PARALLELISM_PROPERTY = "chat2db.task.import.parallelism";
+    private static final String MIN_BYTES_PROPERTY = "chat2db.task.import.parallel.min-bytes";
+    private static final String MIN_ROWS_PROPERTY = "chat2db.task.import.parallel.min-rows";
 
     private static final String H2_DRIVER_NAME = "parallel-import-test-h2.jar";
 
@@ -70,6 +72,8 @@ class ImportRowBatcherParallelTest {
     private IPlugin previousPlugin;
     private InMemoryTaskStorage storage;
     private String previousParallelism;
+    private String previousMinBytes;
+    private String previousMinRows;
 
     @BeforeAll
     static void isolateHomeAndSeedDriver() throws Exception {
@@ -94,6 +98,8 @@ class ImportRowBatcherParallelTest {
     @BeforeEach
     void setUp() throws Exception {
         previousParallelism = System.clearProperty(PARALLELISM_PROPERTY);
+        previousMinBytes = System.setProperty(MIN_BYTES_PROPERTY, "0");
+        previousMinRows = System.setProperty(MIN_ROWS_PROPERTY, "0");
         DBConfig config = new DBConfig();
         config.setDbType(DB_TYPE);
         config.setDefaultDriverConfig(new DriverConfig());
@@ -136,7 +142,17 @@ class ImportRowBatcherParallelTest {
         } else {
             System.setProperty(PARALLELISM_PROPERTY, previousParallelism);
         }
+        restoreProperty(MIN_BYTES_PROPERTY, previousMinBytes);
+        restoreProperty(MIN_ROWS_PROPERTY, previousMinRows);
         connection.close();
+    }
+
+    private static void restoreProperty(String name, String previous) {
+        if (previous == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, previous);
+        }
     }
 
     private static DriverConfig h2DriverConfig() {
@@ -158,9 +174,11 @@ class ImportRowBatcherParallelTest {
         return ImportTaskSpec.builder()
                 .taskType("DATA_FILE_IMPORT")
                 .sourceFile(csv.toString())
+                .importFileId("parallel-import-fixture")
                 .format("CSV")
                 .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("BULK_ROWS").build())
                 .mode("ULTRA_FAST")
+                .confirmedNoStrongRelations(true)
                 .options(ImportOptions.builder()
                         .charset("UTF-8")
                         .delimiter(",")

@@ -87,8 +87,9 @@ public final class ImportManifestBuilder {
         Set<String> ids = new HashSet<>();
         Map<String, ImportManifestShard> byId = new HashMap<>();
         for (ImportManifestShard shard : shards) {
-            if (StringUtils.isAnyBlank(shard.getShardId(), shard.getTableName(), shard.getSourcePath())) {
-                throw new IllegalArgumentException("Every manifest shard requires id, table and source path");
+            if (StringUtils.isAnyBlank(shard.getShardId(), shard.getTableName(), shard.getSourcePath(),
+                    shard.getExpectedChecksum())) {
+                throw new IllegalArgumentException("Every manifest shard requires id, table, source path and checksum");
             }
             if (!ids.add(shard.getShardId())) {
                 throw new IllegalArgumentException("Duplicate manifest shard id: " + shard.getShardId());

@@ -1,17 +1,21 @@
 package ai.chat2db.community.domain.core.impl.task.executor;
 
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
+import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFactory;
+import ai.chat2db.community.domain.core.impl.task.imports.CsvManifestImporter;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -20,6 +24,9 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
 
     @Autowired
     private IImportFileStagingService importFileStagingService;
+
+    @Autowired
+    private TaskStorage taskStorage;
 
     @Override
     public String taskType() {
@@ -42,6 +49,18 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                         "Unsupported data import format");
             }
             context.reportProgress(5, TaskStage.READING.name(), "Preparing data import");
+            ImportManifest manifest = context.taskId() == null || taskStorage == null ? null
+                    : taskStorage.loadImportManifest(context.taskId()).orElse(null);
+            if (manifest != null) {
+                if (!TaskFileFormat.CSV.name().equals(format) || !TaskExecutionMode.isUltraFast(spec.getMode())) {
+                    throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                            "A persisted import manifest requires an ultra-fast CSV task");
+                }
+                new CsvManifestImporter(taskStorage).execute(spec, context, manifest);
+                context.reportProgress(95, TaskStage.IMPORTING.name(), "Manifest import completed");
+                completed = true;
+                return;
+            }
             IImportStrategy strategy = ImportFactory.get(format);
             strategy.run(spec, context);
             context.reportProgress(95, TaskStage.IMPORTING.name(), "Data import completed");

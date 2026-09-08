@@ -123,6 +123,40 @@ public final class CsvShardPreprocessor {
         checksum.update('\n');
     }
 
+    static ShardVerification verify(File source, ImportManifestShard shard) throws IOException {
+        if (source == null || shard == null || StringUtils.isBlank(shard.getExpectedChecksum())) {
+            throw new IllegalArgumentException("CSV shard verification requires a file and expected checksum");
+        }
+        ShardVerification actual = inspect(source);
+        if (actual.rows() != shard.getEstimatedRows()
+                || !actual.checksum().equalsIgnoreCase(shard.getExpectedChecksum())) {
+            throw new IllegalStateException("CSV shard row count or checksum does not match manifest: "
+                    + shard.getShardId());
+        }
+        return actual;
+    }
+
+    static ShardVerification inspect(File source) throws IOException {
+        CRC32 checksum = new CRC32();
+        long rows = 0L;
+        try (CSVParser parser = CSVParser.parse(source.toPath(), StandardCharsets.UTF_8, CSVFormat.DEFAULT)) {
+            var records = parser.iterator();
+            if (!records.hasNext()) {
+                throw new IllegalArgumentException("CSV shard requires a header record");
+            }
+            records.next();
+            while (records.hasNext()) {
+                updateChecksum(checksum, records.next());
+                rows++;
+            }
+        }
+        return new ShardVerification(rows,
+                "CRC32:" + Long.toHexString(checksum.getValue()).toUpperCase(Locale.ROOT));
+    }
+
+    record ShardVerification(long rows, String checksum) {
+    }
+
     private static final class ShardWriter {
         private final String shardId;
         private final String tableName;

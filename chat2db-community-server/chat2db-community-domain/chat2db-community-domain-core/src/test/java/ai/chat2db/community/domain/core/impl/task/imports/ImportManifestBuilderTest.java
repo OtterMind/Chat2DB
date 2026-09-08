@@ -51,6 +51,15 @@ class ImportManifestBuilderTest {
                 42L, "PARALLEL_SAFE", "source-sha", plan(), List.of(edge()), List.of(invalid)));
     }
 
+    @Test
+    void rejectsShardWithoutChecksum() {
+        ImportManifestShard invalid = shard("orders-1", "orders", 0, 10, List.of());
+        invalid.setExpectedChecksum(null);
+
+        assertThrows(IllegalArgumentException.class, () -> ImportManifestBuilder.build(
+                42L, "PARALLEL_SAFE", "source-sha", plan(), List.of(edge()), List.of(invalid)));
+    }
+
     private ImportDependencyPlan plan() {
         return ImportDependencyPlan.builder().mode(ImportPlanMode.PARALLEL_LAYER)
                 .layers(List.of(List.of("orders"), List.of("order_items"))).build();

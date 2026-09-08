@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class TaskExecutionContextImpl implements TaskExecutionContext {
 
@@ -39,7 +40,7 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     private final AtomicReference<String> stage = new AtomicReference<>();
 
-    private final AtomicReference<StatementRegistration> activeStatement = new AtomicReference<>();
+    private final Map<Statement, TaskCancelable> activeStatements = new ConcurrentHashMap<>();
 
     // Insertion order is the publish order, and the OUTPUT role stays the task's primary download.
     private final Map<String, ArtifactDraft> draftsByRole = new LinkedHashMap<>();
@@ -112,7 +113,6 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void registerCancelable(TaskCancelable resource) {
-        activeStatement.set(null);
         runningTask.registerCancelable(resource);
     }
 
@@ -209,7 +209,7 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
             return;
         }
         TaskCancelable cancelable = statement::cancel;
-        activeStatement.set(new StatementRegistration(statement, cancelable));
+        activeStatements.put(statement, cancelable);
         runningTask.registerCancelable(cancelable);
         if (runningTask.cancellationToken().isCancelled()) {
             try {
@@ -222,10 +222,9 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void onStatementClosed(Statement statement) {
-        StatementRegistration registration = activeStatement.get();
-        if (registration != null && registration.statement() == statement
-                && activeStatement.compareAndSet(registration, null)) {
-            runningTask.clearCancelable(registration.cancelable());
+        TaskCancelable cancelable = activeStatements.remove(statement);
+        if (cancelable != null) {
+            runningTask.clearCancelable(cancelable);
         }
     }
 
@@ -271,6 +270,4 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
                 .build());
     }
 
-    private record StatementRegistration(Statement statement, TaskCancelable cancelable) {
-    }
 }
