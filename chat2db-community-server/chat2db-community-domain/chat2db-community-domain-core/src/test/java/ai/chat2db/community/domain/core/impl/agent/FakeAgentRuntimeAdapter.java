@@ -34,6 +34,9 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
     private final AgentRuntimeEnvironmentStatus environmentStatus;
     private String deletedSessionId;
     private int openSessionCount;
+    private RuntimeException openFailure;
+    private RuntimeException startFailure;
+    private AgentEventType terminalEventOnStart;
 
     FakeAgentRuntimeAdapter(AgentRuntimeType runtimeType) {
         this(runtimeType, AgentRuntimeEnvironmentStatus.READY);
@@ -76,7 +79,12 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
             AgentRuntimeSessionOpenRequest request,
             AgentRuntimeEventSink eventSink) {
         openSessionCount++;
-        return new FakeSessionHandle(request.sessionId(), request.externalSessionId(), null, eventSink);
+        if (openFailure != null) {
+            throw openFailure;
+        }
+        return new FakeSessionHandle(
+                request.sessionId(), request.externalSessionId(), null, eventSink,
+                startFailure, terminalEventOnStart);
     }
 
     @Override
@@ -87,7 +95,9 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
                 request.sessionId(),
                 request.binding().externalSessionId(),
                 request.binding().resumeReference(),
-                eventSink);
+                eventSink,
+                startFailure,
+                terminalEventOnStart);
     }
 
     @Override
@@ -103,11 +113,25 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
         return openSessionCount;
     }
 
+    void failOpenWith(RuntimeException failure) {
+        openFailure = failure;
+    }
+
+    void failStartWith(RuntimeException failure) {
+        startFailure = failure;
+    }
+
+    void emitTerminalEventOnStart(AgentEventType type) {
+        terminalEventOnStart = type;
+    }
+
     private static final class FakeSessionHandle implements AgentRuntimeSessionHandle {
 
         private final String sessionId;
         private final AgentRuntimeSessionRef session;
         private final AgentRuntimeEventSink eventSink;
+        private final RuntimeException startFailure;
+        private final AgentEventType terminalEventOnStart;
         private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
         private String activeRunId;
 
@@ -115,10 +139,14 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
                 String sessionId,
                 String externalSessionId,
                 String resumeReference,
-                AgentRuntimeEventSink eventSink) {
+                AgentRuntimeEventSink eventSink,
+                RuntimeException startFailure,
+                AgentEventType terminalEventOnStart) {
             this.sessionId = sessionId;
             this.session = new AgentRuntimeSessionRef(externalSessionId, resumeReference);
             this.eventSink = eventSink;
+            this.startFailure = startFailure;
+            this.terminalEventOnStart = terminalEventOnStart;
         }
 
         @Override
@@ -135,6 +163,12 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
             activeRunId = "external-" + request.runId();
             health = AgentRuntimeHealth.BUSY;
             emit(request.runId(), AgentEventType.RUN_STARTED);
+            if (terminalEventOnStart != null) {
+                emit(request.runId(), terminalEventOnStart);
+            }
+            if (startFailure != null) {
+                return CompletableFuture.failedFuture(startFailure);
+            }
             return CompletableFuture.completedFuture(new AgentRuntimeRunRef(request.runId(), activeRunId));
         }
 

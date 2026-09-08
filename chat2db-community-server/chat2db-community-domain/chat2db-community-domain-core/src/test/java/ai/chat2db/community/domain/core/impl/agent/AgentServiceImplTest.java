@@ -1,6 +1,9 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentEvent;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
@@ -8,6 +11,8 @@ import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironme
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
+import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import org.junit.jupiter.api.Test;
 
@@ -32,8 +37,9 @@ class AgentServiceImplTest {
     void createsV2SessionWithoutStartingTheRuntime() {
         FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
-                new AgentRuntimeRegistry(List.of(adapter)), storage, () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
 
         AgentSession session = service.createSession(command());
 
@@ -52,8 +58,9 @@ class AgentServiceImplTest {
         FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(
                 AgentRuntimeType.PI, AgentRuntimeEnvironmentStatus.BLOCKED);
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
-                new AgentRuntimeRegistry(List.of(adapter)), storage, () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
 
@@ -64,8 +71,9 @@ class AgentServiceImplTest {
     @Test
     void missingRuntimeDoesNotCreateV2Session() {
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of());
         AgentServiceImpl service = new AgentServiceImpl(
-                new AgentRuntimeRegistry(List.of()), storage, () -> "session-one", CLOCK);
+                registry, storage, unusedCoordinator(registry, storage), () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
 
@@ -75,9 +83,12 @@ class AgentServiceImplTest {
     @Test
     void storageDoesNotRevealAnotherUsersSession() {
         MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(
+                List.of(new FakeAgentRuntimeAdapter(AgentRuntimeType.PI)));
         AgentServiceImpl service = new AgentServiceImpl(
-                new AgentRuntimeRegistry(List.of(new FakeAgentRuntimeAdapter(AgentRuntimeType.PI))),
+                registry,
                 storage,
+                unusedCoordinator(registry, storage),
                 () -> "session-one",
                 CLOCK);
         service.createSession(command());
@@ -94,6 +105,35 @@ class AgentServiceImplTest {
                         "default", "Default", null, "You are helpful.",
                         AgentRuntimeType.PI, "model-config", 1),
                 new AgentRuntimeEnvironmentRequest("5.3.0", "macos", "arm64"));
+    }
+
+    private AgentRunCoordinator unusedCoordinator(
+            AgentRuntimeRegistry registry,
+            AgentSessionStorage sessionStorage) {
+        return new AgentRunCoordinator(
+                registry,
+                new AgentRuntimeHandleRegistry(),
+                sessionStorage,
+                new UnusedAgentRunStorage(),
+                new UnusedAgentEventStorage(),
+                () -> "unused",
+                CLOCK);
+    }
+
+    private static final class UnusedAgentRunStorage implements AgentRunStorage {
+        @Override public AgentRun create(AgentRun run, Long userId) { throw new UnsupportedOperationException(); }
+        @Override public AgentRun get(String sessionId, String runId, Long userId) { return null; }
+        @Override public List<AgentRun> list(String sessionId, Long userId) { return List.of(); }
+        @Override public boolean compareAndSet(AgentRun run, AgentRunStatus expectedStatus, Long userId) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class UnusedAgentEventStorage implements AgentEventStorage {
+        @Override public AgentEvent append(AgentEvent event, Long userId) { throw new UnsupportedOperationException(); }
+        @Override public List<AgentEvent> list(String sessionId, Long userId, long afterSequence, int limit) {
+            return List.of();
+        }
     }
 
     private static final class MemoryAgentSessionStorage implements AgentSessionStorage {

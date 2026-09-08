@@ -8,6 +8,7 @@ public record AgentRun(
         AgentRunStatus status,
         AgentModelSnapshot model,
         String requestMessageId,
+        String idempotencyKey,
         String externalRunId,
         long firstEventSequence,
         long lastEventSequence,
@@ -20,6 +21,7 @@ public record AgentRun(
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(model, "model");
         requireText(requestMessageId, "requestMessageId");
+        requireText(idempotencyKey, "idempotencyKey");
         if (firstEventSequence < 0 || lastEventSequence < firstEventSequence) {
             throw new IllegalArgumentException("invalid agent event sequence range");
         }

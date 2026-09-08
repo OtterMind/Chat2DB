@@ -1,12 +1,15 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeDescriptor;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
@@ -18,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 
 @Service
@@ -25,22 +29,27 @@ public class AgentServiceImpl implements AgentService {
 
     private final AgentRuntimeRegistry runtimeRegistry;
     private final AgentSessionStorage sessionStorage;
+    private final AgentRunCoordinator runCoordinator;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
     public AgentServiceImpl(
             AgentRuntimeRegistry runtimeRegistry,
-            AgentSessionStorage sessionStorage) {
-        this(runtimeRegistry, sessionStorage, () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
+            AgentSessionStorage sessionStorage,
+            AgentRunCoordinator runCoordinator) {
+        this(runtimeRegistry, sessionStorage, runCoordinator,
+                () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
     AgentServiceImpl(
             AgentRuntimeRegistry runtimeRegistry,
             AgentSessionStorage sessionStorage,
+            AgentRunCoordinator runCoordinator,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.sessionStorage = Objects.requireNonNull(sessionStorage, "sessionStorage");
+        this.runCoordinator = Objects.requireNonNull(runCoordinator, "runCoordinator");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -91,6 +100,16 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public List<AgentSession> listSessions(Long userId) {
         return sessionStorage.listByUserId(userId);
+    }
+
+    @Override
+    public CompletionStage<AgentRun> startRun(AgentRunStartCommand command) {
+        return runCoordinator.start(command);
+    }
+
+    @Override
+    public CompletionStage<AgentRun> cancelRun(AgentRunCancelCommand command) {
+        return runCoordinator.cancel(command);
     }
 
     private String requireGeneratedId(String id) {

@@ -65,6 +65,7 @@ public class LocalAgentRunStorage implements AgentRunStorage {
         if (!Objects.equals(existing.sessionId(), run.sessionId())
                 || !Objects.equals(existing.model(), run.model())
                 || !Objects.equals(existing.requestMessageId(), run.requestMessageId())
+                || !Objects.equals(existing.idempotencyKey(), run.idempotencyKey())
                 || existing.firstEventSequence() != run.firstEventSequence()) {
             throw new IllegalArgumentException("Agent run identity cannot be changed");
         }
