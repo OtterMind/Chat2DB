@@ -26,6 +26,6 @@ public class PostgreSQLPlugin extends PgsqlSyntaxPlugin implements IPlugin {
 
     @Override
     public IDbManager getDbManager() {
-        return new PostgreSQLDBManager();
+        return new PostgreSQLDBManager(true);
     }
 }

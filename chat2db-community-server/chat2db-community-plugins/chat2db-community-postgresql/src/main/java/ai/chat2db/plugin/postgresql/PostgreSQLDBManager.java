@@ -7,6 +7,7 @@ import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import cn.hutool.core.date.DateUtil;
@@ -14,7 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Date;
 import java.util.Objects;
 
@@ -24,6 +28,112 @@ import static cn.hutool.core.date.DatePattern.NORM_DATETIME_PATTERN;
 import static ai.chat2db.plugin.postgresql.constant.PostgreSQLDBManagerConstants.*;
 @Slf4j
 public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager {
+
+    private final boolean nativePostgreSQL;
+
+    /** Derivative dialect managers inherit common DDL behavior but not PostgreSQL catalog probes. */
+    public PostgreSQLDBManager() {
+        this(false);
+    }
+
+    PostgreSQLDBManager(boolean nativePostgreSQL) {
+        this.nativePostgreSQL = nativePostgreSQL;
+    }
+
+    @Override
+    public ImportResourceSnapshot probeImportResources(Connection connection, String databaseName,
+            String schemaName) {
+        if (!nativePostgreSQL) {
+            return ImportResourceSnapshot.unknown(
+                    "PostgreSQL catalog probes are disabled for derivative dialect managers");
+        }
+        int maxConnections = 0;
+        int activeConnections = 0;
+        boolean connectionCapacityKnown = false;
+        StringBuilder evidence = new StringBuilder();
+        try {
+            maxConnections = queryInt(connection,
+                    "SELECT setting::integer FROM pg_settings WHERE name = 'max_connections'");
+            activeConnections = queryInt(connection, "SELECT COUNT(*) FROM pg_stat_activity");
+            connectionCapacityKnown = maxConnections > 0;
+        } catch (SQLException failure) {
+            evidence.append("connection capacity unavailable; ");
+        }
+
+        boolean replicationStatusKnown = false;
+        boolean replica = false;
+        Long replicationLagSeconds = null;
+        try {
+            replica = queryBoolean(connection, "SELECT pg_is_in_recovery()");
+            if (replica) {
+                replicationLagSeconds = queryNullableLong(connection,
+                        "SELECT CASE WHEN pg_last_xact_replay_timestamp() IS NULL THEN NULL "
+                                + "ELSE GREATEST(0, EXTRACT(EPOCH FROM clock_timestamp() "
+                                + "- pg_last_xact_replay_timestamp())::bigint) END");
+            }
+            replicationStatusKnown = true;
+        } catch (SQLException failure) {
+            evidence.append("replication status unavailable; ");
+        }
+
+        boolean triggerStatusKnown = false;
+        int triggerCount = 0;
+        try {
+            triggerCount = queryTriggerCount(connection, schemaName);
+            triggerStatusKnown = true;
+        } catch (SQLException failure) {
+            evidence.append("trigger metadata unavailable; ");
+        }
+        evidence.append("server disk free space is not exposed reliably by PostgreSQL SQL metadata");
+        return new ImportResourceSnapshot(connectionCapacityKnown, maxConnections, activeConnections,
+                replicationStatusKnown, replica, replicationLagSeconds, triggerStatusKnown, triggerCount,
+                false, false, evidence.toString());
+    }
+
+    int queryInt(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            if (!rows.next()) {
+                throw new SQLException("Resource probe returned no rows");
+            }
+            return rows.getInt(1);
+        }
+    }
+
+    boolean queryBoolean(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            if (!rows.next()) {
+                throw new SQLException("Resource probe returned no rows");
+            }
+            return rows.getBoolean(1);
+        }
+    }
+
+    Long queryNullableLong(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            if (!rows.next()) {
+                throw new SQLException("Resource probe returned no rows");
+            }
+            long value = rows.getLong(1);
+            return rows.wasNull() ? null : value;
+        }
+    }
+
+    int queryTriggerCount(Connection connection, String schemaName) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT COUNT(*) FROM pg_trigger t "
+                        + "JOIN pg_class c ON c.oid = t.tgrelid "
+                        + "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        + "WHERE NOT t.tgisinternal AND t.tgenabled <> 'D' "
+                        + "AND n.nspname = COALESCE(?, current_schema())")) {
+            statement.setString(1, StringUtils.trimToNull(schemaName));
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    throw new SQLException("Trigger probe returned no rows");
+                }
+                return rows.getInt(1);
+            }
+        }
+    }
 
     public void exportDatabase(Connection connection, String databaseName, String schemaName, boolean containData,
             TaskExecutionContext context) throws SQLException {
