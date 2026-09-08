@@ -3,7 +3,7 @@ import { ImportExportFileType, ImportExportTaskType } from '@/constants/importEx
 import { prepareWebImportParams } from './submission';
 
 const file = { name: 'users.json' } as File;
-const params = {
+const params: import('@/service/importExport').ImportTaskParams = {
   dataSourceId: 1,
   databaseName: 'app',
   tableName: 'users',

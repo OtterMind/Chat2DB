@@ -12,9 +12,10 @@ import {
   WorkspaceTabType,
   databaseTypeList,
 } from '@/constants';
-import { ImportExportType } from '@/constants/importExport';
+import { ImportExportFileType, ImportExportType } from '@/constants/importExport';
 import { ShortcutAction } from '@/constants/shortcut';
 import { TreeNodeData } from '@/typings';
+import type { ImportExportTargetScope } from '@/typings/importExport';
 import { canImportExport } from '@/utils/env';
 
 // ----- store -----
@@ -116,6 +117,13 @@ function handleMenuOptions(treeNodeType, databaseType) {
   return withDataSourceColorMenuOption(menuOptions, treeNodeType);
 }
 
+function getImportExportTargetScope(treeNodeType: TreeNodeType): ImportExportTargetScope {
+  if (treeNodeType === TreeNodeType.TABLE) return 'TABLE';
+  if (treeNodeType === TreeNodeType.SCHEMA) return 'SCHEMA';
+  if (treeNodeType === TreeNodeType.DATABASE) return 'DATABASE';
+  return 'DATA_SOURCE';
+}
+
 // Node that can be double-clicked
 export const canBeDoubleClicked = [
   TreeNodeType.TABLE,
@@ -167,11 +175,10 @@ export const useCreateRightClickMenu = () => {
     };
   });
 
-  const { setImportExportDataBoundInfo, setRunSqlBoundInfo, getTaskList, openLogModal } = useImportExportStore(
+  const { setImportExportDataBoundInfo, getTaskList, openLogModal } = useImportExportStore(
     (state) => {
       return {
         setImportExportDataBoundInfo: state.setImportExportDataBoundInfo,
-        setRunSqlBoundInfo: state.setRunSqlBoundInfo,
         getTaskList: state.getTaskList,
         openLogModal: state.openLogModal,
       };
@@ -241,6 +248,7 @@ export const useCreateRightClickMenu = () => {
     };
 
     const { supportSchema, supportDatabase } = getDatabaseSupport(databaseType);
+    const importExportTargetScope = getImportExportTargetScope(treeNodeType);
     const handelOpenCreateDatabaseModal = (type: 'database' | 'schema') => {
       const relyOnParams = {
         databaseType: treeNodeData.extraParams.databaseType!,
@@ -1043,11 +1051,14 @@ export const useCreateRightClickMenu = () => {
         text: i18n('workspace.menu.runSqlFile'),
         icon: 'icon-run-sql',
         handle: () => {
-          setRunSqlBoundInfo({
+          setImportExportDataBoundInfo({
             dataSourceName: dataSourceName,
             dataSourceId: dataSourceId!,
             databaseName,
             schemaName,
+            targetScope: importExportTargetScope,
+            type: ImportExportType.IMPORT,
+            fileType: ImportExportFileType.SQL,
           });
         },
         discard:
@@ -1164,6 +1175,7 @@ export const useCreateRightClickMenu = () => {
             databaseName,
             schemaName,
             tableName: tableName!,
+            targetScope: 'TABLE',
             type: ImportExportType.IMPORT,
           });
         },

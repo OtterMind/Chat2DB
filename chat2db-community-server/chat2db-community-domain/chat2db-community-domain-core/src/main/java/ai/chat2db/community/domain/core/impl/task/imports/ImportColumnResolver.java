@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMatch;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
+import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
 import ai.chat2db.community.tools.exception.ParamBusinessException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -32,13 +34,47 @@ public final class ImportColumnResolver {
 
     public static Resolution resolve(List<TableColumn> tableColumns, List<String> fileHeaders,
             ImportOptions options) {
+        return resolve(tableColumns, fileHeaders, options == null ? null : options.getColumnMappings(),
+                UnmappedTargetStrategy.DEFAULT);
+    }
+
+    public static Resolution resolveForSpec(List<TableColumn> tableColumns, List<String> fileHeaders,
+            ImportTaskSpec spec) {
+        List<ImportColumnMapping> mappings = spec.getColumnMappings();
+        if (mappings == null && spec.getOptions() != null) {
+            mappings = spec.getOptions().getColumnMappings();
+        }
+        return resolve(tableColumns, fileHeaders, mappings, spec.getUnmappedTarget());
+    }
+
+    public static void validateForImport(List<TableColumn> columns, Resolution resolution, ImportTaskSpec spec) {
+        if (resolution.fileIndexes().stream().noneMatch(java.util.Objects::nonNull)) {
+            throw new ParamBusinessException("At least one import column mapping is required");
+        }
+        for (TableColumn column : columns) {
+            if (resolution.missingTableColumns().contains(column.getName())
+                    && Integer.valueOf(0).equals(column.getNullable())
+                    && !Boolean.TRUE.equals(column.getAutoIncrement())
+                    && (spec.getUnmappedTarget() == UnmappedTargetStrategy.NULL || column.getDefaultValue() == null)) {
+                throw new ParamBusinessException("Required import column is unmapped: " + column.getName());
+            }
+        }
+    }
+
+    private static Resolution resolve(List<TableColumn> tableColumns, List<String> fileHeaders,
+            List<ImportColumnMapping> mappings, UnmappedTargetStrategy unmappedTarget) {
         Map<String, Integer> byNormalizedName = new LinkedHashMap<>();
         for (int index = 0; index < fileHeaders.size(); index++) {
-            byNormalizedName.putIfAbsent(normalize(fileHeaders.get(index)), index);
+            if (byNormalizedName.putIfAbsent(normalize(fileHeaders.get(index)), index) != null) {
+                throw new ParamBusinessException("Duplicate import source column: " + fileHeaders.get(index));
+            }
         }
         Map<String, Integer> explicitTargets = new LinkedHashMap<>();
-        if (options != null && options.getColumnMappings() != null) {
-            for (ImportColumnMapping mapping : options.getColumnMappings()) {
+        java.util.Set<Integer> explicitSources = new java.util.HashSet<>();
+        java.util.Set<String> knownTargets = tableColumns.stream().map(column -> normalize(column.getName()))
+                .collect(java.util.stream.Collectors.toSet());
+        if (mappings != null) {
+            for (ImportColumnMapping mapping : mappings) {
                 if (mapping == null || StringUtils.isBlank(mapping.getSourceColumn())
                         || StringUtils.isBlank(mapping.getTargetColumn())) {
                     throw new ParamBusinessException("columnMappings");
@@ -48,7 +84,11 @@ public final class ImportColumnResolver {
                 if (sourceIndex == null) {
                     throw new ParamBusinessException("columnMappings source: " + mapping.getSourceColumn());
                 }
-                explicitTargets.put(normalize(mapping.getTargetColumn()), sourceIndex);
+                String target = normalize(mapping.getTargetColumn());
+                if (!knownTargets.contains(target) || !explicitSources.add(sourceIndex)
+                        || explicitTargets.putIfAbsent(target, sourceIndex) != null) {
+                    throw new ParamBusinessException("Duplicate or invalid import column mapping");
+                }
             }
         }
 
@@ -57,7 +97,7 @@ public final class ImportColumnResolver {
         List<String> missingTableColumns = new ArrayList<>();
         for (TableColumn column : tableColumns) {
             Integer sourceIndex = explicitTargets.get(normalize(column.getName()));
-            if (sourceIndex == null) {
+            if (sourceIndex == null && mappings == null) {
                 sourceIndex = byNormalizedName.get(normalize(column.getName()));
             }
             if (sourceIndex != null) {
@@ -65,6 +105,11 @@ public final class ImportColumnResolver {
                 fileIndexes.add(sourceIndex);
             } else {
                 missingTableColumns.add(column.getName());
+                if (mappings != null && unmappedTarget == UnmappedTargetStrategy.NULL
+                        && !Boolean.TRUE.equals(column.getAutoIncrement())) {
+                    resolvedColumns.add(column);
+                    fileIndexes.add(null);
+                }
             }
         }
 
@@ -73,7 +118,7 @@ public final class ImportColumnResolver {
         for (int index = 0; index < fileHeaders.size(); index++) {
             String tableColumn = null;
             for (int resolved = 0; resolved < fileIndexes.size(); resolved++) {
-                if (fileIndexes.get(resolved) == index) {
+                if (java.util.Objects.equals(fileIndexes.get(resolved), index)) {
                     tableColumn = resolvedColumns.get(resolved).getName();
                     break;
                 }
@@ -89,6 +134,10 @@ public final class ImportColumnResolver {
 
     private static Integer indexOfSource(String source, List<String> fileHeaders,
             Map<String, Integer> byNormalizedName) {
+        Integer namedIndex = byNormalizedName.get(normalize(source));
+        if (namedIndex != null) {
+            return namedIndex;
+        }
         try {
             int index = Integer.parseInt(source);
             return index >= 0 && index < fileHeaders.size() ? index : null;

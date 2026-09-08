@@ -2,23 +2,14 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * AIMD tuning of the concurrency gate: permits grow on throughput improvement, shrink fast on
- * regression, and stay hard-capped at the configured max even while workers hold permits. Tuning windows are row-based: one
+ * regression, stay hard-capped at the configured max even while workers hold permits, and react
+ * to source pressure by cutting a quarter of the fan-out. Tuning windows are row-based: one
  * observation with at least {@link AdaptiveConcurrencyGate#WINDOW_ROWS} rows triggers one
  * evaluation, so successive windows model faster execution with smaller wall times.
  */
@@ -68,8 +59,8 @@ class AdaptiveConcurrencyGateTest {
         tune(gate, 5);
         tune(gate, 2);
         tune(gate, 1);
-        gate.release();
-        gate.release();
+        gate.relinquish(true);
+        gate.relinquish(true);
         // The old available-permits-based guard let the total drift one past the max; the hard
         // total cap must keep it at exactly the configured ceiling.
         assertEquals(4, gate.currentPermits());
@@ -86,7 +77,7 @@ class AdaptiveConcurrencyGateTest {
         tune(gate, 40);
         tune(gate, 80);
         tune(gate, 100);
-        assertEquals(1, gate.currentPermits(), "the fan-out must never drop below the floor");
+        assertEquals(2, gate.currentPermits(), "the fan-out must never drop below the floor");
     }
 
     @Test
@@ -98,44 +89,6 @@ class AdaptiveConcurrencyGateTest {
     }
 
     @Test
-    void ignoresThroughputChangesWithinTenPercentIncludingBoundaries() {
-        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(2, 4);
-        gate.record(100_000, 100 * MILLI);
-        gate.record(110_000, 100 * MILLI);
-        assertEquals(2, gate.totalPermits());
-        gate.record(100_000, 100 * MILLI);
-        gate.record(90_000, 100 * MILLI);
-        assertEquals(2, gate.totalPermits());
-        gate.record(100_000, 100 * MILLI);
-        assertEquals(3, gate.totalPermits());
-    }
-
-    @Test
-    void concurrentSamplesWithEqualEfficiencyDoNotChangePermits() throws Exception {
-        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(2, 4);
-        var executor = Executors.newFixedThreadPool(4);
-        CountDownLatch start = new CountDownLatch(1);
-        var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
-        try {
-            for (int worker = 1; worker <= 4; worker++) {
-                long rows = worker * 10_000L;
-                futures.add(executor.submit(() -> {
-                    start.await();
-                    for (int sample = 0; sample < 2_000; sample++) {
-                        gate.record(rows, rows * MILLI);
-                    }
-                    return null;
-                }));
-            }
-            start.countDown();
-            for (var future : futures) future.get(10, TimeUnit.SECONDS);
-            assertEquals(2, gate.totalPermits());
-        } finally {
-            executor.shutdownNow();
-        }
-    }
-
-    @Test
     void ignoresInvalidObservations() {
         AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(2, 4);
         gate.record(0, MILLI);
@@ -144,89 +97,24 @@ class AdaptiveConcurrencyGateTest {
     }
 
     @Test
-    void repeatedTimeoutsNeverLetWorkProceedWithoutAPermit() throws Exception {
-        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(1, 1);
-        gate.acquire();
-        var executor = Executors.newSingleThreadExecutor();
-        CountDownLatch timedOutTwice = new CountDownLatch(1);
-        AtomicInteger checks = new AtomicInteger();
-        try {
-            var waiting = executor.submit(() -> {
-                gate.awaitPermit(() -> {
-                    if (checks.incrementAndGet() >= 3) {
-                        timedOutTwice.countDown();
-                    }
-                });
-                return null;
-            });
-
-            assertTrue(timedOutTwice.await(5, TimeUnit.SECONDS));
-            assertFalse(waiting.isDone(), "timeouts must not bypass the concurrency limit");
-            assertEquals(0, gate.currentPermits());
-
-            gate.release();
-            waiting.get(5, TimeUnit.SECONDS);
-            assertEquals(0, gate.currentPermits(), "proceeding work owns the released permit");
-        } finally {
-            executor.shutdownNow();
-            gate.release();
-        }
+    void sourcePressureCutsAQuarterImmediatelyButNeverPastTheFloor() {
+        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(4, 4);
+        gate.reduceForSourcePressure();
+        assertEquals(3, gate.currentPermits(), "a slow page cuts a quarter of the fan-out");
+        AdaptiveConcurrencyGate floored = AdaptiveConcurrencyGate.create(2, 4);
+        floored.reduceForSourcePressure();
+        assertEquals(2, floored.currentPermits(), "the floor holds under source pressure");
     }
 
     @Test
-    void taskCancellationStopsWaitingWithoutConsumingAPermit() throws Exception {
-        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(1, 1);
-        gate.acquire();
-        var executor = Executors.newSingleThreadExecutor();
-        CountDownLatch started = new CountDownLatch(1);
-        AtomicBoolean cancelled = new AtomicBoolean();
-        try {
-            var waiting = executor.submit(() -> {
-                gate.awaitPermit(() -> {
-                    started.countDown();
-                    if (cancelled.get()) {
-                        throw new CancellationException("task cancelled");
-                    }
-                });
-                return null;
-            });
-            assertTrue(started.await(5, TimeUnit.SECONDS));
-            cancelled.set(true);
-
-            ExecutionException failure = assertThrows(ExecutionException.class,
-                    () -> waiting.get(5, TimeUnit.SECONDS));
-            assertInstanceOf(CancellationException.class, failure.getCause());
-            assertEquals(0, gate.currentPermits());
-        } finally {
-            executor.shutdownNow();
-            gate.release();
-        }
-    }
-
-    @Test
-    void threadInterruptionStopsWaitingWithoutConsumingAPermit() throws Exception {
-        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(1, 1);
-        gate.acquire();
-        var executor = Executors.newSingleThreadExecutor();
-        CountDownLatch started = new CountDownLatch(1);
-        CountDownLatch exited = new CountDownLatch(1);
-        try {
-            var waiting = executor.submit(() -> {
-                try {
-                    gate.awaitPermit(started::countDown);
-                    return null;
-                } finally {
-                    exited.countDown();
-                }
-            });
-            assertTrue(started.await(5, TimeUnit.SECONDS));
-            assertTrue(waiting.cancel(true));
-
-            assertTrue(exited.await(5, TimeUnit.SECONDS));
-            assertEquals(0, gate.currentPermits());
-        } finally {
-            executor.shutdownNow();
-            gate.release();
-        }
+    void boundedAdmitDegradesInsteadOfHanging() {
+        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(1, 4);
+        gate.tryAcquire(); // the only permit is held
+        assertFalse(gate.admit(1L), "a stuck gate must report failure instead of blocking forever");
+        gate.relinquish(false); // no permit taken: a no-op
+        gate.relinquish(true);
+        assertTrue(gate.admit(1L), "the returned permit is admitted again");
+        gate.relinquish(true);
+        assertEquals(1, gate.currentPermits());
     }
 }

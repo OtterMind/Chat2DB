@@ -4,13 +4,15 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
-import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -34,16 +36,15 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * CSV mapping and failure propagation against a real JDBC target.
+ * The CSV import path end to end: commons-csv grammar, explicit column mapping, error tolerance
+ * with a REJECT sub-artifact, and true batched inserts against the target table.
  */
 class CsvImportPipelineTest {
 
@@ -96,161 +97,70 @@ class CsvImportPipelineTest {
     }
 
     @Test
-    void failedBatchPreservesCommittedRowsWithoutCreatingOutput() throws Exception {
-        Path csv = writeCsv("ROW_ID,ROW_NAME,EXTRA\n1,ok,ignored\n2,this-value-is-too-long,x\n");
-        ImportTaskSpec spec = csvSpec(csv);
-        TaskExecutionContextImpl context = contextFor(spec);
-
-        assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(spec, context));
-
-        assertEquals(List.of(1), importedIds(), "the executor must preserve rows already committed by the driver");
-        assertNull(context.artifactDraft());
-        assertFailedWithoutSummary();
-    }
-
-    @Test
-    void preservesCommittedBatchAndStopsBeforeLaterBatches() throws Exception {
-        StringBuilder content = new StringBuilder("ROW_ID,ROW_NAME\n");
-        for (int id = 1; id <= 60_000; id++) {
-            content.append(id == 25_000 ? 1 : id).append(",ok\n");
-        }
-        ImportTaskSpec spec = csvSpec(writeCsv(content.toString()));
-
-        assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(spec, contextFor(spec)));
-
-        List<Integer> ids = importedIds();
-        assertTrue(ids.containsAll(java.util.stream.IntStream.rangeClosed(1, 20_000).boxed().toList()));
-        assertTrue(ids.contains(20_001), "the failed batch can leave committed rows");
-        assertTrue(ids.stream().allMatch(id -> id <= 40_000), "a later batch must not be submitted");
-        assertEquals(1, storage.events.stream().filter(event -> "BATCH_EXECUTED".equals(event.getCode())).count());
-        assertFailedWithoutSummary();
-    }
-
-    @Test
-    void legacySkipOptionCannotEnableErrorTolerance() throws Exception {
-        ImportTaskSpec spec = csvSpec(writeCsv("ROW_ID,ROW_NAME\n1,ok\n1,duplicate\n"));
-        String json = com.alibaba.fastjson2.JSON.toJSONString(spec);
-        ImportTaskSpec legacySpec = com.alibaba.fastjson2.JSON.parseObject(json.substring(0, json.length() - 1)
-                + ",\"options\":{\"onError\":\"SKIP\",\"maxErrors\":100}}", ImportTaskSpec.class);
-
-        assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(legacySpec, contextFor(legacySpec)));
-
-        assertEquals(List.of(1), importedIds());
-        assertFailedWithoutSummary();
-    }
-
-    @Test
-    void existingCsvSettingsAndMappingsIgnoreLegacyNestedOptions() throws Exception {
-        ImportTaskSpec spec = csvSpec(writeCsv("ROW_ID;ROW_NAME\n1;kept\n2;NULL\n"));
-        CsvOptions csvOptions = CsvOptions.defaults();
-        csvOptions.setDelimiter(";");
-        csvOptions.setEmptyAsNull(false);
-        spec.setCsvOptions(csvOptions);
-        String json = com.alibaba.fastjson2.JSON.toJSONString(spec);
-        ImportTaskSpec legacySpec = com.alibaba.fastjson2.JSON.parseObject(json.substring(0, json.length() - 1)
-                + ",\"options\":{\"delimiter\":\",\",\"skipRows\":99,\"nullString\":\"NULL\","
-                + "\"columnMappings\":[{\"sourceColumn\":\"ROW_NAME\",\"targetColumn\":\"ID\"}]}}",
-                ImportTaskSpec.class);
-
-        new CSVImporter().run(legacySpec, contextFor(legacySpec));
-
-        assertEquals(List.of(1, 2), importedIds());
-        try (Statement statement = connection.createStatement();
-             ResultSet rows = statement.executeQuery("SELECT NAME FROM TARGET_ROWS ORDER BY ID")) {
-            assertTrue(rows.next());
-            assertEquals("kept", rows.getString(1));
-            assertTrue(rows.next());
-            assertEquals("NULL", rows.getString(1));
-            assertFalse(rows.next());
-        }
-    }
-
-    @Test
-    void ordinaryModesPreserveSequentialWritesBeforeFailure() throws Exception {
-        for (String mode : java.util.Arrays.asList(null, "STANDARD", "unknown")) {
-            try (Statement statement = connection.createStatement()) {
-                statement.execute("DELETE FROM TARGET_ROWS");
-            }
-            ImportTaskSpec spec = csvSpec(writeCsv("ROW_ID,ROW_NAME\n1,ok\n1,duplicate\n2,later\n"));
-            spec.setMode(mode);
-
-            assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(spec, contextFor(spec)));
-
-            assertEquals(List.of(1), importedIds(), "ordinary import preserves its executed prefix: " + mode);
-            assertTrue(connection.getAutoCommit());
-        }
-    }
-
-    @Test
-    void ordinaryImportPreservesThousandRowBatchesAndProgress() throws Exception {
-        StringBuilder content = new StringBuilder("ROW_ID,ROW_NAME\n");
-        for (int id = 1; id <= 2001; id++) {
-            content.append(id).append(",ok\n");
-        }
-        ImportTaskSpec spec = csvSpec(writeCsv(content.toString()));
-        spec.setMode("STANDARD");
-
-        new CSVImporter().run(spec, contextFor(spec));
-
-        assertEquals(2001, importedIds().size());
-        assertEquals(List.of(1000, 1000, 1), storage.events.stream()
-                .filter(event -> "BATCH_EXECUTED".equals(event.getCode()) && event.getDetails() != null
-                        && event.getDetails().containsKey("statementCount"))
-                .map(event -> ((Number) event.getDetails().get("statementCount")).intValue()).toList());
-        assertEquals(List.of(30, 40, 40), storage.progressUpdates.stream()
-                .filter(progress -> "IMPORTING".equals(progress.getStage()))
-                .map(TaskProgress::getProgress).toList());
-    }
-
-    private Path writeCsv(String content) throws Exception {
+    void skipsBadRowsIntoRejectArtifactAndMapsColumnsExplicitly() throws Exception {
         Path csv = tempDirectory.resolve("input.csv");
-        Files.writeString(csv, content, StandardCharsets.UTF_8);
-        return csv;
-    }
+        Files.writeString(csv, "ROW_ID,ROW_NAME,EXTRA\n1,ok,ignored\n2,this-value-is-too-long,x\n",
+                StandardCharsets.UTF_8);
 
-    private ImportTaskSpec csvSpec(Path csv) {
-        return ImportTaskSpec.builder()
+        ImportTaskSpec spec = ImportTaskSpec.builder()
                 .taskType("DATA_FILE_IMPORT")
                 .sourceFile(csv.toString())
                 .format("CSV")
-                .mode("FAST")
                 .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("TARGET_ROWS").build())
-                .columnMappings(List.of(
-                        new ImportColumnMapping("ROW_ID", "ID"),
-                        new ImportColumnMapping("ROW_NAME", "NAME")))
+                .options(ImportOptions.builder()
+                        .charset("UTF-8")
+                        .delimiter(",")
+                        .onError("SKIP")
+                        .maxErrors(5)
+                        .columnMappings(List.of(
+                                new ImportColumnMapping("ROW_ID", "ID"),
+                                new ImportColumnMapping("ROW_NAME", "NAME")))
+                        .build())
                 .build();
-    }
 
-    private TaskExecutionContextImpl contextFor(ImportTaskSpec spec) {
         Long taskId = storage.create(Task.builder().type("DATA_FILE_IMPORT").name("import")
                 .target(spec.getTarget()).build(), TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
-        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactServiceImpl());
-    }
+        TaskExecutionContextImpl context = new TaskExecutionContextImpl(taskId, new RunningTask(taskId),
+                storage, new ArtifactService());
 
-    private List<Integer> importedIds() throws Exception {
+        new CSVImporter().run(spec, context);
+
         try (Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery("SELECT ID FROM TARGET_ROWS ORDER BY ID")) {
             List<Integer> ids = new ArrayList<>();
             while (rows.next()) {
                 ids.add(rows.getInt(1));
             }
-            return ids;
+            assertEquals(List.of(1), ids, "the over-long value row must be rejected, not truncated");
         }
+
+        List<Path> rejectDrafts;
+        try (var files = Files.list(tempDirectory)) {
+            rejectDrafts = files.filter(path -> path.getFileName().toString().contains("rejects.ndjson"))
+                    .toList();
+        }
+        assertEquals(1, rejectDrafts.size());
+        String rejects = Files.readString(rejectDrafts.get(0), StandardCharsets.UTF_8);
+        assertTrue(rejects.contains("this-value-is-too-long"), rejects);
+        assertTrue(rejects.contains("\"row\":2"), rejects);
+
+        List<String> codes = storage.listEvents(taskId, 0L, 100).stream().map(TaskEvent::getCode).toList();
+        assertTrue(codes.contains("IMPORT_COLUMN_MAPPING"), "unmatched EXTRA column reported: " + codes);
+        assertTrue(codes.contains("IMPORT_ROW_REJECTED"), codes.toString());
+        assertTrue(codes.contains("IMPORT_SUMMARY"), codes.toString());
     }
 
-    private void assertFailedWithoutSummary() {
-        List<String> codes = storage.events.stream().map(TaskEvent::getCode).toList();
-        assertTrue(codes.contains("IMPORT_BATCH_FAILED"), codes.toString());
-        assertFalse(codes.contains("IMPORT_SUMMARY"), codes.toString());
-    }
-
+    /**
+     * Task storage good enough for the import pipeline: the interesting behaviour is the events
+     * and the reject artifact it records.
+     */
     private static final class InMemoryTaskStorage implements TaskStorage {
 
         private final List<Task> tasks = new ArrayList<>();
         private final List<TaskEvent> events = new ArrayList<>();
-        private final List<TaskProgress> progressUpdates = new ArrayList<>();
-
+        private final List<TaskArtifact> artifacts = new ArrayList<>();
+        private final List<ResumeState> states = new ArrayList<>();
         private long sequence;
 
         @Override
@@ -281,7 +191,6 @@ class CsvImportPipelineTest {
 
         @Override
         public boolean updateProgressIfRunning(Long taskId, TaskProgress progress) {
-            progressUpdates.add(progress);
             return true;
         }
 
@@ -311,6 +220,41 @@ class CsvImportPipelineTest {
         @Override
         public boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             return false;
+        }
+
+        @Override
+        public List<TaskArtifact> listArtifacts(Long taskId) {
+            return List.copyOf(artifacts);
+        }
+
+        @Override
+        public void saveArtifact(Long taskId, TaskArtifact artifact) {
+            artifacts.add(artifact);
+        }
+
+        @Override
+        public void deleteArtifact(Long taskId, String artifactId) {
+            artifacts.removeIf(artifact -> artifact.getArtifactId().equals(artifactId));
+        }
+
+        @Override
+        public List<Task> listResumableTasks() {
+            return List.of();
+        }
+
+        @Override
+        public void saveResumeState(Long taskId, ResumeState state) {
+            states.add(state);
+        }
+
+        @Override
+        public List<ResumeState> listResumeStates(Long taskId) {
+            return List.copyOf(states);
+        }
+
+        @Override
+        public void clearResumeStates(Long taskId) {
+            states.clear();
         }
 
     }

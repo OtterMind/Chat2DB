@@ -10,13 +10,13 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SqlFileImportTaskExecutorTest {
 
     @Test
-    void releasesStagedFileWhenExecutionFails(@TempDir Path tempDirectory) throws Exception {
+    void retainsStagedFileWhenExecutionFails(@TempDir Path tempDirectory) throws Exception {
         File source = Files.writeString(tempDirectory.resolve("input.sql"), "select 1").toFile();
         RecordingImportFileStagingService stagingService = new RecordingImportFileStagingService();
         ImportTaskSpec spec = ImportTaskSpec.builder()
@@ -28,7 +28,7 @@ class SqlFileImportTaskExecutorTest {
         assertThrows(TaskExecutionException.class,
                 () -> new SqlFileImportTaskExecutor(stagingService).execute(spec, null));
 
-        assertEquals("staged-file-id", stagingService.releasedFileId);
+        assertNull(stagingService.releasedFileId);
     }
 
     private static final class RecordingImportFileStagingService implements IImportFileStagingService {

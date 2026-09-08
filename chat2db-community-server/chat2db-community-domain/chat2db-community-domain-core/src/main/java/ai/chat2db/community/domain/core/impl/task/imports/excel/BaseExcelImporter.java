@@ -1,132 +1,129 @@
 package ai.chat2db.community.domain.core.impl.task.imports.excel;
 
-import ai.chat2db.community.domain.core.impl.task.imports.BaseImporter;
-import ai.chat2db.community.domain.core.impl.task.imports.ImportSqlExecutor;
-import ai.chat2db.community.domain.core.impl.task.imports.ImportRowSqlBuilder;
-import ai.chat2db.community.domain.api.model.task.TaskConstants;
-import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
-import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
-import ai.chat2db.community.domain.api.model.task.TaskEventCode;
-import ai.chat2db.community.domain.api.model.task.TaskStage;
-import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.core.impl.task.imports.BaseImporter;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportRowBatcher;
+import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
+import ai.chat2db.spi.IValueProcessor;
+import ai.chat2db.spi.sql.Chat2DBContext;
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.event.AnalysisEventListener;
+import com.alibaba.excel.metadata.data.ReadCellData;
+import com.alibaba.excel.support.ExcelTypeEnum;
+import com.alibaba.excel.util.ConverterUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
-import ai.chat2db.community.domain.api.model.task.ExcelOptions;
-import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
-import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 
+/**
+ * XLSX/XLS import through EasyExcel, sharing the column resolution, batching and reject handling
+ * with the CSV path.
+ */
 @Slf4j
 public abstract class BaseExcelImporter extends BaseImporter {
+
     @Override
     protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
-        context.checkCancelled();
-        ExcelOptions options = (spec.getExcelOptions() == null ? new ExcelOptions() : spec.getExcelOptions()).validate();
-        spec.setExcelOptions(options);
-        NoModelDataListener listener = new NoModelDataListener(spec, context, columns);
-        ExcelImportReader.read(new File(spec.getSourceFile()), options, Integer.MAX_VALUE,
-                CSVImporter.mappedSourceColumnCount(spec), listener::acceptHead, listener::acceptCells,
-                context::checkCancelled);
-        listener.finish();
-        context.checkCancelled();
+        ExcelTypeEnum excelType = getExcelType();
+        try (NoModelDataListener listener = new NoModelDataListener(spec, context, columns,
+                Chat2DBContext.getDbMetaData().getValueProcessor())) {
+            try {
+                EasyExcel.read(new File(spec.getSourceFile()), listener)
+                        .excelType(excelType).sheet().headRowNumber(1).doRead();
+                context.checkCancelled();
+                listener.finish();
+            } catch (RuntimeException failure) {
+                if (listener.batcher != null) {
+                    listener.batcher.abort(failure);
+                }
+                throw failure;
+            }
+        }
     }
 
-    public class NoModelDataListener {
+    protected abstract ExcelTypeEnum getExcelType();
+
+    public class NoModelDataListener extends AnalysisEventListener<Map<Integer, String>> implements AutoCloseable {
+
+        private final ImportTaskSpec spec;
 
         private final TaskExecutionContext taskContext;
 
-        private List<String> sqlList;
+        private final List<TableColumn> columns;
 
-        private long successCount;
+        private final IValueProcessor valueProcessor;
 
-        private long skippedCount;
+        private ImportColumnResolver.Resolution resolution;
 
-        private static final int BATCH_SIZE = 1000;
+        private ImportRowBatcher batcher;
 
-        private final ImportSqlExecutor sqlExecutor;
+        private long rowNumber;
 
-        private final ImportRowSqlBuilder rowSqlBuilder;
-
-        public NoModelDataListener(ImportTaskSpec spec, TaskExecutionContext taskContext,
-                List<TableColumn> columns) {
+        private NoModelDataListener(ImportTaskSpec spec, TaskExecutionContext taskContext,
+                List<TableColumn> columns, IValueProcessor valueProcessor) {
+            this.spec = spec;
             this.taskContext = taskContext;
-            this.sqlExecutor = new ImportSqlExecutor(taskContext);
-            this.rowSqlBuilder = new ImportRowSqlBuilder(spec, columns);
+            this.columns = columns;
+            this.valueProcessor = valueProcessor;
         }
 
-
-        void acceptHead(Map<Integer, String> map) {
+        @Override
+        public void invokeHead(Map<Integer, ReadCellData<?>> headCells, AnalysisContext context) {
             this.taskContext.checkCancelled();
-            rowSqlBuilder.acceptHead(map);
+            Map<Integer, String> headMap = ConverterUtils.convertToStringMap(headCells, context);
+            List<String> headers = new ArrayList<>();
+            int columnsCount = headMap.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1) + 1;
+            for (int index = 0; index < columnsCount; index++) {
+                headers.add(headMap.getOrDefault(index, ""));
+            }
+            resolution = ImportColumnResolver.resolveForSpec(columns, headers, spec);
+            reportResolution(taskContext, resolution);
+            ImportColumnResolver.validateForImport(columns, resolution, spec);
+            batcher = new ImportRowBatcher(spec, taskContext, resolution, valueProcessor);
         }
 
-        void acceptRow(Map<Integer, String> data, long sourceRowNumber) {
-            Map<Integer, ImportCell> cells = new LinkedHashMap<>();
-            if (data != null) data.forEach((index, value) -> cells.put(index, new ImportCell(value, true)));
-            acceptCells(cells, sourceRowNumber);
-        }
-
-        void acceptCells(Map<Integer, ImportCell> data, long sourceRowNumber) {
+        @Override
+        public void invoke(Map<Integer, String> data, AnalysisContext context) {
             this.taskContext.checkCancelled();
-            if (data == null || data.isEmpty()) {
-                skippedCount++;
+            if (data == null || data.isEmpty() || batcher == null || resolution == null) {
                 return;
             }
-            String sql = rowSqlBuilder.buildCells(data, sourceRowNumber);
+            int width = resolution.matches().size();
+            List<String> values = new ArrayList<>(width);
+            for (int index = 0; index < width; index++) {
+                values.add(data.get(index));
+            }
+            batcher.accept(++rowNumber, values);
+        }
 
-            if (StringUtils.isBlank(sql)) {
-                skippedCount++;
-                return;
-            }
-            if (sqlList == null) {
-                sqlList = new ArrayList<>();
-            }
-            sqlList.add(sql);
-            if (sqlList.size() >= BATCH_SIZE) {
-                executeBatchInsert();
-            } else {
-
-            }
+        @Override
+        public void doAfterAllAnalysed(AnalysisContext context) {
+            this.taskContext.checkCancelled();
         }
 
         void finish() {
-            this.taskContext.checkCancelled();
-            executeBatchInsert();
-        }
-
-        private void executeBatchInsert() {
-            taskContext.checkCancelled();
-            if (sqlList != null && !sqlList.isEmpty()) {
-                taskContext.logInfo(TaskEventCode.BATCH_EXECUTED.name(),
-                        String.format("Executing batch insert: %s", sqlList.size()));
-                int statementCount = sqlList.size();
-                try {
-                    sqlExecutor.executeBatch(sqlList);
-                    successCount += statementCount;
-                    reportImportProgress();
-                } catch (TaskCancelledException e) {
-                    throw e;
-                } catch (Exception e) {
-                    taskContext.logError(TaskEventCode.IMPORT_BATCH_FAILED.name(), "Could not import batch", Map.of(
-                            "statementCount", statementCount,
-                            "message", StringUtils.defaultString(e.getMessage())));
-                    throw e;
-                }
+            if (batcher == null) {
+                return;
             }
-            sqlList = new ArrayList<>();
+            batcher.flush();
+            taskContext.logInfo("IMPORT_SUMMARY", "Excel import finished", Map.of(
+                    "importedRows", batcher.importedRows(),
+                    "rejectedRows", batcher.rejectedRows()));
         }
 
-        private void reportImportProgress() {
-            long processedRows = successCount + skippedCount;
-            int progress = (int) Math.min(TaskConstants.MAX_RUNNING_PROGRESS,
-                    20 + Math.min(70, processedRows / 100));
-            taskContext.reportProgress(progress, TaskStage.IMPORTING.name(),
-                    String.format("Imported %s rows", successCount));
+        @Override
+        public void close() {
+            if (batcher != null) {
+                batcher.close();
+            }
         }
     }
-
 }

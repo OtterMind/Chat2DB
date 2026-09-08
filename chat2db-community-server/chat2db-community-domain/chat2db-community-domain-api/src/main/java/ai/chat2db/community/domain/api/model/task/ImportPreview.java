@@ -29,6 +29,9 @@ public class ImportPreview {
 
     private String detectedDelimiter;
 
+    /** Explainable result of the same admission gate enforced before task execution. */
+    private ImportAdmissionReport parallelAdmission;
+
     /**
      * Table columns the source file does not supply; they will be imported as {@code NULL} or
      * their defaults.

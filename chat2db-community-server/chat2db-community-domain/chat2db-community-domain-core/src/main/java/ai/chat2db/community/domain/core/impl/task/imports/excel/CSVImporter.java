@@ -1,40 +1,76 @@
 package ai.chat2db.community.domain.core.impl.task.imports.excel;
 
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.core.impl.task.imports.BaseImporter;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportFileProbe;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportRowBatcher;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
-import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
-import ai.chat2db.community.domain.core.impl.task.imports.reader.CsvImportReader;
+import ai.chat2db.spi.sql.Chat2DBContext;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
-import java.util.List;
 import java.io.File;
+import java.nio.charset.Charset;
+import java.util.List;
+import java.util.Map;
 
-public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
+/**
+ * CSV import on commons-csv: the real grammar (quotes, embedded newlines, BOM, configurable
+ * delimiter and charset) replaces the EasyExcel sheet reader, which additionally chunked input at
+ * the Excel row limit.
+ */
+public class CSVImporter extends BaseImporter implements IImportStrategy {
 
     @Override
-    protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
-        if (TaskExecutionMode.isFast(spec.getMode())) {
-            new ParallelCSVImporter().doImportData(spec, context, columns);
-            return;
-        }
-        CsvOptions options = (spec.getCsvOptions() == null ? CsvOptions.defaults() : spec.getCsvOptions()).validate();
-        spec.setCsvOptions(options);
-        NoModelDataListener listener = new NoModelDataListener(spec, context, columns);
-        CsvImportReader.read(new File(spec.getSourceFile()), options, Integer.MAX_VALUE,
-                mappedSourceColumnCount(spec), listener::acceptHead, listener::acceptRow, context::checkCancelled);
-        listener.finish();
-    }
+    protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context,
+            List<TableColumn> columns) throws Exception {
+        File source = new File(spec.getSourceFile());
+        Charset charset = ImportFileProbe.effectiveCharset(source,
+                spec.getOptions() == null ? null : spec.getOptions().getCharset());
+        char quote = ImportFileProbe.quoteChar(
+                spec.getOptions() == null ? null : spec.getOptions().getQuoteChar());
+        char delimiter = ImportFileProbe.delimiterChar(
+                spec.getOptions() == null ? null : spec.getOptions().getDelimiter(), charset, source);
+        CSVFormat format = ImportFileProbe.csvFormat(delimiter, quote);
+        int skipRows = spec.getOptions() == null || spec.getOptions().getSkipRows() == null
+                ? 0 : Math.max(0, spec.getOptions().getSkipRows());
 
-    static int mappedSourceColumnCount(ImportTaskSpec spec) {
-        if (spec.getColumnMappings() == null) {
-            return 0;
+        try (CSVParser parser = ImportFileProbe.openParser(source, charset, format)) {
+            var iterator = parser.iterator();
+            if (!iterator.hasNext()) {
+                return;
+            }
+            ImportColumnResolver.Resolution resolution =
+                    ImportColumnResolver.resolveForSpec(columns, iterator.next().toList(), spec);
+            reportResolution(context, resolution);
+            ImportColumnResolver.validateForImport(columns, resolution, spec);
+            try (ImportRowBatcher batcher = new ImportRowBatcher(spec, context, resolution,
+                    Chat2DBContext.getDbMetaData().getValueProcessor())) {
+                try {
+                    long rowNumber = 1;
+                    int skipped = 0;
+                    while (iterator.hasNext()) {
+                        context.checkCancelled();
+                        CSVRecord record = iterator.next();
+                        if (skipped < skipRows) {
+                            skipped++;
+                            continue;
+                        }
+                        batcher.accept(rowNumber++, record.toList());
+                    }
+                    batcher.flush();
+                    context.logInfo("IMPORT_SUMMARY", "CSV import finished", Map.of(
+                            "importedRows", batcher.importedRows(),
+                            "rejectedRows", batcher.rejectedRows()));
+                } catch (RuntimeException failure) {
+                    batcher.abort(failure);
+                    throw failure;
+                }
+            }
         }
-        return spec.getColumnMappings().stream()
-                .mapToInt(mapping -> SourceColumnName.columnNumber(mapping.getSourceColumn()))
-                .max()
-                .orElse(0);
     }
 }

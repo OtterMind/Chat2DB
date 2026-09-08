@@ -5,7 +5,6 @@ import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
-import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
@@ -34,6 +33,7 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
 
     @Override
     public void execute(ImportTaskSpec spec, TaskExecutionContext context) {
+        boolean completed = false;
         try {
             TaskExecutorSupport.requireReadableSource(spec.getSourceFile());
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
@@ -42,18 +42,18 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                         "Unsupported data import format");
             }
             context.reportProgress(5, TaskStage.READING.name(), "Preparing data import");
-            context.logInfo(TaskEventCode.IMPORT_PREPARING.name(), "Preparing data import");
             IImportStrategy strategy = ImportFactory.get(format);
             strategy.run(spec, context);
             context.reportProgress(95, TaskStage.IMPORTING.name(), "Data import completed");
-            context.logInfo(TaskEventCode.IMPORT_COMPLETED.name(), "Data import completed");
+            completed = true;
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
             throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
                     "Could not import data file", e);
         } finally {
-            if (spec.getImportFileId() != null) {
+            // Interrupted imports still need the exact staged source to resume from checkpoints.
+            if (completed && spec.getImportFileId() != null) {
                 importFileStagingService.release(spec.getImportFileId());
             }
         }

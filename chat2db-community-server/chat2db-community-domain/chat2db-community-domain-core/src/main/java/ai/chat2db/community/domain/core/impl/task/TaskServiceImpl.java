@@ -25,6 +25,7 @@ import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFileProbe;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportParallelAdmission;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.ImportPreviewListener;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.support.ExcelTypeEnum;
@@ -164,7 +165,7 @@ public class TaskServiceImpl implements TaskService {
             ImportTaskSpec spec, String detectedCharset, String detectedDelimiter) {
         List<String> headers = rows.isEmpty() ? List.of() : rows.get(0);
         ImportColumnResolver.Resolution resolution =
-                ImportColumnResolver.resolve(tableColumns, headers, spec.getOptions());
+                ImportColumnResolver.resolveForSpec(tableColumns, headers, spec);
         return ImportPreview.builder()
                 .targetColumns(tableColumns.stream().map(column ->
                         ai.chat2db.community.domain.api.model.db.ImportTargetColumn.builder()
@@ -179,6 +180,7 @@ public class TaskServiceImpl implements TaskService {
                         : rows.subList(1, rows.size()).stream().map(row -> (List<String>) row).toList())
                 .detectedCharset(detectedCharset)
                 .detectedDelimiter(detectedDelimiter)
+                .parallelAdmission(ImportParallelAdmission.assess(spec, tableColumns))
                 .build();
     }
 

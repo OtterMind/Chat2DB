@@ -109,6 +109,7 @@ class TaskWebConverterTest {
     @Test
     void distinguishesDataAndSqlFileImports() {
         TaskImportRequest dataRequest = importRequest(TaskType.DATA_FILE_IMPORT.name());
+        dataRequest.setConfirmedNoStrongRelations(true);
         TaskImportRequest sqlRequest = importRequest(TaskType.SQL_FILE_IMPORT.name());
 
         ImportTaskSpec dataSpec = converter.importRequest2spec(dataRequest);
@@ -116,6 +117,7 @@ class TaskWebConverterTest {
 
         assertEquals("Import table data - app.public.orders", dataSpec.getTaskName());
         assertEquals("public", dataSpec.getTarget().getSchemaName());
+        assertEquals(Boolean.TRUE, dataSpec.getConfirmedNoStrongRelations());
         assertEquals("Import SQL file - app.public.orders", sqlSpec.getTaskName());
     }
 
