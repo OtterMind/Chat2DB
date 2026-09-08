@@ -1,13 +1,18 @@
 package ai.chat2db.community.domain.api.service.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 
+import java.util.List;
 import java.util.Map;
 
 public interface TaskExecutionContext extends ISqlExecutionStatementListener {
 
-    /** The task these callbacks belong to; null outside a task run. */
+    /**
+     * The task these callbacks belong to; {@code null} for contexts outside a task run.
+     */
     default Long taskId() {
         return null;
     }
@@ -26,11 +31,31 @@ public interface TaskExecutionContext extends ISqlExecutionStatementListener {
 
     void registerCancelable(TaskCancelable resource);
 
-    /** Cancels registered work after execution fails, without changing the task's failure status. */
-    default void cancelResources() {
-    }
-
     ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType);
 
+    /**
+     * Creates one draft per artifact role; the primary download uses {@code OUTPUT}.
+     */
+    default ArtifactDraft createArtifact(String role, String outputDirectory, String fileName, String mediaType) {
+        if (!TaskArtifactRole.OUTPUT.equals(role)) {
+            throw new UnsupportedOperationException("This task context supports only the primary output artifact");
+        }
+        return createArtifact(outputDirectory, fileName, mediaType);
+    }
+
     void write(String content);
+
+    /**
+     * Checkpoints persisted by earlier attempts of this task, so an exporter can resume where the
+     * previous run stopped.
+     */
+    default List<ResumeState> resumeStates() {
+        return List.of();
+    }
+
+    /**
+     * Persists one shard checkpoint (keyed by {@code ResumeState.shardNo}) for a later resume.
+     */
+    default void checkpoint(ResumeState state) {
+    }
 }

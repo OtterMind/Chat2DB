@@ -21,6 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TaskControllerDesktopContractTest {
 
     @Test
+    void previewRejectsRawServerPathsBeforeReadingFiles() {
+        TaskController controller = new TaskController(null, null, null, null);
+        var request = new ai.chat2db.community.web.api.model.request.task.TaskImportRequest();
+        request.setSourceFile("C:/private/data.csv");
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ai.chat2db.community.tools.exception.ParamBusinessException.class,
+                () -> controller.previewImport(request));
+    }
+
+    @Test
     void taskEndpointsUseStaticPathsAndAtMostOneRequestObject() {
         Set<String> paths = Arrays.stream(TaskController.class.getDeclaredMethods())
                 .map(this::requestMapping)
@@ -28,8 +38,8 @@ class TaskControllerDesktopContractTest {
                 .flatMap(mapping -> Arrays.stream(mapping.path()))
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of("/export", "/import", "/list", "/get", "/events", "/delete",
-                "/artifact", "/active-count", "/prepare-user-exit", "/abort-user-exit"), paths);
+        assertEquals(Set.of("/export", "/import", "/import/preview", "/resume", "/list", "/get", "/events", "/delete",
+                "/artifact", "/artifacts", "/active-count", "/prepare-user-exit", "/abort-user-exit"), paths);
 
         Arrays.stream(TaskController.class.getDeclaredMethods())
                 .filter(method -> requestMapping(method) != null)

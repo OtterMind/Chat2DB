@@ -14,12 +14,12 @@ import java.sql.Connection;
 import java.util.List;
 import java.util.Objects;
 
-final class TrustedMetadataRequestResolver {
+public final class TrustedMetadataRequestResolver {
 
     private TrustedMetadataRequestResolver() {
     }
 
-    static TableMetadataRequest table(Long requestDataSourceId, String requestDatabaseName,
+    public static TableMetadataRequest table(Long requestDataSourceId, String requestDatabaseName,
             String requestSchemaName, String requestTableName) {
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         if (connectInfo == null) {
