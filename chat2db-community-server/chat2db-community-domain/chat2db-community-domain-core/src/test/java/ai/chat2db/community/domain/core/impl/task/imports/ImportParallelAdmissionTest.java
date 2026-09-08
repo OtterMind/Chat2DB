@@ -96,6 +96,7 @@ class ImportParallelAdmissionTest {
 
         assertEquals("PARALLEL_FORBIDDEN", report.getVerdict());
         assertTrue(hasFinding(report, "P0", "BLOCKER"));
+        assertTrue(hasFinding(report, "A4", "BLOCKER"));
     }
 
     private ImportTaskSpec csvSpec(String content, boolean confirmed, boolean mapGeneratedKey) throws Exception {

@@ -68,6 +68,7 @@ public final class ImportParallelAdmission {
             blocker(findings, "C2", "Excel containers are not safely shardable",
                     format + " is a compressed binary workbook", "Use STANDARD mode or export a UTF-8 CSV source.");
         } else if ("SQL".equals(format)) {
+            scanSql(source, spec, findings);
             blocker(findings, "P0", "Safe parallel SQL planning is not available",
                     "SQL execution currently preserves file order on one connection",
                     "Use STANDARD mode until statement-boundary sharding, dependency barriers and validation are available.");
@@ -116,6 +117,18 @@ public final class ImportParallelAdmission {
                 .relationshipRiskAccepted(relationshipAccepted)
                 .findings(List.copyOf(findings))
                 .build();
+    }
+
+    private static void scanSql(File source, ImportTaskSpec spec, List<ImportAdmissionFinding> findings) {
+        try {
+            Charset charset = ImportFileProbe.effectiveCharset(source,
+                    spec.getOptions() == null ? null : spec.getOptions().getCharset());
+            findings.addAll(SqlImportRiskScanner.scan(source, charset));
+        } catch (Exception failure) {
+            blocker(findings, "D1", "The SQL source could not be decoded and scanned deterministically",
+                    failure.getClass().getSimpleName() + ": " + StringUtils.defaultString(failure.getMessage()),
+                    "Specify the correct charset and stage the SQL file again.");
+        }
     }
 
     public static ImportAdmissionReport enforce(ImportTaskSpec spec, List<TableColumn> tableColumns,
