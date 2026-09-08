@@ -7,8 +7,7 @@ public record AgentSession(
         int schemaVersion,
         String id,
         Long userId,
-        String agentDefinitionId,
-        long agentDefinitionRevision,
+        AgentDefinition definition,
         AgentRuntimeBinding runtimeBinding,
         AgentSessionStatus status,
         String title,
@@ -24,10 +23,7 @@ public record AgentSession(
         }
         requireText(id, "id");
         Objects.requireNonNull(userId, "userId");
-        requireText(agentDefinitionId, "agentDefinitionId");
-        if (agentDefinitionRevision < 1) {
-            throw new IllegalArgumentException("agentDefinitionRevision must be greater than zero");
-        }
+        Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(runtimeBinding, "runtimeBinding");
         Objects.requireNonNull(status, "status");
         if (lastEventSequence < 0) {

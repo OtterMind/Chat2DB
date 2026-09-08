@@ -104,8 +104,7 @@ public class LocalAgentSessionStorage implements AgentSessionStorage {
         if (!Objects.equals(existing.userId(), session.userId())) {
             throw new StorageException("Agent session owner cannot be changed: " + session.id());
         }
-        if (!Objects.equals(existing.agentDefinitionId(), session.agentDefinitionId())
-                || existing.agentDefinitionRevision() != session.agentDefinitionRevision()
+        if (!Objects.equals(existing.definition(), session.definition())
                 || !Objects.equals(existing.runtimeBinding(), session.runtimeBinding())
                 || !Objects.equals(existing.gmtCreate(), session.gmtCreate())) {
             throw new IllegalArgumentException("Agent session identity cannot be changed");

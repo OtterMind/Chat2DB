@@ -22,9 +22,7 @@ class AgentContractTest {
 
     @Test
     void agentDefinitionKeepsRuntimeSelectionExplicit() {
-        AgentDefinition definition = new AgentDefinition(
-                "default", "Default agent", null, "You are a database assistant.",
-                AgentRuntimeType.PI, "model-config", 1);
+        AgentDefinition definition = definition();
 
         assertEquals(AgentRuntimeType.PI, definition.runtimeType());
         assertThrows(IllegalArgumentException.class, () -> new AgentDefinition(
@@ -38,13 +36,13 @@ class AgentContractTest {
         AgentRuntimeBinding binding = new AgentRuntimeBinding(
                 AgentRuntimeType.PI, "0.85.1", "jsonl-rpc", "external-session", null, 1);
         AgentSession session = new AgentSession(
-                AgentSession.SCHEMA_VERSION, "session", 1L, "default", 1, binding, AgentSessionStatus.CREATED,
+                AgentSession.SCHEMA_VERSION, "session", 1L, definition(), binding, AgentSessionStatus.CREATED,
                 "New session", 0, now, now);
 
         assertEquals(2, session.schemaVersion());
         assertEquals(AgentRuntimeType.PI, session.runtimeBinding().runtimeType());
         assertThrows(IllegalArgumentException.class, () -> new AgentSession(
-                1, "session", 1L, "default", 1, binding, AgentSessionStatus.CREATED,
+                1, "session", 1L, definition(), binding, AgentSessionStatus.CREATED,
                 "New session", 0, now, now));
     }
 
@@ -119,5 +117,11 @@ class AgentContractTest {
         assertThrows(IllegalArgumentException.class, () -> new AgentApproval(
                 "approval", "session", "run", "tool-call", AgentApprovalStatus.PENDING,
                 AgentApprovalScope.ONCE, "not-a-sha", expiresAt));
+    }
+
+    private AgentDefinition definition() {
+        return new AgentDefinition(
+                "default", "Default agent", null, "You are a database assistant.",
+                AgentRuntimeType.PI, "model-config", 1);
     }
 }

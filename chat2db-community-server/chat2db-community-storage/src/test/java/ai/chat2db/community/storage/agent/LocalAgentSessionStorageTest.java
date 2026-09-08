@@ -2,6 +2,7 @@ package ai.chat2db.community.storage.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
+import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
 import ai.chat2db.community.storage.StorageFileUtils;
@@ -190,8 +191,9 @@ class LocalAgentSessionStorageTest {
                 AgentSession.SCHEMA_VERSION,
                 id,
                 userId,
-                "default",
-                1,
+                new AgentDefinition(
+                        "default", "Default", null, "You are helpful.",
+                        AgentRuntimeType.PI, "model-config", 1),
                 new AgentRuntimeBinding(
                         AgentRuntimeType.PI, "0.85.1", "jsonl-rpc", id, null, 1),
                 status,

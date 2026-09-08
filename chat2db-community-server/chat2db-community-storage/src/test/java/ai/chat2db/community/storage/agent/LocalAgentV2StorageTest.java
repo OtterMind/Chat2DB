@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.agent.AgentArtifact;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifactType;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentEventType;
+import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
@@ -161,8 +162,9 @@ class LocalAgentV2StorageTest {
                 AgentSession.SCHEMA_VERSION,
                 SESSION_ID,
                 USER_ID,
-                "default",
-                1,
+                new AgentDefinition(
+                        "default", "Default", null, "You are helpful.",
+                        AgentRuntimeType.PI, "model-config", 1),
                 new AgentRuntimeBinding(
                         AgentRuntimeType.PI, "0.85.1", "jsonl-rpc", SESSION_ID, null, 1),
                 AgentSessionStatus.READY,
