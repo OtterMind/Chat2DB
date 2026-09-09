@@ -90,6 +90,82 @@ class CursorHandlerTest {
     }
 
     @Test
+    void normalBrowserCursorDoesNotOverwriteParentCursor() throws Exception {
+        Panel parent = new Panel();
+        parent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        Panel browserComponent = new Panel();
+        parent.add(browserComponent);
+
+        assertTrue(new CursorHandler().onCursorChange(
+                browserWithUiComponent(browserComponent),
+                Cursor.TEXT_CURSOR
+        ));
+        flushEventQueue();
+
+        assertEquals(Cursor.TEXT_CURSOR, browserComponent.getCursor().getType());
+        assertEquals(Cursor.CROSSHAIR_CURSOR, parent.getCursor().getType());
+    }
+
+    @Test
+    void forcedCursorRestoresComponentHierarchyAndLatestBrowserCursor() throws Exception {
+        Panel root = new Panel();
+        root.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        Panel parent = new Panel();
+        parent.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        Panel inheritedParent = new Panel();
+        Panel browserComponent = new Panel();
+        root.add(parent);
+        parent.add(inheritedParent);
+        inheritedParent.add(browserComponent);
+        CefBrowser browser = browserWithUiComponent(browserComponent);
+        CursorHandler handler = new CursorHandler();
+
+        assertTrue(handler.onCursorChange(browser, Cursor.TEXT_CURSOR));
+        flushEventQueue();
+        CursorHandler.setForcedCursor(browser, "ns-resize", 20);
+        flushEventQueue();
+
+        assertEquals(Cursor.N_RESIZE_CURSOR, browserComponent.getCursor().getType());
+        assertEquals(Cursor.N_RESIZE_CURSOR, inheritedParent.getCursor().getType());
+        assertEquals(Cursor.N_RESIZE_CURSOR, parent.getCursor().getType());
+        assertEquals(Cursor.N_RESIZE_CURSOR, root.getCursor().getType());
+
+        assertTrue(handler.onCursorChange(browser, Cursor.HAND_CURSOR));
+        flushEventQueue();
+        assertEquals(Cursor.N_RESIZE_CURSOR, browserComponent.getCursor().getType());
+
+        CursorHandler.setForcedCursor(browser, "default", 21);
+        flushEventQueue();
+
+        assertEquals(Cursor.HAND_CURSOR, browserComponent.getCursor().getType());
+        assertFalse(inheritedParent.isCursorSet());
+        assertEquals(Cursor.HAND_CURSOR, inheritedParent.getCursor().getType());
+        assertEquals(Cursor.HAND_CURSOR, parent.getCursor().getType());
+        assertEquals(Cursor.CROSSHAIR_CURSOR, root.getCursor().getType());
+    }
+
+    @Test
+    void eachBrowserRestoresItsOwnLatestCursor() throws Exception {
+        Panel firstComponent = new Panel();
+        Panel secondComponent = new Panel();
+        CefBrowser firstBrowser = browserWithUiComponent(firstComponent);
+        CefBrowser secondBrowser = browserWithUiComponent(secondComponent);
+        CursorHandler handler = new CursorHandler();
+
+        assertTrue(handler.onCursorChange(firstBrowser, Cursor.TEXT_CURSOR));
+        assertTrue(handler.onCursorChange(secondBrowser, Cursor.HAND_CURSOR));
+        flushEventQueue();
+
+        CursorHandler.setForcedCursor(firstBrowser, "ns-resize", 20);
+        flushEventQueue();
+        CursorHandler.setForcedCursor(firstBrowser, "default", 21);
+        flushEventQueue();
+
+        assertEquals(Cursor.TEXT_CURSOR, firstComponent.getCursor().getType());
+        assertEquals(Cursor.HAND_CURSOR, secondComponent.getCursor().getType());
+    }
+
+    @Test
     void highestConcurrentSequenceOwnsForcedCursor() throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(8);
         try {
@@ -116,5 +192,10 @@ class CursorHandlerTest {
                 new Class<?>[]{CefBrowser.class},
                 (proxy, method, args) -> method.getName().equals("getUIComponent") ? component : null
         );
+    }
+
+    private void flushEventQueue() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+        });
     }
 }

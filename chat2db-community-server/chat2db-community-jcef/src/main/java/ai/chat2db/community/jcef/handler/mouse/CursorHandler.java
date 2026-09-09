@@ -5,10 +5,16 @@ import org.cef.handler.CefDisplayHandlerAdapter;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 public class CursorHandler extends CefDisplayHandlerAdapter {
 
     private static final Object FORCED_CURSOR_LOCK = new Object();
+    private static final Map<Component, CursorState> FORCED_CURSOR_RESTORE_VALUES = new IdentityHashMap<>();
+    private static final Map<Component, Integer> BROWSER_CURSOR_TYPES = Collections.synchronizedMap(new WeakHashMap<>());
     private static volatile Integer forcedCursorType;
     private static long forcedCursorSequence;
 
@@ -18,7 +24,7 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
         if (!isPredefinedCursorType(effectiveCursorType)) {
             return false;
         }
-        applyCursor(browser, cursorType);
+        applyCursor(browser, isPredefinedCursorType(cursorType) ? cursorType : null);
         return true;
     }
 
@@ -26,7 +32,7 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
         if (!updateForcedCursor(cssCursor, sequence)) {
             return;
         }
-        applyCursor(browser, Cursor.DEFAULT_CURSOR);
+        applyCursor(browser, null);
     }
 
     static boolean updateForcedCursor(String cssCursor, long sequence) {
@@ -54,6 +60,8 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
         synchronized (FORCED_CURSOR_LOCK) {
             forcedCursorSequence = 0;
             forcedCursorType = null;
+            FORCED_CURSOR_RESTORE_VALUES.clear();
+            BROWSER_CURSOR_TYPES.clear();
         }
     }
 
@@ -68,22 +76,48 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
         };
     }
 
-    private static void applyCursor(CefBrowser browser, int cursorType) {
+    private static void applyCursor(CefBrowser browser, Integer browserCursorType) {
         if (browser == null) {
             return;
         }
         SwingUtilities.invokeLater(() -> {
-            int effectiveCursorType = effectiveCursorType(cursorType);
-            if (!isPredefinedCursorType(effectiveCursorType)) {
+            Component browserComponent = browser.getUIComponent();
+            if (browserComponent == null) {
                 return;
             }
-            Cursor awtCursor = Cursor.getPredefinedCursor(effectiveCursorType);
-            Component component = browser.getUIComponent();
-            while (component != null) {
-                component.setCursor(awtCursor);
-                component = component.getParent();
+            if (browserCursorType != null) {
+                BROWSER_CURSOR_TYPES.put(browserComponent, browserCursorType);
             }
+
+            Integer forcedType = forcedCursorType;
+            if (forcedType != null) {
+                applyForcedCursor(browserComponent, forcedType);
+                return;
+            }
+
+            restoreForcedCursorComponents();
+            int cursorType = BROWSER_CURSOR_TYPES.getOrDefault(browserComponent, Cursor.DEFAULT_CURSOR);
+            browserComponent.setCursor(Cursor.getPredefinedCursor(cursorType));
         });
+    }
+
+    private static void applyForcedCursor(Component browserComponent, int cursorType) {
+        Cursor cursor = Cursor.getPredefinedCursor(cursorType);
+        Component component = browserComponent;
+        while (component != null) {
+            FORCED_CURSOR_RESTORE_VALUES.putIfAbsent(
+                    component,
+                    new CursorState(component.isCursorSet(), component.getCursor())
+            );
+            component.setCursor(cursor);
+            component = component.getParent();
+        }
+    }
+
+    private static void restoreForcedCursorComponents() {
+        FORCED_CURSOR_RESTORE_VALUES.forEach((component, state) ->
+                component.setCursor(state.explicitlySet() ? state.cursor() : null));
+        FORCED_CURSOR_RESTORE_VALUES.clear();
     }
 
     static int effectiveCursorType(int cursorType) {
@@ -93,5 +127,8 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
 
     static boolean isPredefinedCursorType(int cursorType) {
         return cursorType >= Cursor.DEFAULT_CURSOR && cursorType <= Cursor.MOVE_CURSOR;
+    }
+
+    private record CursorState(boolean explicitlySet, Cursor cursor) {
     }
 }
