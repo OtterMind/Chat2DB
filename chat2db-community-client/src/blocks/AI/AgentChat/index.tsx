@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Modal, Popover, Select, Tooltip } from 'antd';
+import { Button, Checkbox, Input, Modal, Popover, Select, Tag, Tooltip } from 'antd';
 import { Send, Settings2, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -17,6 +17,7 @@ interface AgentChatProps {
   initialSessionId?: string;
   initialTitle?: string;
   initialModelConfigId?: string;
+  initialInput?: string;
 }
 
 const requestId = () =>
@@ -25,7 +26,12 @@ const requestId = () =>
     .toString(36)
     .slice(2)}`;
 
-export default function AgentChat({ initialSessionId, initialTitle, initialModelConfigId }: AgentChatProps) {
+export default function AgentChat({
+  initialSessionId,
+  initialTitle,
+  initialModelConfigId,
+  initialInput,
+}: AgentChatProps) {
   const { styles } = useStyles();
   const [modal, modalContextHolder] = Modal.useModal();
   const [sessionId, setSessionId] = useState(initialSessionId || '');
@@ -86,8 +92,8 @@ export default function AgentChat({ initialSessionId, initialTitle, initialModel
   const selectedModel = useMemo(() => models.find((item) => item.value === modelValue), [modelValue, models]);
   const transcript = useMemo(() => buildAgentTranscript(events), [events]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  const send = useCallback(async (inputOverride?: string) => {
+    const text = (inputOverride ?? input).trim();
     if (!text || !selectedModel || submitting || activeRun) return;
     setSubmitting(true);
     try {
@@ -130,6 +136,11 @@ export default function AgentChat({ initialSessionId, initialTitle, initialModel
       setSubmitting(false);
     }
   }, [activeRun, input, refreshEvents, selectedModel, sessionId, submitting]);
+
+  useEffect(() => {
+    if (!initialInput || initialSessionId || sessionId || !selectedModel || submitting) return;
+    void send(initialInput);
+  }, [initialInput, initialSessionId, selectedModel, send, sessionId, submitting]);
 
   const cancel = useCallback(async () => {
     if (!activeRun || !sessionId) return;
@@ -176,20 +187,23 @@ export default function AgentChat({ initialSessionId, initialTitle, initialModel
       <div className={styles.header}>
         <span className={styles.title}>{title || i18n('stream.agent.title')}</span>
         <div className={styles.runtimeActions}>
-          <span>{i18n('stream.agent.runtimePi')}</span>
+          <span>{i18n('stream.runtime.pi')}</span>
+          <Tag color="gold">Beta</Tag>
           <Popover
             trigger="click"
             placement="bottomRight"
             content={
               <div className={styles.runtimeConfigPanel}>
-                <div className={styles.runtimeConfigTitle}>{i18n('stream.agent.runtimePi')}</div>
+                <div className={styles.runtimeConfigTitle}>
+                  {i18n('stream.runtime.pi')} <Tag color="gold">Beta</Tag>
+                </div>
                 <Checkbox checked={shellEnabled} onChange={(event) => handleShellChange(event.target.checked)}>
                   {i18n('setting.agent.bash.label')}
                 </Checkbox>
               </div>
             }
           >
-            <button type="button" className={styles.runtimeConfigButton} aria-label={i18n('stream.agent.runtimePi')}>
+            <button type="button" className={styles.runtimeConfigButton} aria-label={i18n('stream.runtime.pi')}>
               <Settings2 size={14} />
             </button>
           </Popover>

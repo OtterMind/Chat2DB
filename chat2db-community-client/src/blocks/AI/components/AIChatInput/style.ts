@@ -145,7 +145,7 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-shrink: 0;
     `,
     runtimeSelect: css`
-      min-width: 76px;
+      min-width: 112px;
 
       .ant-select-selector {
         padding: 0 4px !important;

@@ -553,6 +553,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     id?: string;
     title?: string;
     modelConfigId?: string;
+    initialInput?: string;
   } | null>(null);
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>('DEFAULT');
   const [piShellEnabled, setPiShellEnabled] = useState(false);
@@ -1602,6 +1603,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         return;
       }
 
+      if (runtimeChoice === 'PI') {
+        setAgentSession({
+          modelConfigId: selectedOption.modelConfigId || selectedValue,
+          initialInput: content,
+        });
+        return;
+      }
+
       setStreamTraceEntries([]);
       streamTraceEntriesRef.current = [];
       previousStreamThoughtPreviewRef.current = '';
@@ -1706,6 +1715,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       isCurrentRoundOverflowingViewport,
       messages,
       modelOptionMap,
+      runtimeChoice,
       selectedModel?.value,
       request,
       scrollMessageListToBottom,
@@ -2154,9 +2164,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         feedback.error(result.state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
         return;
       }
-      setRuntimeChoice(value);
-      handleNewChat();
-      setAgentSession({});
+    setRuntimeChoice(value);
+    handleNewChat();
+    setAgentSession(null);
     } catch (error) {
       feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
     } finally {
@@ -2289,6 +2299,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         initialSessionId={agentSession.id}
         initialTitle={agentSession.title}
         initialModelConfigId={agentSession.modelConfigId}
+        initialInput={agentSession.initialInput}
       />
     );
   }
