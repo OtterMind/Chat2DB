@@ -43,12 +43,12 @@ class AgentToolGatewayServiceTest {
                         method.getName().equals("list") ? List.of(run) : run);
         AgentToolGatewayService gateway = new AgentToolGatewayService(
                 new AiToolAdapter(domainTools, new AiToolContextConverter()), sessions, runs, () -> 1L,
-                null, List.of(), List.of(), 11837);
+                null, List.of(), 11837);
         try {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
             var catalog = gateway.listTools();
-            assertEquals(8, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
+            assertEquals(7, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
             assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("list_all_datasources")
                     && tool.status() == AgentToolState.Status.ENABLED));
             assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN)

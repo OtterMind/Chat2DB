@@ -1020,7 +1020,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, []);
 
   const requestAgentApproval = useCallback((event: AgentEvent, operation: AgentOperation) => {
-    const { approvalId, command, workingDirectory } = event.payload;
+    const { approvalId, command, workingDirectory, toolName } = event.payload;
     if (typeof approvalId !== 'string' || typeof command !== 'string' || operation.approvals.has(approvalId)) return;
     operation.approvals.add(approvalId);
     const decide = async (approved: boolean) => {
@@ -1035,7 +1035,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     };
     const close = () => dialog.destroy();
     const dialog = modal.confirm({
-      title: 'Bash',
+      title: toolName === 'powershell' ? 'PowerShell' : 'Bash',
       content: <>
         {typeof workingDirectory === 'string' && <p>
           {i18n('setting.agent.workingDirectory')}：<code style={{ overflowWrap: 'anywhere' }}>{workingDirectory}</code>

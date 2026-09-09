@@ -1,6 +1,6 @@
 package ai.chat2db.community.domain.api.service.agent;
 
-public interface AgentShellSettingsStorage {
+public interface AgentWorkspaceStorage {
     String getWorkingDirectory();
     void setWorkingDirectory(String directory);
 }

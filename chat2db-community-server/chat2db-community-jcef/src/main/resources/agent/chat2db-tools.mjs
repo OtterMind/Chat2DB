@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { createReadTool, createEditTool, createWriteTool, createGrepTool, createFindTool, createLsTool,
+  createBashTool, createPowerShellTool } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 
 export default function (pi) {
@@ -27,6 +29,40 @@ export default function (pi) {
           signal,
         });
         return { content: [{ type: "text", text: result.content }], details: {} };
+      },
+    });
+  }
+
+  const factories = { read: createReadTool, edit: createEditTool, write: createWriteTool,
+    grep: createGrepTool, find: createFindTool, ls: createLsTool,
+    ...(process.platform === "win32" ? { powershell: createPowerShellTool } : { bash: createBashTool }) };
+  for (const [name, createTool] of Object.entries(factories)) {
+    const definition = createTool(process.cwd());
+    const executions = new Map();
+    pi.on("before_agent_start", () => executions.clear());
+    pi.registerTool({
+      ...definition,
+      async execute(toolCallId, args, signal, onUpdate) {
+        const serialized = JSON.stringify(args);
+        const previous = executions.get(toolCallId);
+        if (previous) {
+          if (previous.args !== serialized) throw new Error("Tool call arguments have changed");
+          return previous.result;
+        }
+        const result = (async () => {
+          const { workingDirectory } = await request("/prepare-native", {
+            method: "POST", body: JSON.stringify({ toolCallId, toolName: name, arguments: args }), signal,
+          });
+          signal?.throwIfAborted();
+          if (realpathSync(workingDirectory) !== workingDirectory) {
+            throw new Error("The working directory changed after authorization");
+          }
+          const native = createTool(workingDirectory);
+          const output = await native.execute(toolCallId, args, signal, onUpdate);
+          return { ...output, details: { ...output.details, workingDirectory } };
+        })();
+        executions.set(toolCallId, { args: serialized, result });
+        return result;
       },
     });
   }

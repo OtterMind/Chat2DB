@@ -1,8 +1,8 @@
 package ai.chat2db.community.web.api.controller;
 
-import ai.chat2db.community.domain.api.model.agent.AgentShellSettings;
+import ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.model.agent.AgentToolState;
-import ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService;
+import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -17,9 +17,9 @@ import java.util.List;
 @RequestMapping("/api/v3/ai/features")
 public class AgentToolSettingsController {
     private final AgentToolAccessService tools;
-    private final List<AgentShellSettingsService> settings;
+    private final List<AgentWorkspaceService> settings;
 
-    public AgentToolSettingsController(AgentToolAccessService tools, List<AgentShellSettingsService> settings) {
+    public AgentToolSettingsController(AgentToolAccessService tools, List<AgentWorkspaceService> settings) {
         this.tools = tools;
         this.settings = settings;
     }
@@ -29,18 +29,24 @@ public class AgentToolSettingsController {
         return ListResult.of(tools.listTools());
     }
 
-    @GetMapping("/bash/settings")
-    public DataResult<AgentShellSettings> getSettings() {
+    @GetMapping({"/tools/settings", "/bash/settings"})
+    public DataResult<AgentWorkspaceSettings> getSettings() {
         return DataResult.of(settings().get());
     }
 
-    @PostMapping("/bash/settings")
-    public DataResult<AgentShellSettings> updateSettings(@RequestBody @Valid SettingsRequest request) {
+    @PostMapping({"/tools/settings", "/bash/settings"})
+    public DataResult<AgentWorkspaceSettings> updateSettings(@RequestBody @Valid SettingsRequest request) {
         return DataResult.of(settings().update(request.workingDirectory()));
     }
 
-    private AgentShellSettingsService settings() {
-        if (settings.isEmpty()) throw new AgentRuntimeUnavailableException("PI", "Local shell settings are unavailable");
+    @GetMapping("/tools/directories")
+    public DataResult<ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing> listDirectories(
+            @RequestParam(defaultValue = "") String path) {
+        return DataResult.of(settings().listDirectories(path));
+    }
+
+    private AgentWorkspaceService settings() {
+        if (settings.isEmpty()) throw new AgentRuntimeUnavailableException("PI", "Local workspace settings are unavailable");
         return settings.get(0);
     }
 

@@ -42,18 +42,6 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
-    public BashEnvironmentChecker bashEnvironmentChecker() {
-        return new BashEnvironmentChecker();
-    }
-
-    @Bean
-    public BashAgentFeatureService bashAgentFeatureService(
-            AgentFeatureFlagStorage flagStorage,
-            BashEnvironmentChecker environmentChecker) {
-        return new BashAgentFeatureService(flagStorage, environmentChecker);
-    }
-
-    @Bean
     public PiRuntimeInstallation piRuntimeInstallation(
             PiRuntimePaths paths,
             @Value("${chat2db.agent.pi.version:0.85.1}") String version,
@@ -111,15 +99,9 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
-    public ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService agentShellSettingsService() {
-        return new BashSettingsService(new SettingsAgentShellSettingsStorage(),
+    public ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService agentWorkspaceService() {
+        return new PiWorkspaceService(new SettingsAgentWorkspaceStorage(),
                 Path.of(ConfigUtils.getEnvBasePath()).resolve("storage/ai-chat-history-v2/workspaces"));
-    }
-
-    @Bean
-    public ai.chat2db.community.domain.api.service.agent.AgentShellExecutor agentShellExecutor(
-            ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService settings) {
-        return new BashSandboxExecutor(settings);
     }
 
     @Bean

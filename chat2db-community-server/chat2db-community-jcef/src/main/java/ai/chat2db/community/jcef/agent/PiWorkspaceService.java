@@ -1,8 +1,8 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentShellSettings;
-import ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService;
-import ai.chat2db.community.domain.api.service.agent.AgentShellSettingsStorage;
+import ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings;
+import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
+import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceStorage;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.AgentTrace;
 
@@ -12,27 +12,27 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Map;
 
-public class BashSettingsService implements AgentShellSettingsService {
-    private final AgentShellSettingsStorage storage;
+public class PiWorkspaceService implements AgentWorkspaceService {
+    private final AgentWorkspaceStorage storage;
     private final Path defaultWorkspaces;
 
-    public BashSettingsService(AgentShellSettingsStorage storage, Path defaultWorkspaces) {
+    public PiWorkspaceService(AgentWorkspaceStorage storage, Path defaultWorkspaces) {
         this.storage = storage;
         this.defaultWorkspaces = defaultWorkspaces.toAbsolutePath().normalize();
     }
 
     @Override
-    public AgentShellSettings get() {
-        return new AgentShellSettings(storage.getWorkingDirectory());
+    public AgentWorkspaceSettings get() {
+        return new AgentWorkspaceSettings(storage.getWorkingDirectory());
     }
 
     @Override
-    public AgentShellSettings update(String workingDirectory) {
+    public AgentWorkspaceSettings update(String workingDirectory) {
         String value = workingDirectory.strip();
         String directory = value.isEmpty() ? "" : existingDirectory(value).toString();
         storage.setWorkingDirectory(directory);
-        AgentTrace.record("shell.settings.saved", null, null, Map.of("workingDirectory", directory));
-        return new AgentShellSettings(directory);
+        AgentTrace.record("workspace.settings.saved", null, null, Map.of("workingDirectory", directory));
+        return new AgentWorkspaceSettings(directory);
     }
 
     @Override
@@ -48,6 +48,21 @@ public class BashSettingsService implements AgentShellSettingsService {
                 throw new BusinessException("agent.bash.directory.invalid");
             }
             return workspace.toRealPath().toString();
+        } catch (IOException error) {
+            throw new BusinessException("agent.bash.directory.invalid");
+        }
+    }
+
+    @Override
+    public ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing listDirectories(String path) {
+        Path directory = existingDirectory(path.isBlank() ? System.getProperty("user.home") : path);
+        try (var children = Files.list(directory)) {
+            var entries = children.filter(Files::isDirectory).filter(Files::isReadable)
+                    .sorted(java.util.Comparator.comparing(item -> item.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
+                    .map(item -> new ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing.Entry(
+                            item.getFileName().toString(), item.toString())).toList();
+            return new ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing(directory.toString(),
+                    directory.getParent() == null ? null : directory.getParent().toString(), entries);
         } catch (IOException error) {
             throw new BusinessException("agent.bash.directory.invalid");
         }

@@ -38,7 +38,7 @@ class PiProcessSupervisorTest {
         supervisor.start("session-one", "external-one", List.of(extension));
 
         assertEquals(1, supervisor.size());
-        assertEquals(1, captured[0].environment().size());
+        assertEquals(System.getenv("PATH"), captured[0].environment().get("PATH"));
         assertTrue(captured[0].environment().containsKey("PI_CODING_AGENT_DIR"));
         assertTrue(captured[0].command().containsAll(List.of(
                 "--mode", "rpc", "--no-builtin-tools", "--no-extensions",
@@ -91,7 +91,7 @@ class PiProcessSupervisorTest {
         supervisor.start("session", "external", List.of(), access, "existing V1 prompt\nwith formatting");
 
         assertEquals("short-ticket", captured[0].environment().get("CHAT2DB_MODEL_TICKET"));
-        assertEquals(2, captured[0].environment().size());
+        assertFalse(captured[0].environment().containsKey("OPENAI_API_KEY"));
         int promptIndex = captured[0].command().indexOf("--system-prompt");
         assertTrue(promptIndex > 0);
         assertEquals("existing V1 prompt\nwith formatting", captured[0].command().get(promptIndex + 1));

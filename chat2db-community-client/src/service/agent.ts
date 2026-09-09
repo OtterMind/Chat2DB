@@ -60,8 +60,14 @@ export interface AgentToolState {
   status: 'ENABLED' | 'DISABLED' | 'UNAVAILABLE';
 }
 
-export interface AgentShellSettings {
+export interface AgentWorkspaceSettings {
   workingDirectory: string;
+}
+
+export interface AgentDirectoryListing {
+  path: string;
+  parent: string | null;
+  directories: { name: string; path: string }[];
 }
 
 export interface AgentSession {
@@ -101,11 +107,14 @@ const enableBash = createRequest<{ confirmed: true }, AgentToolFeatureState>('/a
 });
 const disableBash = createRequest<void, AgentToolFeatureState>('/api/v3/ai/features/bash/disable', { method: 'post' });
 const listTools = createRequest<void, AgentToolState[]>('/api/v3/ai/features/tools', { errorLevel: false });
-const getShellSettings = createRequest<void, AgentShellSettings>(
-  '/api/v3/ai/features/bash/settings', { errorLevel: false },
+const getWorkspaceSettings = createRequest<void, AgentWorkspaceSettings>(
+  '/api/v3/ai/features/tools/settings', { errorLevel: false },
 );
-const saveShellSettings = createRequest<AgentShellSettings, AgentShellSettings>(
-  '/api/v3/ai/features/bash/settings', { method: 'post', errorLevel: false },
+const saveWorkspaceSettings = createRequest<AgentWorkspaceSettings, AgentWorkspaceSettings>(
+  '/api/v3/ai/features/tools/settings', { method: 'post', errorLevel: false },
+);
+const listDirectories = createRequest<{ path: string }, AgentDirectoryListing>(
+  '/api/v3/ai/features/tools/directories', { errorLevel: false },
 );
 const createSession = createRequest<
   {
@@ -152,8 +161,9 @@ export default {
   enableBash,
   disableBash,
   listTools,
-  getShellSettings,
-  saveShellSettings,
+  listDirectories,
+  getWorkspaceSettings,
+  saveWorkspaceSettings,
   createSession,
   getSession,
   startRun,

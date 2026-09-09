@@ -1,9 +1,10 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.service.agent.AgentShellSettingsStorage;
+import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceStorage;
 import ai.chat2db.community.tools.util.SystemSettingsUtil;
 
-public class SettingsAgentShellSettingsStorage implements AgentShellSettingsStorage {
+public class SettingsAgentWorkspaceStorage implements AgentWorkspaceStorage {
+    // Preserve the existing saved directory when migrating from Bash-only settings.
     private static final String WORKING_DIRECTORY = "agent.bash.workingDirectory";
 
     @Override

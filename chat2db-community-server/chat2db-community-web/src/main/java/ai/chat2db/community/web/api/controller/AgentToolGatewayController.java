@@ -52,6 +52,14 @@ public class AgentToolGatewayController {
         }
     }
 
+    @PostMapping("/agent-tools/prepare-native")
+    public ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings prepareNative(
+            @RequestHeader("Authorization") String authorization, @RequestBody @Valid ToolRequest body,
+            HttpServletRequest request) throws Exception {
+        return gateway.prepareNative(ticket(authorization), request.getRemoteAddr(),
+                body.toolCallId(), body.toolName(), body.arguments());
+    }
+
     @PostMapping("/sessions/{sessionId}/approvals")
     public ActionResult decide(@PathVariable String sessionId,
             @RequestBody @Valid DecisionRequest decision) {

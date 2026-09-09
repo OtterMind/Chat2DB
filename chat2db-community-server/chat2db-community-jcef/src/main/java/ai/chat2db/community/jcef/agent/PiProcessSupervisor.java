@@ -104,6 +104,11 @@ public class PiProcessSupervisor implements AutoCloseable {
                 executable, externalSessionId, sessionDirectory, extensions, modelAccess, systemPrompt));
         builder.directory(sessionDirectory.toFile());
         builder.environment().clear();
+        // Native tools need executable lookup and the platform shell environment, but no model/provider secrets.
+        for (String name : List.of("PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "TMPDIR")) {
+            String value = System.getenv(name);
+            if (value != null) builder.environment().put(name, value);
+        }
         builder.environment().put("PI_CODING_AGENT_DIR", configDirectory.toString());
         if (modelAccess != null) {
             builder.environment().put("CHAT2DB_MODEL_TICKET", modelAccess.ticket());

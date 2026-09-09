@@ -18,6 +18,8 @@ export const useStyles = createStyles(({ css, token }) => ({
   panel: css`
     width: 370px;
     max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
   `,
   title: css`
     margin-bottom: 12px;
@@ -43,11 +45,31 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow-y: auto;
     border-top: 1px solid ${token.colorBorderSecondary};
   `,
-  group: css`
-    margin: 12px 0 6px;
-    color: ${token.colorTextSecondary};
-    font-size: 12px;
-    font-weight: 600;
+  browserPath: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    overflow-wrap: anywhere;
+  `,
+  directories: css`
+    min-height: 160px;
+    max-height: 320px;
+    overflow-y: auto;
+  `,
+  directoryEntry: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    border: 0;
+    color: ${token.colorText};
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    overflow-wrap: anywhere;
+    &:hover { background: ${token.colorFillSecondary}; }
   `,
   row: css`
     padding: 8px 0;

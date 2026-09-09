@@ -17,6 +17,8 @@ assert.notEqual(toolDescription(tool, translate), zh['setting.agent.tool.bash'])
 for (const locale of [zh, en, ja, ko, es]) {
   assert.ok(locale['setting.agent.toolStatus.UNAVAILABLE']);
   assert.ok(locale['setting.agent.workingDirectory.hint']);
+  assert.ok(locale['setting.agent.workingDirectory.choose']);
+  assert.ok(locale['setting.agent.workingDirectory.parent']);
   assert.ok(locale['setting.agent.tool.execute_sql']);
 }
 assert.equal(toolDescription({ ...tool, name: 'custom_tool', description: 'Custom tool description' }, translate),
