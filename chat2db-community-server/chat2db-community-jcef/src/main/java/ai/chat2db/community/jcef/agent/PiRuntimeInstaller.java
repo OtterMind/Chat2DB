@@ -18,7 +18,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.UUID;
 
-public class PiRuntimeInstaller {
+public class PiRuntimeInstaller implements PiRuntimeInstallation {
 
     private static final long MAX_MANIFEST_BYTES = 1024 * 1024;
     private static final long MAX_FILE_BYTES = 512L * 1024 * 1024;
@@ -44,6 +44,7 @@ public class PiRuntimeInstaller {
         this.fetcher = fetcher;
     }
 
+    @Override
     public synchronized Path install(AgentRuntimeEnvironmentRequest environment) throws IOException {
         String os = PiRuntimeLayout.normalizeOperatingSystem(environment.operatingSystem());
         String architecture = PiRuntimeLayout.normalizeArchitecture(environment.architecture());

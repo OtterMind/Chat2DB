@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PiAgentRuntimeAdapterTest {
 
@@ -26,7 +27,7 @@ class PiAgentRuntimeAdapterTest {
         PiAgentRuntimeAdapter adapter = new PiAgentRuntimeAdapter(
                 "0.85.1", "rpc-v1",
                 new PiRuntimeEnvironmentChecker(new PiRuntimeLayout(temporaryDirectory, "0.85.1")),
-                launcher);
+                launcher, () -> true);
 
         adapter.openSession(new AgentRuntimeSessionOpenRequest(
                 "session", "external", null, model()), event -> { });
@@ -41,6 +42,19 @@ class PiAgentRuntimeAdapterTest {
         assertEquals(AgentRuntimeType.PI, adapter.descriptor().type());
         assertEquals(AgentRuntimeEnvironmentStatus.BLOCKED,
                 adapter.inspectEnvironment(new AgentRuntimeEnvironmentRequest("5.3.0", "macos", "arm64")).status());
+    }
+
+    @Test
+    void blocksInspectionAndOpeningWhileBetaIsDisabled() {
+        PiAgentRuntimeAdapter adapter = new PiAgentRuntimeAdapter(
+                "0.85.1", "rpc-v1",
+                new PiRuntimeEnvironmentChecker(new PiRuntimeLayout(temporaryDirectory, "0.85.1")),
+                new RecordingLauncher(), () -> false);
+
+        assertEquals(AgentRuntimeEnvironmentStatus.BLOCKED,
+                adapter.inspectEnvironment(new AgentRuntimeEnvironmentRequest("5.3.0", "macos", "arm64")).status());
+        assertThrows(PiRpcException.class, () -> adapter.openSession(
+                new AgentRuntimeSessionOpenRequest("session", "external", null, model()), event -> { }));
     }
 
     private AgentModelSnapshot model() {
