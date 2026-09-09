@@ -277,7 +277,7 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
         RedisKey redisKey = new RedisKey();
         redisKey.setName(key);
         String keyType = RedisScriptExecutor.getInstance().getKeyType(connection, key);
-        redisKey.setType(keyType);
+        redisKey.setType(RedisDataType.normalizeCode(keyType));
         ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
         return typeScript.getKeyR(connection, redisKey);
     }
@@ -305,9 +305,12 @@ public class RedisMetaData extends DefaultMetaService implements IDbMetaData {
                         RedisKey redisKey = new RedisKey();
                         redisKey.setName(keyName);
                         String keyType = RedisScriptExecutor.getInstance().getKeyType(keyName);
-                        redisKey.setType(keyType);
+                        redisKey.setType(RedisDataType.normalizeCode(keyType));
                         ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
-                        redisKeys.add(typeScript.getKeyR(connection, redisKey));
+                        RedisKey detail = typeScript.getKeyR(connection, redisKey);
+                        if (detail != null) {
+                            redisKeys.add(detail);
+                        }
                     }
                 }
                 return nextCursor;

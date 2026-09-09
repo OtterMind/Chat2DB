@@ -68,7 +68,7 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
                 .build();
         // getKeyType/getTtl yield null on empty driver result sets; Map.of would NPE on null values.
         Map<String, Object> extra = new HashMap<>();
-        extra.put(RedisConstants.FIELD_KEY_TYPE, keyType);
+        extra.put(RedisConstants.FIELD_KEY_TYPE, RedisDataType.normalizeCode(keyType));
         extra.put(RedisConstants.FIELD_KEY, command.getTableName());
         extra.put(RedisConstants.FIELD_TTL, getTtl(command.getTableName()));
         String script = typeScript.getKey(redisKey);
@@ -297,7 +297,7 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         ITypeScript typeScript = RedisDataType.fromCode(keyType).getScript();
         RedisKey redisKey = RedisKey.builder()
                 .name(key)
-                .type(keyType)
+                .type(RedisDataType.normalizeCode(keyType))
                 .build();
         return typeScript.getKeyR(connection, redisKey);
     }

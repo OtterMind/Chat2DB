@@ -15,6 +15,8 @@ public final class RedisConstants {
     public static final String COMMAND_EXPIRE_KEY_PREFIX = "EXPIRE ";
     public static final String COMMAND_PERSIST_KEY_PREFIX = "PERSIST ";
     public static final String COMMAND_GET_KEY_PREFIX = "GET ";
+    public static final String COMMAND_JSON_GET_KEY_PREFIX = "JSON.GET ";
+    public static final String COMMAND_JSON_SET_KEY_PREFIX = "JSON.SET ";
     public static final String COMMAND_HASH_DELETE_PREFIX = "HDEL ";
     public static final String COMMAND_HASH_GET_ALL_PREFIX = "HGETALL ";
     public static final String COMMAND_HASH_GET_PREFIX = "HGET ";
@@ -88,6 +90,7 @@ public final class RedisConstants {
     public static final String METHOD_BUILD_SHOW_CREATE_VIEW = "buildShowCreateView";
     public static final String METHOD_BUILD_TRUNCATE_TABLE = "buildTruncateTable";
     public static final String METHOD_BUILD_UPDATE = "buildUpdate";
+    public static final String METHOD_BUILD_JSON_OPERATION = "buildJsonOperation";
     public static final String METHOD_BUILD_USE_DATABASE = "buildUseDatabase";
     public static final String REDIS_EXEC_COMMAND = "EXEC";
     public static final String REDIS_MULTI_COMMAND = "MULTI \n";
