@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import ai.chat2db.community.tools.util.AgentTrace;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -116,6 +117,9 @@ public class AgentModelGatewayService implements AgentModelAccessService {
         if (!requestBody.isObject() || !ticket.modelId().equals(requestBody.path("model").asText())) {
             throw new SecurityException("Agent model request does not match its ticket");
         }
+        long started = System.nanoTime();
+        AgentTrace.record("model.request", ticket.sessionId(), null,
+                Map.of("model", ticket.modelId(), "requestBytes", body.length));
         try {
             HttpResponse<InputStream> response = httpClient.send(
                     HttpRequest.newBuilder(responsesUri(ticket.baseUrl()))
@@ -129,10 +133,39 @@ public class AgentModelGatewayService implements AgentModelAccessService {
             java.util.List<String> contentTypes = response.headers().map().get("content-type");
             String contentType = contentTypes == null || contentTypes.isEmpty()
                     ? "application/octet-stream" : contentTypes.get(0);
+            AgentTrace.record("model.response.headers", ticket.sessionId(), null,
+                    Map.of("status", response.statusCode(), "durationMs", elapsedMillis(started)));
+            InputStream monitored = new java.io.FilterInputStream(response.body()) {
+                private long bytes;
+                private boolean ended;
+                private boolean closed;
+                @Override public int read(byte[] buffer, int offset, int length) throws IOException {
+                    int count = in.read(buffer, offset, length);
+                    if (count < 0) ended = true; else bytes += count;
+                    return count;
+                }
+                @Override public int read() throws IOException {
+                    int value = in.read();
+                    if (value < 0) ended = true; else bytes++;
+                    return value;
+                }
+                @Override public void close() throws IOException {
+                    if (closed) return;
+                    closed = true;
+                    try { super.close(); } finally {
+                        AgentTrace.record("model.response.closed", ticket.sessionId(), null,
+                                Map.of("bytes", bytes, "complete", ended, "durationMs", elapsedMillis(started)));
+                    }
+                }
+            };
             return new GatewayResponse(
                     response.statusCode(),
                     contentType,
-                    response.body());
+                    monitored);
+        } catch (IOException error) {
+            AgentTrace.record("model.failed", ticket.sessionId(), null,
+                    Map.of("errorType", error.getClass().getSimpleName(), "durationMs", elapsedMillis(started)));
+            throw error;
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             throw new IOException("Agent model request was interrupted", error);
@@ -147,6 +180,10 @@ public class AgentModelGatewayService implements AgentModelAccessService {
         return URI.create(normalized.endsWith("/v1")
                 ? normalized + "/responses"
                 : normalized + "/v1/responses");
+    }
+
+    private long elapsedMillis(long started) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     }
 
     private boolean isLoopback(String address) {

@@ -83,6 +83,42 @@ class PiAgentRuntimeSessionHandleTest {
                 new AgentRuntimeInput("hello", List.of()), "request");
     }
 
+    @Test
+    void settledAfterAnAssistantErrorFailsTheRunWithItsRealReason() throws Exception {
+        handle.startRun(runRequest());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        handle.accept(objectMapper.readTree("""
+                {"type":"message_end","message":{"role":"assistant","stopReason":"error",
+                "errorMessage":"model connection failed","usage":{"input":2,"output":0}}}
+                """));
+        handle.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
+
+        assertEquals(List.of(AgentEventType.USAGE_UPDATED, AgentEventType.RUN_FAILED),
+                events.stream().map(AgentRuntimeEvent::type).toList());
+        assertEquals("model connection failed", events.get(1).payload().get("error"));
+        assertEquals(AgentRuntimeHealth.FAILED, handle.snapshot().toCompletableFuture().join().health());
+    }
+
+    @Test
+    void aSuccessfulRetryIsNotMarkedFailedAndTrailingEventsDoNotBreakIdleState() throws Exception {
+        handle.startRun(runRequest());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        handle.accept(objectMapper.readTree("""
+                {"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"retry"}}
+                """));
+        handle.accept(objectMapper.readTree("""
+                {"type":"message_end","message":{"role":"assistant","stopReason":"stop","usage":{"input":2,"output":3}}}
+                """));
+        handle.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
+        handle.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
+
+        assertEquals(List.of(AgentEventType.USAGE_UPDATED, AgentEventType.RUN_COMPLETED),
+                events.stream().map(AgentRuntimeEvent::type).toList());
+        assertEquals(AgentRuntimeHealth.READY, handle.snapshot().toCompletableFuture().join().health());
+    }
+
     private static final class FakeTransport implements PiRpcTransport {
         private String command;
         private CompletableFuture<JsonNode> response;

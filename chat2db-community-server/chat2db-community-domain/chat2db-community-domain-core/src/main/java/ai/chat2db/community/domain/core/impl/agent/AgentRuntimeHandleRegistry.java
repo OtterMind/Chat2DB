@@ -68,6 +68,14 @@ public class AgentRuntimeHandleRegistry {
         return handles.size();
     }
 
+    public void closeIdle(java.util.function.Predicate<String> isIdle) {
+        for (var entry : new ArrayList<>(handles.entrySet())) {
+            if (isIdle.test(entry.getKey()) && remove(entry.getKey(), entry.getValue())) {
+                ai.chat2db.community.tools.util.AgentTrace.record("runtime.idle.closed", entry.getKey(), null, Map.of());
+            }
+        }
+    }
+
     private String requireSessionId(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("sessionId must not be blank");

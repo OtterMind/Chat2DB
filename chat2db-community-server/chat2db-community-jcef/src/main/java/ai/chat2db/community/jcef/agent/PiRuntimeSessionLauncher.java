@@ -6,10 +6,15 @@ import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
+import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -20,18 +25,21 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
     private final ObjectMapper objectMapper;
     private final PiEventMapper eventMapper;
     private final AgentModelAccessService modelAccessService;
+    private final AgentToolAccessService toolAccessService;
 
     public PiRuntimeSessionLauncher(
             PiProcessSupervisor supervisor,
             List<Path> extensions,
-            AgentModelAccessService modelAccessService) {
-        this(supervisor, extensions, modelAccessService, new ObjectMapper(), new PiEventMapper());
+            AgentModelAccessService modelAccessService,
+            AgentToolAccessService toolAccessService) {
+        this(supervisor, extensions, modelAccessService, toolAccessService, new ObjectMapper(), new PiEventMapper());
     }
 
     PiRuntimeSessionLauncher(
             PiProcessSupervisor supervisor,
             List<Path> extensions,
             AgentModelAccessService modelAccessService,
+            AgentToolAccessService toolAccessService,
             ObjectMapper objectMapper,
             PiEventMapper eventMapper) {
         this.supervisor = supervisor;
@@ -39,6 +47,7 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
         this.objectMapper = objectMapper;
         this.eventMapper = eventMapper;
         this.modelAccessService = modelAccessService;
+        this.toolAccessService = toolAccessService;
     }
 
     @Override
@@ -50,9 +59,20 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
             AgentModelSnapshot model,
             AgentRuntimeEventSink eventSink) {
         AgentModelAccess modelAccess = modelAccessService.issue(sessionId, model);
+        AgentToolAccess toolAccess = null;
         try {
-            writeModelConfiguration(supervisor.prepareConfigurationDirectory(sessionId), modelAccess, model);
-            PiProcessHandle process = supervisor.start(sessionId, externalSessionId, extensions, modelAccess, systemPrompt);
+            toolAccess = toolAccessService.issue(sessionId, eventSink);
+            Path configuration = supervisor.prepareConfigurationDirectory(sessionId);
+            writeModelConfiguration(configuration, modelAccess, model);
+            objectMapper.writeValue(configuration.resolve("tools.json").toFile(), toolAccess);
+            Path extension = configuration.resolve("chat2db-tools.mjs");
+            try (var resource = new org.springframework.core.io.ClassPathResource("agent/chat2db-tools.mjs").getInputStream()) {
+                Files.copy(resource, extension, StandardCopyOption.REPLACE_EXISTING);
+            }
+            List<Path> loadedExtensions = new ArrayList<>(extensions);
+            loadedExtensions.add(extension);
+            PiProcessHandle process = supervisor.start(
+                    sessionId, externalSessionId, loadedExtensions, modelAccess, systemPrompt);
             AtomicReference<PiAgentRuntimeSessionHandle> handleReference = new AtomicReference<>();
             PiRpcClient rpc = new PiRpcClient(process.stdout(), process.stdin(), event -> {
                 PiAgentRuntimeSessionHandle handle = handleReference.get();
@@ -61,6 +81,7 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
                 }
                 handle.accept(event);
             });
+            String toolTicket = toolAccess.ticket();
             PiAgentRuntimeSessionHandle handle = new PiAgentRuntimeSessionHandle(
                     sessionId,
                     new AgentRuntimeSessionRef(externalSessionId, resumeReference),
@@ -69,16 +90,21 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
                     eventMapper,
                     eventSink,
                     objectMapper,
-                    () -> modelAccessService.revoke(modelAccess.ticket()),
+                    () -> {
+                        modelAccessService.revoke(modelAccess.ticket());
+                        toolAccessService.revoke(toolTicket);
+                    },
                     modelAccess.provider(),
                     modelAccess.modelId());
             handleReference.set(handle);
             return handle;
         } catch (IOException error) {
             modelAccessService.revoke(modelAccess.ticket());
+            if (toolAccess != null) toolAccessService.revoke(toolAccess.ticket());
             throw new PiRpcException("Cannot start Pi runtime process", error);
         } catch (RuntimeException error) {
             modelAccessService.revoke(modelAccess.ticket());
+            if (toolAccess != null) toolAccessService.revoke(toolAccess.ticket());
             throw error;
         }
     }

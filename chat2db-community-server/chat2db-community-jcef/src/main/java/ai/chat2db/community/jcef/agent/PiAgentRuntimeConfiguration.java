@@ -105,8 +105,14 @@ public class PiAgentRuntimeConfiguration {
     @Bean
     public PiRuntimeSessionLauncher piRuntimeSessionLauncher(
             PiProcessSupervisor supervisor,
-            AgentModelAccessService modelAccessService) {
-        return new PiRuntimeSessionLauncher(supervisor, List.of(), modelAccessService);
+            AgentModelAccessService modelAccessService,
+            ai.chat2db.community.domain.api.service.agent.AgentToolAccessService toolAccessService) {
+        return new PiRuntimeSessionLauncher(supervisor, List.of(), modelAccessService, toolAccessService);
+    }
+
+    @Bean
+    public ai.chat2db.community.domain.api.service.agent.AgentShellExecutor agentShellExecutor() {
+        return new BashSandboxExecutor();
     }
 
     @Bean

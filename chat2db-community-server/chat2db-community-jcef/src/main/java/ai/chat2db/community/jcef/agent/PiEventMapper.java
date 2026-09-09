@@ -47,12 +47,14 @@ public class PiEventMapper {
             case "message_start" -> "assistant".equals(event.path("message").path("role").asText())
                     ? AgentEventType.ASSISTANT_MESSAGE_STARTED : null;
             case "message_update" -> mapMessageUpdate(event);
+            case "message_end" -> "assistant".equals(event.path("message").path("role").asText())
+                    && event.path("message").path("usage").isObject() ? AgentEventType.USAGE_UPDATED : null;
             case "tool_execution_start" -> AgentEventType.TOOL_CALL_RUNNING;
             case "tool_execution_end" -> event.path("isError").asBoolean(false)
                     ? AgentEventType.TOOL_CALL_FAILED : AgentEventType.TOOL_CALL_COMPLETED;
             case "extension_ui_request" -> AgentEventType.APPROVAL_REQUESTED;
-            case "agent_settled" -> event.hasNonNull("error")
-                    ? AgentEventType.RUN_FAILED : AgentEventType.RUN_COMPLETED;
+            case "agent_settled" -> event.path("cancelled").asBoolean(false) ? AgentEventType.RUN_CANCELLED
+                    : event.hasNonNull("error") ? AgentEventType.RUN_FAILED : AgentEventType.RUN_COMPLETED;
             case "compaction_end" -> event.hasNonNull("result") ? AgentEventType.CHECKPOINT_COMMITTED : null;
             default -> null;
         };
@@ -63,7 +65,7 @@ public class PiEventMapper {
         if ("text_delta".equals(updateType)) {
             return AgentEventType.ASSISTANT_TEXT_DELTA;
         }
-        if ("reasoning_delta".equals(updateType)) {
+        if ("thinking_delta".equals(updateType) || "reasoning_delta".equals(updateType)) {
             return AgentEventType.ASSISTANT_REASONING_DELTA;
         }
         if ("usage".equals(updateType)) {

@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.domain.api.service.ai.IAiSystemPromptService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
+import ai.chat2db.community.tools.util.AgentTrace;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -79,6 +80,8 @@ public class AgentServiceImpl implements AgentService {
                 command.runtimeType(), command.modelConfigId(), 1);
         AgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());
+        AgentTrace.record("session.environment", null, null,
+                java.util.Map.of("runtime", command.runtimeType(), "status", environment.status()));
         if (environment.runtimeType() != definition.runtimeType()) {
             throw new IllegalStateException("Agent runtime environment report type does not match its adapter");
         }
@@ -108,7 +111,11 @@ public class AgentServiceImpl implements AgentService {
                 0,
                 now,
                 now);
-        return sessionStorage.create(session);
+        AgentSession created = sessionStorage.create(session);
+        AgentTrace.record("session.created", session.id(), null,
+                java.util.Map.of("runtime", definition.runtimeType(), "modelConfigId", definition.modelConfigId(),
+                        "status", session.status(), "promptCharacters", definition.systemPrompt().length()));
+        return created;
     }
 
     @Override

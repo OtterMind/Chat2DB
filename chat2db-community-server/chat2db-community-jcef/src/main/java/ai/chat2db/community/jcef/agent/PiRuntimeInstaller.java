@@ -78,6 +78,8 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
         String os = PiRuntimeLayout.normalizeOperatingSystem(environment.operatingSystem());
         String architecture = PiRuntimeLayout.normalizeArchitecture(environment.architecture());
         String platform = os + "-" + architecture;
+        ai.chat2db.community.tools.util.AgentTrace.record("install.checked", null, null,
+                java.util.Map.of("platform", platform, "version", version));
         PiRuntimeLayout finalLayout = new PiRuntimeLayout(paths.installations(), version);
         Path target = finalLayout.platformDirectory(os, architecture);
         if (new PiRuntimeEnvironmentChecker(finalLayout).inspect(environment).isUsable()) {
@@ -89,8 +91,12 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
         try {
             Files.createDirectories(staging);
             String assetName = assetName(os, architecture);
+            ai.chat2db.community.tools.util.AgentTrace.record("install.download.started", null, null,
+                    java.util.Map.of("platform", platform, "asset", assetName));
             byte[] archive = fetcher.fetch(sourceRoot.resolve(assetName), MAX_ARCHIVE_BYTES);
             archiveTrust.verify(platform, archive);
+            ai.chat2db.community.tools.util.AgentTrace.record("install.archive.verified", null, null,
+                    java.util.Map.of("platform", platform, "bytes", archive.length));
             if (assetName.endsWith(".zip")) {
                 extractZip(archive, staging);
             } else {
@@ -108,8 +114,12 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
                         + report.diagnostics().getOrDefault("reason", "unknown reason"));
             }
             publish(stagingRoot, staging, target);
+            ai.chat2db.community.tools.util.AgentTrace.record("install.published", null, null,
+                    java.util.Map.of("platform", platform, "version", version));
             return target;
         } catch (IOException | RuntimeException error) {
+            ai.chat2db.community.tools.util.AgentTrace.record("install.failed", null, null,
+                    java.util.Map.of("platform", platform, "errorType", error.getClass().getSimpleName()));
             deleteTree(stagingRoot);
             throw error;
         }

@@ -33,6 +33,7 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
     private String activeRunId;
     private String activeExternalRunId;
     private boolean cancelling;
+    private JsonNode lastAssistantMessage;
 
     public PiAgentRuntimeSessionHandle(
             String sessionId,
@@ -72,10 +73,13 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
             return CompletableFuture.failedFuture(new IllegalStateException("Pi runtime session is not ready"));
         }
         activeRunId = request.runId();
+        lastAssistantMessage = null;
         activeExternalRunId = request.runId();
         health = AgentRuntimeHealth.BUSY;
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("message", request.input().text());
+        ai.chat2db.community.tools.util.AgentTrace.record("pi.prompt.sending", sessionId, request.runId(),
+                java.util.Map.of("inputCharacters", request.input().text().length()));
         CompletableFuture<JsonNode> response = rpc.request("set_model", objectMapper.createObjectNode()
                         .put("provider", runtimeProvider)
                         .put("modelId", runtimeModelId))
@@ -113,13 +117,29 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
 
     public synchronized void accept(JsonNode rawEvent) {
         if (activeRunId == null) {
-            throw new PiRpcException("Pi emitted a run event without an active run");
+            ai.chat2db.community.tools.util.AgentTrace.record("pi.event.ignored", sessionId, null,
+                    java.util.Map.of("type", rawEvent.path("type").asText()));
+            return;
+        }
+        if ("message_end".equals(rawEvent.path("type").asText())
+                && "assistant".equals(rawEvent.path("message").path("role").asText())) {
+            lastAssistantMessage = rawEvent.get("message");
+        }
+        if ("agent_settled".equals(rawEvent.path("type").asText()) && lastAssistantMessage != null) {
+            ObjectNode settled = rawEvent.deepCopy();
+            String stopReason = lastAssistantMessage.path("stopReason").asText();
+            if ("error".equals(stopReason)) {
+                settled.put("error", lastAssistantMessage.path("errorMessage").asText("Pi model request failed"));
+            } else if ("aborted".equals(stopReason)) {
+                settled.put("cancelled", true);
+            }
+            rawEvent = settled;
         }
         AgentRuntimeEvent event = eventMapper.map(sessionId, activeRunId, rawEvent);
         if (event == null) {
             return;
         }
-        if (cancelling && event.type() == AgentEventType.RUN_COMPLETED) {
+        if (cancelling && isTerminal(event.type())) {
             return;
         }
         eventSink.emit(event);
@@ -139,6 +159,7 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
     }
 
     private synchronized AgentRuntimeRunRef acknowledgeRun(String runId, JsonNode result) {
+        ai.chat2db.community.tools.util.AgentTrace.record("pi.prompt.acknowledged", sessionId, runId, java.util.Map.of());
         String externalRunId = result.hasNonNull("externalRunId")
                 ? result.get("externalRunId").asText() : runId;
         if (externalRunId.isBlank()) {

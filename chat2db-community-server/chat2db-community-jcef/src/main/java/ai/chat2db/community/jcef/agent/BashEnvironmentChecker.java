@@ -56,7 +56,7 @@ public class BashEnvironmentChecker {
                     ? Path.of("/usr/bin/sandbox-exec") : null;
         } else if (os.contains("linux")) {
             shell = executable.test(Path.of("/bin/bash")) ? Path.of("/bin/bash") : null;
-            sandbox = firstExecutable(List.of(Path.of("/usr/bin/bwrap"), Path.of("/usr/bin/firejail")));
+            sandbox = executable.test(Path.of("/usr/bin/bwrap")) ? Path.of("/usr/bin/bwrap") : null;
         } else {
             shell = null;
             sandbox = null;

@@ -78,6 +78,7 @@ public class PiProcessSupervisor implements AutoCloseable {
         if (closed) {
             throw new IllegalStateException("Pi process supervisor is closed");
         }
+        processes.entrySet().removeIf(entry -> !entry.getValue().process().isAlive());
         if (processes.containsKey(sessionId)) {
             throw new IllegalStateException("Pi process already exists for session: " + sessionId);
         }
@@ -108,9 +109,15 @@ public class PiProcessSupervisor implements AutoCloseable {
             builder.environment().put("CHAT2DB_MODEL_TICKET", modelAccess.ticket());
         }
         Process process = processStarter.start(builder);
+        ai.chat2db.community.tools.util.AgentTrace.record("pi.process.started", sessionId, null,
+                java.util.Map.of("version", layout.version(), "extensions", extensions.size()));
         PiProcessHandle handle = new PiProcessHandle(sessionId, process);
         processes.put(sessionId, handle);
-        process.onExit().thenRun(() -> remove(sessionId, handle));
+        process.onExit().thenRun(() -> {
+            ai.chat2db.community.tools.util.AgentTrace.record("pi.process.exited", sessionId, null,
+                    java.util.Map.of("exitCode", process.exitValue()));
+            remove(sessionId, handle);
+        });
         return handle;
     }
 

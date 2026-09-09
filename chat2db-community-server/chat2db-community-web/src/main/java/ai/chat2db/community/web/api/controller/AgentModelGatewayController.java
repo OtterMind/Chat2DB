@@ -25,9 +25,17 @@ public class AgentModelGatewayController {
     public ResponseEntity<StreamingResponseBody> responses(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
             @RequestBody byte[] body,
-            HttpServletRequest request) throws IOException {
-        AgentModelGatewayService.GatewayResponse upstream = gatewayService.forward(
-                bearerToken(authorization), request.getRemoteAddr(), body);
+            HttpServletRequest request) {
+        AgentModelGatewayService.GatewayResponse upstream;
+        try {
+            upstream = gatewayService.forward(bearerToken(authorization), request.getRemoteAddr(), body);
+        } catch (IOException error) {
+            byte[] failure = """
+                    {"error":{"type":"model_connection_failed","message":"Cannot connect to the configured model endpoint. Check the model URL and service availability."}}
+                    """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            return ResponseEntity.status(502).header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .body(output -> output.write(failure));
+        }
         StreamingResponseBody responseBody = output -> {
             try (upstream) {
                 upstream.body().transferTo(output);

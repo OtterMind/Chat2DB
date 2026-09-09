@@ -102,4 +102,19 @@ class AgentRuntimeHandleRegistryTest {
             closed = true;
         }
     }
+
+    @Test
+    void idleReclamationPreservesActiveHandlesAndAllowsNewSessions() {
+        AgentRuntimeHandleRegistry registry = new AgentRuntimeHandleRegistry();
+        RecordingHandle idle = new RecordingHandle("idle");
+        RecordingHandle active = new RecordingHandle("active");
+        registry.register("idle", idle);
+        registry.register("active", active);
+        registry.closeIdle("idle"::equals);
+        assertTrue(idle.closed);
+        assertFalse(active.closed);
+        assertSame(active, registry.get("active"));
+        registry.register("new", new RecordingHandle("new"));
+        assertEquals(2, registry.size());
+    }
 }

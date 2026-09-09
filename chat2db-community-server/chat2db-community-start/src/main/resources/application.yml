@@ -74,3 +74,4 @@ logbook:
     - /api/**
   exclude:
     - /api/v3/ai/agent-model/**
+    - /api/v3/ai/agent-tools/**
