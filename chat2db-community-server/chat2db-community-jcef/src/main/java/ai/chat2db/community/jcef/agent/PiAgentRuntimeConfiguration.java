@@ -39,6 +39,18 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
+    public BashEnvironmentChecker bashEnvironmentChecker() {
+        return new BashEnvironmentChecker();
+    }
+
+    @Bean
+    public BashAgentFeatureService bashAgentFeatureService(
+            AgentFeatureFlagStorage flagStorage,
+            BashEnvironmentChecker environmentChecker) {
+        return new BashAgentFeatureService(flagStorage, environmentChecker);
+    }
+
+    @Bean
     public PiRuntimeInstallation piRuntimeInstallation(
             PiRuntimePaths paths,
             @Value("${chat2db.agent.pi.version:0.85.1}") String version,

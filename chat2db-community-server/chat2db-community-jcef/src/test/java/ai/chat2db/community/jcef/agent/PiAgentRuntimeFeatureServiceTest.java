@@ -80,5 +80,11 @@ class PiAgentRuntimeFeatureServiceTest {
         @Override public void setEnabled(AgentRuntimeType runtimeType, boolean enabled) {
             values.put(runtimeType, enabled);
         }
+        @Override public boolean isEnabled(ai.chat2db.community.domain.api.model.agent.AgentFeature feature) {
+            return false;
+        }
+        @Override public void setEnabled(
+                ai.chat2db.community.domain.api.model.agent.AgentFeature feature, boolean enabled) {
+        }
     }
 }

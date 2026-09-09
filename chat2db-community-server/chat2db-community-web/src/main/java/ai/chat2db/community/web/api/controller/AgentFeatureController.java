@@ -2,6 +2,9 @@ package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
+import ai.chat2db.community.domain.api.model.agent.AgentFeature;
+import ai.chat2db.community.domain.api.model.agent.AgentFeatureState;
+import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
@@ -23,10 +26,12 @@ import java.util.Map;
 public class AgentFeatureController {
 
     private final Map<AgentRuntimeType, AgentRuntimeFeatureService> services;
+    private final Map<AgentFeature, AgentFeatureService> featureServices;
     private final AgentHostEnvironmentProvider environmentProvider;
 
     public AgentFeatureController(
             List<AgentRuntimeFeatureService> services,
+            List<AgentFeatureService> featureServices,
             AgentHostEnvironmentProvider environmentProvider) {
         Map<AgentRuntimeType, AgentRuntimeFeatureService> indexed = new EnumMap<>(AgentRuntimeType.class);
         for (AgentRuntimeFeatureService service : services) {
@@ -35,6 +40,13 @@ public class AgentFeatureController {
             }
         }
         this.services = Map.copyOf(indexed);
+        Map<AgentFeature, AgentFeatureService> indexedFeatures = new EnumMap<>(AgentFeature.class);
+        for (AgentFeatureService service : featureServices) {
+            if (indexedFeatures.putIfAbsent(service.feature(), service) != null) {
+                throw new IllegalStateException("Duplicate agent feature service: " + service.feature());
+            }
+        }
+        this.featureServices = Map.copyOf(indexedFeatures);
         this.environmentProvider = environmentProvider;
     }
 
@@ -61,10 +73,34 @@ public class AgentFeatureController {
         return DataResult.of(require(AgentRuntimeType.PI).disable(environmentProvider.current()));
     }
 
+    @PostMapping("/bash/check")
+    public DataResult<AgentFeatureState> checkBash() {
+        return DataResult.of(require(AgentFeature.BASH).check());
+    }
+
+    @PostMapping("/bash/enable")
+    public DataResult<AgentFeatureState> enableBash(
+            @RequestBody @Valid AgentRuntimeEnableRequest request) {
+        return DataResult.of(require(AgentFeature.BASH).enable());
+    }
+
+    @PostMapping("/bash/disable")
+    public DataResult<AgentFeatureState> disableBash() {
+        return DataResult.of(require(AgentFeature.BASH).disable());
+    }
+
     private AgentRuntimeFeatureService require(AgentRuntimeType runtimeType) {
         AgentRuntimeFeatureService service = services.get(runtimeType);
         if (service == null) {
             throw new IllegalStateException("Agent runtime is unavailable: " + runtimeType);
+        }
+        return service;
+    }
+
+    private AgentFeatureService require(AgentFeature feature) {
+        AgentFeatureService service = featureServices.get(feature);
+        if (service == null) {
+            throw new IllegalStateException("Agent feature is unavailable: " + feature);
         }
         return service;
     }
