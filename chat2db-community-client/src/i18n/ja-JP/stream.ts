@@ -51,6 +51,7 @@ export default {
   'stream.attachment.added': '{1} 件のファイルを追加しました。',
   'stream.source.files': 'Files',
   'stream.sidebar.newAgentChat': '新しい Agent チャット',
+  'stream.sidebar.agent': 'Agent',
   'stream.agent.title': 'Agent チャット',
   'stream.agent.runtimePi': 'Pi Beta',
   'stream.agent.empty': 'Agent との会話を開始',

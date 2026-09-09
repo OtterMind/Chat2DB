@@ -51,6 +51,7 @@ export default {
   'stream.attachment.added': '已添加 {1} 个文件',
   'stream.source.files': 'Files',
   'stream.sidebar.newAgentChat': '新建 Agent 对话',
+  'stream.sidebar.agent': 'Agent',
   'stream.agent.title': 'Agent 对话',
   'stream.agent.runtimePi': 'Pi Beta',
   'stream.agent.empty': '开始一个 Agent 对话',

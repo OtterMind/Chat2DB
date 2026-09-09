@@ -51,6 +51,7 @@ export default {
   'stream.attachment.added': '{1}개 파일을 추가했습니다.',
   'stream.source.files': '파일',
   'stream.sidebar.newAgentChat': '새 Agent 채팅',
+  'stream.sidebar.agent': 'Agent',
   'stream.agent.title': 'Agent 채팅',
   'stream.agent.runtimePi': 'Pi Beta',
   'stream.agent.empty': 'Agent 대화 시작',

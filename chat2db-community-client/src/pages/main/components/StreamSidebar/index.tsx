@@ -161,11 +161,12 @@ const StreamSidebar = ({
           <Tooltip title={i18n('stream.sidebar.newAgentChat')} placement="bottom" mouseEnterDelay={0.3}>
             <span className={styles.streamSearchTooltipAnchor}>
               <IconButton
-                size={{ boxSize: 32, iconSize: 18 }}
-                className={styles.streamSearchButton}
+                size={{ boxSize: 32, iconSize: 17 }}
+                className={styles.streamAgentButton}
                 icon={Bot}
                 onClick={onNewAgentChat}
               />
+              <span className={styles.streamAgentLabel}>{i18n('stream.sidebar.agent')}</span>
             </span>
           </Tooltip>
         ) : null}
