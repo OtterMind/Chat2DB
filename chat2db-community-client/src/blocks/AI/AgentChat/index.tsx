@@ -15,6 +15,7 @@ import { useStyles } from './style';
 interface AgentChatProps {
   initialSessionId?: string;
   initialTitle?: string;
+  initialModelConfigId?: string;
 }
 
 const requestId = () =>
@@ -23,7 +24,7 @@ const requestId = () =>
     .toString(36)
     .slice(2)}`;
 
-export default function AgentChat({ initialSessionId, initialTitle }: AgentChatProps) {
+export default function AgentChat({ initialSessionId, initialTitle, initialModelConfigId }: AgentChatProps) {
   const { styles } = useStyles();
   const [sessionId, setSessionId] = useState(initialSessionId || '');
   const [title, setTitle] = useState(initialTitle || '');
@@ -62,11 +63,14 @@ export default function AgentChat({ initialSessionId, initialTitle }: AgentChatP
       .then((items) => {
         const available = items || [];
         setModels(available);
-        const selected = available.find((item) => item.defaultOption) || available[0];
+        const selected =
+          available.find((item) => item.modelConfigId === initialModelConfigId) ||
+          available.find((item) => item.defaultOption) ||
+          available[0];
         setModelValue(selected?.value || '');
       })
       .catch(() => feedback.error(i18n('stream.error.loadModelList')));
-  }, []);
+  }, [initialModelConfigId]);
 
   useEffect(() => {
     if (!activeRun || !sessionId) return;
@@ -164,7 +168,7 @@ export default function AgentChat({ initialSessionId, initialTitle }: AgentChatP
           value={modelValue || undefined}
           options={models.map((model) => ({ value: model.value, label: model.label }))}
           onChange={setModelValue}
-          disabled={Boolean(activeRun)}
+          disabled={Boolean(activeRun || sessionId)}
         />
         <Input.TextArea
           className={styles.input}

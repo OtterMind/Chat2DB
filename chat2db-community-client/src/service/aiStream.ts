@@ -22,6 +22,7 @@ export interface IChatSession {
   sessionVersion: 1 | 2;
   runtimeType?: 'PI' | 'CODEX' | 'DSH';
   agentStatus?: string;
+  modelConfigId?: string;
   gmtCreate: string;
   gmtModified: string;
 }

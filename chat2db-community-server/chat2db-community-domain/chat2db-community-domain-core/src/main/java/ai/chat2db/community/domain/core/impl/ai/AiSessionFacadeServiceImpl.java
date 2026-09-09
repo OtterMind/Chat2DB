@@ -66,13 +66,13 @@ public class AiSessionFacadeServiceImpl implements AiSessionFacadeService {
     private AiSessionSummary v1(AiChatSession session) {
         return new AiSessionSummary(
                 session.getId(), session.getTitle(), 1, null, null,
-                session.getGmtCreate(), session.getGmtModified());
+                null, session.getGmtCreate(), session.getGmtModified());
     }
 
     private AiSessionSummary v2(AgentSession session) {
         return new AiSessionSummary(
                 session.id(), session.title(), 2, session.runtimeBinding().runtimeType(), session.status(),
-                session.gmtCreate(), session.gmtModified());
+                session.definition().modelConfigId(), session.gmtCreate(), session.gmtModified());
     }
 
     private void requireUnique(Set<String> identifiers, String id) {

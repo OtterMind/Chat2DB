@@ -304,7 +304,12 @@ function CommunityMainPage() {
       });
       window.dispatchEvent(
         new CustomEvent('stream:loadSession', {
-          detail: { sessionId: session.id, title: session.title, sessionVersion: session.sessionVersion },
+          detail: {
+            sessionId: session.id,
+            title: session.title,
+            sessionVersion: session.sessionVersion,
+            modelConfigId: session.modelConfigId,
+          },
         }),
       );
     },

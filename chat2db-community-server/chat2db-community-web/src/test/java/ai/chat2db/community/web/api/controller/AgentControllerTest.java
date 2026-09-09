@@ -132,6 +132,7 @@ class AgentControllerTest {
         private AiSessionSummary summary() {
             return new AiSessionSummary(
                     "session-one", "Session", 2, AgentRuntimeType.PI, AgentSessionStatus.READY,
+                    "model",
                     LocalDateTime.of(2026, 9, 9, 0, 0), LocalDateTime.of(2026, 9, 9, 0, 0));
         }
     }

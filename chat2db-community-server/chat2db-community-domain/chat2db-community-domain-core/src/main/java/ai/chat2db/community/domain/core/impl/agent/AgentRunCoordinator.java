@@ -82,6 +82,9 @@ public class AgentRunCoordinator {
         if (session.status() != AgentSessionStatus.READY) {
             throw new IllegalStateException("Agent session is not ready: " + session.id());
         }
+        if (!session.definition().modelConfigId().equals(command.model().modelConfigId())) {
+            throw new IllegalArgumentException("Agent session model cannot be changed");
+        }
         long sequence = session.lastEventSequence() + 1;
         String runId = nextId();
         AgentRun run = new AgentRun(

@@ -545,7 +545,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
-  const [agentSession, setAgentSession] = useState<{ id?: string; title?: string } | null>(null);
+  const [agentSession, setAgentSession] = useState<{
+    id?: string;
+    title?: string;
+    modelConfigId?: string;
+  } | null>(null);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
@@ -1501,7 +1505,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           .then((sessions) => {
             const session = (sessions || []).find((item) => item.id === chatId);
             if (session?.sessionVersion === 2) {
-              setAgentSession({ id: session.id, title: session.title });
+              setAgentSession({ id: session.id, title: session.title, modelConfigId: session.modelConfigId });
               return;
             }
             handleLoadSessionById(chatId, session?.title);
@@ -1540,10 +1544,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title, sessionVersion } = (e as CustomEvent).detail;
+      const { sessionId, title, sessionVersion, modelConfigId } = (e as CustomEvent).detail;
       if (sessionVersion === 2) {
         stop();
-        setAgentSession({ id: sessionId, title });
+        setAgentSession({ id: sessionId, title, modelConfigId });
         return;
       }
       setAgentSession(null);
@@ -2198,7 +2202,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   );
 
   if (!isPanel && agentSession) {
-    return <AgentChat initialSessionId={agentSession.id} initialTitle={agentSession.title} />;
+    return (
+      <AgentChat
+        initialSessionId={agentSession.id}
+        initialTitle={agentSession.title}
+        initialModelConfigId={agentSession.modelConfigId}
+      />
+    );
   }
 
   return (

@@ -11,6 +11,7 @@ public record AiSessionSummary(
         int sessionVersion,
         AgentRuntimeType runtimeType,
         AgentSessionStatus agentStatus,
+        String modelConfigId,
         LocalDateTime gmtCreate,
         LocalDateTime gmtModified) {
 
@@ -24,10 +25,11 @@ public record AiSessionSummary(
         if (sessionVersion != 1 && sessionVersion != 2) {
             throw new IllegalArgumentException("sessionVersion must be 1 or 2");
         }
-        if (sessionVersion == 1 && (runtimeType != null || agentStatus != null)) {
+        if (sessionVersion == 1 && (runtimeType != null || agentStatus != null || modelConfigId != null)) {
             throw new IllegalArgumentException("V1 session cannot contain Agent runtime state");
         }
-        if (sessionVersion == 2 && (runtimeType == null || agentStatus == null)) {
+        if (sessionVersion == 2 && (runtimeType == null || agentStatus == null
+                || modelConfigId == null || modelConfigId.isBlank())) {
             throw new IllegalArgumentException("V2 session requires Agent runtime state");
         }
     }

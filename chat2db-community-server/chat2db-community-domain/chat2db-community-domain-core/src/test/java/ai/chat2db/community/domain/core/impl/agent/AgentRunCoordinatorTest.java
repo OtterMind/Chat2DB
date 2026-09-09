@@ -154,6 +154,18 @@ class AgentRunCoordinatorTest {
         assertEquals(1, storage.list(SESSION_ID, USER_ID).size());
     }
 
+    @Test
+    void rejectsChangingTheFrozenSessionModel() {
+        AgentModelSnapshot otherModel = new AgentModelSnapshot(
+                "other-model", 1, "openai", "gpt-other", 1000, 100);
+
+        assertThrows(IllegalArgumentException.class, () -> coordinator.start(new AgentRunStartCommand(
+                USER_ID, SESSION_ID, otherModel, new AgentRuntimeInput("hello", List.of()), "other")));
+
+        assertEquals(List.of(), storage.events);
+        assertEquals(List.of(), storage.list(SESSION_ID, USER_ID));
+    }
+
     private AgentRunStartCommand startCommand(String idempotencyKey) {
         return new AgentRunStartCommand(
                 USER_ID, SESSION_ID, model(), new AgentRuntimeInput("hello", List.of()), idempotencyKey);
