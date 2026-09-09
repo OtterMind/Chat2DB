@@ -15,8 +15,15 @@ import java.util.Map;
 public class PiWorkspaceService implements AgentWorkspaceService {
     private final AgentWorkspaceStorage storage;
     private final Path defaultWorkspaces;
+    private final java.util.function.Supplier<String> directoryChooser;
 
     public PiWorkspaceService(AgentWorkspaceStorage storage, Path defaultWorkspaces) {
+        this(storage, defaultWorkspaces, NativeWorkspaceDirectoryChooser::choose);
+    }
+
+    PiWorkspaceService(AgentWorkspaceStorage storage, Path defaultWorkspaces,
+            java.util.function.Supplier<String> directoryChooser) {
+        this.directoryChooser = directoryChooser;
         this.storage = storage;
         this.defaultWorkspaces = defaultWorkspaces.toAbsolutePath().normalize();
     }
@@ -54,18 +61,27 @@ public class PiWorkspaceService implements AgentWorkspaceService {
     }
 
     @Override
-    public ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing listDirectories(String path) {
-        Path directory = existingDirectory(path.isBlank() ? System.getProperty("user.home") : path);
-        try (var children = Files.list(directory)) {
-            var entries = children.filter(Files::isDirectory).filter(Files::isReadable)
-                    .sorted(java.util.Comparator.comparing(item -> item.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
-                    .map(item -> new ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing.Entry(
-                            item.getFileName().toString(), item.toString())).toList();
-            return new ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing(directory.toString(),
-                    directory.getParent() == null ? null : directory.getParent().toString(), entries);
-        } catch (IOException error) {
-            throw new BusinessException("agent.bash.directory.invalid");
+    public String selectDirectory() {
+        AgentTrace.record("workspace.picker.opened", null, null, Map.of());
+        String selected = directoryChooser.get();
+        String path = selected == null ? null : existingDirectory(selected).toString();
+        AgentTrace.record("workspace.picker.closed", null, null, Map.of("selected", path != null));
+        return path;
+    }
+
+    @Override
+    public boolean isToolEnabled(String toolName) {
+        return ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform().contains(toolName)
+                && storage.isToolEnabled(toolName);
+    }
+
+    @Override
+    public void setToolEnabled(String toolName, boolean enabled) {
+        if (!ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform().contains(toolName)) {
+            throw new IllegalArgumentException("Tool is unavailable on this platform");
         }
+        storage.setToolEnabled(toolName, enabled);
+        AgentTrace.record("tool.settings.saved", null, null, Map.of("tool", toolName, "enabled", enabled));
     }
 
     static Path existingDirectory(String value) {

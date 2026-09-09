@@ -45,32 +45,6 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow-y: auto;
     border-top: 1px solid ${token.colorBorderSecondary};
   `,
-  browserPath: css`
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    overflow-wrap: anywhere;
-  `,
-  directories: css`
-    min-height: 160px;
-    max-height: 320px;
-    overflow-y: auto;
-  `,
-  directoryEntry: css`
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px;
-    border: 0;
-    color: ${token.colorText};
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    overflow-wrap: anywhere;
-    &:hover { background: ${token.colorFillSecondary}; }
-  `,
   row: css`
     padding: 8px 0;
     border-bottom: 1px solid ${token.colorBorderSecondary};

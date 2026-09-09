@@ -1,5 +1,5 @@
 export default {
-  "setting.agent.workingDirectory.parent": "상위 디렉터리",
+  "setting.agent.tool.enable": "활성화",
   "setting.agent.workingDirectory.choose": "폴더 선택",
   "setting.agent.tools.title": "Pi Agent 도구",
   "setting.agent.tools.DATABASE": "데이터베이스 도구",

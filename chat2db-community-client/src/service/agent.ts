@@ -64,12 +64,6 @@ export interface AgentWorkspaceSettings {
   workingDirectory: string;
 }
 
-export interface AgentDirectoryListing {
-  path: string;
-  parent: string | null;
-  directories: { name: string; path: string }[];
-}
-
 export interface AgentSession {
   id: string;
   title: string;
@@ -113,8 +107,11 @@ const getWorkspaceSettings = createRequest<void, AgentWorkspaceSettings>(
 const saveWorkspaceSettings = createRequest<AgentWorkspaceSettings, AgentWorkspaceSettings>(
   '/api/v3/ai/features/tools/settings', { method: 'post', errorLevel: false },
 );
-const listDirectories = createRequest<{ path: string }, AgentDirectoryListing>(
-  '/api/v3/ai/features/tools/directories', { errorLevel: false },
+const selectDirectory = createRequest<void, string | null>(
+  '/api/v3/ai/features/tools/select-directory', { method: 'post', errorLevel: false, timeout: false },
+);
+const setToolEnabled = createRequest<{ toolName: string; enabled: boolean }, AgentToolState>(
+  '/api/v3/ai/features/tools/:toolName/enabled', { method: 'post', errorLevel: false },
 );
 const createSession = createRequest<
   {
@@ -161,7 +158,8 @@ export default {
   enableBash,
   disableBash,
   listTools,
-  listDirectories,
+  selectDirectory,
+  setToolEnabled,
   getWorkspaceSettings,
   saveWorkspaceSettings,
   createSession,

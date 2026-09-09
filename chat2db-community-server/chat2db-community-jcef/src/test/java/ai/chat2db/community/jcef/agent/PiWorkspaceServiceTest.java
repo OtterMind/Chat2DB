@@ -43,21 +43,40 @@ class PiWorkspaceServiceTest {
     }
 
     @Test
-    void directoryBrowserReturnsOnlyDirectoriesAndDoesNotSaveSelection() throws Exception {
+    void nativeFolderSelectionAndCancellationDoNotSaveTheDirectory() throws Exception {
+        MemorySettings storage = new MemorySettings();
+        var selected = new java.util.concurrent.atomic.AtomicReference<String>();
+        PiWorkspaceService service = new PiWorkspaceService(storage, temporaryDirectory.resolve("sessions"), selected::get);
+        assertNull(service.selectDirectory());
+        Path folder = Files.createDirectory(temporaryDirectory.resolve("数据 space"));
+        selected.set(folder.toString());
+        assertEquals(folder.toRealPath().toString(), service.selectDirectory());
+        assertEquals("", storage.directory);
+    }
+
+    @Test
+    void toolsStartDisabledAndRememberOnlyExplicitChoices() {
         MemorySettings storage = new MemorySettings();
         PiWorkspaceService service = new PiWorkspaceService(storage, temporaryDirectory.resolve("sessions"));
-        Path folder = Files.createDirectory(temporaryDirectory.resolve("数据 space"));
-        Files.writeString(temporaryDirectory.resolve("file.csv"), "id\n1");
-        var listing = service.listDirectories(temporaryDirectory.toString());
-        assertEquals(temporaryDirectory.toRealPath().toString(), listing.path());
-        assertEquals(1, listing.directories().size());
-        assertEquals(folder.toRealPath().toString(), listing.directories().get(0).path());
+        var tools = ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform();
+        assertTrue(tools.stream().noneMatch(service::isToolEnabled));
+        service.setToolEnabled("read", true);
+        assertTrue(new PiWorkspaceService(storage, temporaryDirectory).isToolEnabled("read"));
+        assertFalse(service.isToolEnabled("write"));
+        service.setToolEnabled("read", false);
+        assertFalse(service.isToolEnabled("read"));
+        assertThrows(IllegalArgumentException.class, () -> service.setToolEnabled("unknown", true));
         assertEquals("", storage.directory);
     }
 
     static final class MemorySettings implements AgentWorkspaceStorage {
         String directory = "";
+        java.util.Set<String> enabledTools = new java.util.HashSet<>();
         @Override public String getWorkingDirectory() { return directory; }
         @Override public void setWorkingDirectory(String value) { directory = value; }
+        @Override public boolean isToolEnabled(String toolName) { return enabledTools.contains(toolName); }
+        @Override public void setToolEnabled(String toolName, boolean enabled) {
+            if (enabled) enabledTools.add(toolName); else enabledTools.remove(toolName);
+        }
     }
 }

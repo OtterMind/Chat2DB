@@ -1,5 +1,5 @@
 export default {
-  "setting.agent.workingDirectory.parent": "上级目录",
+  "setting.agent.tool.enable": "启用",
   "setting.agent.workingDirectory.choose": "选择文件夹",
   "setting.agent.tools.title": "Pi Agent 工具",
   "setting.agent.tools.DATABASE": "数据库工具",

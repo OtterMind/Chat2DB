@@ -39,16 +39,28 @@ public class AgentToolSettingsController {
         return DataResult.of(settings().update(request.workingDirectory()));
     }
 
-    @GetMapping("/tools/directories")
-    public DataResult<ai.chat2db.community.domain.api.model.agent.AgentDirectoryListing> listDirectories(
-            @RequestParam(defaultValue = "") String path) {
-        return DataResult.of(settings().listDirectories(path));
+    @PostMapping("/tools/select-directory")
+    public DataResult<String> selectDirectory(jakarta.servlet.http.HttpServletRequest request) {
+        if (!("127.0.0.1".equals(request.getRemoteAddr()) || "::1".equals(request.getRemoteAddr())
+                || "0:0:0:0:0:0:0:1".equals(request.getRemoteAddr()))) {
+            throw new SecurityException("Directory selection is available only on the local computer");
+        }
+        return DataResult.of(settings().selectDirectory());
+    }
+
+    @PostMapping("/tools/{toolName}/enabled")
+    public DataResult<AgentToolState> setToolEnabled(@PathVariable String toolName,
+            @RequestBody @Valid ToolEnabledRequest request) {
+        settings().setToolEnabled(toolName, request.enabled());
+        return DataResult.of(tools.listTools().stream().filter(tool -> tool.name().equals(toolName)).findFirst().orElseThrow());
     }
 
     private AgentWorkspaceService settings() {
         if (settings.isEmpty()) throw new AgentRuntimeUnavailableException("PI", "Local workspace settings are unavailable");
         return settings.get(0);
     }
+
+    public record ToolEnabledRequest(@NotNull Boolean enabled) { }
 
     public record SettingsRequest(@NotNull String workingDirectory) { }
 }

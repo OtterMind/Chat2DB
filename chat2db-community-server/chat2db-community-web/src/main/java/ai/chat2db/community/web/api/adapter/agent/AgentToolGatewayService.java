@@ -81,7 +81,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     public List<String> activeTools(String ticket, String address) {
         requireAccess(ticket, address);
         List<String> names = new ArrayList<>(tools.keySet());
-        if (!workspaces.isEmpty()) names.addAll(AgentNativeTools.currentPlatform());
+        AgentNativeTools.currentPlatform().stream().filter(this::nativeToolEnabled).forEach(names::add);
         return names;
     }
 
@@ -91,9 +91,9 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         tools.values().forEach(callback -> catalog.add(new AgentToolState(
                 callback.getToolDefinition().name(), callback.getToolDefinition().description(),
                 AgentToolState.Category.DATABASE, AgentToolState.Status.ENABLED)));
-        AgentToolState.Status status = workspaces.isEmpty()
-                ? AgentToolState.Status.UNAVAILABLE : AgentToolState.Status.ENABLED;
         for (String name : AgentNativeTools.currentPlatform()) {
+            AgentToolState.Status status = workspaces.isEmpty() ? AgentToolState.Status.UNAVAILABLE
+                    : nativeToolEnabled(name) ? AgentToolState.Status.ENABLED : AgentToolState.Status.DISABLED;
             catalog.add(new AgentToolState(name, name, AgentToolState.Category.BUILTIN, status));
         }
         return List.copyOf(catalog);
@@ -157,8 +157,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     public AgentWorkspaceSettings prepareNative(String ticket, String address, String toolCallId,
             String toolName, Map<String, Object> arguments) throws Exception {
         Access access = requireAccess(ticket, address);
-        if (workspaces.isEmpty() || !AgentNativeTools.currentPlatform().contains(toolName)) {
-            throw new IllegalArgumentException("Native tool is unavailable on this platform");
+        if (!nativeToolEnabled(toolName)) {
+            throw new IllegalArgumentException("Native tool is disabled or unavailable");
         }
         AgentRun run = runs.list(access.sessionId, access.userId).stream()
                 .filter(candidate -> isActive(access, candidate.id())).findFirst()
@@ -191,7 +191,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                                 AgentEventType.APPROVAL_REQUESTED,
                                 Map.of("approvalId", approval.id(), "toolName", toolName,
                                         "command", command, "workingDirectory", cwd), LocalDateTime.now())),
-                        () -> isActive(access, run.id()));
+                        () -> isActive(access, run.id()) && nativeToolEnabled(toolName));
                 if (isActive(access, run.id())) {
                     access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
                             AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(), "approved", approved),
@@ -200,6 +200,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 if (!approved) throw new IllegalStateException("Shell command was not approved");
             }
             if (!isActive(access, run.id())) throw new IllegalStateException("Agent run has stopped");
+            if (!nativeToolEnabled(toolName)) throw new IllegalStateException("Native tool has been disabled");
             AgentWorkspaceSettings result = new AgentWorkspaceSettings(cwd);
             preparation.result.complete(result);
             AgentTrace.record("tool.native.authorized", access.sessionId, run.id(),
@@ -216,6 +217,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private String digest(String value) throws java.security.NoSuchAlgorithmException {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(value.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private boolean nativeToolEnabled(String toolName) {
+        return !workspaces.isEmpty() && workspaces.get(0).isToolEnabled(toolName);
     }
 
     private boolean isActive(Access access, String runId) {

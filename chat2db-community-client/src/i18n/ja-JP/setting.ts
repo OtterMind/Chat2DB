@@ -1,5 +1,5 @@
 export default {
-  "setting.agent.workingDirectory.parent": "親ディレクトリ",
+  "setting.agent.tool.enable": "有効にする",
   "setting.agent.workingDirectory.choose": "フォルダーを選択",
   "setting.agent.tools.title": "Pi Agent のツール",
   "setting.agent.tools.DATABASE": "データベースツール",

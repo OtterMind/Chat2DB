@@ -20,11 +20,15 @@ class AgentNativeToolApprovalTest {
     void nativeFilesAreAvailableAndShellApprovalFreezesDirectory() throws Exception {
         AtomicReference<String> directory = new AtomicReference<>("/first");
         AtomicInteger decisions = new AtomicInteger();
+        Set<String> enabledTools = new HashSet<>();
+        var disableWhileWaiting = new java.util.concurrent.atomic.AtomicBoolean();
         AgentWorkspaceService workspace = new AgentWorkspaceService() {
             public AgentWorkspaceSettings get() { return new AgentWorkspaceSettings(directory.get()); }
             public AgentWorkspaceSettings update(String value) { directory.set(value); return get(); }
             public String resolveWorkingDirectory(String sessionId) { return directory.get(); }
-            public AgentDirectoryListing listDirectories(String path) { throw new UnsupportedOperationException(); }
+            public String selectDirectory() { throw new UnsupportedOperationException(); }
+            public boolean isToolEnabled(String name) { return enabledTools.contains(name); }
+            public void setToolEnabled(String name, boolean enabled) { if (enabled) enabledTools.add(name); else enabledTools.remove(name); }
         };
         var now = LocalDateTime.now();
         AgentSession session = new AgentSession(2, "session", 1L,
@@ -38,7 +42,8 @@ class AgentNativeToolApprovalTest {
             decisions.incrementAndGet();
             ((Runnable) args[2]).run();
             directory.set("/second");
-            return true;
+            if (disableWhileWaiting.get()) enabledTools.remove(AgentNativeTools.currentPlatform().get(0));
+            return ((java.util.function.BooleanSupplier) args[3]).getAsBoolean();
         });
         IAiToolService database = proxy(IAiToolService.class, (method, args) -> "database");
         var gateway = new AgentToolGatewayService(new AiToolAdapter(database, new AiToolContextConverter()),
@@ -48,6 +53,9 @@ class AgentNativeToolApprovalTest {
             ContextUtils.setContext(new Context());
             var access = gateway.issue("session", events::add);
             String shell = AgentNativeTools.currentPlatform().get(0);
+            assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("read"));
+            assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "disabled", "read", Map.of("path", "a.csv")));
+            enabledTools.addAll(AgentNativeTools.currentPlatform());
             assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").containsAll(AgentNativeTools.currentPlatform()));
             assertEquals(7, gateway.listTools().stream().filter(t -> t.category() == AgentToolState.Category.BUILTIN
                     && t.status() == AgentToolState.Status.ENABLED).count());
@@ -61,6 +69,11 @@ class AgentNativeToolApprovalTest {
             assertEquals("/second", gateway.prepareNative(access.ticket(), "127.0.0.1", "next", "ls", Map.of()).workingDirectory());
             assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "shell", shell, Map.of("command", "changed")));
             assertThrows(SecurityException.class, () -> gateway.prepareNative(access.ticket(), "192.0.2.1", "outside", "read", Map.of()));
+            enabledTools.remove("read");
+            assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("read"));
+            assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "read", "read", Map.of("path", "a.csv")));
+            disableWhileWaiting.set(true);
+            assertThrows(IllegalStateException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "disabled-pending", shell, Map.of("command", "pwd")));
             String otherShell = shell.equals("bash") ? "powershell" : "bash";
             assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "other", otherShell, Map.of("command", "pwd")));
         } finally { ContextUtils.removeContext(); }

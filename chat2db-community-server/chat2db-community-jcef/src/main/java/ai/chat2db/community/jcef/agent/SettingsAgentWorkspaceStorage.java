@@ -17,4 +17,16 @@ public class SettingsAgentWorkspaceStorage implements AgentWorkspaceStorage {
     public void setWorkingDirectory(String directory) {
         SystemSettingsUtil.setProperty(WORKING_DIRECTORY, directory);
     }
+    @Override
+    public boolean isToolEnabled(String toolName) {
+        Object saved = SystemSettingsUtil.getProperty("agentToolEnabled." + toolName);
+        if (saved instanceof Boolean enabled) return enabled;
+        // Keep Bash enabled only when the user explicitly enabled it in the previous UI.
+        return "bash".equals(toolName) && SystemSettingsUtil.getBooleanProperty("agentFeatureBetaEnabled.BASH", false);
+    }
+
+    @Override
+    public void setToolEnabled(String toolName, boolean enabled) {
+        SystemSettingsUtil.setProperty("agentToolEnabled." + toolName, enabled);
+    }
 }
