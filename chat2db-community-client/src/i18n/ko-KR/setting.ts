@@ -301,4 +301,14 @@ export default {
   'setting.modelConfig.placeholder.location': '예: us-central1',
   'setting.modelConfig.placeholder.temperature': '예: 0.7',
   'setting.modelConfig.placeholder.maxTokens': '예: 4096',
+  'setting.agent.title': 'Agent Beta',
+  'setting.agent.pi.label': 'Pi Agent Beta 사용',
+  'setting.agent.pi.confirmTitle': 'Pi Agent Beta를 사용하시겠습니까?',
+  'setting.agent.pi.confirmContent':
+    '필요할 때 Pi를 다운로드하고 별도 프로세스로 실행합니다. Beta 기능이므로 플랫폼 호환성 문제가 있을 수 있습니다.',
+  'setting.agent.bash.label': 'Bash Beta 사용',
+  'setting.agent.bash.confirmTitle': 'Bash Beta를 사용하시겠습니까?',
+  'setting.agent.bash.confirmContent':
+    'Agent가 제어된 Shell 명령을 요청할 수 있습니다. 환경 격리와 위험 승인은 계속 적용됩니다.',
+  'setting.agent.enableFailed': '현재 환경에서는 이 기능을 사용할 수 없습니다',
 };

@@ -9,13 +9,18 @@ import { useGlobalStore } from '@/store/global';
 import { isDesktop } from '@/utils/env';
 import { openWebPage } from '@/utils/url';
 import { staticMessage } from '@chat2db/ui';
-import { Button, Checkbox, Progress } from 'antd';
-import { useMemo } from 'react';
+import { Button, Checkbox, Modal, Progress } from 'antd';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
+import agentService, { AgentRuntimeFeatureState, AgentToolFeatureState } from '@/service/agent';
 
 // About Us
 export default function AboutUs() {
   const { styles } = useStyles();
+  const [modal, modalContextHolder] = Modal.useModal();
+  const [piFeature, setPiFeature] = useState<AgentRuntimeFeatureState | null>(null);
+  const [bashFeature, setBashFeature] = useState<AgentToolFeatureState | null>(null);
+  const [agentFeatureLoading, setAgentFeatureLoading] = useState(false);
   const {
     appUrlConfig,
     hotUpdateConfig,
@@ -41,6 +46,90 @@ export default function AboutUs() {
     }
     openWebPage(CHANGE_LOG_URL);
   };
+
+  const loadAgentFeatures = useCallback(async () => {
+    if (!isDesktop) return;
+    try {
+      const [runtimeFeatures, bash] = await Promise.all([
+        agentService.listRuntimeFeatures(undefined as void),
+        agentService.checkBash(undefined as void),
+      ]);
+      setPiFeature((runtimeFeatures || []).find((feature) => feature.runtimeType === 'PI') || null);
+      setBashFeature(bash);
+    } catch {
+      setPiFeature(null);
+      setBashFeature(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAgentFeatures();
+  }, [loadAgentFeatures]);
+
+  const disablePi = useCallback(async () => {
+    setAgentFeatureLoading(true);
+    try {
+      const [pi, bash] = await Promise.all([
+        agentService.disablePi(undefined as void),
+        agentService.disableBash(undefined as void),
+      ]);
+      setPiFeature(pi);
+      setBashFeature(bash);
+    } finally {
+      setAgentFeatureLoading(false);
+    }
+  }, []);
+
+  const confirmEnablePi = useCallback(() => {
+    modal.confirm({
+      title: i18n('setting.agent.pi.confirmTitle'),
+      content: i18n('setting.agent.pi.confirmContent'),
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+      onOk: async () => {
+        setAgentFeatureLoading(true);
+        try {
+          const state = await agentService.enablePi({ confirmed: true });
+          setPiFeature(state);
+          if (!state.enabled) {
+            staticMessage.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
+          }
+        } finally {
+          setAgentFeatureLoading(false);
+        }
+      },
+    });
+  }, [modal]);
+
+  const disableBash = useCallback(async () => {
+    setAgentFeatureLoading(true);
+    try {
+      setBashFeature(await agentService.disableBash(undefined as void));
+    } finally {
+      setAgentFeatureLoading(false);
+    }
+  }, []);
+
+  const confirmEnableBash = useCallback(() => {
+    modal.confirm({
+      title: i18n('setting.agent.bash.confirmTitle'),
+      content: i18n('setting.agent.bash.confirmContent'),
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+      onOk: async () => {
+        setAgentFeatureLoading(true);
+        try {
+          const state = await agentService.enableBash({ confirmed: true });
+          setBashFeature(state);
+          if (!state.enabled) {
+            staticMessage.error(Object.values(state.diagnostics)[0] || i18n('setting.agent.enableFailed'));
+          }
+        } finally {
+          setAgentFeatureLoading(false);
+        }
+      },
+    });
+  }, [modal]);
 
   const checkUpdate = () => {
     handleCheckUpdate().then((available) => {
@@ -109,6 +198,7 @@ export default function AboutUs() {
 
   return (
     <div>
+      {modalContextHolder}
       <div className={styles.versionsInfo}>
         <Logo size={98} className={styles.brandLogo} />
         <div>
@@ -134,6 +224,33 @@ export default function AboutUs() {
           </div>
         </div>
       </div>
+      {isDesktop && (
+        <div className={styles.updateRule}>
+          <div className={styles.updateRuleTitle}>{i18n('setting.agent.title')}</div>
+          <div className={styles.checkboxBox}>
+            <Checkbox
+              checked={Boolean(piFeature?.enabled)}
+              disabled={agentFeatureLoading}
+              onChange={(event) => (event.target.checked ? confirmEnablePi() : disablePi())}
+            >
+              {i18n('setting.agent.pi.label')}
+            </Checkbox>
+            <Checkbox
+              checked={Boolean(bashFeature?.enabled)}
+              disabled={agentFeatureLoading || !piFeature?.enabled}
+              onChange={(event) => (event.target.checked ? confirmEnableBash() : disableBash())}
+            >
+              {i18n('setting.agent.bash.label')}
+            </Checkbox>
+            {piFeature?.environment.status === 'BLOCKED' && piFeature.environment.diagnostics.reason ? (
+              <div className={styles.featureDiagnostic}>{piFeature.environment.diagnostics.reason}</div>
+            ) : null}
+            {bashFeature && !bashFeature.available && Object.values(bashFeature.diagnostics)[0] ? (
+              <div className={styles.featureDiagnostic}>{Object.values(bashFeature.diagnostics)[0]}</div>
+            ) : null}
+          </div>
+        </div>
+      )}
       {isDesktop && clientRuntime.enableAutoUpdate && (
         <>
           {!!updateDetail.progress && (

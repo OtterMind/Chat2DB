@@ -303,4 +303,14 @@ export default {
   'setting.modelConfig.placeholder.location': 'p. ej., us-central1',
   'setting.modelConfig.placeholder.temperature': 'p. ej., 0.7',
   'setting.modelConfig.placeholder.maxTokens': 'p. ej., 4096',
+  'setting.agent.title': 'Agent Beta',
+  'setting.agent.pi.label': 'Activar Pi Agent Beta',
+  'setting.agent.pi.confirmTitle': '¿Activar Pi Agent Beta?',
+  'setting.agent.pi.confirmContent':
+    'Chat2DB descargará Pi cuando sea necesario y lo ejecutará como un proceso independiente. Esta función Beta puede tener problemas de compatibilidad.',
+  'setting.agent.bash.label': 'Activar Bash Beta',
+  'setting.agent.bash.confirmTitle': '¿Activar Bash Beta?',
+  'setting.agent.bash.confirmContent':
+    'El Agent podrá solicitar comandos de Shell controlados. Se seguirán aplicando el aislamiento y la aprobación de riesgos.',
+  'setting.agent.enableFailed': 'Esta función no está disponible en el entorno actual',
 };

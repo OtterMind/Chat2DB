@@ -303,4 +303,14 @@ export default {
   'setting.modelConfig.placeholder.location': '例：us-central1',
   'setting.modelConfig.placeholder.temperature': '例：0.7',
   'setting.modelConfig.placeholder.maxTokens': '例：4096',
+  'setting.agent.title': 'Agent Beta',
+  'setting.agent.pi.label': 'Pi Agent Beta を有効にする',
+  'setting.agent.pi.confirmTitle': 'Pi Agent Beta を有効にしますか？',
+  'setting.agent.pi.confirmContent':
+    '必要に応じて Pi をダウンロードし、独立したプロセスとして実行します。Beta のため、環境によっては互換性の問題があります。',
+  'setting.agent.bash.label': 'Bash Beta を有効にする',
+  'setting.agent.bash.confirmTitle': 'Bash Beta を有効にしますか？',
+  'setting.agent.bash.confirmContent':
+    'Agent が管理された Shell コマンドを要求できるようになります。環境分離とリスク承認は引き続き適用されます。',
+  'setting.agent.enableFailed': '現在の環境ではこの機能を有効にできません',
 };

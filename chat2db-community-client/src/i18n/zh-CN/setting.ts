@@ -298,4 +298,12 @@ export default {
   'setting.modelConfig.placeholder.location': '例如：us-central1',
   'setting.modelConfig.placeholder.temperature': '例如：0.7',
   'setting.modelConfig.placeholder.maxTokens': '例如：4096',
+  'setting.agent.title': 'Agent Beta',
+  'setting.agent.pi.label': '启用 Pi Agent Beta',
+  'setting.agent.pi.confirmTitle': '启用 Pi Agent Beta？',
+  'setting.agent.pi.confirmContent': '将按需下载并运行独立的 Pi 进程。该功能仍处于 Beta 阶段，可能存在平台兼容性问题。',
+  'setting.agent.bash.label': '启用 Bash Beta',
+  'setting.agent.bash.confirmTitle': '启用 Bash Beta？',
+  'setting.agent.bash.confirmContent': 'Agent 将可请求执行受控 Shell 命令。命令仍需通过环境隔离和风险审批。',
+  'setting.agent.enableFailed': '当前环境无法启用该功能',
 };
