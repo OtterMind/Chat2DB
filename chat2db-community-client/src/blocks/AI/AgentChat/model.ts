@@ -18,6 +18,11 @@ const eventText = (payload: Record<string, unknown>) => {
       if (typeof nested.content === 'string') return nested.content;
     }
   }
+  const assistantEvent = payload.assistantMessageEvent;
+  if (assistantEvent && typeof assistantEvent === 'object') {
+    const delta = (assistantEvent as Record<string, unknown>).delta;
+    if (typeof delta === 'string') return delta;
+  }
   return '';
 };
 

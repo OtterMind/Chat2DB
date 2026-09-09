@@ -22,13 +22,11 @@ class PiEventMapperTest {
     void mapsSupportedPiEvents() throws Exception {
         assertEquals(AgentEventType.RUN_STARTED, type("{\"type\":\"agent_start\"}"));
         assertEquals(AgentEventType.ASSISTANT_MESSAGE_STARTED,
-                type("{\"type\":\"message_start\",\"role\":\"assistant\"}"));
+                type("{\"type\":\"message_start\",\"message\":{\"role\":\"assistant\"}}"));
         assertEquals(AgentEventType.ASSISTANT_TEXT_DELTA,
-                type("{\"type\":\"message_update\",\"updateType\":\"text_delta\"}"));
-        assertEquals(AgentEventType.USAGE_UPDATED,
-                type("{\"type\":\"message_update\",\"updateType\":\"usage\"}"));
+                type("{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\"}}"));
         assertEquals(AgentEventType.TOOL_CALL_FAILED,
-                type("{\"type\":\"tool_execution_end\",\"success\":false}"));
+                type("{\"type\":\"tool_execution_end\",\"isError\":true}"));
         assertEquals(AgentEventType.RUN_COMPLETED, type("{\"type\":\"agent_settled\"}"));
         assertEquals(AgentEventType.RUN_FAILED,
                 type("{\"type\":\"agent_settled\",\"error\":\"failed\"}"));

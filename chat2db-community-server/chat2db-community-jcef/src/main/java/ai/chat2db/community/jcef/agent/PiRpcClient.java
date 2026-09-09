@@ -76,8 +76,15 @@ public class PiRpcClient implements PiRpcTransport {
         }
         ObjectNode request = objectMapper.createObjectNode();
         request.put("id", id);
-        request.put("command", command);
-        request.set("payload", payload == null ? objectMapper.createObjectNode() : payload);
+        request.put("type", command);
+        if (payload != null) {
+            if (!payload.isObject() || payload.has("id") || payload.has("type")) {
+                pending.remove(id, response);
+                return CompletableFuture.failedFuture(
+                        new PiRpcException("Pi RPC payload must be an object without id or type"));
+            }
+            request.setAll((ObjectNode) payload);
+        }
         try {
             writeFrame(request);
         } catch (IOException | RuntimeException error) {
@@ -135,32 +142,28 @@ public class PiRpcClient implements PiRpcTransport {
         if (!message.isObject()) {
             throw new PiRpcException("Pi RPC frame must be a JSON object");
         }
-        JsonNode idNode = message.get("id");
-        if (idNode == null) {
-            if (!message.hasNonNull("type")) {
-                throw new PiRpcException("Pi RPC event has no type");
-            }
+        JsonNode typeNode = message.get("type");
+        if (typeNode == null || !typeNode.isTextual() || typeNode.asText().isBlank()) {
+            throw new PiRpcException("Pi RPC frame has no valid type");
+        }
+        if (!"response".equals(typeNode.asText())) {
             eventConsumer.accept(message);
             return;
         }
-        if (!idNode.isTextual() || idNode.asText().isBlank()) {
+        JsonNode idNode = message.get("id");
+        if (idNode == null || !idNode.isTextual() || idNode.asText().isBlank()) {
             throw new PiRpcException("Pi RPC response id is invalid");
         }
         CompletableFuture<JsonNode> response = pending.remove(idNode.asText());
         if (response == null) {
             throw new PiRpcException("Pi RPC response has an unknown request id");
         }
-        JsonNode error = message.get("error");
-        if (error != null && !error.isNull()) {
-            response.completeExceptionally(new PiRpcException("Pi RPC command failed: " + error));
+        if (!message.path("success").asBoolean(false)) {
+            response.completeExceptionally(new PiRpcException(
+                    "Pi RPC command failed: " + message.path("error").asText("unknown error")));
             return;
         }
-        if (!message.has("result")) {
-            PiRpcException protocolError = new PiRpcException("Pi RPC response has no result");
-            response.completeExceptionally(protocolError);
-            throw protocolError;
-        }
-        response.complete(message.get("result"));
+        response.complete(message.has("data") ? message.get("data") : objectMapper.createObjectNode());
     }
 
     private synchronized void writeFrame(JsonNode request) throws IOException {

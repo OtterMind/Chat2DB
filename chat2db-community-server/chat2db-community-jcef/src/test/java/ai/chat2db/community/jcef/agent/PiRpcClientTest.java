@@ -46,12 +46,13 @@ class PiRpcClientTest {
         var response = client.request("prompt", objectMapper.readTree("{\"text\":\"hello\"}"));
         JsonNode request = awaitWrittenRequest();
         writeLine("{\"type\":\"agent_start\",\"runId\":\"run-one\"}\r\n");
-        writeLine("{\"id\":\"" + request.get("id").asText() + "\",\"result\":{\"accepted\":true}}\n");
+        writeLine("{\"id\":\"" + request.get("id").asText()
+                + "\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true}\n");
 
-        assertTrue(response.get(1, TimeUnit.SECONDS).get("accepted").asBoolean());
+        assertTrue(response.get(1, TimeUnit.SECONDS).isObject());
         awaitEvent();
         assertEquals("agent_start", events.get(0).get("type").asText());
-        assertEquals("prompt", request.get("command").asText());
+        assertEquals("prompt", request.get("type").asText());
     }
 
     @Test
@@ -72,7 +73,7 @@ class PiRpcClientTest {
     void rejectsUnknownResponseIds() throws Exception {
         client = new PiRpcClient(runtimeOutput, runtimeInput, events::add);
 
-        writeLine("{\"id\":\"unknown\",\"result\":{}}\n");
+        writeLine("{\"id\":\"unknown\",\"type\":\"response\",\"success\":true}\n");
 
         ExecutionException error = assertThrows(
                 ExecutionException.class, () -> client.termination().get(1, TimeUnit.SECONDS));
@@ -102,6 +103,16 @@ class PiRpcClientTest {
 
         assertThrows(ExecutionException.class, () -> response.get(1, TimeUnit.SECONDS));
         assertEquals(0, runtimeInput.size());
+    }
+
+    @Test
+    void routesExtensionUiRequestsWithIdsAsEvents() throws Exception {
+        client = new PiRpcClient(runtimeOutput, runtimeInput, events::add);
+
+        writeLine("{\"id\":\"dialog\",\"type\":\"extension_ui_request\",\"method\":\"confirm\"}\n");
+
+        awaitEvent();
+        assertEquals("dialog", events.get(0).get("id").asText());
     }
 
     private JsonNode awaitWrittenRequest() throws Exception {

@@ -66,12 +66,11 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
         activeExternalRunId = request.runId();
         health = AgentRuntimeHealth.BUSY;
         ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("sessionId", request.sessionId());
-        payload.put("runId", request.runId());
-        payload.put("idempotencyKey", request.idempotencyKey());
-        payload.set("model", objectMapper.valueToTree(request.model()));
-        payload.set("input", objectMapper.valueToTree(request.input()));
-        CompletableFuture<JsonNode> response = rpc.request("prompt", payload);
+        payload.put("message", request.input().text());
+        CompletableFuture<JsonNode> response = rpc.request("set_model", objectMapper.createObjectNode()
+                        .put("provider", request.model().provider())
+                        .put("modelId", request.model().modelId()))
+                .thenCompose(ignored -> rpc.request("prompt", payload));
         response.whenComplete((ignored, error) -> {
             if (error != null) {
                 failActiveRun(request.runId());
@@ -89,8 +88,6 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
         }
         cancelling = true;
         ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("runId", request.runId());
-        payload.put("externalRunId", request.externalRunId());
         CompletableFuture<JsonNode> response = rpc.request("abort", payload);
         response.whenComplete((ignored, error) -> {
             if (error != null) {

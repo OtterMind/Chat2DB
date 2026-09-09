@@ -14,7 +14,10 @@ const event = (sequence: number, type: AgentEvent['type'], payload: Record<strin
 
 const merged = mergeAgentEvents(
   [event(1, 'RUN_ACCEPTED', { text: 'hello' }), event(2, 'ASSISTANT_MESSAGE_STARTED')],
-  [event(2, 'ASSISTANT_MESSAGE_STARTED'), event(3, 'ASSISTANT_TEXT_DELTA', { delta: { text: 'hi' } })],
+  [
+    event(2, 'ASSISTANT_MESSAGE_STARTED'),
+    event(3, 'ASSISTANT_TEXT_DELTA', { assistantMessageEvent: { type: 'text_delta', delta: 'hi' } }),
+  ],
 );
 assert.deepEqual(merged.map((item) => item.sequence), [1, 2, 3]);
 assert.deepEqual(buildAgentTranscript(merged), [

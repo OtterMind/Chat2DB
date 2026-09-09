@@ -44,22 +44,22 @@ public class PiEventMapper {
         String type = requiredText(event, "type");
         return switch (type) {
             case "agent_start" -> AgentEventType.RUN_STARTED;
-            case "message_start" -> "assistant".equals(text(event, "role"))
+            case "message_start" -> "assistant".equals(event.path("message").path("role").asText())
                     ? AgentEventType.ASSISTANT_MESSAGE_STARTED : null;
             case "message_update" -> mapMessageUpdate(event);
             case "tool_execution_start" -> AgentEventType.TOOL_CALL_RUNNING;
-            case "tool_execution_end" -> event.path("success").asBoolean(false)
-                    ? AgentEventType.TOOL_CALL_COMPLETED : AgentEventType.TOOL_CALL_FAILED;
+            case "tool_execution_end" -> event.path("isError").asBoolean(false)
+                    ? AgentEventType.TOOL_CALL_FAILED : AgentEventType.TOOL_CALL_COMPLETED;
             case "extension_ui_request" -> AgentEventType.APPROVAL_REQUESTED;
             case "agent_settled" -> event.hasNonNull("error")
                     ? AgentEventType.RUN_FAILED : AgentEventType.RUN_COMPLETED;
-            case "session_compact" -> AgentEventType.CHECKPOINT_COMMITTED;
+            case "compaction_end" -> event.hasNonNull("result") ? AgentEventType.CHECKPOINT_COMMITTED : null;
             default -> null;
         };
     }
 
     private AgentEventType mapMessageUpdate(JsonNode event) {
-        String updateType = text(event, "updateType");
+        String updateType = event.path("assistantMessageEvent").path("type").asText();
         if ("text_delta".equals(updateType)) {
             return AgentEventType.ASSISTANT_TEXT_DELTA;
         }

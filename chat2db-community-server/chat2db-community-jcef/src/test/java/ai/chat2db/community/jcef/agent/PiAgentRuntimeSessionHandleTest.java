@@ -33,11 +33,13 @@ class PiAgentRuntimeSessionHandleTest {
     @Test
     void startsStreamsCompletesAndSnapshots() throws Exception {
         var start = handle.startRun(runRequest());
+        assertEquals("set_model", transport.command);
+        transport.complete(objectMapper.createObjectNode());
         assertEquals("prompt", transport.command);
         handle.accept(objectMapper.readTree("{\"type\":\"agent_start\"}"));
-        transport.response.complete(objectMapper.readTree("{\"externalRunId\":\"pi-run\"}"));
+        transport.complete(objectMapper.createObjectNode());
 
-        assertEquals("pi-run", start.toCompletableFuture().join().externalRunId());
+        assertEquals("run", start.toCompletableFuture().join().externalRunId());
         assertEquals(AgentRuntimeHealth.BUSY, handle.snapshot().toCompletableFuture().join().health());
 
         handle.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
@@ -49,8 +51,9 @@ class PiAgentRuntimeSessionHandleTest {
     @Test
     void preservesTerminalEventBeforePromptAcknowledgement() throws Exception {
         var start = handle.startRun(runRequest());
+        transport.complete(objectMapper.createObjectNode());
         handle.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
-        transport.response.complete(objectMapper.readTree("{}"));
+        transport.complete(objectMapper.createObjectNode());
 
         assertEquals("run", start.toCompletableFuture().join().externalRunId());
         assertEquals(AgentRuntimeHealth.READY, handle.snapshot().toCompletableFuture().join().health());
@@ -60,13 +63,13 @@ class PiAgentRuntimeSessionHandleTest {
     @Test
     void emitsCancellationAfterAbortIsAcknowledged() throws Exception {
         var start = handle.startRun(runRequest());
-        transport.response.complete(objectMapper.readTree("{\"externalRunId\":\"pi-run\"}"));
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
         start.toCompletableFuture().join();
-        transport.response = new CompletableFuture<>();
 
-        var cancel = handle.cancel(new AgentRuntimeCancelRequest("session", "run", "pi-run"));
+        var cancel = handle.cancel(new AgentRuntimeCancelRequest("session", "run", "run"));
         assertEquals("abort", transport.command);
-        transport.response.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
         cancel.toCompletableFuture().join();
 
         assertEquals(AgentEventType.RUN_CANCELLED, events.get(0).type());
@@ -82,11 +85,15 @@ class PiAgentRuntimeSessionHandleTest {
 
     private static final class FakeTransport implements PiRpcTransport {
         private String command;
-        private CompletableFuture<JsonNode> response = new CompletableFuture<>();
+        private CompletableFuture<JsonNode> response;
         private final CompletableFuture<Void> termination = new CompletableFuture<>();
         @Override public CompletableFuture<JsonNode> request(String command, JsonNode payload) {
             this.command = command;
+            this.response = new CompletableFuture<>();
             return response;
+        }
+        private void complete(JsonNode value) {
+            response.complete(value);
         }
         @Override public CompletableFuture<Void> termination() { return termination; }
         @Override public void close() { termination.complete(null); }
