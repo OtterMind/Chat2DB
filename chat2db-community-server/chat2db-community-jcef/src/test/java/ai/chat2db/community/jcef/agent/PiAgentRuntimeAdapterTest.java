@@ -30,15 +30,17 @@ class PiAgentRuntimeAdapterTest {
                 launcher, () -> true);
 
         adapter.openSession(new AgentRuntimeSessionOpenRequest(
-                "session", "external", null, model()), event -> { });
+                "session", "external", "existing V1 prompt", model()), event -> { });
         assertEquals("session", launcher.sessionId);
+        assertEquals("existing V1 prompt", launcher.systemPrompt);
         assertEquals(null, launcher.resumeReference);
 
         adapter.resumeSession(new AgentRuntimeSessionResumeRequest(
                 "session", new AgentRuntimeBinding(
-                        AgentRuntimeType.PI, "0.85.1", "rpc-v1", "external", "resume", 1), model()),
+                        AgentRuntimeType.PI, "0.85.1", "rpc-v1", "external", "resume", 1), "existing V1 prompt", model()),
                 event -> { });
         assertEquals("resume", launcher.resumeReference);
+        assertEquals("existing V1 prompt", launcher.systemPrompt);
         assertEquals(AgentRuntimeType.PI, adapter.descriptor().type());
         assertEquals(AgentRuntimeEnvironmentStatus.BLOCKED,
                 adapter.inspectEnvironment(new AgentRuntimeEnvironmentRequest("5.3.0", "macos", "arm64")).status());
@@ -64,15 +66,18 @@ class PiAgentRuntimeAdapterTest {
     private static final class RecordingLauncher implements PiSessionLauncher {
         private String sessionId;
         private String resumeReference;
+        private String systemPrompt;
         @Override
         public AgentRuntimeSessionHandle launch(
                 String sessionId,
                 String externalSessionId,
                 String resumeReference,
+                String systemPrompt,
                 AgentModelSnapshot model,
                 ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink eventSink) {
             this.sessionId = sessionId;
             this.resumeReference = resumeReference;
+            this.systemPrompt = systemPrompt;
             return null;
         }
     }

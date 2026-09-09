@@ -64,6 +64,15 @@ public class PiProcessSupervisor implements AutoCloseable {
             String externalSessionId,
             List<Path> extensions,
             AgentModelAccess modelAccess) throws IOException {
+        return start(sessionId, externalSessionId, extensions, modelAccess, null);
+    }
+
+    public synchronized PiProcessHandle start(
+            String sessionId,
+            String externalSessionId,
+            List<Path> extensions,
+            AgentModelAccess modelAccess,
+            String systemPrompt) throws IOException {
         requireText(sessionId, "sessionId");
         requireText(externalSessionId, "externalSessionId");
         if (closed) {
@@ -91,7 +100,7 @@ public class PiProcessSupervisor implements AutoCloseable {
         Files.createDirectories(sessionDirectory);
         Files.createDirectories(configDirectory);
         ProcessBuilder builder = new ProcessBuilder(command(
-                executable, externalSessionId, sessionDirectory, extensions, modelAccess));
+                executable, externalSessionId, sessionDirectory, extensions, modelAccess, systemPrompt));
         builder.directory(sessionDirectory.toFile());
         builder.environment().clear();
         builder.environment().put("PI_CODING_AGENT_DIR", configDirectory.toString());
@@ -110,12 +119,17 @@ public class PiProcessSupervisor implements AutoCloseable {
             String externalSessionId,
             Path sessionDirectory,
             List<Path> extensions,
-            AgentModelAccess modelAccess) throws IOException {
+            AgentModelAccess modelAccess,
+            String systemPrompt) throws IOException {
         List<String> command = new ArrayList<>(List.of(
                 executable.toString(), "--mode", "rpc",
                 "--session-id", externalSessionId,
                 "--session-dir", sessionDirectory.toString(),
                 "--no-builtin-tools", "--no-extensions"));
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            command.add("--system-prompt");
+            command.add(systemPrompt);
+        }
         if (modelAccess != null) {
             command.add("--provider");
             command.add(modelAccess.provider());

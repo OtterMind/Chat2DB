@@ -33,8 +33,13 @@ class AgentRunCoordinatorTest {
     void setUp() {
         storage.create(session());
         AtomicInteger ids = new AtomicInteger();
+        AgentModelResolver resolver = new AgentModelResolver(null) {
+            @Override public AgentModelSnapshot resolve(String modelConfigId) {
+                return model();
+            }
+        };
         coordinator = new AgentRunCoordinator(
-                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage,
+                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver,
                 () -> "generated-" + ids.incrementAndGet(),
                 Clock.fixed(Instant.parse("2026-09-08T16:00:00Z"), ZoneOffset.UTC));
     }
@@ -42,7 +47,7 @@ class AgentRunCoordinatorTest {
     @Test
     void startsIdempotentlyAndCancelsOneRun() {
         AgentRunStartCommand start = new AgentRunStartCommand(
-                USER_ID, SESSION_ID, model(), new AgentRuntimeInput("hello", List.of()), "request-one");
+                USER_ID, SESSION_ID, "model", new AgentRuntimeInput("hello", List.of()), "request-one");
 
         AgentRun running = coordinator.start(start).toCompletableFuture().join();
         AgentRun duplicate = coordinator.start(start).toCompletableFuture().join();
@@ -135,10 +140,10 @@ class AgentRunCoordinatorTest {
     void rejectsUnknownAndForeignSessionsWithoutWriting() {
         assertThrows(IllegalArgumentException.class,
                 () -> coordinator.start(new AgentRunStartCommand(
-                        2L, SESSION_ID, model(), new AgentRuntimeInput("hello", List.of()), "foreign")));
+                        2L, SESSION_ID, "model", new AgentRuntimeInput("hello", List.of()), "foreign")));
         assertThrows(IllegalArgumentException.class,
                 () -> coordinator.start(new AgentRunStartCommand(
-                        USER_ID, "missing", model(), new AgentRuntimeInput("hello", List.of()), "missing")));
+                        USER_ID, "missing", "model", new AgentRuntimeInput("hello", List.of()), "missing")));
 
         assertEquals(List.of(), storage.events);
         assertEquals(List.of(), storage.list(SESSION_ID, USER_ID));
@@ -156,11 +161,8 @@ class AgentRunCoordinatorTest {
 
     @Test
     void rejectsChangingTheFrozenSessionModel() {
-        AgentModelSnapshot otherModel = new AgentModelSnapshot(
-                "other-model", 1, "openai", "gpt-other", 1000, 100);
-
         assertThrows(IllegalArgumentException.class, () -> coordinator.start(new AgentRunStartCommand(
-                USER_ID, SESSION_ID, otherModel, new AgentRuntimeInput("hello", List.of()), "other")));
+                USER_ID, SESSION_ID, "other-model", new AgentRuntimeInput("hello", List.of()), "other")));
 
         assertEquals(List.of(), storage.events);
         assertEquals(List.of(), storage.list(SESSION_ID, USER_ID));
@@ -168,7 +170,7 @@ class AgentRunCoordinatorTest {
 
     private AgentRunStartCommand startCommand(String idempotencyKey) {
         return new AgentRunStartCommand(
-                USER_ID, SESSION_ID, model(), new AgentRuntimeInput("hello", List.of()), idempotencyKey);
+                USER_ID, SESSION_ID, "model", new AgentRuntimeInput("hello", List.of()), idempotencyKey);
     }
 
     private List<AgentEventType> eventTypes() {

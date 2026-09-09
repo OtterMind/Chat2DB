@@ -42,28 +42,27 @@ class AgentControllerTest {
     @Test
     void createsOnlyV2SessionsForCurrentUser() {
         AgentSessionCreateRequest request = new AgentSessionCreateRequest(
-                2, "Session", definition());
+                "Session", AgentRuntimeType.PI, "model");
 
         assertEquals(service.session, controller.createSession(request).getData());
         assertEquals(USER_ID, service.createCommand.userId());
-        assertThrows(IllegalArgumentException.class,
-                () -> controller.createSession(new AgentSessionCreateRequest(
-                        1, "Session", definition())));
+        assertEquals(AgentRuntimeType.PI, service.createCommand.runtimeType());
+        assertEquals("model", service.createCommand.modelConfigId());
+        assertEquals("Session", service.createCommand.message());
     }
 
     @Test
     void routesRunsAndEventsWithCurrentIdentity() {
-        AgentModelSnapshot model = model();
-        AgentRuntimeInput input = new AgentRuntimeInput("hello", List.of());
-
         AgentRun started = controller.startRun(
-                        "session-one", new AgentRunStartRequest(model, input, "request-one"))
+                        "session-one", new AgentRunStartRequest("model", "hello", "request-one"))
                 .toCompletableFuture().join().getData();
         AgentRun cancelled = controller.cancelRun(
                         started.id(), new AgentRunCancelRequest("session-one"))
                 .toCompletableFuture().join().getData();
 
         assertEquals(USER_ID, service.startCommand.userId());
+        assertEquals("model", service.startCommand.modelConfigId());
+        assertEquals("hello", service.startCommand.input().text());
         assertEquals(USER_ID, service.cancelCommand.userId());
         assertEquals(started, cancelled);
         assertEquals(AgentEventType.RUN_STARTED,

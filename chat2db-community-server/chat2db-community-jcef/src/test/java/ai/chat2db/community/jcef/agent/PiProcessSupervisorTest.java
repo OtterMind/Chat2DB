@@ -88,10 +88,13 @@ class PiProcessSupervisorTest {
                 "chat2db", "gpt-test", "openai-responses",
                 "http://127.0.0.1:10825/model/ticket/v1", "short-ticket");
 
-        supervisor.start("session", "external", List.of(), access);
+        supervisor.start("session", "external", List.of(), access, "existing V1 prompt\nwith formatting");
 
         assertEquals("short-ticket", captured[0].environment().get("CHAT2DB_MODEL_TICKET"));
         assertEquals(2, captured[0].environment().size());
+        int promptIndex = captured[0].command().indexOf("--system-prompt");
+        assertTrue(promptIndex > 0);
+        assertEquals("existing V1 prompt\nwith formatting", captured[0].command().get(promptIndex + 1));
         assertTrue(captured[0].command().containsAll(List.of("--provider", "chat2db", "--model", "gpt-test")));
     }
 

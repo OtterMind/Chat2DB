@@ -3,6 +3,7 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.domain.api.model.ai.AiSessionSummary;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
@@ -53,9 +54,9 @@ public class AgentController {
 
     @PostMapping("/sessions")
     public DataResult<AgentSession> createSession(@RequestBody @Valid AgentSessionCreateRequest request) {
-        requireV2(request.sessionVersion());
         return DataResult.of(agentService.createSession(new AgentSessionCreateCommand(
-                identityService.currentUserId(), request.title(), request.definition(), environmentProvider.current())));
+                identityService.currentUserId(), request.message(), request.runtimeType(),
+                request.modelConfigId(), environmentProvider.current())));
     }
 
     @GetMapping("/sessions")
@@ -81,7 +82,8 @@ public class AgentController {
             @RequestBody @Valid AgentRunStartRequest request) {
         return agentService.startRun(new AgentRunStartCommand(
                         identityService.currentUserId(), sessionId,
-                        request.model(), request.input(), request.idempotencyKey()))
+                        request.modelConfigId(), new AgentRuntimeInput(request.message(), List.of()),
+                        request.idempotencyKey()))
                 .thenApply(DataResult::of);
     }
 
@@ -118,9 +120,4 @@ public class AgentController {
         return ActionResult.isSuccess();
     }
 
-    private void requireV2(Integer sessionVersion) {
-        if (sessionVersion != AgentSession.SCHEMA_VERSION) {
-            throw new IllegalArgumentException("Agent sessions require sessionVersion 2");
-        }
-    }
 }

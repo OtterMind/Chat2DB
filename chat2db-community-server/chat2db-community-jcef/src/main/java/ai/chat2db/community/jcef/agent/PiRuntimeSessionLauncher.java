@@ -46,12 +46,13 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
             String sessionId,
             String externalSessionId,
             String resumeReference,
+            String systemPrompt,
             AgentModelSnapshot model,
             AgentRuntimeEventSink eventSink) {
         AgentModelAccess modelAccess = modelAccessService.issue(sessionId, model);
         try {
             writeModelConfiguration(supervisor.prepareConfigurationDirectory(sessionId), modelAccess, model);
-            PiProcessHandle process = supervisor.start(sessionId, externalSessionId, extensions, modelAccess);
+            PiProcessHandle process = supervisor.start(sessionId, externalSessionId, extensions, modelAccess, systemPrompt);
             AtomicReference<PiAgentRuntimeSessionHandle> handleReference = new AtomicReference<>();
             PiRpcClient rpc = new PiRpcClient(process.stdout(), process.stdin(), event -> {
                 PiAgentRuntimeSessionHandle handle = handleReference.get();

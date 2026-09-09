@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.agent;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentEventType;
 import ai.chat2db.community.domain.api.model.agent.AgentFailure;
+import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
@@ -39,6 +40,7 @@ public class AgentRunCoordinator {
     private final AgentSessionStorage sessionStorage;
     private final AgentRunStorage runStorage;
     private final AgentEventStorage eventStorage;
+    private final AgentModelResolver modelResolver;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -48,8 +50,9 @@ public class AgentRunCoordinator {
             AgentRuntimeHandleRegistry handleRegistry,
             AgentSessionStorage sessionStorage,
             AgentRunStorage runStorage,
-            AgentEventStorage eventStorage) {
-        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage,
+            AgentEventStorage eventStorage,
+            AgentModelResolver modelResolver) {
+        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -59,6 +62,7 @@ public class AgentRunCoordinator {
             AgentSessionStorage sessionStorage,
             AgentRunStorage runStorage,
             AgentEventStorage eventStorage,
+            AgentModelResolver modelResolver,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -66,6 +70,7 @@ public class AgentRunCoordinator {
         this.sessionStorage = Objects.requireNonNull(sessionStorage, "sessionStorage");
         this.runStorage = Objects.requireNonNull(runStorage, "runStorage");
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
+        this.modelResolver = Objects.requireNonNull(modelResolver, "modelResolver");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -82,13 +87,14 @@ public class AgentRunCoordinator {
         if (session.status() != AgentSessionStatus.READY) {
             throw new IllegalStateException("Agent session is not ready: " + session.id());
         }
-        if (!session.definition().modelConfigId().equals(command.model().modelConfigId())) {
+        if (!session.definition().modelConfigId().equals(command.modelConfigId())) {
             throw new IllegalArgumentException("Agent session model cannot be changed");
         }
+        AgentModelSnapshot model = modelResolver.resolve(command.modelConfigId());
         long sequence = session.lastEventSequence() + 1;
         String runId = nextId();
         AgentRun run = new AgentRun(
-                runId, session.id(), AgentRunStatus.ACCEPTED, command.model(), nextId(),
+                runId, session.id(), AgentRunStatus.ACCEPTED, model, nextId(),
                 command.idempotencyKey(), null, sequence, sequence, null, null);
         runStorage.create(run, command.userId());
         eventStorage.append(productEvent(
@@ -101,9 +107,9 @@ public class AgentRunCoordinator {
         updateSession(session, AgentSessionStatus.READY, AgentSessionStatus.RUNNING, sequence);
 
         AgentRuntimeRunRequest runtimeRequest = new AgentRuntimeRunRequest(
-                session.id(), runId, command.model(), command.input(), command.idempotencyKey());
+                session.id(), runId, model, command.input(), command.idempotencyKey());
         try {
-            AgentRuntimeSessionHandle handle = handle(session, command);
+            AgentRuntimeSessionHandle handle = handle(session, command, model);
             return handle.startRun(runtimeRequest).handle((reference, error) -> {
                 synchronized (this) {
                     if (error != null) {
@@ -132,7 +138,8 @@ public class AgentRunCoordinator {
                 .thenApply(ignored -> requireRun(command.sessionId(), command.runId(), command.userId()));
     }
 
-    private AgentRuntimeSessionHandle handle(AgentSession session, AgentRunStartCommand command) {
+    private AgentRuntimeSessionHandle handle(
+            AgentSession session, AgentRunStartCommand command, AgentModelSnapshot model) {
         AgentRuntimeSessionHandle existing = handleRegistry.get(session.id());
         if (existing != null) {
             return existing;
@@ -141,7 +148,7 @@ public class AgentRunCoordinator {
         AgentRuntimeSessionHandle opened = adapter.openSession(
                 new AgentRuntimeSessionOpenRequest(
                         session.id(), session.runtimeBinding().externalSessionId(),
-                        session.definition().systemPrompt(), command.model()),
+                        session.definition().systemPrompt(), model),
                 event -> recordRuntimeEvent(command.userId(), event));
         handleRegistry.register(session.id(), opened);
         return opened;

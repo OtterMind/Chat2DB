@@ -8,6 +8,7 @@ import java.util.Objects;
 public record AgentRuntimeSessionResumeRequest(
         String sessionId,
         AgentRuntimeBinding binding,
+        String systemPrompt,
         AgentModelSnapshot model) {
 
     public AgentRuntimeSessionResumeRequest {

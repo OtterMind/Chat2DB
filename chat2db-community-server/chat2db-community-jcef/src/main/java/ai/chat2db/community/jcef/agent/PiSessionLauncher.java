@@ -10,6 +10,7 @@ public interface PiSessionLauncher {
             String sessionId,
             String externalSessionId,
             String resumeReference,
+            String systemPrompt,
             AgentModelSnapshot model,
             AgentRuntimeEventSink eventSink);
 }

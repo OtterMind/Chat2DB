@@ -58,7 +58,8 @@ import java.util.stream.Collectors;
 
 @Component
 @Slf4j
-public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, SseEmitter> {
+public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, SseEmitter>,
+        ai.chat2db.community.domain.api.service.ai.IAiSystemPromptService {
 
     private static final String DEFAULT_SYSTEM_PROMPT = """
             You are Chat2DB AI assistant, a professional data analysis assistant.
@@ -512,6 +513,12 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         builder.append("- Mention relevant file names when useful.\n");
         builder.append("- If the file content is insufficient, truncated, or ambiguous, say so clearly before giving conclusions.\n");
         return builder.toString();
+    }
+
+    @Override
+    public String defaultSystemPrompt(boolean databaseToolsAvailable) {
+        return resolveSystemPrompt(new ChatRequest(),
+                databaseToolsAvailable ? Map.of("globalDatabaseScope", true) : Map.of());
     }
 
     private String resolveSystemPrompt(ChatRequest request, Map<String, Object> toolContext) {

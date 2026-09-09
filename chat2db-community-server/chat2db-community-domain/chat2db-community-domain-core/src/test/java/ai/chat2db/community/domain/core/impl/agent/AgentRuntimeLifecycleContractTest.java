@@ -66,7 +66,7 @@ class AgentRuntimeLifecycleContractTest {
                 AgentRuntimeType.PI, "1.0.0", "fake-v1", "external-session", "resume-ref", 1);
 
         AgentRuntimeSessionHandle handle = adapter.resumeSession(
-                new AgentRuntimeSessionResumeRequest("session", binding, model()),
+                new AgentRuntimeSessionResumeRequest("session", binding, "existing prompt", model()),
                 event -> {
                 });
         adapter.deleteSession(new AgentRuntimeSessionDeleteRequest("session", binding));

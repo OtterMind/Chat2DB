@@ -1,22 +1,26 @@
 package ai.chat2db.community.domain.api.model.request.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 
 import java.util.Objects;
 
 public record AgentSessionCreateCommand(
         Long userId,
-        String title,
-        AgentDefinition definition,
+        String message,
+        AgentRuntimeType runtimeType,
+        String modelConfigId,
         AgentRuntimeEnvironmentRequest environment) {
 
     public AgentSessionCreateCommand {
         Objects.requireNonNull(userId, "userId");
-        if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("title must not be blank");
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("message must not be blank");
         }
-        Objects.requireNonNull(definition, "definition");
+        Objects.requireNonNull(runtimeType, "runtimeType");
+        if (modelConfigId == null || modelConfigId.isBlank()) {
+            throw new IllegalArgumentException("modelConfigId must not be blank");
+        }
         Objects.requireNonNull(environment, "environment");
     }
 }

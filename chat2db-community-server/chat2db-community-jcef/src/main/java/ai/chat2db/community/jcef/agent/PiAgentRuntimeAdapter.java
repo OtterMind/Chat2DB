@@ -69,7 +69,7 @@ public class PiAgentRuntimeAdapter implements AgentRuntimeAdapter {
             AgentRuntimeEventSink eventSink) {
         requireEnabled();
         return sessionLauncher.launch(
-                request.sessionId(), request.externalSessionId(), null, request.model(), eventSink);
+                request.sessionId(), request.externalSessionId(), null, request.systemPrompt(), request.model(), eventSink);
     }
 
     @Override
@@ -79,7 +79,7 @@ public class PiAgentRuntimeAdapter implements AgentRuntimeAdapter {
         requireEnabled();
         return sessionLauncher.launch(
                 request.sessionId(), request.binding().externalSessionId(),
-                request.binding().resumeReference(), request.model(), eventSink);
+                request.binding().resumeReference(), request.systemPrompt(), request.model(), eventSink);
     }
 
     @Override

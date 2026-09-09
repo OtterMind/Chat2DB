@@ -15,6 +15,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.domain.api.service.ai.IAiSystemPromptService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,7 @@ public class AgentServiceImpl implements AgentService {
     private final AgentRunCoordinator runCoordinator;
     private final AgentEventStorage eventStorage;
     private final AgentRuntimeHandleRegistry handleRegistry;
+    private final IAiSystemPromptService promptService;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -44,8 +46,9 @@ public class AgentServiceImpl implements AgentService {
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
-            AgentRuntimeHandleRegistry handleRegistry) {
-        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry,
+            AgentRuntimeHandleRegistry handleRegistry,
+            IAiSystemPromptService promptService) {
+        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry, promptService,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -55,6 +58,7 @@ public class AgentServiceImpl implements AgentService {
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
             AgentRuntimeHandleRegistry handleRegistry,
+            IAiSystemPromptService promptService,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -62,6 +66,7 @@ public class AgentServiceImpl implements AgentService {
         this.runCoordinator = Objects.requireNonNull(runCoordinator, "runCoordinator");
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
         this.handleRegistry = Objects.requireNonNull(handleRegistry, "handleRegistry");
+        this.promptService = Objects.requireNonNull(promptService, "promptService");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -69,7 +74,9 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public AgentSession createSession(AgentSessionCreateCommand command) {
         Objects.requireNonNull(command, "command");
-        AgentDefinition definition = command.definition();
+        AgentDefinition definition = new AgentDefinition(
+                "DEFAULT", "Chat2DB Agent", null, promptService.defaultSystemPrompt(true),
+                command.runtimeType(), command.modelConfigId(), 1);
         AgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());
         if (environment.runtimeType() != definition.runtimeType()) {
@@ -97,7 +104,7 @@ public class AgentServiceImpl implements AgentService {
                 definition,
                 binding,
                 AgentSessionStatus.READY,
-                command.title().trim(),
+                sessionTitle(command.message()),
                 0,
                 now,
                 now);
@@ -168,5 +175,10 @@ public class AgentServiceImpl implements AgentService {
             throw new IllegalStateException("Agent session id generator returned a blank value");
         }
         return id;
+    }
+
+    private String sessionTitle(String message) {
+        String title = message.strip();
+        return title.substring(0, title.offsetByCodePoints(0, Math.min(100, title.codePointCount(0, title.length()))));
     }
 }
