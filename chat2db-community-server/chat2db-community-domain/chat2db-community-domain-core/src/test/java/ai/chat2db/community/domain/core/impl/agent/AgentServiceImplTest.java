@@ -41,7 +41,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt",
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         AgentSession session = service.createSession(command());
@@ -52,7 +52,7 @@ class AgentServiceImplTest {
         assertEquals("Session", session.title());
         assertEquals("DEFAULT", session.definition().id());
         assertEquals("Chat2DB Agent", session.definition().name());
-        assertTrue(session.definition().systemPrompt().contains("database assistant"));
+        assertTrue(session.definition().systemPrompt().contains("数据库、文件和命令行任务"));
         assertEquals("model-config", session.definition().modelConfigId());
         assertEquals(LocalDateTime.of(2026, 9, 8, 14, 0), session.gmtCreate());
         assertEquals(0, adapter.openSessionCount());
@@ -68,7 +68,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt",
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -83,7 +83,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of());
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt",
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -101,7 +101,7 @@ class AgentServiceImplTest {
                 storage,
                 unusedCoordinator(registry, storage),
                 new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt",
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one",
                 CLOCK);
         service.createSession(command());
@@ -117,7 +117,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt",
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
         service.createSession(command());
 
@@ -137,7 +137,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), available -> "existing V1 database assistant prompt", () -> "session-one", CLOCK);
+                new AgentRuntimeHandleRegistry(), () -> "session-one", CLOCK);
         service.createSession(command());
 
         assertEquals("Renamed", service.renameSession("session-one", 1L, " Renamed ").title());

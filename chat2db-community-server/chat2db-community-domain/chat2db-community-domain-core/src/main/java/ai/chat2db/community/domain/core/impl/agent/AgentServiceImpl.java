@@ -15,7 +15,6 @@ import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
-import ai.chat2db.community.domain.api.service.ai.IAiSystemPromptService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.util.AgentTrace;
 import org.springframework.stereotype.Service;
@@ -37,7 +36,6 @@ public class AgentServiceImpl implements AgentService {
     private final AgentRunCoordinator runCoordinator;
     private final AgentEventStorage eventStorage;
     private final AgentRuntimeHandleRegistry handleRegistry;
-    private final IAiSystemPromptService promptService;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -47,9 +45,8 @@ public class AgentServiceImpl implements AgentService {
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
-            AgentRuntimeHandleRegistry handleRegistry,
-            IAiSystemPromptService promptService) {
-        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry, promptService,
+            AgentRuntimeHandleRegistry handleRegistry) {
+        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -59,7 +56,6 @@ public class AgentServiceImpl implements AgentService {
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
             AgentRuntimeHandleRegistry handleRegistry,
-            IAiSystemPromptService promptService,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -67,7 +63,6 @@ public class AgentServiceImpl implements AgentService {
         this.runCoordinator = Objects.requireNonNull(runCoordinator, "runCoordinator");
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
         this.handleRegistry = Objects.requireNonNull(handleRegistry, "handleRegistry");
-        this.promptService = Objects.requireNonNull(promptService, "promptService");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -76,7 +71,11 @@ public class AgentServiceImpl implements AgentService {
     public AgentSession createSession(AgentSessionCreateCommand command) {
         Objects.requireNonNull(command, "command");
         AgentDefinition definition = new AgentDefinition(
-                "DEFAULT", "Chat2DB Agent", null, promptService.defaultSystemPrompt(true),
+                "DEFAULT", "Chat2DB Agent", null, """
+                你是 Chat2DB Agent，帮助用户完成数据库、文件和命令行任务。
+                根据用户请求使用已启用的工具，基于实际结果简洁回答。
+                需要审批时等待用户确认；工具不可用或执行失败时如实说明。
+                """,
                 command.runtimeType(), command.modelConfigId(), 1);
         AgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());
