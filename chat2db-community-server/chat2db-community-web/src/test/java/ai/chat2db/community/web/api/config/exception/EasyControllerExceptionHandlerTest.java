@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.config.exception;
 
 import ai.chat2db.community.tools.exception.SystemException;
+import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -78,6 +79,17 @@ class EasyControllerExceptionHandlerTest {
         assertFalse(result.success());
         assertEquals(I18nUtils.DEFAULT_MESSAGE_CODE, result.errorCode());
         assertEquals(SYSTEM_ERROR_MESSAGE, result.errorMessage());
+        assertNull(result.errorDetail());
+    }
+
+    @Test
+    void unavailableAgentRuntimeKeepsAnActionableErrorCode() {
+        ActionResult result = exceptionHandler.convert(
+                new AgentRuntimeUnavailableException("PI", "environment status is BLOCKED"));
+
+        assertFalse(result.success());
+        assertEquals("agent.runtimeUnavailable", result.errorCode());
+        assertEquals("Agent runtime PI is unavailable: environment status is BLOCKED", result.errorMessage());
         assertNull(result.errorDetail());
     }
 }

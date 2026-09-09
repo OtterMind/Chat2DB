@@ -9,6 +9,7 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.exception.NeedLoggedInBusinessException;
 import ai.chat2db.community.tools.exception.RedirectBusinessException;
 import ai.chat2db.community.tools.exception.SystemException;
+import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import com.google.common.collect.Maps;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,6 +58,8 @@ public class EasyControllerExceptionHandler {
                 new MethodArgumentTypeMismatchExceptionConvertor());
         EXCEPTION_CONVERTOR_MAP.put(MaxUploadSizeExceededException.class,
                 new MaxUploadSizeExceededExceptionConvertor());
+        EXCEPTION_CONVERTOR_MAP.put(AgentRuntimeUnavailableException.class,
+                new AgentRuntimeUnavailableExceptionConvertor());
     }
 
 
@@ -68,7 +71,7 @@ public class EasyControllerExceptionHandler {
             BusinessException.class, MaxUploadSizeExceededException.class, ClientAbortException.class,
             HttpRequestMethodNotSupportedException.class, HttpMediaTypeNotAcceptableException.class,
             MultipartException.class, MissingRequestHeaderException.class, HttpMediaTypeNotSupportedException.class,
-            NeedLoggedInBusinessException.class})
+            NeedLoggedInBusinessException.class, AgentRuntimeUnavailableException.class})
     @ResponseStatus(value = HttpStatus.OK)
     @ResponseBody
     public ActionResult handleBusinessException(HttpServletRequest request, Exception exception) {
