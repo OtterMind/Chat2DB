@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +41,7 @@ public class AgentModelGatewayService implements AgentModelAccessService {
     private final SecureRandom secureRandom;
     private final Map<String, Ticket> tickets = new ConcurrentHashMap<>();
 
+    @Autowired
     public AgentModelGatewayService(
             IAiModelConfigService modelConfigService,
             @Value("${server.port:10825}") int localPort) {

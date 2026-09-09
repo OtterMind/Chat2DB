@@ -134,7 +134,7 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
             long extractedBytes = 0;
             int fileCount = 0;
             TarArchiveEntry entry;
-            while ((entry = input.getNextEntry()) != null) {
+            while ((entry = input.getNextTarEntry()) != null) {
                 if (entry.isSymbolicLink() || entry.isLink() || entry.isCharacterDevice()
                         || entry.isBlockDevice() || entry.isFIFO()) {
                     throw new IOException("Pi runtime archive contains an unsupported entry");

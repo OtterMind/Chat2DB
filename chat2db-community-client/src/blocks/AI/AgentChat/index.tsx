@@ -1,5 +1,5 @@
-import { Button, Input, Select, Tooltip } from 'antd';
-import { Send, Square } from 'lucide-react';
+import { Button, Checkbox, Input, Modal, Popover, Select, Tooltip } from 'antd';
+import { Send, Settings2, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +9,7 @@ import agentService, { AgentEvent, AgentRun, toAgentModelSnapshot } from '@/serv
 import { IModelOptionItem } from '@/service/aiStream';
 import { listAvailableModelOptions } from '@/service/aiModelConfig';
 import feedback from '@/utils/feedback';
+import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 import { buildAgentTranscript, isTerminalAgentEvent, mergeAgentEvents } from './model';
 import { useStyles } from './style';
 
@@ -26,6 +27,7 @@ const requestId = () =>
 
 export default function AgentChat({ initialSessionId, initialTitle, initialModelConfigId }: AgentChatProps) {
   const { styles } = useStyles();
+  const [modal, modalContextHolder] = Modal.useModal();
   const [sessionId, setSessionId] = useState(initialSessionId || '');
   const [title, setTitle] = useState(initialTitle || '');
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -34,6 +36,7 @@ export default function AgentChat({ initialSessionId, initialTitle, initialModel
   const [input, setInput] = useState('');
   const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [shellEnabled, setShellEnabled] = useState(false);
   const lastSequenceRef = useRef(0);
 
   const refreshEvents = useCallback(async (targetSessionId: string) => {
@@ -138,11 +141,59 @@ export default function AgentChat({ initialSessionId, initialTitle, initialModel
     }
   }, [activeRun, refreshEvents, sessionId]);
 
+  const handleShellChange = async (enabled: boolean) => {
+    if (!enabled) {
+      try {
+        await agentService.disableBash();
+        setShellEnabled(false);
+      } catch (error) {
+        feedback.error((error as { errorMessage?: string })?.errorMessage || i18n('setting.agent.enableFailed'));
+      }
+      return;
+    }
+    const confirmed = await confirmBetaFeature(modal, {
+      title: i18n('setting.agent.bash.confirmTitle'),
+      content: i18n('setting.agent.bash.confirmContent'),
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+    });
+    if (!confirmed) return;
+    try {
+      const state = await agentService.enableBash({ confirmed: true });
+      if (!state.enabled) {
+        feedback.error(state.diagnostics.reason || i18n('setting.agent.enableFailed'));
+        return;
+      }
+      setShellEnabled(true);
+    } catch (error) {
+      feedback.error((error as { errorMessage?: string })?.errorMessage || i18n('setting.agent.enableFailed'));
+    }
+  };
+
   return (
     <div className={styles.root}>
+      {modalContextHolder}
       <div className={styles.header}>
         <span className={styles.title}>{title || i18n('stream.agent.title')}</span>
-        <span>{i18n('stream.agent.runtimePi')}</span>
+        <div className={styles.runtimeActions}>
+          <span>{i18n('stream.agent.runtimePi')}</span>
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            content={
+              <div className={styles.runtimeConfigPanel}>
+                <div className={styles.runtimeConfigTitle}>{i18n('stream.agent.runtimePi')}</div>
+                <Checkbox checked={shellEnabled} onChange={(event) => handleShellChange(event.target.checked)}>
+                  {i18n('setting.agent.bash.label')}
+                </Checkbox>
+              </div>
+            }
+          >
+            <button type="button" className={styles.runtimeConfigButton} aria-label={i18n('stream.agent.runtimePi')}>
+              <Settings2 size={14} />
+            </button>
+          </Popover>
+        </div>
       </div>
       <div className={styles.transcript}>
         {transcript.length === 0 ? <div className={styles.empty}>{i18n('stream.agent.empty')}</div> : null}

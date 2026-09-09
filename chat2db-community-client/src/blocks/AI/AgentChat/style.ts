@@ -8,7 +8,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     flex-direction: column;
     background: ${token.colorBgContainer};
   `,
-  header: css`
+    header: css`
     display: flex;
     height: 48px;
     flex: 0 0 48px;
@@ -16,7 +16,38 @@ export const useStyles = createStyles(({ css, token }) => ({
     justify-content: space-between;
     padding: 0 20px;
     border-bottom: 1px solid ${token.colorBorderSecondary};
-  `,
+    `,
+    runtimeActions: css`
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    `,
+    runtimeConfigButton: css`
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      border-radius: 4px;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+
+      &:hover {
+        color: ${token.colorPrimary};
+        background: ${token.colorFillSecondary};
+      }
+    `,
+    runtimeConfigPanel: css`
+      min-width: 180px;
+    `,
+    runtimeConfigTitle: css`
+      margin-bottom: 8px;
+      color: ${token.colorText};
+      font-weight: 500;
+    `,
   title: css`
     min-width: 0;
     overflow: hidden;

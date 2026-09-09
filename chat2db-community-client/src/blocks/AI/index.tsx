@@ -59,6 +59,7 @@ import InlineRenameInput from '@/components/InlineRenameInput';
 import AgentChat from './AgentChat';
 import agentService from '@/service/agent';
 import importExportService from '@/service/importExport';
+import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
@@ -2131,11 +2132,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     });
     if (!confirmed) return;
     setRuntimeSwitching(true);
-    const loadingMessageKey = 'agent-pi-enable';
-    feedback.loading({ content: i18n('setting.agent.pi.confirmContent'), duration: 0, key: loadingMessageKey });
     try {
       const result = await agentService.enablePi({ confirmed: true });
       if (result.taskId) {
+        void useImportExportStore.getState().getTaskList();
         let task = await importExportService.getTaskDetails({ taskId: result.taskId });
         while (task && ['PENDING', 'RUNNING'].includes(task.status)) {
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
@@ -2160,7 +2160,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     } catch (error) {
       feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
     } finally {
-      feedback.destroy(loadingMessageKey);
       setRuntimeSwitching(false);
     }
   };
