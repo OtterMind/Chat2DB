@@ -22,7 +22,7 @@ interface StreamSidebarProps {
   onSearchKeywordChange: (keyword: string) => void;
   onSearchBlur: () => void;
   onNewChat: () => void;
-  agentEnabled: boolean;
+  showAgentEntry: boolean;
   onNewAgentChat: () => void;
   onSessionClick: (session: IChatSession) => void;
   onSessionDelete: (sessionId: string) => void;
@@ -46,7 +46,7 @@ const StreamSidebar = ({
   onSearchKeywordChange,
   onSearchBlur,
   onNewChat,
-  agentEnabled,
+  showAgentEntry,
   onNewAgentChat,
   onSessionClick,
   onSessionDelete,
@@ -157,7 +157,7 @@ const StreamSidebar = ({
         >
           {i18n('stream.panel.newChat')}
         </Button>
-        {agentEnabled ? (
+        {showAgentEntry ? (
           <Tooltip title={i18n('stream.sidebar.newAgentChat')} placement="bottom" mouseEnterDelay={0.3}>
             <span className={styles.streamSearchTooltipAnchor}>
               <IconButton

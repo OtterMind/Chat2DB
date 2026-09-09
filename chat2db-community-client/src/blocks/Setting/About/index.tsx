@@ -13,6 +13,7 @@ import { Button, Checkbox, Modal, Progress } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 import agentService, { AgentRuntimeFeatureState, AgentToolFeatureState } from '@/service/agent';
+import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 
 // About Us
 export default function AboutUs() {
@@ -81,26 +82,25 @@ export default function AboutUs() {
     }
   }, []);
 
-  const confirmEnablePi = useCallback(() => {
-    modal.confirm({
+  const confirmEnablePi = useCallback(async () => {
+    const confirmed = await confirmBetaFeature(modal, {
       title: i18n('setting.agent.pi.confirmTitle'),
       content: i18n('setting.agent.pi.confirmContent'),
       okText: i18n('common.button.confirm'),
       cancelText: i18n('common.button.cancel'),
-      onOk: async () => {
-        setAgentFeatureLoading(true);
-        try {
-          const state = await agentService.enablePi({ confirmed: true });
-          setPiFeature(state);
-          window.dispatchEvent(new CustomEvent('agent:featuresChanged'));
-          if (!state.enabled) {
-            staticMessage.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
-          }
-        } finally {
-          setAgentFeatureLoading(false);
-        }
-      },
     });
+    if (!confirmed) return;
+    setAgentFeatureLoading(true);
+    try {
+      const state = await agentService.enablePi({ confirmed: true });
+      setPiFeature(state);
+      window.dispatchEvent(new CustomEvent('agent:featuresChanged'));
+      if (!state.enabled) {
+        staticMessage.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
+      }
+    } finally {
+      setAgentFeatureLoading(false);
+    }
   }, [modal]);
 
   const disableBash = useCallback(async () => {
@@ -112,25 +112,24 @@ export default function AboutUs() {
     }
   }, []);
 
-  const confirmEnableBash = useCallback(() => {
-    modal.confirm({
+  const confirmEnableBash = useCallback(async () => {
+    const confirmed = await confirmBetaFeature(modal, {
       title: i18n('setting.agent.bash.confirmTitle'),
       content: i18n('setting.agent.bash.confirmContent'),
       okText: i18n('common.button.confirm'),
       cancelText: i18n('common.button.cancel'),
-      onOk: async () => {
-        setAgentFeatureLoading(true);
-        try {
-          const state = await agentService.enableBash({ confirmed: true });
-          setBashFeature(state);
-          if (!state.enabled) {
-            staticMessage.error(Object.values(state.diagnostics)[0] || i18n('setting.agent.enableFailed'));
-          }
-        } finally {
-          setAgentFeatureLoading(false);
-        }
-      },
     });
+    if (!confirmed) return;
+    setAgentFeatureLoading(true);
+    try {
+      const state = await agentService.enableBash({ confirmed: true });
+      setBashFeature(state);
+      if (!state.enabled) {
+        staticMessage.error(Object.values(state.diagnostics)[0] || i18n('setting.agent.enableFailed'));
+      }
+    } finally {
+      setAgentFeatureLoading(false);
+    }
   }, [modal]);
 
   const checkUpdate = () => {
