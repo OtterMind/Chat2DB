@@ -1288,7 +1288,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const renamePanelHistorySession = useCallback(async (sessionId: string, title: string) => {
     try {
-      await aiStreamService.renameChatSession({ id: sessionId, title });
+      const session = sessionList.find((item) => item.id === sessionId);
+      if (!session) return;
+      await aiStreamService.renameChatSession({ ...session, title });
       setSessionList((prev) => prev.map((item) => (item.id === sessionId ? { ...item, title } : item)));
       if (currentSessionIdRef.current === sessionId) {
         setCurrentSessionTitle(title);
@@ -1304,12 +1306,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       feedback.error(i18n('stream.sidebar.renameFailed'));
       throw error;
     }
-  }, []);
+  }, [sessionList]);
 
   const handleDeleteHistorySession = useCallback(
     async (sessionId: string) => {
       try {
-        await aiStreamService.deleteChatSession({ id: sessionId });
+        const session = sessionList.find((item) => item.id === sessionId);
+        if (!session) return;
+        await aiStreamService.deleteChatSession(session);
         setSessionList((prev) => prev.filter((item) => item.id !== sessionId));
 
         if (currentSessionIdRef.current === sessionId || newSessionIdRef.current === sessionId) {
@@ -1322,7 +1326,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         feedback.error(i18n('stream.sidebar.deleteFailed'));
       }
     },
-    [handleNewChat],
+    [handleNewChat, sessionList],
   );
 
   const confirmDeleteHistorySession = useCallback(

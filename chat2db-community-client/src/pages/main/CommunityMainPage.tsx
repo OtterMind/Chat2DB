@@ -268,7 +268,9 @@ function CommunityMainPage() {
         pathName: `/stream/${session.id}`,
       });
       window.dispatchEvent(
-        new CustomEvent('stream:loadSession', { detail: { sessionId: session.id, title: session.title } }),
+        new CustomEvent('stream:loadSession', {
+          detail: { sessionId: session.id, title: session.title, sessionVersion: session.sessionVersion },
+        }),
       );
     },
     [handleChangePageTab, navConfig],
@@ -277,8 +279,10 @@ function CommunityMainPage() {
   const handleSidebarDeleteSession = useCallback(
     async (sessionId: string) => {
       try {
-        await aiStreamService.deleteChatSession({ id: sessionId });
-        setSidebarSessions((prev) => prev.filter((session) => session.id !== sessionId));
+        const targetSession = sidebarSessions.find((item) => item.id === sessionId);
+        if (!targetSession) return;
+        await aiStreamService.deleteChatSession(targetSession);
+        setSidebarSessions((prev) => prev.filter((item) => item.id !== sessionId));
         if (activeSessionId === sessionId) {
           setActiveSessionId(null);
           window.dispatchEvent(new CustomEvent('stream:newChat'));
@@ -287,15 +291,17 @@ function CommunityMainPage() {
         feedback.error(i18n('stream.sidebar.deleteFailed'));
       }
     },
-    [activeSessionId],
+    [activeSessionId, sidebarSessions],
   );
 
   const handleSidebarRenameSession = useCallback(
     async (sessionId: string, title: string) => {
       try {
-        await aiStreamService.renameChatSession({ id: sessionId, title });
+        const targetSession = sidebarSessions.find((item) => item.id === sessionId);
+        if (!targetSession) return;
+        await aiStreamService.renameChatSession({ ...targetSession, title });
         setSidebarSessions((prev) =>
-          prev.map((session) => (session.id === sessionId ? { ...session, title } : session)),
+          prev.map((item) => (item.id === sessionId ? { ...item, title } : item)),
         );
         window.dispatchEvent(new CustomEvent('stream:sessionRenamed', { detail: { sessionId, title } }));
         feedback.success(i18n('common.message.modifySuccessfully'));
@@ -304,7 +310,7 @@ function CommunityMainPage() {
         throw error;
       }
     },
-    [],
+    [sidebarSessions],
   );
 
   const handleSidebarNewChat = useCallback(() => {
