@@ -15,11 +15,16 @@ public class PiProcessSupervisor implements AutoCloseable {
     private final Path sessionDataRoot;
     private final int maximumProcesses;
     private final ProcessStarter processStarter;
+    private final PiRuntimePreflight preflight;
     private final Map<String, PiProcessHandle> processes = new LinkedHashMap<>();
     private boolean closed;
 
-    public PiProcessSupervisor(PiRuntimeLayout layout, Path sessionDataRoot, int maximumProcesses) {
-        this(layout, sessionDataRoot, maximumProcesses, ProcessBuilder::start);
+    public PiProcessSupervisor(
+            PiRuntimeLayout layout,
+            Path sessionDataRoot,
+            int maximumProcesses,
+            PiRuntimePreflight preflight) {
+        this(layout, sessionDataRoot, maximumProcesses, preflight, ProcessBuilder::start);
     }
 
     PiProcessSupervisor(
@@ -27,12 +32,22 @@ public class PiProcessSupervisor implements AutoCloseable {
             Path sessionDataRoot,
             int maximumProcesses,
             ProcessStarter processStarter) {
+        this(layout, sessionDataRoot, maximumProcesses, () -> { }, processStarter);
+    }
+
+    PiProcessSupervisor(
+            PiRuntimeLayout layout,
+            Path sessionDataRoot,
+            int maximumProcesses,
+            PiRuntimePreflight preflight,
+            ProcessStarter processStarter) {
         if (maximumProcesses < 1) {
             throw new IllegalArgumentException("maximumProcesses must be greater than zero");
         }
         this.layout = layout;
         this.sessionDataRoot = sessionDataRoot.toAbsolutePath().normalize();
         this.maximumProcesses = maximumProcesses;
+        this.preflight = preflight;
         this.processStarter = processStarter;
     }
 
@@ -51,6 +66,7 @@ public class PiProcessSupervisor implements AutoCloseable {
         if (processes.size() >= maximumProcesses) {
             throw new IllegalStateException("Pi process limit has been reached");
         }
+        preflight.verify();
         String os = System.getProperty("os.name", "unknown");
         String architecture = System.getProperty("os.arch", "unknown");
         Path executable = layout.executable(os, architecture);

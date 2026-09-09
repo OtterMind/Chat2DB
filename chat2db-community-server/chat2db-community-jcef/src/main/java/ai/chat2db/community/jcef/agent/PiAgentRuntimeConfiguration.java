@@ -74,10 +74,22 @@ public class PiAgentRuntimeConfiguration {
     @Bean(destroyMethod = "close")
     public PiProcessSupervisor piProcessSupervisor(
             PiRuntimeLayout layout,
+            PiRuntimeEnvironmentChecker environmentChecker,
+            @Value("${chat2db.version}") String applicationVersion,
             @Value("${chat2db.agent.pi.max-processes:3}") int maximumProcesses) {
         Path sessionDataRoot = Path.of(ConfigUtils.getEnvBasePath())
                 .resolve("storage/ai-chat-history-v2/runtime/pi");
-        return new PiProcessSupervisor(layout, sessionDataRoot, maximumProcesses);
+        return new PiProcessSupervisor(layout, sessionDataRoot, maximumProcesses, () -> {
+            var report = environmentChecker.inspect(
+                    new ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest(
+                            applicationVersion,
+                            System.getProperty("os.name", "unknown"),
+                            System.getProperty("os.arch", "unknown")));
+            if (!report.isUsable()) {
+                throw new IOException("Pi runtime failed its launch preflight: "
+                        + report.diagnostics().getOrDefault("reason", "unknown reason"));
+            }
+        });
     }
 
     @Bean

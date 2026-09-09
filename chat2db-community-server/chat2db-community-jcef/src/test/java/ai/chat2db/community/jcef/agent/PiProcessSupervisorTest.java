@@ -61,6 +61,20 @@ class PiProcessSupervisorTest {
                 () -> supervisor.start("../outside", "external", List.of()));
     }
 
+    @Test
+    void refusesToStartWhenRuntimePreflightFails() throws Exception {
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(
+                runtimeLayout(), temporaryDirectory.resolve("session-data"), 1,
+                () -> {
+                    throw new java.io.IOException("hash mismatch");
+                },
+                builder -> new FakeProcess());
+
+        assertThrows(java.io.IOException.class,
+                () -> supervisor.start("session", "external", List.of()));
+        assertEquals(0, supervisor.size());
+    }
+
     private PiRuntimeLayout runtimeLayout() throws Exception {
         PiRuntimeLayout layout = new PiRuntimeLayout(temporaryDirectory.resolve("runtime"), "0.85.1");
         Path executable = layout.executable(
