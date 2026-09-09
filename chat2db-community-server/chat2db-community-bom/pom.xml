@@ -54,6 +54,7 @@
         <java-jwt.version>4.4.0</java-jwt.version>
         <sql-formatter.version>2.0.4</sql-formatter.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
+        <commons-compress.version>1.27.1</commons-compress.version>
         <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
         <mongodb-bson.version>4.10.1</mongodb-bson.version>
         <jcef.version>122.1.9-gd14e051-chromium-122.0.6261.94-api-1.14</jcef.version>
@@ -578,6 +579,11 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
                 <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.jetbrains</groupId>

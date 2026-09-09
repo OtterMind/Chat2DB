@@ -1,10 +1,13 @@
 package ai.chat2db.community.jcef.agent;
 
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +16,8 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,48 +29,51 @@ class PiRuntimeInstallerTest {
     Path temporaryDirectory;
 
     @Test
-    void installsAndReusesAVerifiedRuntime() throws Exception {
+    void installsAnOfficialStyleArchiveAndReusesIt() throws Exception {
         PiRuntimePaths paths = new PiRuntimePaths(temporaryDirectory.resolve("runtime/agent/pi"));
-        URI source = URI.create("https://runtime.example/pi/");
-        String os = PiRuntimeLayout.normalizeOperatingSystem(System.getProperty("os.name"));
-        String architecture = PiRuntimeLayout.normalizeArchitecture(System.getProperty("os.arch"));
-        String executable = "windows".equals(os) ? "pi.exe" : "pi";
-        Map<String, byte[]> resources = resources(source, os, architecture, executable, "runtime");
+        byte[] archive = archive(Map.of("pi/pi", "runtime", "pi/assets/data.txt", "asset"));
+        String archiveSha256 = sha256(archive);
         AtomicInteger downloads = new AtomicInteger();
-        PiRuntimeInstaller installer = new PiRuntimeInstaller(
-                paths, "0.85.1", source, trust(resources), (uri, maximumBytes) -> {
-                    downloads.incrementAndGet();
-                    byte[] bytes = resources.get(uri.toString());
-                    if (bytes == null) throw new java.io.IOException("missing resource");
-                    return bytes;
-                });
+        PiRuntimeInstaller installer = installer(paths, archive, (platform, bytes) -> {
+            try {
+                assertEquals(archiveSha256, sha256(bytes));
+            } catch (Exception error) {
+                throw new java.io.IOException(error);
+            }
+        }, downloads);
 
         Path installed = installer.install(environment());
         int firstDownloadCount = downloads.get();
         assertEquals(installed, installer.install(environment()));
 
-        assertEquals("runtime", Files.readString(installed.resolve(executable)));
+        assertEquals("runtime", Files.readString(installed.resolve(executableName())));
+        assertEquals("asset", Files.readString(installed.resolve("assets/data.txt")));
         assertEquals(firstDownloadCount, downloads.get());
         assertFalse(Files.exists(paths.temporary()) && hasChildren(paths.temporary()));
     }
 
     @Test
-    void rejectsHashMismatchAndCleansStaging() throws Exception {
+    void rejectsAnArchiveThatDoesNotMatchThePinnedDigest() throws Exception {
         PiRuntimePaths paths = new PiRuntimePaths(temporaryDirectory.resolve("runtime/agent/pi"));
-        URI source = URI.create("https://runtime.example/pi/");
-        String os = PiRuntimeLayout.normalizeOperatingSystem(System.getProperty("os.name"));
-        String architecture = PiRuntimeLayout.normalizeArchitecture(System.getProperty("os.arch"));
-        String executable = "windows".equals(os) ? "pi.exe" : "pi";
-        Map<String, byte[]> resources = resources(source, os, architecture, executable, "expected");
-        String fileUri = source.resolve("0.85.1/" + os + "-" + architecture + "/" + executable).toString();
-        resources.put(fileUri, "changed".getBytes());
-        PiRuntimeInstaller installer = new PiRuntimeInstaller(
-                paths, "0.85.1", source, trust(resources),
-                (uri, maximumBytes) -> resources.get(uri.toString()));
+        byte[] archive = archive(Map.of("pi/pi", "runtime"));
+        PiRuntimeInstaller installer = installer(
+                paths,
+                archive,
+                new PinnedPiRuntimeArchiveTrust(platform -> "0".repeat(64)),
+                new AtomicInteger());
 
         assertThrows(java.io.IOException.class, () -> installer.install(environment()));
-
         assertFalse(Files.exists(paths.installations().resolve("0.85.1")));
+    }
+
+    @Test
+    void rejectsArchivePathTraversalAndCleansStaging() throws Exception {
+        PiRuntimePaths paths = new PiRuntimePaths(temporaryDirectory.resolve("runtime/agent/pi"));
+        byte[] archive = archive(Map.of("pi/pi", "runtime", "pi/../../outside", "unsafe"));
+        PiRuntimeInstaller installer = installer(paths, archive, (platform, bytes) -> { }, new AtomicInteger());
+
+        assertThrows(java.io.IOException.class, () -> installer.install(environment()));
+        assertFalse(Files.exists(temporaryDirectory.resolve("outside")));
         assertFalse(Files.exists(paths.temporary()) && hasChildren(paths.temporary()));
     }
 
@@ -73,72 +81,72 @@ class PiRuntimeInstallerTest {
     void requiresHttpsDownloadSource() {
         assertThrows(IllegalArgumentException.class, () -> new PiRuntimeInstaller(
                 new PiRuntimePaths(temporaryDirectory), "0.85.1", URI.create("http://runtime.example/pi/"),
-                (platform, manifest) -> { }));
+                (platform, archive) -> { }));
     }
 
-    @Test
-    void rejectsAManifestThatDoesNotMatchThePinnedDigest() throws Exception {
-        PiRuntimePaths paths = new PiRuntimePaths(temporaryDirectory.resolve("runtime/agent/pi"));
-        URI source = URI.create("https://runtime.example/pi/");
-        String os = PiRuntimeLayout.normalizeOperatingSystem(System.getProperty("os.name"));
-        String architecture = PiRuntimeLayout.normalizeArchitecture(System.getProperty("os.arch"));
-        String executable = "windows".equals(os) ? "pi.exe" : "pi";
-        Map<String, byte[]> resources = resources(source, os, architecture, executable, "runtime");
-        PiRuntimeInstaller installer = new PiRuntimeInstaller(
-                paths, "0.85.1", source,
-                new PinnedPiRuntimeManifestTrust(platform -> "0".repeat(64)),
-                (uri, maximumBytes) -> resources.get(uri.toString()));
-
-        assertThrows(java.io.IOException.class, () -> installer.install(environment()));
-        assertFalse(Files.exists(paths.installations().resolve("0.85.1")));
+    private PiRuntimeInstaller installer(
+            PiRuntimePaths paths,
+            byte[] archive,
+            PiRuntimeArchiveTrust trust,
+            AtomicInteger downloads) {
+        return new PiRuntimeInstaller(
+                paths,
+                "0.85.1",
+                URI.create("https://runtime.example/pi/"),
+                trust,
+                (uri, maximumBytes) -> {
+                    downloads.incrementAndGet();
+                    return archive;
+                });
     }
 
-    private Map<String, byte[]> resources(
-            URI source, String os, String architecture, String executable, String executableContent) throws Exception {
-        byte[] runtime = executableContent.getBytes();
-        byte[] asset = "asset".getBytes();
-        Map<String, String> files = new LinkedHashMap<>();
-        files.put(executable, sha256(runtime));
-        files.put("assets/data.txt", sha256(asset));
-        PiRuntimeManifest manifest = new PiRuntimeManifest(
-                "0.85.1", os, architecture, "rpc-v1", "pi-release", files);
-        String platform = "0.85.1/" + os + "-" + architecture + "/";
-        Map<String, byte[]> resources = new LinkedHashMap<>();
-        resources.put(source.resolve(platform + "runtime-manifest.json").toString(),
-                new ObjectMapper().writeValueAsBytes(manifest));
-        resources.put(source.resolve(platform + executable).toString(), runtime);
-        resources.put(source.resolve(platform + "assets/data.txt").toString(), asset);
-        return resources;
+    private byte[] archive(Map<String, String> files) throws Exception {
+        return "windows".equals(currentOs()) ? zip(files) : tarGzip(files);
+    }
+
+    private byte[] tarGzip(Map<String, String> files) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (TarArchiveOutputStream output = new TarArchiveOutputStream(new GzipCompressorOutputStream(bytes))) {
+            output.setLongFileMode(TarArchiveOutputStream.LONGFILE_ERROR);
+            for (Map.Entry<String, String> file : new LinkedHashMap<>(files).entrySet()) {
+                byte[] content = file.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                TarArchiveEntry entry = new TarArchiveEntry(file.getKey());
+                entry.setSize(content.length);
+                output.putArchiveEntry(entry);
+                output.write(content);
+                output.closeArchiveEntry();
+            }
+        }
+        return bytes.toByteArray();
+    }
+
+    private byte[] zip(Map<String, String> files) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream output = new ZipOutputStream(bytes)) {
+            for (Map.Entry<String, String> file : files.entrySet()) {
+                output.putNextEntry(new ZipEntry(file.getKey().replace("pi/pi", "pi/pi.exe")));
+                output.write(file.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.closeEntry();
+            }
+        }
+        return bytes.toByteArray();
     }
 
     private String sha256(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 
-    private PiRuntimeManifestTrust trust(Map<String, byte[]> resources) {
-        byte[] manifest = null;
-        for (Map.Entry<String, byte[]> resource : resources.entrySet()) {
-            if (resource.getKey().endsWith("runtime-manifest.json")) {
-                manifest = resource.getValue();
-                break;
-            }
-        }
-        if (manifest == null) {
-            throw new AssertionError("manifest fixture is missing");
-        }
-        byte[] trustedManifest = manifest;
-        return new PinnedPiRuntimeManifestTrust(platform -> {
-            try {
-                return sha256(trustedManifest);
-            } catch (Exception error) {
-                throw new AssertionError(error);
-            }
-        });
-    }
-
     private AgentRuntimeEnvironmentRequest environment() {
         return new AgentRuntimeEnvironmentRequest(
                 "5.3.0", System.getProperty("os.name"), System.getProperty("os.arch"));
+    }
+
+    private String currentOs() {
+        return PiRuntimeLayout.normalizeOperatingSystem(System.getProperty("os.name"));
+    }
+
+    private String executableName() {
+        return "windows".equals(currentOs()) ? "pi.exe" : "pi";
     }
 
     private boolean hasChildren(Path directory) throws Exception {

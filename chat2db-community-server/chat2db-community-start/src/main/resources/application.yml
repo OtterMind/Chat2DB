@@ -58,15 +58,15 @@ chat2db:
   agent:
     pi:
       version: ${CHAT2DB_PI_RUNTIME_VERSION:0.85.1}
-      source: ${CHAT2DB_PI_RUNTIME_SOURCE:}
+      source: ${CHAT2DB_PI_RUNTIME_SOURCE:https://github.com/earendil-works/pi/releases/download/v0.85.1/}
       max-processes: ${CHAT2DB_PI_MAX_PROCESSES:3}
-      manifest-sha256:
-        macos-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_MACOS_ARM64:}
-        macos-x64: ${CHAT2DB_PI_MANIFEST_SHA256_MACOS_X64:}
-        windows-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_WINDOWS_ARM64:}
-        windows-x64: ${CHAT2DB_PI_MANIFEST_SHA256_WINDOWS_X64:}
-        linux-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_LINUX_ARM64:}
-        linux-x64: ${CHAT2DB_PI_MANIFEST_SHA256_LINUX_X64:}
+      archive-sha256:
+        macos-arm64: ${CHAT2DB_PI_ARCHIVE_SHA256_MACOS_ARM64:d5f70e3c0cf7398eac239fd0261ee074d98b7ba7f6b43fe3617f052ed5b79d06}
+        macos-x64: ${CHAT2DB_PI_ARCHIVE_SHA256_MACOS_X64:adb918b845625f184d8bea408d55eacaf21aa87238793c0f5b4f3b9737bce62b}
+        windows-arm64: ${CHAT2DB_PI_ARCHIVE_SHA256_WINDOWS_ARM64:b25e96fe64c9f41f75a924c0d36f395abb98d6c6fec0b78aaa0b86926f938bb4}
+        windows-x64: ${CHAT2DB_PI_ARCHIVE_SHA256_WINDOWS_X64:002fa95b90d521245b9985d8f168caebc237ad56e7e30b319807dee1b2e17e1c}
+        linux-arm64: ${CHAT2DB_PI_ARCHIVE_SHA256_LINUX_ARM64:042d20ae885ee4f3b102815f3280b962c377b2e9fb44de4037908cc530eae4d4}
+        linux-x64: ${CHAT2DB_PI_ARCHIVE_SHA256_LINUX_X64:494e498f47d74d21f40b3386f6a5e921a3d49531a169cab55bbdaca0ea1fe25a}
 
 # Print the HTTP log
 logbook:

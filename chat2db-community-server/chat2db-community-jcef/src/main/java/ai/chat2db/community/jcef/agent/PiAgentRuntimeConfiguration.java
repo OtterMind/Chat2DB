@@ -66,8 +66,8 @@ public class PiAgentRuntimeConfiguration {
                 paths,
                 version,
                 URI.create(source),
-                new PinnedPiRuntimeManifestTrust(platform -> springEnvironment.getProperty(
-                        "chat2db.agent.pi.manifest-sha256." + platform)));
+                new PinnedPiRuntimeArchiveTrust(platform -> springEnvironment.getProperty(
+                        "chat2db.agent.pi.archive-sha256." + platform)));
     }
 
     @Bean
