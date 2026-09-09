@@ -269,7 +269,11 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
         public byte[] fetch(URI uri, long maximumBytes) throws IOException {
             try {
                 HttpResponse<byte[]> response = client.send(
-                        HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(3)).GET().build(),
+                        HttpRequest.newBuilder(uri)
+                                .timeout(Duration.ofMinutes(3))
+                                .header("Accept-Encoding", "identity")
+                                .GET()
+                                .build(),
                         HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() != 200) {
                     throw new IOException("Pi runtime download failed with HTTP " + response.statusCode());
