@@ -72,3 +72,5 @@ chat2db:
 logbook:
   include:
     - /api/**
+  exclude:
+    - /api/v3/ai/agent-model/**

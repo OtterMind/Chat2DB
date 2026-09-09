@@ -26,6 +26,9 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
     private final PiEventMapper eventMapper;
     private final AgentRuntimeEventSink eventSink;
     private final ObjectMapper objectMapper;
+    private final Runnable closeHook;
+    private final String runtimeProvider;
+    private final String runtimeModelId;
     private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
     private String activeRunId;
     private String activeExternalRunId;
@@ -38,7 +41,10 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
             PiRpcTransport rpc,
             PiEventMapper eventMapper,
             AgentRuntimeEventSink eventSink,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            Runnable closeHook,
+            String runtimeProvider,
+            String runtimeModelId) {
         this.sessionId = sessionId;
         this.session = session;
         this.process = process;
@@ -46,6 +52,9 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
         this.eventMapper = eventMapper;
         this.eventSink = eventSink;
         this.objectMapper = objectMapper;
+        this.closeHook = closeHook;
+        this.runtimeProvider = runtimeProvider;
+        this.runtimeModelId = runtimeModelId;
         rpc.termination().whenComplete((ignored, error) -> runtimeTerminated(error));
     }
 
@@ -68,8 +77,8 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("message", request.input().text());
         CompletableFuture<JsonNode> response = rpc.request("set_model", objectMapper.createObjectNode()
-                        .put("provider", request.model().provider())
-                        .put("modelId", request.model().modelId()))
+                        .put("provider", runtimeProvider)
+                        .put("modelId", runtimeModelId))
                 .thenCompose(ignored -> rpc.request("prompt", payload));
         response.whenComplete((ignored, error) -> {
             if (error != null) {
@@ -126,6 +135,7 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
         activeExternalRunId = null;
         rpc.close();
         process.close();
+        closeHook.run();
     }
 
     private synchronized AgentRuntimeRunRef acknowledgeRun(String runId, JsonNode result) {

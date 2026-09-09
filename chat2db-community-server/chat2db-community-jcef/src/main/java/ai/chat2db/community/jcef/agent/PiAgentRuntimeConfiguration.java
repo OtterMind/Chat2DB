@@ -1,6 +1,7 @@
 package ai.chat2db.community.jcef.agent;
 
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
+import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -100,8 +101,10 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
-    public PiRuntimeSessionLauncher piRuntimeSessionLauncher(PiProcessSupervisor supervisor) {
-        return new PiRuntimeSessionLauncher(supervisor, List.of());
+    public PiRuntimeSessionLauncher piRuntimeSessionLauncher(
+            PiProcessSupervisor supervisor,
+            AgentModelAccessService modelAccessService) {
+        return new PiRuntimeSessionLauncher(supervisor, List.of(), modelAccessService);
     }
 
     @Bean

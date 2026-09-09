@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
 
 public class PiProcessSupervisor implements AutoCloseable {
 
@@ -55,6 +56,14 @@ public class PiProcessSupervisor implements AutoCloseable {
             String sessionId,
             String externalSessionId,
             List<Path> extensions) throws IOException {
+        return start(sessionId, externalSessionId, extensions, null);
+    }
+
+    public synchronized PiProcessHandle start(
+            String sessionId,
+            String externalSessionId,
+            List<Path> extensions,
+            AgentModelAccess modelAccess) throws IOException {
         requireText(sessionId, "sessionId");
         requireText(externalSessionId, "externalSessionId");
         if (closed) {
@@ -74,7 +83,7 @@ public class PiProcessSupervisor implements AutoCloseable {
             throw new IOException("Pi runtime executable is unavailable");
         }
         Path sessionDirectory = sessionDataRoot.resolve("sessions").resolve(sessionId).normalize();
-        Path configDirectory = sessionDataRoot.resolve("config").resolve(sessionId).normalize();
+        Path configDirectory = configurationDirectory(sessionId);
         if (!sessionDirectory.startsWith(sessionDataRoot.resolve("sessions"))
                 || !configDirectory.startsWith(sessionDataRoot.resolve("config"))) {
             throw new IOException("Pi session path is unsafe");
@@ -82,10 +91,13 @@ public class PiProcessSupervisor implements AutoCloseable {
         Files.createDirectories(sessionDirectory);
         Files.createDirectories(configDirectory);
         ProcessBuilder builder = new ProcessBuilder(command(
-                executable, externalSessionId, sessionDirectory, extensions));
+                executable, externalSessionId, sessionDirectory, extensions, modelAccess));
         builder.directory(sessionDirectory.toFile());
         builder.environment().clear();
         builder.environment().put("PI_CODING_AGENT_DIR", configDirectory.toString());
+        if (modelAccess != null) {
+            builder.environment().put("CHAT2DB_MODEL_TICKET", modelAccess.ticket());
+        }
         Process process = processStarter.start(builder);
         PiProcessHandle handle = new PiProcessHandle(sessionId, process);
         processes.put(sessionId, handle);
@@ -97,12 +109,19 @@ public class PiProcessSupervisor implements AutoCloseable {
             Path executable,
             String externalSessionId,
             Path sessionDirectory,
-            List<Path> extensions) throws IOException {
+            List<Path> extensions,
+            AgentModelAccess modelAccess) throws IOException {
         List<String> command = new ArrayList<>(List.of(
                 executable.toString(), "--mode", "rpc",
                 "--session-id", externalSessionId,
                 "--session-dir", sessionDirectory.toString(),
                 "--no-builtin-tools", "--no-extensions"));
+        if (modelAccess != null) {
+            command.add("--provider");
+            command.add(modelAccess.provider());
+            command.add("--model");
+            command.add(modelAccess.modelId());
+        }
         for (Path extension : extensions == null ? List.<Path>of() : extensions) {
             Path file = extension.toAbsolutePath().normalize();
             if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
@@ -115,6 +134,24 @@ public class PiProcessSupervisor implements AutoCloseable {
                 "--no-skills", "--no-prompt-templates", "--no-themes",
                 "--no-context-files", "--no-approve", "--offline"));
         return List.copyOf(command);
+    }
+
+    public synchronized Path prepareConfigurationDirectory(String sessionId) throws IOException {
+        if (closed) {
+            throw new IllegalStateException("Pi process supervisor is closed");
+        }
+        Path directory = configurationDirectory(sessionId);
+        Files.createDirectories(directory);
+        return directory;
+    }
+
+    private Path configurationDirectory(String sessionId) throws IOException {
+        requireText(sessionId, "sessionId");
+        Path directory = sessionDataRoot.resolve("config").resolve(sessionId).normalize();
+        if (!directory.startsWith(sessionDataRoot.resolve("config"))) {
+            throw new IOException("Pi configuration path is unsafe");
+        }
+        return directory;
     }
 
     private synchronized void remove(String sessionId, PiProcessHandle expected) {

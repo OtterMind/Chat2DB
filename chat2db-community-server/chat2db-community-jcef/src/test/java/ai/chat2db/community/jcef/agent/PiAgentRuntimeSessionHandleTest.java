@@ -28,7 +28,7 @@ class PiAgentRuntimeSessionHandleTest {
     private final PiAgentRuntimeSessionHandle handle = new PiAgentRuntimeSessionHandle(
             "session", new AgentRuntimeSessionRef("external-session", "resume"),
             new PiProcessHandle("session", new FakeProcess()), transport,
-            new PiEventMapper(), events::add, objectMapper);
+            new PiEventMapper(), events::add, objectMapper, () -> { }, "chat2db", "gpt");
 
     @Test
     void startsStreamsCompletesAndSnapshots() throws Exception {

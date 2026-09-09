@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -73,6 +74,25 @@ class PiProcessSupervisorTest {
         assertThrows(java.io.IOException.class,
                 () -> supervisor.start("session", "external", List.of()));
         assertEquals(0, supervisor.size());
+    }
+
+    @Test
+    void passesOnlyTheShortLivedModelTicketToPi() throws Exception {
+        ProcessBuilder[] captured = new ProcessBuilder[1];
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(
+                runtimeLayout(), temporaryDirectory.resolve("session-data"), 1, builder -> {
+                    captured[0] = builder;
+                    return new FakeProcess();
+                });
+        AgentModelAccess access = new AgentModelAccess(
+                "chat2db", "gpt-test", "openai-responses",
+                "http://127.0.0.1:10825/model/ticket/v1", "short-ticket");
+
+        supervisor.start("session", "external", List.of(), access);
+
+        assertEquals("short-ticket", captured[0].environment().get("CHAT2DB_MODEL_TICKET"));
+        assertEquals(2, captured[0].environment().size());
+        assertTrue(captured[0].command().containsAll(List.of("--provider", "chat2db", "--model", "gpt-test")));
     }
 
     private PiRuntimeLayout runtimeLayout() throws Exception {

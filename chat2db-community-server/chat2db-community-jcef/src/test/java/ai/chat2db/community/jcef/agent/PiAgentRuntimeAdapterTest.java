@@ -69,6 +69,7 @@ class PiAgentRuntimeAdapterTest {
                 String sessionId,
                 String externalSessionId,
                 String resumeReference,
+                AgentModelSnapshot model,
                 ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink eventSink) {
             this.sessionId = sessionId;
             this.resumeReference = resumeReference;
