@@ -15,6 +15,8 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
+import ai.chat2db.community.domain.api.model.ai.AiSessionSummary;
+import ai.chat2db.community.domain.api.service.ai.AiSessionFacadeService;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunCancelRequest;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunStartRequest;
@@ -35,7 +37,7 @@ class AgentControllerTest {
     private static final Long USER_ID = 42L;
     private final RecordingAgentService service = new RecordingAgentService();
     private final AgentController controller = new AgentController(
-            service, () -> USER_ID, new AgentHostEnvironmentProvider("5.3.0"));
+            service, () -> USER_ID, new AgentHostEnvironmentProvider("5.3.0"), new SessionFacade());
 
     @Test
     void createsOnlyV2SessionsForCurrentUser() {
@@ -113,6 +115,20 @@ class AgentControllerTest {
             return new AgentRun(
                     "run-one", "session-one", AgentRunStatus.RUNNING, model(),
                     "message", "request-one", "external-run", 1, 1, null, null);
+        }
+    }
+
+    private final class SessionFacade implements AiSessionFacadeService {
+        @Override public List<AiSessionSummary> listSessions(Long userId) {
+            return List.of(summary());
+        }
+        @Override public AiSessionSummary getSession(String sessionId, Long userId, int sessionVersion) {
+            return summary();
+        }
+        private AiSessionSummary summary() {
+            return new AiSessionSummary(
+                    "session-one", "Session", 2, AgentRuntimeType.PI, AgentSessionStatus.READY,
+                    LocalDateTime.of(2026, 9, 9, 0, 0), LocalDateTime.of(2026, 9, 9, 0, 0));
         }
     }
 }

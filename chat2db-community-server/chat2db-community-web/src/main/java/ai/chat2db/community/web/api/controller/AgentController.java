@@ -3,11 +3,13 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
+import ai.chat2db.community.domain.api.model.ai.AiSessionSummary;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.domain.api.service.ai.AiSessionFacadeService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
@@ -34,14 +36,17 @@ public class AgentController {
     private final AgentService agentService;
     private final IIdentityService identityService;
     private final AgentHostEnvironmentProvider environmentProvider;
+    private final AiSessionFacadeService sessionFacadeService;
 
     public AgentController(
             AgentService agentService,
             IIdentityService identityService,
-            AgentHostEnvironmentProvider environmentProvider) {
+            AgentHostEnvironmentProvider environmentProvider,
+            AiSessionFacadeService sessionFacadeService) {
         this.agentService = agentService;
         this.identityService = identityService;
         this.environmentProvider = environmentProvider;
+        this.sessionFacadeService = sessionFacadeService;
     }
 
     @PostMapping("/sessions")
@@ -52,13 +57,16 @@ public class AgentController {
     }
 
     @GetMapping("/sessions")
-    public ListResult<AgentSession> listSessions() {
-        return ListResult.of(agentService.listSessions(identityService.currentUserId()));
+    public ListResult<AiSessionSummary> listSessions() {
+        return ListResult.of(sessionFacadeService.listSessions(identityService.currentUserId()));
     }
 
     @GetMapping("/sessions/{sessionId}")
-    public DataResult<AgentSession> getSession(@PathVariable String sessionId) {
-        AgentSession session = agentService.getSession(sessionId, identityService.currentUserId());
+    public DataResult<AiSessionSummary> getSession(
+            @PathVariable String sessionId,
+            @RequestParam int sessionVersion) {
+        AiSessionSummary session = sessionFacadeService.getSession(
+                sessionId, identityService.currentUserId(), sessionVersion);
         if (session == null) {
             throw new IllegalArgumentException("Agent session does not exist");
         }
