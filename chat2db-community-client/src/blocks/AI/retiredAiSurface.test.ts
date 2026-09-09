@@ -87,7 +87,13 @@ const knowledgeRequestSource = inputSource.slice(
   inputSource.indexOf('const fetchKnowledgeList'),
   inputSource.indexOf('const handleSend'),
 );
+const mentionTableRequestSource = inputSource.slice(
+  inputSource.indexOf('const fetchTableList'),
+  inputSource.indexOf('const requestKnowledgePage'),
+);
 assert.doesNotMatch(knowledgeRequestSource, /debounce/);
+assert.match(mentionTableRequestSource, /getOwnedErrorPage\(requestOwner\)/);
+assert.doesNotMatch(mentionTableRequestSource, /mainPageActiveTab/);
 assert.match(inputSource, /pageSize: KNOWLEDGE_PAGE_SIZE/);
 assert.match(inputSource, /loadMoreKnowledge/);
 assert.match(mentionSource, /onScrollCapture/);

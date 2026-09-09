@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './mentionTableRequestCoordinator.test';
 import {
   detectMentionTrigger,
   filterUnselectedMentionCandidates,

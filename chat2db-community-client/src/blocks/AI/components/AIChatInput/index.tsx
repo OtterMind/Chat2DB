@@ -51,6 +51,23 @@ import {
   type MentionTrigger,
   type SelectedMention,
 } from './mentionSelection';
+import {
+  MentionSuggestionResolution,
+  MentionTableRequestCoordinator,
+  type MentionTableRequestContext,
+  type MentionTableRequestOwner,
+} from './mentionTableRequestCoordinator';
+
+function toMentionTableRequestContext(contextInfo: IAICascaderData): MentionTableRequestContext {
+  if (!('dataSourceId' in contextInfo)) {
+    return {};
+  }
+  return {
+    dataSourceId: contextInfo.dataSourceId,
+    databaseName: contextInfo.databaseName,
+    schemaName: contextInfo.schemaName,
+  };
+}
 
 export interface SendParams {
   input: string;
@@ -168,6 +185,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const knowledgeRequestSequenceRef = useRef(0);
   const knowledgeSearchCursorRef = useRef<KnowledgeSearchCursor | null>(null);
   const knowledgeLoadingSequenceRef = useRef<number | null>(null);
+  const mentionTableRequestCoordinatorRef = useRef(new MentionTableRequestCoordinator<PageType>());
 
   // caches tables without search conditions
   const tableListWithoutSearchKey = useRef<ITable[]>([]);
@@ -246,76 +264,116 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     knowledgeSearchCursorRef.current = null;
     knowledgeLoadingSequenceRef.current = null;
     setKnowledgeLoadingMore(false);
-    if (cascaderDataMap[mainPageActiveTab]) {
-      fetchTableList(cascaderDataMap[mainPageActiveTab], '');
+    const contextInfo = cascaderDataMap[mainPageActiveTab];
+    if (contextInfo) {
+      const requestOwner = mentionTableRequestCoordinatorRef.current.beginRequest(
+        mainPageActiveTab as PageType,
+        toMentionTableRequestContext(contextInfo),
+        '',
+      );
+      fetchTableList(contextInfo, '', requestOwner);
+    } else {
+      mentionTableRequestCoordinatorRef.current.invalidate();
     }
-  }, [cascaderDataMap[mainPageActiveTab]]);
+  }, [mainPageActiveTab, cascaderDataMap[mainPageActiveTab]]);
 
   const fetchTableList = useRef(
-    debounce(async (_contextInfo: IAICascaderData, searchKey: string) => {
-      if (!_contextInfo) return;
-      if ('dataSourceId' in _contextInfo && _contextInfo?.dataSourceId) {
-        if (!searchKey && tableListWithoutSearchKey.current.length) {
-          setTableList(tableListWithoutSearchKey.current);
-          return;
-        }
-        let res;
-        let viewRes;
-        try {
-          res = await sqlService.getTableList({
-            dataSourceId: _contextInfo.dataSourceId,
-            databaseName: _contextInfo.databaseName,
-            schemaName: _contextInfo.schemaName,
-            pageNo: 1,
-            pageSize: 1000,
-            searchKey,
-          });
-          viewRes = await sqlService.getViewList({
-            dataSourceId: _contextInfo.dataSourceId,
-            databaseName: _contextInfo.databaseName,
-            schemaName: _contextInfo.schemaName,
-            pageNo: 1,
-            pageSize: 1000,
-            searchKey,
-          });
-        } catch (error) {
-          const requestError = error as { errorCode?: string };
-          if (
-            requestError.errorCode === 'QUERY_DATASOURCE_ERROR' ||
-            requestError.errorCode === ErrorCode.NeedLoggedIn
-          ) {
-            tableListWithoutSearchKey.current = [];
-            setTableList([]);
-            clearCascaderData(mainPageActiveTab as PageType);
+    debounce(
+      async (
+        _contextInfo: IAICascaderData,
+        searchKey: string,
+        requestOwner: MentionTableRequestOwner<PageType>,
+        onResolved?: (hasCandidates: boolean) => void,
+      ) => {
+        if (!_contextInfo || !('dataSourceId' in _contextInfo) || !_contextInfo.dataSourceId) {
+          if (mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+            onResolved?.(false);
           }
           return;
         }
+        if ('dataSourceId' in _contextInfo && _contextInfo?.dataSourceId) {
+          if (!mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+            return;
+          }
+          if (!searchKey && tableListWithoutSearchKey.current.length) {
+            setTableList(tableListWithoutSearchKey.current);
+            onResolved?.(tableListWithoutSearchKey.current.length > 0);
+            return;
+          }
+          let res;
+          let viewRes;
+          try {
+            res = await sqlService.getTableList({
+              dataSourceId: _contextInfo.dataSourceId,
+              databaseName: _contextInfo.databaseName,
+              schemaName: _contextInfo.schemaName,
+              pageNo: 1,
+              pageSize: 1000,
+              searchKey,
+            });
+            if (!mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+              return;
+            }
+            viewRes = await sqlService.getViewList({
+              dataSourceId: _contextInfo.dataSourceId,
+              databaseName: _contextInfo.databaseName,
+              schemaName: _contextInfo.schemaName,
+              pageNo: 1,
+              pageSize: 1000,
+              searchKey,
+            });
+            if (!mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+              return;
+            }
+          } catch (error) {
+            const requestError = error as { errorCode?: string };
+            const ownedPage = mentionTableRequestCoordinatorRef.current.getOwnedErrorPage(requestOwner);
+            if (
+              ownedPage &&
+              (requestError.errorCode === 'QUERY_DATASOURCE_ERROR' ||
+                requestError.errorCode === ErrorCode.NeedLoggedIn)
+            ) {
+              tableListWithoutSearchKey.current = [];
+              setTableList([]);
+              clearCascaderData(ownedPage);
+            }
+            if (ownedPage) {
+              onResolved?.(false);
+            }
+            return;
+          }
 
-        const atTableList =
-          res.data?.map((s) => ({
-            ...s,
-            tableType: 'TABLE',
-          })) || [];
+          const atTableList =
+            res.data?.map((s) => ({
+              ...s,
+              tableType: 'TABLE',
+            })) || [];
 
-        const atViewList =
-          viewRes.data?.map((s) => ({
-            ...s,
-            tableType: 'VIEW',
-          })) || [];
+          const atViewList =
+            viewRes.data?.map((s) => ({
+              ...s,
+              tableType: 'VIEW',
+            })) || [];
 
-        const list = [...atTableList, ...atViewList];
+          const list = [...atTableList, ...atViewList];
 
-        if (!searchKey) {
-          tableListWithoutSearchKey.current = list;
+          if (!searchKey) {
+            tableListWithoutSearchKey.current = list;
+          }
+
+          setTableList(list);
+          onResolved?.(list.length > 0);
         }
-
-        setTableList(list);
-      }
-    }, 300),
+      },
+      300,
+    ),
   ).current;
 
   useEffect(() => {
-    return () => fetchTableList.cancel();
+    return () => {
+      mentionTableRequestCoordinatorRef.current.invalidate();
+      fetchTableList.cancel();
+    };
   }, []);
 
   const requestKnowledgePage = (
@@ -686,6 +744,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   ) => {
     const nextTrigger = detectMentionTrigger(value, cursor);
     if (!nextTrigger) {
+      mentionTableRequestCoordinatorRef.current.invalidate();
       knowledgeRequestSequenceRef.current += 1;
       setMentionTrigger(null);
       setKnowledgeList([]);
@@ -706,9 +765,29 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setKnowledgeLoadingMore(false);
     setMentionTrigger(nextTrigger);
     const contextInfo = cascaderDataMap[mainPageActiveTab];
+    const expectsTableResult = nextTrigger.mode === 'explicit' && Boolean(contextInfo);
+    const suggestionResolution = new MentionSuggestionResolution(expectsTableResult);
+    const applySuggestionDecision = (decision: ReturnType<MentionSuggestionResolution['resolveTable']>) => {
+      if (requestSequence !== knowledgeRequestSequenceRef.current) return;
+      if (decision === 'open') {
+        onTrigger(nextTrigger);
+      } else if (decision === 'close') {
+        setMentionTrigger(null);
+        onTrigger(false);
+      }
+    };
 
-    if (nextTrigger.mode === 'explicit') {
-      fetchTableList(contextInfo, nextTrigger.query);
+    if (nextTrigger.mode === 'explicit' && contextInfo) {
+      const requestOwner = mentionTableRequestCoordinatorRef.current.beginRequest(
+        mainPageActiveTab as PageType,
+        toMentionTableRequestContext(contextInfo),
+        nextTrigger.query,
+      );
+      fetchTableList(contextInfo, nextTrigger.query, requestOwner, (hasCandidates) => {
+        applySuggestionDecision(suggestionResolution.resolveTable(hasCandidates));
+      });
+    } else {
+      mentionTableRequestCoordinatorRef.current.invalidate();
     }
 
     fetchKnowledgeList(
@@ -718,13 +797,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         : { inputText: nextTrigger.inputText.slice(-200) },
       requestSequence,
       (hasCandidates) => {
-        if (requestSequence !== knowledgeRequestSequenceRef.current) return;
-        if (hasCandidates) {
-          onTrigger(nextTrigger);
-        } else {
-          setMentionTrigger(null);
-          onTrigger(false);
-        }
+        applySuggestionDecision(suggestionResolution.resolveKnowledge(hasCandidates));
       },
     );
   };
