@@ -809,7 +809,15 @@ public class MainJFrame extends JFrame {
                 }
             }
         });
+        createBrowserImmediatelyForHiddenStartup(browser_, showWindowOnStartup);
         log.info("4. CefBrowser and UI component creation completed.");
+    }
+
+    static void createBrowserImmediatelyForHiddenStartup(CefBrowser browser, boolean showWindowOnStartup) {
+        if (!showWindowOnStartup) {
+            // Windowed JCEF normally creates the browser when Swing makes its component displayable.
+            browser.createImmediately();
+        }
     }
 
     private static String resolveWebFrontendUrl() {

@@ -78,6 +78,7 @@ export default {
   'workspace.tips.cannotMoveLastSplitTab': '当前分屏至少需要保留一个标签',
   'workspace.menu.newGroup': '新建组',
   'workspace.menu.moveToGroup': '移动到',
+  'workspace.tips.treePositionRefreshFailed': '位置已更新，但数据源列表刷新失败，请手动刷新',
   'workspace.menu.deleteGroup': '删除组',
   'workspace.menu.renameGroup': '重命名',
   'workspace.menu.newDataSource': '新建连接',

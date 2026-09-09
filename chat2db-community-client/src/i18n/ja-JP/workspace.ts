@@ -81,6 +81,7 @@ export default {
   'workspace.tips.cannotMoveLastSplitTab': '現在の分割ペインには少なくとも1つのタブを残してください',
   'workspace.menu.newGroup': '新しいグループ',
   'workspace.menu.moveToGroup': '移動先',
+  'workspace.tips.treePositionRefreshFailed': '位置は更新されましたが、データソース一覧を更新できませんでした。手動で更新してください。',
   'workspace.menu.deleteGroup': 'グループを削除',
   'workspace.menu.renameGroup': '名前を変更',
   'workspace.menu.newDataSource': '新しい接続',

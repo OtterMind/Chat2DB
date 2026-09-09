@@ -11,13 +11,14 @@ import { FolderOpenOutlined } from '@ant-design/icons';
 import { Button, Checkbox, Collapse, Form, Input, Select, Table, Tooltip } from 'antd';
 import classnames from 'classnames';
 import { CircleHelp } from 'lucide-react';
-import React, { ForwardedRef, Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import React, { ForwardedRef, Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import Driver from './components/Driver';
 import { dataSourceFormConfigs } from './config/dataSource';
 import { InputType } from './config/enum';
 import { IConnectionConfig, IFormItem, ILocalizedConnectionText, ISelect } from './config/types';
 import { applyConnectionIdentityColorUpdate } from './identityColorUpdate';
 import styles from './index.less';
+import { SubmissionGuard } from './submissionGuard';
 import { formatJdbcHostForUrl, normalizeJdbcHostFromUrl, shouldSyncJdbcUrlForField } from './utils/jdbcUrl';
 
 // ----- store -----
@@ -398,6 +399,7 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
     testButton: false,
     sshTestLoading: false,
   });
+  const submissionGuardRef = useRef(new SubmissionGuard());
   const { curOrg } = useOrgStore((s) => ({ curOrg: s.curOrg }));
 
   const dataSourceFormConfigPropsMemo = useMemo<IConnectionConfig>(() => {
@@ -530,7 +532,11 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
     }));
 
     if ((type === submitType.SAVE || type === submitType.UPDATE) && submit) {
-      Promise.resolve(submit(p, type))
+      const request = submissionGuardRef.current.run(() => submit(p, type));
+      if (!request) {
+        return;
+      }
+      request
         .catch((error: any) => {
           staticMessage.error(getConnectionErrorMessage(error));
         })
@@ -543,7 +549,13 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
       return;
     }
 
-    const api: any = connectionService[type](p);
+    const api: any =
+      type === submitType.SAVE || type === submitType.UPDATE
+        ? submissionGuardRef.current.run(() => connectionService[type](p))
+        : connectionService[type](p);
+    if (!api) {
+      return;
+    }
     if (type === submitType.TEST) {
       api
         .then((res: any) => {

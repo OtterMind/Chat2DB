@@ -82,6 +82,7 @@ export default {
   'workspace.tips.cannotMoveLastSplitTab': 'Mantenga al menos una pestaña en el panel dividido actual',
   'workspace.menu.newGroup': 'Nuevo grupo',
   'workspace.menu.moveToGroup': 'Mover a',
+  'workspace.tips.treePositionRefreshFailed': 'La posición se actualizó, pero no se pudo actualizar la lista de fuentes de datos. Actualícela manualmente.',
   'workspace.menu.deleteGroup': 'Eliminar grupo',
   'workspace.menu.renameGroup': 'Cambiar nombre',
   'workspace.menu.newDataSource': 'Nueva conexión',

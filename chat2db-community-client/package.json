@@ -44,7 +44,7 @@
     "test:data-source-identity": "tsx src/utils/dataSourceIdentity.test.ts && tsx src/store/tree/dataSourceIdentity.test.ts && tsx src/store/tree/dataSourceList.test.ts && tsx src/store/tree/treeNodeLoadState.test.ts && tsx src/blocks/NewTree/dataSourceIdentity.test.ts && tsx src/blocks/NewTree/dataSourceColorMenu.test.ts && tsx src/blocks/NewTree/treeMenuDanger.test.ts && tsx src/blocks/NewTree/treeMenuGrouping.test.ts && tsx src/blocks/NewTree/dataSourceIdentityColorRequest.test.ts && tsx src/components/ConnectionEdit/identityColorUpdate.test.ts && tsx src/utils/editorDataSourceLifecycle.test.ts && tsx src/components/SelectBoundInfo/cascadeRequestGuard.test.ts && tsx src/components/SelectBoundInfo/dataSourceSelection.test.ts && tsx src/blocks/AI/dataSourceContext.test.ts",
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:data-source-authorization": "tsx src/utils/dataSourceAuthorization.test.ts",
-    "test:data-source-mutation-refresh": "tsx src/store/tree/dataSourceMutationRefresh.test.ts",
+    "test:data-source-mutation-refresh": "tsx src/store/tree/dataSourceMutationRefresh.test.ts && tsx src/components/ConnectionEdit/submissionGuard.test.ts && tsx src/blocks/NewTree/treePositionMutation.test.ts",
     "test:dashboard-store": "tsx src/store/dashboard/slices/common/refreshCurrentDashboard.test.ts",
     "test:dynamic-database-registry": "tsx src/utils/dynamicDatabaseRegistry.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",

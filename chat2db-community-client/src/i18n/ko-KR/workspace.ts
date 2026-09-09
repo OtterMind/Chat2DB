@@ -81,6 +81,7 @@ export default {
   'workspace.tips.cannotMoveLastSplitTab': '현재 분할 창에 탭을 하나 이상 유지하세요',
   'workspace.menu.newGroup': '새 그룹',
   'workspace.menu.moveToGroup': '이동',
+  'workspace.tips.treePositionRefreshFailed': '위치는 변경되었지만 데이터 소스 목록을 새로 고치지 못했습니다. 수동으로 새로 고쳐 주세요.',
   'workspace.menu.deleteGroup': '그룹 삭제',
   'workspace.menu.renameGroup': '이름 변경',
   'workspace.menu.newDataSource': '새 연결',

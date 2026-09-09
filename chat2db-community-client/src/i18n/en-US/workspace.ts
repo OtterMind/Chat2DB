@@ -82,6 +82,7 @@ export default {
   'workspace.tips.cannotMoveLastSplitTab': 'Keep at least one tab in the current split pane',
   'workspace.menu.newGroup': 'New group',
   'workspace.menu.moveToGroup': 'Move to',
+  'workspace.tips.treePositionRefreshFailed': 'The position was updated, but the data source list failed to refresh. Please refresh it manually.',
   'workspace.menu.deleteGroup': 'Delete group',
   'workspace.menu.renameGroup': 'Rename',
   'workspace.menu.newDataSource': 'New connection',
