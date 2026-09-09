@@ -54,6 +54,8 @@ class AgentRunCoordinatorTest {
         assertEquals(List.of(AgentEventType.RUN_ACCEPTED, AgentEventType.RUN_STARTED),
                 storage.events.stream().map(AgentEvent::type).toList());
         assertEquals(List.of(1L, 2L), storage.events.stream().map(AgentEvent::sequence).toList());
+        assertEquals("hello", storage.events.get(0).payload().get("text"));
+        assertEquals(running.requestMessageId(), storage.events.get(0).payload().get("requestMessageId"));
 
         AgentRun cancelled = coordinator.cancel(
                 new AgentRunCancelCommand(USER_ID, SESSION_ID, running.id()))

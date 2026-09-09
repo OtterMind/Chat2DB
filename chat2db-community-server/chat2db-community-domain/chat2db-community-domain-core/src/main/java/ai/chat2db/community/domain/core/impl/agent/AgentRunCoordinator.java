@@ -86,7 +86,12 @@ public class AgentRunCoordinator {
                 runId, session.id(), AgentRunStatus.ACCEPTED, command.model(), nextId(),
                 command.idempotencyKey(), null, sequence, sequence, null, null);
         runStorage.create(run, command.userId());
-        eventStorage.append(productEvent(session.id(), runId, sequence, AgentEventType.RUN_ACCEPTED, Map.of()),
+        eventStorage.append(productEvent(
+                        session.id(), runId, sequence, AgentEventType.RUN_ACCEPTED,
+                        Map.of(
+                                "text", Objects.toString(command.input().text(), ""),
+                                "artifactIds", command.input().artifactIds(),
+                                "requestMessageId", run.requestMessageId())),
                 command.userId());
         updateSession(session, AgentSessionStatus.READY, AgentSessionStatus.RUNNING, sequence);
 
