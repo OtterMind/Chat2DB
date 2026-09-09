@@ -20,6 +20,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -41,6 +42,7 @@ public class AgentRunCoordinator {
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
+    @Autowired
     public AgentRunCoordinator(
             AgentRuntimeRegistry runtimeRegistry,
             AgentRuntimeHandleRegistry handleRegistry,

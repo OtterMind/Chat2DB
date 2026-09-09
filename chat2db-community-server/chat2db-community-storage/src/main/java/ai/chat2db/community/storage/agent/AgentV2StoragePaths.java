@@ -2,6 +2,7 @@ package ai.chat2db.community.storage.agent;
 
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -16,6 +17,7 @@ public class AgentV2StoragePaths {
 
     private final Path root;
 
+    @Autowired
     public AgentV2StoragePaths() {
         this(resolveRoot(Path.of(ConfigUtils.getEnvBasePath())));
     }

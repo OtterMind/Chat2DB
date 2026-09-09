@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -37,6 +38,7 @@ public class AgentServiceImpl implements AgentService {
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
+    @Autowired
     public AgentServiceImpl(
             AgentRuntimeRegistry runtimeRegistry,
             AgentSessionStorage sessionStorage,
