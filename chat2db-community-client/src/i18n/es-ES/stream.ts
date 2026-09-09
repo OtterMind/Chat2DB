@@ -1,4 +1,13 @@
 export default {
+  "stream.approval.title": "Aprobación de comando",
+  "stream.approval.pending": "Pendiente de aprobación",
+  "stream.approval.approved": "Permitido",
+  "stream.approval.denied": "Rechazado",
+  "stream.approval.closed": "Finalizado",
+  "stream.approval.command": "Comando que se ejecutará",
+  "stream.approval.hint": "Solo se autoriza este comando",
+  "stream.approval.approve": "Ejecutar una vez",
+  "stream.approval.deny": "Rechazar",
   'stream.agent.modelBound': 'Esta conversación está vinculada a su modelo. Inicia una conversación nueva para elegir otro modelo.',
   'stream.session.title': 'Nuevo chat',
   'stream.codeBlock.pin': 'Fijar en la consola',

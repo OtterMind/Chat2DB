@@ -1,5 +1,44 @@
 import type { AgentEvent } from '@/service/agent';
 
+export interface AgentApprovalItem {
+  id: string;
+  sessionId: string;
+  runId: string;
+  toolName: string;
+  command: string;
+  workingDirectory: string;
+  status: 'pending' | 'approved' | 'denied' | 'closed';
+}
+
+export const updateAgentApprovals = (current: AgentApprovalItem[], events: AgentEvent[]): AgentApprovalItem[] => {
+  const approvals = new Map(current.map((item) => [item.id, item]));
+  for (const event of events) {
+    const { approvalId, command, workingDirectory, toolName, approved } = event.payload;
+    if (event.type === 'APPROVAL_REQUESTED' && typeof approvalId === 'string'
+        && typeof command === 'string' && event.runId && !approvals.has(approvalId)) {
+      approvals.set(approvalId, {
+        id: approvalId, sessionId: event.sessionId, runId: event.runId, command,
+        workingDirectory: typeof workingDirectory === 'string' ? workingDirectory : '',
+        toolName: toolName === 'powershell' ? 'PowerShell' : 'Bash', status: 'pending',
+      });
+    }
+    if (event.type === 'APPROVAL_DECIDED' && typeof approvalId === 'string') {
+      const item = approvals.get(approvalId);
+      if (item && item.sessionId === event.sessionId && item.runId === event.runId) {
+        approvals.set(approvalId, { ...item, status: approved === true ? 'approved' : 'denied' });
+      }
+    }
+    if (isTerminalAgentEvent(event)) {
+      for (const [id, item] of approvals) {
+        if (item.sessionId === event.sessionId && item.runId === event.runId && item.status === 'pending') {
+          approvals.set(id, { ...item, status: 'closed' });
+        }
+      }
+    }
+  }
+  return [...approvals.values()];
+};
+
 export interface AgentTranscriptMessage {
   id: string;
   runId: string;

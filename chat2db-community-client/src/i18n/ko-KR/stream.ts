@@ -1,4 +1,13 @@
 export default {
+  "stream.approval.title": "명령 승인",
+  "stream.approval.pending": "승인 대기",
+  "stream.approval.approved": "허용됨",
+  "stream.approval.denied": "거부됨",
+  "stream.approval.closed": "종료됨",
+  "stream.approval.command": "실행할 명령",
+  "stream.approval.hint": "이 명령에만 적용됩니다",
+  "stream.approval.approve": "한 번 실행",
+  "stream.approval.deny": "거부",
   'stream.agent.modelBound': '이 대화의 모델은 고정되어 있습니다. 다른 모델을 선택하려면 새 대화를 시작하세요.',
   'stream.session.title': '새 채팅',
   'stream.codeBlock.pin': '콘솔에 고정',

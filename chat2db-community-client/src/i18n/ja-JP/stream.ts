@@ -1,4 +1,13 @@
 export default {
+  "stream.approval.title": "コマンドの承認",
+  "stream.approval.pending": "確認待ち",
+  "stream.approval.approved": "許可済み",
+  "stream.approval.denied": "拒否済み",
+  "stream.approval.closed": "終了",
+  "stream.approval.command": "実行するコマンド",
+  "stream.approval.hint": "このコマンドにのみ適用",
+  "stream.approval.approve": "一度だけ実行",
+  "stream.approval.deny": "拒否",
   'stream.agent.modelBound': 'この会話のモデルは固定されています。別のモデルを選ぶには新しい会話を開始してください。',
   'stream.session.title': '新しい会話',
   'stream.codeBlock.pin': 'コンソールに固定',

@@ -1,4 +1,13 @@
 export default {
+  "stream.approval.title": "Command approval",
+  "stream.approval.pending": "Awaiting approval",
+  "stream.approval.approved": "Allowed",
+  "stream.approval.denied": "Denied",
+  "stream.approval.closed": "Closed",
+  "stream.approval.command": "Command to run",
+  "stream.approval.hint": "Applies to this command only",
+  "stream.approval.approve": "Run once",
+  "stream.approval.deny": "Deny",
   'stream.agent.modelBound': 'This conversation is bound to its model. Start a new conversation to choose another model.',
   'stream.session.title': 'New Chat',
   'stream.codeBlock.pin': 'Pin to Console',

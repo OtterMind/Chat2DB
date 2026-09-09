@@ -56,11 +56,12 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
+import AgentApprovalCard from './components/AgentApprovalCard';
 import agentService, { AgentEvent } from '@/service/agent';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
-import { agentErrorText, agentEventTrace, appendAgentText, buildAgentTranscript, isTerminalAgentEvent } from './agentEvents';
+import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, buildAgentTranscript, isTerminalAgentEvent } from './agentEvents';
 import { followAgentRun, readAgentHistory, traceAgentStage } from './agentEventStream';
 import { getChatSessionId, getChatSessionUrl } from './chatSessionRoute';
 
@@ -345,17 +346,17 @@ interface AgentOperation {
   sessionId?: string;
   runId?: string;
   cancelRequested: boolean;
-  approvals: Set<string>;
 }
 
 const createAgentOperation = (sessionId?: string): AgentOperation => ({
-  controller: new AbortController(), sessionId, cancelRequested: false, approvals: new Set(),
+  controller: new AbortController(), sessionId, cancelRequested: false,
 });
 
 type ChatRole = 'user' | 'assistant';
 
 interface IChatItem {
   id: string;
+  runId?: string;
   role: ChatRole;
   content: string;
   attachments?: IChatAttachment[];
@@ -573,6 +574,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const agentSessionRef = useRef<{ id: string; modelConfigId: string; sequence: number }>();
   const agentOperationRef = useRef<AgentOperation>();
   const [agentRunning, setAgentRunning] = useState(false);
+  const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
     clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
   );
@@ -985,6 +987,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, [status]);
 
   const stopAgentPolling = useCallback((cancelRun = false) => {
+    setAgentApprovals([]);
     const operation = agentOperationRef.current;
     if (!operation) return;
     operation.cancelRequested = cancelRun;
@@ -1000,11 +1003,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, []);
 
   const finishAgentReply = useCallback((error?: unknown) => {
+    setAgentApprovals((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     const content = streamingRef.current;
     const traceEntries = [...streamTraceEntriesRef.current];
     if (error) traceEntries.push({ type: 'error', content: agentErrorText(error) || i18n('stream.agent.sendFailed') });
-    if (content.trim() || traceEntries.length) {
-      const message: IChatItem = { id: agentRequestId(), role: 'assistant', content, traceEntries };
+    if (content.trim() || traceEntries.length || agentOperationRef.current?.runId) {
+      const message: IChatItem = { id: agentRequestId(), runId: agentOperationRef.current?.runId, role: 'assistant', content, traceEntries };
       setMessages((previous) => {
         const next = [...previous, message];
         messagesRef.current = next;
@@ -1019,38 +1023,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     currentRoundUserMessageIdRef.current = null;
   }, []);
 
-  const requestAgentApproval = useCallback((event: AgentEvent, operation: AgentOperation) => {
-    const { approvalId, command, workingDirectory, toolName } = event.payload;
-    if (typeof approvalId !== 'string' || typeof command !== 'string' || operation.approvals.has(approvalId)) return;
-    operation.approvals.add(approvalId);
-    const decide = async (approved: boolean) => {
-      try {
-        await agentService.decideApproval({ sessionId: event.sessionId, approvalId, approved });
-      } catch (error) {
-        if (!operation.controller.signal.aborted) {
-          feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
-          throw error;
-        }
-      }
-    };
-    const close = () => dialog.destroy();
-    const dialog = modal.confirm({
-      title: toolName === 'powershell' ? 'PowerShell' : 'Bash',
-      content: <>
-        {typeof workingDirectory === 'string' && <p>
-          {i18n('setting.agent.workingDirectory')}：<code style={{ overflowWrap: 'anywhere' }}>{workingDirectory}</code>
-        </p>}
-        <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command}</pre>
-      </>,
-      okText: i18n('common.button.confirm'),
-      cancelText: i18n('common.button.cancel'),
-      onOk: () => decide(true),
-      onCancel: () => decide(false),
-      afterClose: () => operation.controller.signal.removeEventListener('abort', close),
-    });
-    operation.controller.signal.addEventListener('abort', close, { once: true });
-    if (operation.controller.signal.aborted) close();
-  }, [modal]);
+  const decideAgentApproval = async (approval: AgentApprovalItem, approved: boolean) => {
+    const operation = agentOperationRef.current;
+    if (!operation || operation.controller.signal.aborted || operation.sessionId !== approval.sessionId
+        || operation.runId !== approval.runId) throw new Error(i18n('stream.approval.closed'));
+    await agentService.decideApproval({ sessionId: approval.sessionId, approvalId: approval.id, approved },
+      { signal: operation.controller.signal });
+    if (!operation.controller.signal.aborted) {
+      setAgentApprovals((current) => current.map((item) => item.id === approval.id && item.status === 'pending'
+        ? { ...item, status: approved ? 'approved' : 'denied' } : item));
+    }
+  };
 
   const applyAgentEvents = useCallback((events: AgentEvent[]) => {
     const session = agentSessionRef.current;
@@ -1066,12 +1049,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       streamTraceEntriesRef.current = [...streamTraceEntriesRef.current, ...traces];
       setStreamTraceEntries(streamTraceEntriesRef.current);
     }
-    const operation = agentOperationRef.current;
-    if (operation) {
-      events.filter((event) => event.type === 'APPROVAL_REQUESTED')
-        .forEach((event) => requestAgentApproval(event, operation));
-    }
-  }, [requestAgentApproval]);
+    setAgentApprovals((current) => updateAgentApprovals(current, events));
+  }, []);
 
   const pollAgentRun = useCallback(async (operation: AgentOperation, sessionId: string, runId: string) => {
     try {
@@ -1149,7 +1128,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const fetchSessionList = useCallback(async () => {
     try {
       const sessions = (await aiStreamService.getChatSessions(undefined as void)) || [];
-      setSessionList(sessions.filter((session) => session.sessionVersion === 1));
+      setSessionList(sessions);
     } catch {
       // silent
     }
@@ -1364,6 +1343,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     messages,
     streamingText,
     streamTraceEntries.length,
+    agentApprovals,
     currentRoundUserMessageId,
     messageListContentHeight,
     isCurrentRoundOverflowingViewport,
@@ -1651,6 +1631,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           event.runId === accepted.runId && isTerminalAgentEvent(event)) ? accepted.runId : undefined;
         const transcript = buildAgentTranscript(events)
           .filter((message) => message.content || message.traceEntries.length);
+        setAgentApprovals(updateAgentApprovals([], events).map((item) =>
+          item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
+            ? { ...item, status: 'closed' } : item));
         const activeReply = activeRunId
           ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId)
           : undefined;
@@ -1674,9 +1657,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         currentSessionTitleRef.current = session.title || title || '';
         if (activeRunId) {
           operation.runId = activeRunId;
-          events.filter((event) => event.type === 'APPROVAL_REQUESTED'
-            && approvals.some((approval) => approval.id === event.payload.approvalId))
-            .forEach((event) => requestAgentApproval(event, operation));
+          const userMessageId = transcript.find((item) => item.role === 'user' && item.runId === activeRunId)?.id || null;
+          setCurrentRoundUserMessageId(userMessageId);
+          currentRoundUserMessageIdRef.current = userMessageId;
           setAgentRunning(true);
           void pollAgentRun(operation, sessionId, activeRunId);
         } else {
@@ -1689,7 +1672,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         if (!operation.controller.signal.aborted) setSessionLoading(false);
       }
     },
-    [pollAgentRun, requestAgentApproval, setSelectedModel, stop, stopAgentPolling],
+    [pollAgentRun, setSelectedModel, stop, stopAgentPolling],
   );
 
   // Restore the conversation from the path when first opening /stream/:chatId.
@@ -2208,6 +2191,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
+  const renderApprovals = (runId?: string) => agentApprovals.filter((item) => item.runId === runId).map((item) =>
+    <AgentApprovalCard key={item.id} approval={item} onDecide={(approved) => decideAgentApproval(item, approved)} />);
+
   const renderMessages = () => {
     const rounds: IChatRound[] = [];
     let pendingRound: IChatRound | null = null;
@@ -2307,6 +2293,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   <div className={styles.assistantContent}>
                     {renderThoughtStrip(round.assistant.traceEntries || [], `trace-${round.assistant.id}`)}
                     {renderMarkdown(round.assistant.content)}
+                    {renderApprovals(round.assistant.runId)}
                   </div>
                 </div>
               )}
@@ -2318,7 +2305,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   streamThoughtPulse,
                 )}
               {isCurrentRound &&
-                streamingText &&
+                (streamingText || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)) &&
                 (() => {
                   const { textBeforeChart, hasIncompleteChart } = splitIncompleteChartBlock(streamingText);
                   return (
@@ -2340,6 +2327,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                         ) : (
                           renderMarkdown(streamingText)
                         )}
+                        {renderApprovals(agentOperationRef.current?.runId)}
                       </div>
                     </div>
                   );

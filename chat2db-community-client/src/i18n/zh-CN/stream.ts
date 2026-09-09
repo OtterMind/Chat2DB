@@ -1,4 +1,13 @@
 export default {
+  "stream.approval.title": "命令审批",
+  "stream.approval.pending": "等待确认",
+  "stream.approval.approved": "已允许",
+  "stream.approval.denied": "已拒绝",
+  "stream.approval.closed": "已结束",
+  "stream.approval.command": "待执行命令",
+  "stream.approval.hint": "仅授权本次命令",
+  "stream.approval.approve": "执行一次",
+  "stream.approval.deny": "拒绝",
   'stream.agent.modelBound': '当前会话已绑定模型，请新建对话后选择其他模型。',
   'stream.session.title': '新对话',
   'stream.codeBlock.pin': '钉到控制台',
