@@ -1,4 +1,5 @@
 export default {
+  'stream.agent.modelBound': 'This conversation is bound to its model. Start a new conversation to choose another model.',
   'stream.session.title': 'New Chat',
   'stream.codeBlock.pin': 'Pin to Console',
   'stream.codeBlock.copy': 'Copy',

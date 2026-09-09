@@ -1,4 +1,5 @@
 export default {
+  'stream.agent.modelBound': '当前会话已绑定模型，请新建对话后选择其他模型。',
   'stream.session.title': '新对话',
   'stream.codeBlock.pin': '钉到控制台',
   'stream.codeBlock.copy': '复制',

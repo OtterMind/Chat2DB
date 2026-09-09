@@ -1,4 +1,5 @@
 export default {
+  'stream.agent.modelBound': 'この会話のモデルは固定されています。別のモデルを選ぶには新しい会話を開始してください。',
   'stream.session.title': '新しい会話',
   'stream.codeBlock.pin': 'コンソールに固定',
   'stream.codeBlock.copy': 'コピー',

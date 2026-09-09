@@ -8,7 +8,7 @@ import React, {
   useRef,
   useCallback,
 } from 'react';
-import { Checkbox, Input, Popover, Select } from 'antd';
+import { Checkbox, Input, Popover, Select, Tag } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
@@ -79,6 +79,7 @@ interface ChatInputProps {
   className?: string;
   chatInputAreaClassName?: string;
   loading?: boolean;
+  sendDisabled?: boolean;
   contextInfo?: IAICascaderData;
   onContextChange?: (contextInfo: IAICascaderData) => void;
   // Whether to clear the input box after sending
@@ -143,15 +144,16 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     className,
     chatInputAreaClassName,
     loading,
+    sendDisabled = false,
     hideDatabaseSelect,
     modelOptions,
     showCustomModelEntry,
     onCustomModelClick,
-  customModelText,
-  runtimeChoice = 'DEFAULT',
-  onRuntimeChange,
-  piShellEnabled = false,
-  onPiShellChange,
+    customModelText,
+    runtimeChoice,
+    onRuntimeChange,
+    piShellEnabled = false,
+    onPiShellChange,
     prefillInputState,
     onChatSend,
     onContextChange,
@@ -398,7 +400,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   );
 
   const handleSend = async (params?: SendParams) => {
-    if (loading || attachmentLoading) return;
+    if (loading || attachmentLoading || sendDisabled) return;
 
     /**
      * source parameter
@@ -483,7 +485,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const triggerSend = (params: SendParams) => {
-    if (loading) return;
+    if (loading || sendDisabled) return;
 
     handleSend(params);
   };
@@ -909,17 +911,28 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               )}
             </div>
             <div className={styles.bottomAddonsRight}>
-              <Select
-                className={styles.runtimeSelect}
-                size="small"
-                variant="borderless"
-                value={runtimeChoice}
-                options={[
+              {runtimeChoice ? (
+                <Select
+                  className={styles.runtimeSelect}
+                  size="small"
+                  variant="borderless"
+                  aria-label="Agent"
+                  disabled={loading || !onRuntimeChange}
+                  popupMatchSelectWidth={156}
+                  value={runtimeChoice}
+                  options={[
                   { value: 'DEFAULT', label: i18n('stream.runtime.default') },
                   { value: 'PI', label: i18n('stream.runtime.pi') },
                 ]}
-                onChange={onRuntimeChange}
-              />
+                  optionRender={(option) => (
+                  <div className={styles.runtimeOption}>
+                    <span>{option.label}</span>
+                    {option.value === 'PI' ? <Tag color="gold">Beta</Tag> : null}
+                  </div>
+                )}
+                  onChange={onRuntimeChange}
+                />
+              ) : null}
               {runtimeChoice === 'PI' && onPiShellChange ? (
                 <Popover
                   trigger="click"
@@ -962,7 +975,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                   }}
                   code="icon-chat-send"
                   className={styles.sendButton}
-                  disabled={!inputValue.trim() && !attachments.length}
+                  disabled={sendDisabled || (!inputValue.trim() && !attachments.length)}
                   onClick={() => handleSend()}
                 />
                 // <Button

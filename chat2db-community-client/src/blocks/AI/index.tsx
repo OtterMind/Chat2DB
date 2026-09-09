@@ -44,7 +44,7 @@ import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
 import { ErrorCode } from '@/constants/request';
-import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
+import { listAvailableModelOptions, prepareAgentModelOption, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
@@ -56,11 +56,13 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
-import AgentChat from './AgentChat';
-import agentService from '@/service/agent';
+import agentService, { AgentEvent } from '@/service/agent';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
+import { agentErrorText, agentEventTrace, appendAgentText, buildAgentTranscript, isTerminalAgentEvent } from './agentEvents';
+import { followAgentRun, readAgentHistory, traceAgentStage } from './agentEventStream';
+import { getChatSessionId, getChatSessionUrl } from './chatSessionRoute';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -330,6 +332,25 @@ const INITIAL_VIEWPORT_ANIMATION_MS = 260;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const MESSAGE_TOP_ALIGNMENT_GAP = 20;
 const COLLAPSED_THOUGHT_PREVIEW_MAX_LENGTH = 48;
+const AI_RUNTIME_STORAGE_KEY = 'chat2db-ai-runtime';
+
+const agentRequestId = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+
+interface AgentOperation {
+  controller: AbortController;
+  sessionId?: string;
+  runId?: string;
+  cancelRequested: boolean;
+  approvals: Set<string>;
+}
+
+const createAgentOperation = (sessionId?: string): AgentOperation => ({
+  controller: new AbortController(), sessionId, cancelRequested: false, approvals: new Set(),
+});
 
 type ChatRole = 'user' | 'assistant';
 
@@ -549,14 +570,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
-  const [agentSession, setAgentSession] = useState<{
-    id?: string;
-    title?: string;
-    modelConfigId?: string;
-    initialInput?: string;
-  } | null>(null);
-  const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>('DEFAULT');
+  const agentSessionRef = useRef<{ id: string; modelConfigId: string; sequence: number }>();
+  const agentOperationRef = useRef<AgentOperation>();
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
+    clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
+  );
   const [piShellEnabled, setPiShellEnabled] = useState(false);
+  const piShellChangingRef = useRef(false);
   const [runtimeSwitching, setRuntimeSwitching] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -965,6 +986,115 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     statusRef.current = status;
   }, [status]);
 
+  const stopAgentPolling = useCallback((cancelRun = false) => {
+    const operation = agentOperationRef.current;
+    if (!operation) return;
+    operation.cancelRequested = cancelRun;
+    traceAgentStage('conversation.detached', { sessionId: operation.sessionId, runId: operation.runId, cancelRun });
+    operation.controller.abort();
+    agentOperationRef.current = undefined;
+    setAgentRunning(false);
+    if (cancelRun && operation.runId && operation.sessionId) {
+      void agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId }).catch((error) => {
+        feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+      });
+    }
+  }, []);
+
+  const finishAgentReply = useCallback((error?: unknown) => {
+    const content = streamingRef.current;
+    const traceEntries = [...streamTraceEntriesRef.current];
+    if (error) traceEntries.push({ type: 'error', content: agentErrorText(error) || i18n('stream.agent.sendFailed') });
+    if (content.trim() || traceEntries.length) {
+      const message: IChatItem = { id: agentRequestId(), role: 'assistant', content, traceEntries };
+      setMessages((previous) => {
+        const next = [...previous, message];
+        messagesRef.current = next;
+        return next;
+      });
+    }
+    streamingRef.current = '';
+    setStreamingText('');
+    streamTraceEntriesRef.current = [];
+    setStreamTraceEntries([]);
+    setCurrentRoundUserMessageId(null);
+    currentRoundUserMessageIdRef.current = null;
+  }, []);
+
+  const requestAgentApproval = useCallback((event: AgentEvent, operation: AgentOperation) => {
+    const { approvalId, command } = event.payload;
+    if (typeof approvalId !== 'string' || typeof command !== 'string' || operation.approvals.has(approvalId)) return;
+    operation.approvals.add(approvalId);
+    const decide = async (approved: boolean) => {
+      try {
+        await agentService.decideApproval({ sessionId: event.sessionId, approvalId, approved });
+      } catch (error) {
+        if (!operation.controller.signal.aborted) {
+          feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+          throw error;
+        }
+      }
+    };
+    const close = () => dialog.destroy();
+    const dialog = modal.confirm({
+      title: 'Bash',
+      content: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command}</pre>,
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+      onOk: () => decide(true),
+      onCancel: () => decide(false),
+      afterClose: () => operation.controller.signal.removeEventListener('abort', close),
+    });
+    operation.controller.signal.addEventListener('abort', close, { once: true });
+    if (operation.controller.signal.aborted) close();
+  }, [modal]);
+
+  const applyAgentEvents = useCallback((events: AgentEvent[]) => {
+    const session = agentSessionRef.current;
+    if (!session || !events.length) return;
+    session.sequence = Math.max(session.sequence, ...events.map((event) => event.sequence));
+    const text = appendAgentText(streamingRef.current, events);
+    if (text !== streamingRef.current) {
+      streamingRef.current = text;
+      setStreamingText(streamingRef.current);
+    }
+    const traces = events.map(agentEventTrace).filter((trace): trace is ITraceEntry => !!trace);
+    if (traces.length) {
+      streamTraceEntriesRef.current = [...streamTraceEntriesRef.current, ...traces];
+      setStreamTraceEntries(streamTraceEntriesRef.current);
+    }
+    const operation = agentOperationRef.current;
+    if (operation) {
+      events.filter((event) => event.type === 'APPROVAL_REQUESTED')
+        .forEach((event) => requestAgentApproval(event, operation));
+    }
+  }, [requestAgentApproval]);
+
+  const pollAgentRun = useCallback(async (operation: AgentOperation, sessionId: string, runId: string) => {
+    try {
+      const terminal = await followAgentRun(agentService.listEvents, sessionId, runId,
+        agentSessionRef.current?.sequence || 0, operation.controller.signal, applyAgentEvents);
+      if (!operation.controller.signal.aborted && terminal) {
+        finishAgentReply();
+        if (terminal.type === 'RUN_FAILED' || terminal.type === 'RUN_OUTCOME_UNKNOWN') {
+          feedback.error(agentErrorText(terminal.payload) || i18n('stream.agent.sendFailed'));
+        }
+      }
+      if (terminal) traceAgentStage('run.terminal', { sessionId, runId, type: terminal.type });
+    } catch (error) {
+      if (!operation.controller.signal.aborted) {
+        finishAgentReply(error);
+        feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+      }
+    } finally {
+      if (agentOperationRef.current === operation) {
+        operation.controller.abort();
+        agentOperationRef.current = undefined;
+        setAgentRunning(false);
+      }
+    }
+  }, [applyAgentEvents, finishAgentReply]);
+
   useEffect(() => {
     return () => {
       if (streamThoughtPulseTimerRef.current !== null) {
@@ -991,8 +1121,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         window.clearTimeout(messageHighlightTimerRef.current);
         messageHighlightTimerRef.current = null;
       }
+      stopAgentPolling();
     };
-  }, []);
+  }, [stopAgentPolling]);
 
   useEffect(() => {
     const previewText = getTracePreview(streamTraceEntries[streamTraceEntries.length - 1]);
@@ -1083,26 +1214,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // URL helpers for the /stream/:chatId path format.
 
   const getChatIdFromPath = useCallback(() => {
-    const parts = window.location.pathname.split('/');
-    // pathname: /stream/2a7b72bc-...
-    if (parts[1] === 'stream' && parts[2]) {
-      return parts[2];
-    }
-    return null;
+    return getChatSessionId(window.location);
   }, []);
 
   const setChatIdInPath = useCallback((chatId: string) => {
-    // Update only from a /stream path so other page URLs are not overwritten.
-    if (window.location.pathname.startsWith('/stream')) {
-      window.history.pushState({}, '', `/stream/${chatId}`);
-    }
+    const url = getChatSessionUrl(window.location, chatId);
+    if (url) window.history.replaceState(window.history.state, '', url);
   }, []);
 
   const clearChatIdFromPath = useCallback(() => {
-    // Reset to /stream only from /stream/:chatId so other page URLs remain intact.
-    if (window.location.pathname.startsWith('/stream/')) {
-      window.history.pushState({}, '', '/stream');
-    }
+    const url = getChatSessionUrl(window.location);
+    if (url) window.history.replaceState(window.history.state, '', url);
   }, []);
 
   // Add the AI response locally and update the session ID when SSE completes.
@@ -1250,6 +1372,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const handleNewChat = useCallback(() => {
     stop();
+    stopAgentPolling(true);
+    setSessionLoading(false);
+    agentSessionRef.current = undefined;
     setAutoFollow(true);
     chatInputRef.current?.resetAttachments();
     pendingViewportAnchorRef.current = null;
@@ -1294,7 +1419,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       clearChatIdFromPath();
     }
     onSessionChange?.();
-  }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
+  }, [clearChatIdFromPath, isPanel, onSessionChange, stop, stopAgentPolling]);
 
   const startPanelHistoryRename = useCallback((session: IChatSession) => {
     setPanelRenamingSessionId(session.id);
@@ -1360,6 +1485,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const handleLoadSessionById = useCallback(
     async (sessionId: string, title?: string) => {
+      stopAgentPolling();
+      agentSessionRef.current = undefined;
+      setRuntimeChoice('DEFAULT');
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'DEFAULT');
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1496,38 +1625,99 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setSessionLoading(false);
       }
     },
-    [onSessionChange, stop],
+    [onSessionChange, stop, stopAgentPolling],
+  );
+
+  const handleLoadAgentSessionById = useCallback(
+    async (sessionId: string, title?: string) => {
+      stop();
+      stopAgentPolling();
+      const operation = createAgentOperation(sessionId);
+      agentOperationRef.current = operation;
+      setSessionLoading(true);
+      try {
+        const [session, events, approvals, availableModels] = await Promise.all([
+          agentService.getSession({ sessionId, sessionVersion: 2 }, { signal: operation.controller.signal }),
+          readAgentHistory(agentService.listEvents, sessionId, operation.controller.signal),
+          agentService.listApprovals({ sessionId }, { signal: operation.controller.signal }),
+          listAvailableModelOptions(),
+        ]);
+        if (operation.controller.signal.aborted) return;
+        const accepted = [...events].reverse().find((event) => event.type === 'RUN_ACCEPTED');
+        const activeRunId = accepted?.runId && !events.some((event) =>
+          event.runId === accepted.runId && isTerminalAgentEvent(event)) ? accepted.runId : undefined;
+        const transcript = buildAgentTranscript(events)
+          .filter((message) => message.content || message.traceEntries.length);
+        const activeReply = activeRunId
+          ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId)
+          : undefined;
+        const restoredMessages = transcript.filter((item) => item !== activeReply);
+        setMessages(restoredMessages);
+        messagesRef.current = restoredMessages;
+        streamingRef.current = activeReply?.content || '';
+        setStreamingText(streamingRef.current);
+        streamTraceEntriesRef.current = activeReply?.traceEntries || [];
+        setStreamTraceEntries(streamTraceEntriesRef.current);
+        setRuntimeChoice('PI');
+        localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'PI');
+        agentSessionRef.current = { id: sessionId, modelConfigId: session.modelConfigId || '',
+          sequence: events.length ? events[events.length - 1].sequence : 0 };
+        traceAgentStage('session.restored', { sessionId, events: events.length, activeRunId });
+        const selected = availableModels.find((option) => option.modelConfigId === session.modelConfigId);
+        if (selected) setSelectedModel({ value: selected.value, label: selected.label });
+        setCurrentSessionId(sessionId);
+        currentSessionIdRef.current = sessionId;
+        setCurrentSessionTitle(session.title || title || '');
+        currentSessionTitleRef.current = session.title || title || '';
+        if (activeRunId) {
+          operation.runId = activeRunId;
+          events.filter((event) => event.type === 'APPROVAL_REQUESTED'
+            && approvals.some((approval) => approval.id === event.payload.approvalId))
+            .forEach((event) => requestAgentApproval(event, operation));
+          setAgentRunning(true);
+          void pollAgentRun(operation, sessionId, activeRunId);
+        } else {
+          agentOperationRef.current = undefined;
+        }
+      } catch (error) {
+        if (agentOperationRef.current === operation) agentOperationRef.current = undefined;
+        if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
+      } finally {
+        if (!operation.controller.signal.aborted) setSessionLoading(false);
+      }
+    },
+    [pollAgentRun, requestAgentApproval, setSelectedModel, stop, stopAgentPolling],
   );
 
   // Restore the conversation from the path when first opening /stream/:chatId.
 
-  const mountedRef = useRef(false);
   useEffect(() => {
-    if (mountedRef.current) return;
-    mountedRef.current = true;
+    let active = true;
     if (!isPanel) {
       const chatId = getChatIdFromPath();
       if (chatId) {
         aiStreamService
           .getChatSessions(undefined as void)
           .then((sessions) => {
+            if (!active) return;
             const session = (sessions || []).find((item) => item.id === chatId);
             if (session?.sessionVersion === 2) {
-              setAgentSession({ id: session.id, title: session.title, modelConfigId: session.modelConfigId });
+              void handleLoadAgentSessionById(session.id, session.title);
               return;
             }
             handleLoadSessionById(chatId, session?.title);
           })
-          .catch(() => handleLoadSessionById(chatId));
+          .catch(() => { if (active) void handleLoadSessionById(chatId); });
       }
     }
+    return () => { active = false; };
   }, []);
 
   // Handle stream:newChat in every mode, including the Cmd+L shortcut.
 
   useEffect(() => {
     const handleNewChatEvent = () => {
-      setAgentSession(null);
+      agentSessionRef.current = undefined;
       handleNewChat();
     };
     window.addEventListener('stream:newChat', handleNewChatEvent);
@@ -1536,29 +1726,19 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     };
   }, [handleNewChat]);
 
-  useEffect(() => {
-    if (isPanel) return;
-    const handleNewAgentChat = () => {
-      handleNewChat();
-      setAgentSession({});
-    };
-    window.addEventListener('stream:newAgentChat', handleNewAgentChat);
-    return () => window.removeEventListener('stream:newAgentChat', handleNewAgentChat);
-  }, [handleNewChat, isPanel]);
-
   // Handle sidebar events only in page mode.
 
   useEffect(() => {
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title, sessionVersion, modelConfigId } = (e as CustomEvent).detail;
+      const { sessionId, title, sessionVersion } = (e as CustomEvent).detail;
       if (sessionVersion === 2) {
-        stop();
-        setAgentSession({ id: sessionId, title, modelConfigId });
+        void handleLoadAgentSessionById(sessionId, title);
         return;
       }
-      setAgentSession(null);
+      agentSessionRef.current = undefined;
+      setRuntimeChoice('DEFAULT');
       handleLoadSessionById(sessionId, title);
     };
 
@@ -1566,7 +1746,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return () => {
       window.removeEventListener('stream:loadSession', handleLoadEvent);
     };
-  }, [isPanel, handleLoadSessionById, stop]);
+  }, [handleLoadAgentSessionById, handleLoadSessionById, isPanel]);
 
   useEffect(() => {
     const handleSessionRenamed = (event: Event) => {
@@ -1590,7 +1770,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const handleSend = useCallback(
     async (params: SendParams) => {
       const content = (params.input || '').trim();
-      if (!content) return;
+      if (!content || (runtimeChoice === 'PI' && agentOperationRef.current)) return;
 
       const selectedValue = params.model || selectedModel?.value;
       if (!selectedValue) {
@@ -1600,14 +1780,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const selectedOption = modelOptionMap[selectedValue];
       if (!selectedOption) {
         feedback.warning(i18n('stream.warning.invalidModel'));
-        return;
-      }
-
-      if (runtimeChoice === 'PI') {
-        setAgentSession({
-          modelConfigId: selectedOption.modelConfigId || selectedValue,
-          initialInput: content,
-        });
         return;
       }
 
@@ -1652,6 +1824,54 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         messagesRef.current = next;
         return next;
       });
+
+      if (runtimeChoice === 'PI') {
+        const operation = createAgentOperation();
+        traceAgentStage('run.preparing', { requestId: userMessageId, modelConfigId: selectedOption.modelConfigId });
+        agentOperationRef.current = operation;
+        setAgentRunning(true);
+        try {
+          const model = await prepareAgentModelOption(selectedOption);
+          if (operation.controller.signal.aborted || operation.cancelRequested) return;
+          const modelConfigId = model.modelConfigId || model.value;
+          let session = agentSessionRef.current;
+          if (session && session.modelConfigId !== modelConfigId) {
+            throw new Error(i18n('stream.agent.modelBound'));
+          }
+          if (!session) {
+            const created = await agentService.createSession({ message: content, runtimeType: 'PI', modelConfigId });
+            if (operation.controller.signal.aborted || operation.cancelRequested) return;
+            session = { id: created.id, modelConfigId, sequence: 0 };
+            traceAgentStage('session.created', { sessionId: created.id, modelConfigId });
+            agentSessionRef.current = session;
+            setCurrentSessionId(created.id);
+            currentSessionIdRef.current = created.id;
+            setCurrentSessionTitle(created.title);
+            currentSessionTitleRef.current = created.title;
+            window.dispatchEvent(new CustomEvent('stream:sessionsChanged'));
+          }
+          operation.sessionId = session.id;
+          if (!isPanel) setChatIdInPath(session.id);
+          const run = await agentService.startRun({ sessionId: session.id, modelConfigId,
+            message: content, idempotencyKey: userMessageId });
+          operation.runId = run.id;
+          traceAgentStage('run.accepted', { sessionId: session.id, runId: run.id, status: run.status });
+          if (operation.cancelRequested && ['ACCEPTED', 'RUNNING'].includes(run.status)) {
+            await agentService.cancelRun({ runId: run.id, sessionId: session.id });
+          }
+          if (!operation.controller.signal.aborted) await pollAgentRun(operation, session.id, run.id);
+        } catch (error) {
+          if (!operation.controller.signal.aborted) finishAgentReply(error);
+        } finally {
+          if (agentOperationRef.current === operation) {
+            agentOperationRef.current = undefined;
+            setAgentRunning(false);
+            setCurrentRoundUserMessageId(null);
+            currentRoundUserMessageIdRef.current = null;
+          }
+        }
+        return;
+      }
 
       // Let the backend load history for an existing session; otherwise send local history.
       const historyPayload = currentSessionId
@@ -1713,12 +1933,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     [
       currentSessionId,
       isCurrentRoundOverflowingViewport,
+      isPanel,
       messages,
       modelOptionMap,
       runtimeChoice,
       selectedModel?.value,
       request,
+      pollAgentRun,
+      finishAgentReply,
       scrollMessageListToBottom,
+      setChatIdInPath,
     ],
   );
 
@@ -2126,76 +2350,103 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Panel-mode header.
 
+  useEffect(() => {
+    if (runtimeChoice !== 'PI' || !clientRuntime.usesLocalPersistence) return;
+    const controller = new AbortController();
+    void agentService.checkBash(undefined, { signal: controller.signal }).then((state) => {
+      if (!controller.signal.aborted) setPiShellEnabled(state.enabled);
+    })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [runtimeChoice]);
+
   const handleRuntimeChange = async (value: 'DEFAULT' | 'PI') => {
+    if (runtimeSwitching || !clientRuntime.usesLocalPersistence) return;
     if (value === 'DEFAULT') {
       setRuntimeChoice(value);
-      setAgentSession(null);
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, value);
       handleNewChat();
       return;
     }
-    if (!clientRuntime.usesLocalPersistence) return;
-    const confirmed = await confirmBetaFeature(modal, {
-      title: i18n('setting.agent.pi.confirmTitle'),
-      content: i18n('setting.agent.pi.confirmContent'),
-      okText: i18n('common.button.confirm'),
-      cancelText: i18n('common.button.cancel'),
-    });
-    if (!confirmed) return;
     setRuntimeSwitching(true);
     try {
-      const result = await agentService.enablePi({ confirmed: true });
-      if (result.taskId) {
-        void useImportExportStore.getState().getTaskList();
-        let task = await importExportService.getTaskDetails({ taskId: result.taskId });
-        while (task && ['PENDING', 'RUNNING'].includes(task.status)) {
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-          task = await importExportService.getTaskDetails({ taskId: result.taskId });
+      let state = await agentService.checkPi();
+      if (!state.enabled) {
+        const confirmed = await confirmBetaFeature(modal, {
+          title: i18n('setting.agent.pi.confirmTitle'),
+          content: i18n('setting.agent.pi.confirmContent'),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+        });
+        if (!confirmed) return;
+        const result = await agentService.enablePi({ confirmed: true });
+        state = result.state;
+        if (result.taskId) {
+          void useImportExportStore.getState().getTaskList();
+          let task = await importExportService.getTaskDetails({ taskId: result.taskId });
+          while (task && ['PENDING', 'RUNNING'].includes(task.status)) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1000));
+            task = await importExportService.getTaskDetails({ taskId: result.taskId });
+          }
+          if (task?.status !== 'SUCCESS') {
+            feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));
+            return;
+          }
+          state = (await agentService.enablePi({ confirmed: true })).state;
         }
-        if (task?.status !== 'SUCCESS') {
-          feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));
+        if (!state.enabled) {
+          feedback.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
           return;
         }
-        const completed = await agentService.enablePi({ confirmed: true });
-        if (!completed.state.enabled) {
-          feedback.error(completed.state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
-          return;
-        }
-      } else if (!result.state.enabled) {
-        feedback.error(result.state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
-        return;
       }
-    setRuntimeChoice(value);
-    handleNewChat();
-    setAgentSession(null);
+      setRuntimeChoice(value);
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, value);
+      handleNewChat();
     } catch (error) {
-      feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
+      feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
     } finally {
       setRuntimeSwitching(false);
     }
   };
 
   const handlePiShellChange = async (enabled: boolean) => {
-    if (!enabled) {
-      setPiShellEnabled(false);
-      await agentService.disableBash();
+    if (piShellChangingRef.current) return;
+    piShellChangingRef.current = true;
+    try {
+      if (enabled) {
+        const confirmed = await confirmBetaFeature(modal, {
+          title: i18n('setting.agent.bash.confirmTitle'),
+          content: i18n('setting.agent.bash.confirmContent'),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+        });
+        if (!confirmed) return;
+      }
+      const state = enabled ? await agentService.enableBash({ confirmed: true }) : await agentService.disableBash();
+      setPiShellEnabled(state.enabled);
+      if (enabled && !state.enabled) {
+        feedback.error(Object.values(state.diagnostics).join('; ') || i18n('setting.agent.enableFailed'));
+      }
+    } catch (error) {
+      feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
+    } finally {
+      piShellChangingRef.current = false;
+    }
+  };
+
+  const handleStop = async () => {
+    const operation = agentOperationRef.current;
+    if (runtimeChoice !== 'PI' || !operation) {
+      stop();
       return;
     }
-    const confirmed = await confirmBetaFeature(modal, {
-      title: i18n('setting.agent.bash.confirmTitle'),
-      content: i18n('setting.agent.bash.confirmContent'),
-      okText: i18n('common.button.confirm'),
-      cancelText: i18n('common.button.cancel'),
-    });
-    if (!confirmed) return;
+    operation.cancelRequested = true;
+    traceAgentStage('run.cancel.requested', { sessionId: operation.sessionId, runId: operation.runId });
+    if (!operation.runId || !operation.sessionId) return;
     try {
-      const state = await agentService.enableBash({ confirmed: true });
-      if (!state.enabled) {
-        feedback.error(state.diagnostics.reason || i18n('setting.agent.enableFailed'));
-        return;
-      }
-      setPiShellEnabled(true);
+      await agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId });
     } catch (error) {
-      feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
+      feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
     }
   };
 
@@ -2226,7 +2477,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   title={item.title || i18n('stream.session.title')}
                   onClick={() => {
                     if (panelRenamingSessionId !== item.id) {
-                      handleLoadSessionById(item.id, item.title);
+                      if (item.sessionVersion === 2) {
+                        void handleLoadAgentSessionById(item.id, item.title);
+                      } else {
+                        setRuntimeChoice('DEFAULT');
+                        localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'DEFAULT');
+                        handleLoadSessionById(item.id, item.title);
+                      }
                     }
                   }}
                 >
@@ -2293,17 +2550,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     </div>
   );
 
-  if (agentSession) {
-    return (
-      <AgentChat
-        initialSessionId={agentSession.id}
-        initialTitle={agentSession.title}
-        initialModelConfigId={agentSession.modelConfigId}
-        initialInput={agentSession.initialInput}
-      />
-    );
-  }
-
   return (
     <div className={styles.main}>
       {modalContextHolder}
@@ -2363,14 +2609,15 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 ref={chatInputRef}
                 className={styles.chatInput}
                 chatInputAreaClassName={`${styles.chatInputAreaRounded} ${
-                  status === SSERequestStatus.LOADING ? styles.chatInputAreaLoading : ''
+                  status === SSERequestStatus.LOADING || agentRunning ? styles.chatInputAreaLoading : ''
                 }`}
-                loading={status === SSERequestStatus.LOADING}
+                loading={status === SSERequestStatus.LOADING || agentRunning}
+                sendDisabled={runtimeSwitching}
                 onContextChange={() => {
                   handleNewChat();
                 }}
                 onChatSend={handleSend}
-                onStop={stop}
+                onStop={handleStop}
                 autoSize={
                   isPanel
                     ? { minRows: 2, maxRows: 4 }
@@ -2379,7 +2626,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                     : { minRows: 2, maxRows: 6 }
                 }
                 modelOptions={modelOptions}
-                runtimeChoice={runtimeChoice}
+                runtimeChoice={clientRuntime.usesLocalPersistence ? runtimeChoice : undefined}
                 onRuntimeChange={runtimeSwitching ? undefined : handleRuntimeChange}
                 piShellEnabled={piShellEnabled}
                 onPiShellChange={handlePiShellChange}

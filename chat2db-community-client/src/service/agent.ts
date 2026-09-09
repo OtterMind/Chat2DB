@@ -1,5 +1,5 @@
 import createRequest from './base';
-import type { IModelOptionItem } from './aiStream';
+import type { IChatSession } from './aiStream';
 
 export type AgentRuntimeType = 'PI' | 'CODEX' | 'DSH';
 export type AgentEventType =
@@ -13,6 +13,7 @@ export type AgentEventType =
   | 'TOOL_CALL_COMPLETED'
   | 'TOOL_CALL_FAILED'
   | 'APPROVAL_REQUESTED'
+  | 'APPROVAL_DECIDED'
   | 'USAGE_UPDATED'
   | 'CHECKPOINT_COMMITTED'
   | 'RUN_COMPLETED'
@@ -64,6 +65,7 @@ export interface AgentRun {
   sessionId: string;
   status: string;
   externalRunId?: string;
+  failure?: { code: string; message: string };
 }
 
 export interface AgentEvent {
@@ -75,13 +77,6 @@ export interface AgentEvent {
   payload: Record<string, unknown>;
   occurredAt: string;
 }
-
-export const toAgentModelSnapshot = (option: IModelOptionItem) => ({
-  modelConfigId: option.modelConfigId || option.value,
-  modelRevision: 1,
-  provider: option.provider,
-  modelId: option.model,
-});
 
 const listRuntimeFeatures = createRequest<void, AgentRuntimeFeatureState[]>('/api/v3/ai/features');
 const checkPi = createRequest<void, AgentRuntimeFeatureState>('/api/v3/ai/features/pi/check', { method: 'post' });
@@ -96,34 +91,38 @@ const enableBash = createRequest<{ confirmed: true }, AgentToolFeatureState>('/a
 const disableBash = createRequest<void, AgentToolFeatureState>('/api/v3/ai/features/bash/disable', { method: 'post' });
 const createSession = createRequest<
   {
-    sessionVersion: 2;
-    title: string;
-    definition: {
-      id: string;
-      name: string;
-      description?: string;
-      systemPrompt: string;
-      runtimeType: AgentRuntimeType;
-      modelConfigId: string;
-      revision: number;
-    };
+    message: string;
+    runtimeType: AgentRuntimeType;
+    modelConfigId: string;
   },
   AgentSession
->('/api/v3/ai/sessions', { method: 'post' });
+>('/api/v3/ai/sessions', { method: 'post', errorLevel: false });
+const getSession = createRequest<{ sessionId: string; sessionVersion: 2 }, IChatSession>(
+  '/api/v3/ai/sessions/:sessionId',
+  { errorLevel: false },
+);
 const startRun = createRequest<
   {
     sessionId: string;
-    model: ReturnType<typeof toAgentModelSnapshot>;
-    input: { text: string; artifactIds: string[] };
+    modelConfigId: string;
+    message: string;
     idempotencyKey: string;
   },
   AgentRun
->('/api/v3/ai/sessions/:sessionId/runs', { method: 'post' });
+>('/api/v3/ai/sessions/:sessionId/runs', { method: 'post', errorLevel: false });
 const cancelRun = createRequest<{ runId: string; sessionId: string }, AgentRun>('/api/v3/ai/runs/:runId/cancel', {
   method: 'post',
+  errorLevel: false,
 });
 const listEvents = createRequest<{ sessionId: string; afterSequence: number; limit?: number }, AgentEvent[]>(
   '/api/v3/ai/sessions/:sessionId/events',
+  { errorLevel: false },
+);
+const listApprovals = createRequest<{ sessionId: string }, { id: string }[]>(
+  '/api/v3/ai/sessions/:sessionId/approvals', { errorLevel: false },
+);
+const decideApproval = createRequest<{ sessionId: string; approvalId: string; approved: boolean }, void>(
+  '/api/v3/ai/sessions/:sessionId/approvals', { method: 'post', errorLevel: false },
 );
 
 export default {
@@ -135,7 +134,10 @@ export default {
   enableBash,
   disableBash,
   createSession,
+  getSession,
   startRun,
   cancelRun,
   listEvents,
+  listApprovals,
+  decideApproval,
 };

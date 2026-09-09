@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildAgentTranscript, mergeAgentEvents } from './model';
+import { buildAgentTranscript, mergeAgentEvents } from './agentEvents';
 import type { AgentEvent } from '@/service/agent';
 
 const event = (sequence: number, type: AgentEvent['type'], payload: Record<string, unknown> = {}): AgentEvent => ({
@@ -21,6 +21,6 @@ const merged = mergeAgentEvents(
 );
 assert.deepEqual(merged.map((item) => item.sequence), [1, 2, 3]);
 assert.deepEqual(buildAgentTranscript(merged), [
-  { id: 'user-event-1', runId: 'run', role: 'user', content: 'hello' },
-  { id: 'assistant-run', runId: 'run', role: 'assistant', content: 'hi' },
+  { id: 'user-event-1', runId: 'run', role: 'user', content: 'hello', traceEntries: [] },
+  { id: 'assistant-run', runId: 'run', role: 'assistant', content: 'hi', traceEntries: [] },
 ]);

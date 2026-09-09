@@ -34,21 +34,6 @@ export const useStyles = createStyles(({ css, token }) => {
         background-color: ${token.colorFillTertiary};
       }
     `,
-    streamAgentButton: css`
-      flex-shrink: 0;
-      border-radius: 6px !important;
-      color: ${token.colorPrimary};
-      &:hover {
-        background-color: ${token.colorPrimaryBg};
-      }
-    `,
-    streamAgentLabel: css`
-      margin-left: -4px;
-      color: ${token.colorPrimary};
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    `,
     streamSearchWrap: css`
       flex-shrink: 0;
       padding: 8px 12px 0;

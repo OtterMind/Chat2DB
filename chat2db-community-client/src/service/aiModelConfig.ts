@@ -217,6 +217,34 @@ export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> =
   return merged;
 };
 
+export const prepareAgentModelOption = async (option: IModelOptionItem): Promise<IModelOptionItem> => {
+  if (!clientRuntime.usesLocalPersistence || !option.customOption || !option.modelConfigId) {
+    return option;
+  }
+  const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);
+  if (!config) {
+    throw new Error('Agent model configuration is unavailable');
+  }
+  const saved = await saveRemoteModelConfig({
+    id: config.id,
+    name: config.name,
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    projectId: config.projectId,
+    location: config.location,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    enabled: config.enabled,
+    defaultConfig: config.defaultConfig,
+  });
+  return {
+    ...option,
+    modelConfigId: saved.id,
+  };
+};
+
 export const resolveModelRequestPayload = async (option: IModelOptionItem) => {
   if (clientRuntime.usesLocalPersistence && option.customOption && option.modelConfigId) {
     const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);

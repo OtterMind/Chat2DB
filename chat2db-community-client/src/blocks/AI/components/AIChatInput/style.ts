@@ -145,7 +145,7 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-shrink: 0;
     `,
     runtimeSelect: css`
-      min-width: 112px;
+      width: 96px;
 
       .ant-select-selector {
         padding: 0 4px !important;
@@ -176,6 +176,12 @@ export const useStyles = createStyles(({ css, token }) => {
       margin-bottom: 8px;
       color: ${token.colorText};
       font-weight: 500;
+    `,
+    runtimeOption: css`
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     `,
     attachmentButton: css`
       border-radius: 50% !important;

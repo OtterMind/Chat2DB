@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { IconButton, IconfontSvg } from '@chat2db/ui';
 import { Button, Input, Modal, Tooltip, type InputRef } from 'antd';
 import dayjs from 'dayjs';
-import { Bot, MessageSquarePlus, Search } from 'lucide-react';
+import { MessageSquarePlus, Search } from 'lucide-react';
 
 import PortalContextMenu from '@/components/ContextMenu/PortalContextMenu';
 import type { ContextMenuAction, ContextMenuIntent } from '@/components/ContextMenu/core';
@@ -22,8 +22,6 @@ interface StreamSidebarProps {
   onSearchKeywordChange: (keyword: string) => void;
   onSearchBlur: () => void;
   onNewChat: () => void;
-  showAgentEntry: boolean;
-  onNewAgentChat: () => void;
   onSessionClick: (session: IChatSession) => void;
   onSessionDelete: (sessionId: string) => void;
   onSessionRename: (sessionId: string, title: string) => Promise<void>;
@@ -46,8 +44,6 @@ const StreamSidebar = ({
   onSearchKeywordChange,
   onSearchBlur,
   onNewChat,
-  showAgentEntry,
-  onNewAgentChat,
   onSessionClick,
   onSessionDelete,
   onSessionRename,
@@ -157,19 +153,6 @@ const StreamSidebar = ({
         >
           {i18n('stream.panel.newChat')}
         </Button>
-        {showAgentEntry ? (
-          <Tooltip title={i18n('stream.sidebar.newAgentChat')} placement="bottom" mouseEnterDelay={0.3}>
-            <span className={styles.streamSearchTooltipAnchor}>
-              <IconButton
-                size={{ boxSize: 32, iconSize: 17 }}
-                className={styles.streamAgentButton}
-                icon={Bot}
-                onClick={onNewAgentChat}
-              />
-              <span className={styles.streamAgentLabel}>{i18n('stream.sidebar.agent')}</span>
-            </span>
-          </Tooltip>
-        ) : null}
         <Tooltip title={i18n('stream.sidebar.search')} placement="bottom" mouseEnterDelay={0.3}>
           <span className={styles.streamSearchTooltipAnchor}>
             <IconButton

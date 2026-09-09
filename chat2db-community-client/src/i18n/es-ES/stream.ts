@@ -1,4 +1,5 @@
 export default {
+  'stream.agent.modelBound': 'Esta conversación está vinculada a su modelo. Inicia una conversación nueva para elegir otro modelo.',
   'stream.session.title': 'Nuevo chat',
   'stream.codeBlock.pin': 'Fijar en la consola',
   'stream.codeBlock.copy': 'Copiar',

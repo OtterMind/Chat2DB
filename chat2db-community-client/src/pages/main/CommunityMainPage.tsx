@@ -1,6 +1,6 @@
 import { Confetti } from '@chat2db/ui';
 import clientExtension from '@client-extension';
-import { Modal, type InputRef } from 'antd';
+import { type InputRef } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '@/i18n';
@@ -30,7 +30,6 @@ import { useStyles } from './style';
 import { clientRuntime } from '@client-runtime';
 import { IframeType } from '@/constants';
 import aiStreamService, { IChatSession } from '@/service/aiStream';
-import agentService from '@/service/agent';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
 import {
@@ -44,10 +43,8 @@ import {
   resolveInitialMainPage,
 } from '@/utils/mainPageNavigation';
 import { checkIsSharePage } from '@/utils/url';
-import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 
 function CommunityMainPage() {
-  const [modal, modalContextHolder] = Modal.useModal();
   const [navConfig, setNavConfig] = useState<INavItem[]>([]);
 
   const allNavItems: INavItem[] = useMemo(
@@ -69,7 +66,6 @@ function CommunityMainPage() {
   const [sidebarSessions, setSidebarSessions] = useState<IChatSession[]>([]);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchKeyword, setSidebarSearchKeyword] = useState('');
-  const [agentEnabled, setAgentEnabled] = useState(false);
   const sidebarSearchInputRef = useRef<InputRef>(null);
   const { styles } = useStyles({});
   const { tab: settingTab } = useParams<{ tab: string }>();
@@ -110,16 +106,6 @@ function CommunityMainPage() {
       setSidebarSessions(result);
     } catch (error) {
       console.warn('loadSidebarSessions failed', error);
-    }
-  }, []);
-
-  const loadAgentAvailability = useCallback(async () => {
-    if (!clientRuntime.usesLocalPersistence) return;
-    try {
-      const features = (await agentService.listRuntimeFeatures(undefined as void)) || [];
-      setAgentEnabled(features.some((feature) => feature.runtimeType === 'PI' && feature.enabled));
-    } catch {
-      setAgentEnabled(false);
     }
   }, []);
 
@@ -259,13 +245,6 @@ function CommunityMainPage() {
   }, [activeSessionId, loadSidebarSessions]);
 
   useEffect(() => {
-    loadAgentAvailability();
-    const handler = () => loadAgentAvailability();
-    window.addEventListener('agent:featuresChanged', handler);
-    return () => window.removeEventListener('agent:featuresChanged', handler);
-  }, [loadAgentAvailability]);
-
-  useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: string }>).detail;
       if (!detail?.sessionId) return;
@@ -360,33 +339,6 @@ function CommunityMainPage() {
     handleChangePageTab({ page: 'stream', navConfigTmp: navConfig, pathName: '/stream' });
     window.dispatchEvent(new CustomEvent('stream:newChat'));
   }, [handleChangePageTab, navConfig]);
-
-  const handleSidebarNewAgentChat = useCallback(async () => {
-    if (!agentEnabled) {
-      const confirmed = await confirmBetaFeature(modal, {
-        title: i18n('setting.agent.pi.confirmTitle'),
-        content: i18n('setting.agent.pi.confirmContent'),
-        okText: i18n('common.button.confirm'),
-        cancelText: i18n('common.button.cancel'),
-      });
-      if (!confirmed) return;
-      try {
-        const state = await agentService.enablePi({ confirmed: true });
-        setAgentEnabled(state.enabled);
-        window.dispatchEvent(new CustomEvent('agent:featuresChanged'));
-        if (!state.enabled) {
-          feedback.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
-          return;
-        }
-      } catch (error) {
-        feedback.error((error as { errorMessage?: string })?.errorMessage || i18n('setting.agent.enableFailed'));
-        return;
-      }
-    }
-    setActiveSessionId(null);
-    handleChangePageTab({ page: 'stream', navConfigTmp: navConfig, pathName: '/stream' });
-    window.dispatchEvent(new CustomEvent('stream:newAgentChat'));
-  }, [agentEnabled, handleChangePageTab, modal, navConfig]);
 
   const handleSidebarSearchBlur = useCallback(() => {
     if (!sidebarSearchKeyword.trim()) {
@@ -525,7 +477,6 @@ function CommunityMainPage() {
 
   return (
     <div className={styles.container}>
-      {modalContextHolder}
       {showMainActionBar && (
         <CommunityMainActionBar
           navItems={navConfig}
@@ -555,8 +506,6 @@ function CommunityMainPage() {
           onSearchKeywordChange={setSidebarSearchKeyword}
           onSearchBlur={handleSidebarSearchBlur}
           onNewChat={handleSidebarNewChat}
-          showAgentEntry={clientRuntime.usesLocalPersistence}
-          onNewAgentChat={handleSidebarNewAgentChat}
           onSessionClick={handleSidebarSessionClick}
           onSessionDelete={handleSidebarDeleteSession}
           onSessionRename={handleSidebarRenameSession}
