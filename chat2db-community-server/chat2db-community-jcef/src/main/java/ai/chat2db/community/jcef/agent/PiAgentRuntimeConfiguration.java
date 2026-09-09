@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import ai.chat2db.community.domain.api.service.task.TaskService;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -75,8 +76,9 @@ public class PiAgentRuntimeConfiguration {
     public PiAgentRuntimeFeatureService piAgentRuntimeFeatureService(
             AgentFeatureFlagStorage flagStorage,
             PiRuntimeEnvironmentChecker environmentChecker,
-            PiRuntimeInstallation installer) {
-        return new PiAgentRuntimeFeatureService(flagStorage, environmentChecker, installer);
+            PiRuntimeInstallation installer,
+            TaskService taskService) {
+        return new PiAgentRuntimeFeatureService(flagStorage, environmentChecker, installer, taskService);
     }
 
     @Bean(destroyMethod = "close")

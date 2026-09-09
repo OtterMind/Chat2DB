@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Dropdown, Flex, Modal, Select } from 'antd';
+import { Dropdown, Flex, Modal } from 'antd';
 import feedback from '@/utils/feedback';
 import {
   CopyOutlined,
@@ -58,6 +58,7 @@ import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
 import AgentChat from './AgentChat';
 import agentService from '@/service/agent';
+import importExportService from '@/service/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
@@ -553,6 +554,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     modelConfigId?: string;
   } | null>(null);
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>('DEFAULT');
+  const [piShellEnabled, setPiShellEnabled] = useState(false);
+  const [runtimeSwitching, setRuntimeSwitching] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
@@ -2112,43 +2115,85 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Panel-mode header.
 
+  const handleRuntimeChange = async (value: 'DEFAULT' | 'PI') => {
+    if (value === 'DEFAULT') {
+      setRuntimeChoice(value);
+      setAgentSession(null);
+      handleNewChat();
+      return;
+    }
+    if (!clientRuntime.usesLocalPersistence) return;
+    const confirmed = await confirmBetaFeature(modal, {
+      title: i18n('setting.agent.pi.confirmTitle'),
+      content: i18n('setting.agent.pi.confirmContent'),
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+    });
+    if (!confirmed) return;
+    setRuntimeSwitching(true);
+    const loadingMessageKey = 'agent-pi-enable';
+    feedback.loading({ content: i18n('setting.agent.pi.confirmContent'), duration: 0, key: loadingMessageKey });
+    try {
+      const result = await agentService.enablePi({ confirmed: true });
+      if (result.taskId) {
+        let task = await importExportService.getTaskDetails({ taskId: result.taskId });
+        while (task && ['PENDING', 'RUNNING'].includes(task.status)) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          task = await importExportService.getTaskDetails({ taskId: result.taskId });
+        }
+        if (task?.status !== 'SUCCESS') {
+          feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));
+          return;
+        }
+        const completed = await agentService.enablePi({ confirmed: true });
+        if (!completed.state.enabled) {
+          feedback.error(completed.state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
+          return;
+        }
+      } else if (!result.state.enabled) {
+        feedback.error(result.state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
+        return;
+      }
+      setRuntimeChoice(value);
+      handleNewChat();
+      setAgentSession({});
+    } catch (error) {
+      feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
+    } finally {
+      feedback.destroy(loadingMessageKey);
+      setRuntimeSwitching(false);
+    }
+  };
+
+  const handlePiShellChange = async (enabled: boolean) => {
+    if (!enabled) {
+      setPiShellEnabled(false);
+      await agentService.disableBash();
+      return;
+    }
+    const confirmed = await confirmBetaFeature(modal, {
+      title: i18n('setting.agent.bash.confirmTitle'),
+      content: i18n('setting.agent.bash.confirmContent'),
+      okText: i18n('common.button.confirm'),
+      cancelText: i18n('common.button.cancel'),
+    });
+    if (!confirmed) return;
+    try {
+      const state = await agentService.enableBash({ confirmed: true });
+      if (!state.enabled) {
+        feedback.error(state.diagnostics.reason || i18n('setting.agent.enableFailed'));
+        return;
+      }
+      setPiShellEnabled(true);
+    } catch (error) {
+      feedback.error(error instanceof Error ? error.message : i18n('setting.agent.enableFailed'));
+    }
+  };
+
   const renderPanelHeader = () => (
     <div className={styles.panelHeader}>
       <Flex gap={8} align="center" className={styles.panelHeaderLeading}>
         <span className={styles.panelHeaderTitle}>{currentSessionTitle || i18n('stream.session.title')}</span>
-        <Select
-          className={styles.runtimeSelect}
-          size="small"
-          value={runtimeChoice}
-          options={[
-            { value: 'DEFAULT', label: i18n('stream.runtime.default') },
-            { value: 'PI', label: i18n('stream.runtime.pi') },
-          ]}
-          onChange={async (value: 'DEFAULT' | 'PI') => {
-            if (value === 'DEFAULT') {
-              setRuntimeChoice(value);
-              setAgentSession(null);
-              handleNewChat();
-              return;
-            }
-            if (!clientRuntime.usesLocalPersistence) return;
-            const confirmed = await confirmBetaFeature(modal, {
-              title: i18n('setting.agent.pi.confirmTitle'),
-              content: i18n('setting.agent.pi.confirmContent'),
-              okText: i18n('common.button.confirm'),
-              cancelText: i18n('common.button.cancel'),
-            });
-            if (!confirmed) return;
-            const state = await agentService.enablePi({ confirmed: true });
-            if (!state.enabled) {
-              feedback.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
-              return;
-            }
-            setRuntimeChoice(value);
-            handleNewChat();
-            setAgentSession({});
-          }}
-        />
       </Flex>
       <Flex gap={4} align="center">
         <button
@@ -2324,6 +2369,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                     : { minRows: 2, maxRows: 6 }
                 }
                 modelOptions={modelOptions}
+                runtimeChoice={runtimeChoice}
+                onRuntimeChange={runtimeSwitching ? undefined : handleRuntimeChange}
+                piShellEnabled={piShellEnabled}
+                onPiShellChange={handlePiShellChange}
                 showCustomModelEntry={canManageCustomModels}
                 onCustomModelClick={canManageCustomModels ? () => setOpenSettings(true) : undefined}
                 customModelText={i18n('setting.modelConfig.entry')}

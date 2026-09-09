@@ -39,6 +39,11 @@ export interface AgentRuntimeFeatureState {
   environment: AgentEnvironmentReport;
 }
 
+export interface AgentRuntimeEnableResult {
+  state: AgentRuntimeFeatureState;
+  taskId?: number;
+}
+
 export interface AgentToolFeatureState {
   feature: 'BASH';
   enabled: boolean;
@@ -80,7 +85,7 @@ export const toAgentModelSnapshot = (option: IModelOptionItem) => ({
 
 const listRuntimeFeatures = createRequest<void, AgentRuntimeFeatureState[]>('/api/v3/ai/features');
 const checkPi = createRequest<void, AgentRuntimeFeatureState>('/api/v3/ai/features/pi/check', { method: 'post' });
-const enablePi = createRequest<{ confirmed: true }, AgentRuntimeFeatureState>('/api/v3/ai/features/pi/enable', {
+const enablePi = createRequest<{ confirmed: true }, AgentRuntimeEnableResult>('/api/v3/ai/features/pi/enable', {
   method: 'post',
 });
 const disablePi = createRequest<void, AgentRuntimeFeatureState>('/api/v3/ai/features/pi/disable', { method: 'post' });

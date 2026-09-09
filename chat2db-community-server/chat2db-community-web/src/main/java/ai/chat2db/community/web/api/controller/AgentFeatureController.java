@@ -2,6 +2,7 @@ package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
+import ai.chat2db.community.domain.api.model.agent.AgentRuntimeEnableResult;
 import ai.chat2db.community.domain.api.model.agent.AgentFeature;
 import ai.chat2db.community.domain.api.model.agent.AgentFeatureState;
 import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
@@ -63,9 +64,9 @@ public class AgentFeatureController {
     }
 
     @PostMapping("/pi/enable")
-    public DataResult<AgentRuntimeFeatureState> enablePi(
+    public DataResult<AgentRuntimeEnableResult> enablePi(
             @RequestBody @Valid AgentRuntimeEnableRequest request) {
-        return DataResult.of(require(AgentRuntimeType.PI).enable(environmentProvider.current()));
+        return DataResult.of(require(AgentRuntimeType.PI).enableAsync(environmentProvider.current()));
     }
 
     @PostMapping("/pi/disable")

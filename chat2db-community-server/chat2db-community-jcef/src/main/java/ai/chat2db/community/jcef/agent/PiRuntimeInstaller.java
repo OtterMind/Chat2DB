@@ -275,7 +275,7 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
             try {
                 HttpResponse<byte[]> response = client.send(
                         HttpRequest.newBuilder(uri)
-                                .timeout(Duration.ofMinutes(3))
+                                .timeout(Duration.ofSeconds(20))
                                 .header("Accept-Encoding", "identity")
                                 .GET()
                                 .build(),
