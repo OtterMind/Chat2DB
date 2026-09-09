@@ -53,6 +53,17 @@ export interface AgentToolFeatureState {
   diagnostics: Record<string, string>;
 }
 
+export interface AgentToolState {
+  name: string;
+  description: string;
+  category: 'DATABASE' | 'BUILTIN';
+  status: 'ENABLED' | 'DISABLED' | 'UNAVAILABLE';
+}
+
+export interface AgentShellSettings {
+  workingDirectory: string;
+}
+
 export interface AgentSession {
   id: string;
   title: string;
@@ -89,6 +100,13 @@ const enableBash = createRequest<{ confirmed: true }, AgentToolFeatureState>('/a
   method: 'post',
 });
 const disableBash = createRequest<void, AgentToolFeatureState>('/api/v3/ai/features/bash/disable', { method: 'post' });
+const listTools = createRequest<void, AgentToolState[]>('/api/v3/ai/features/tools', { errorLevel: false });
+const getShellSettings = createRequest<void, AgentShellSettings>(
+  '/api/v3/ai/features/bash/settings', { errorLevel: false },
+);
+const saveShellSettings = createRequest<AgentShellSettings, AgentShellSettings>(
+  '/api/v3/ai/features/bash/settings', { method: 'post', errorLevel: false },
+);
 const createSession = createRequest<
   {
     message: string;
@@ -133,6 +151,9 @@ export default {
   checkBash,
   enableBash,
   disableBash,
+  listTools,
+  getShellSettings,
+  saveShellSettings,
   createSession,
   getSession,
   startRun,

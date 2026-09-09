@@ -8,7 +8,7 @@ import React, {
   useRef,
   useCallback,
 } from 'react';
-import { Checkbox, Input, Popover, Select, Tag } from 'antd';
+import { Input, Select, Tag } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
@@ -31,7 +31,7 @@ import { TextAreaRef } from 'antd/es/input/TextArea';
 import { PageType } from '@/store/ai/slices/cascader/initialState';
 import { debounce } from 'lodash';
 import { IconButton } from '@chat2db/ui';
-import { Settings2 } from 'lucide-react';
+import PiToolSettings from '../PiToolSettings';
 import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
@@ -93,8 +93,6 @@ interface ChatInputProps {
   customModelText?: string;
   runtimeChoice?: 'DEFAULT' | 'PI';
   onRuntimeChange?: (value: 'DEFAULT' | 'PI') => void;
-  piShellEnabled?: boolean;
-  onPiShellChange?: (enabled: boolean) => void;
   prefillInputState?: { text: string; token: number; questionType?: QuestionType } | null;
   onChatSend?: (param: SendParams) => void;
   onStop?: () => void;
@@ -152,8 +150,6 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     customModelText,
     runtimeChoice,
     onRuntimeChange,
-    piShellEnabled = false,
-    onPiShellChange,
     prefillInputState,
     onChatSend,
     onContextChange,
@@ -933,24 +929,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                   onChange={onRuntimeChange}
                 />
               ) : null}
-              {runtimeChoice === 'PI' && onPiShellChange ? (
-                <Popover
-                  trigger="click"
-                  placement="topRight"
-                  content={
-                    <div className={styles.runtimeConfigPanel}>
-                      <div className={styles.runtimeConfigTitle}>{i18n('stream.runtime.pi')}</div>
-                      <Checkbox checked={piShellEnabled} onChange={(event) => onPiShellChange(event.target.checked)}>
-                        {i18n('setting.agent.bash.label')}
-                      </Checkbox>
-                    </div>
-                  }
-                >
-                  <button type="button" className={styles.runtimeConfigButton} aria-label={i18n('stream.runtime.pi')}>
-                    <Settings2 size={14} />
-                  </button>
-                </Popover>
-              ) : null}
+              {runtimeChoice === 'PI' ? <PiToolSettings /> : null}
               <AIModelSelect
                 options={modelOptions}
                 showCustomModelEntry={showCustomModelEntry}

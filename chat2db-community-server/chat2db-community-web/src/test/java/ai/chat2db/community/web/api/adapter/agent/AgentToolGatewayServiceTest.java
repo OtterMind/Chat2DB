@@ -47,6 +47,12 @@ class AgentToolGatewayServiceTest {
         try {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
+            var catalog = gateway.listTools();
+            assertEquals(8, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
+            assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("list_all_datasources")
+                    && tool.status() == AgentToolState.Status.ENABLED));
+            assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN)
+                    .allMatch(tool -> tool.status() == AgentToolState.Status.UNAVAILABLE));
             ContextUtils.setContext(caller);
             assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("list_all_datasources"));
             assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("bash"));

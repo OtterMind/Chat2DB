@@ -576,8 +576,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
     clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
   );
-  const [piShellEnabled, setPiShellEnabled] = useState(false);
-  const piShellChangingRef = useRef(false);
   const [runtimeSwitching, setRuntimeSwitching] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -1022,7 +1020,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, []);
 
   const requestAgentApproval = useCallback((event: AgentEvent, operation: AgentOperation) => {
-    const { approvalId, command } = event.payload;
+    const { approvalId, command, workingDirectory } = event.payload;
     if (typeof approvalId !== 'string' || typeof command !== 'string' || operation.approvals.has(approvalId)) return;
     operation.approvals.add(approvalId);
     const decide = async (approved: boolean) => {
@@ -1038,7 +1036,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     const close = () => dialog.destroy();
     const dialog = modal.confirm({
       title: 'Bash',
-      content: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command}</pre>,
+      content: <>
+        {typeof workingDirectory === 'string' && <p>
+          {i18n('setting.agent.workingDirectory')}：<code style={{ overflowWrap: 'anywhere' }}>{workingDirectory}</code>
+        </p>}
+        <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command}</pre>
+      </>,
       okText: i18n('common.button.confirm'),
       cancelText: i18n('common.button.cancel'),
       onOk: () => decide(true),
@@ -2350,16 +2353,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Panel-mode header.
 
-  useEffect(() => {
-    if (runtimeChoice !== 'PI' || !clientRuntime.usesLocalPersistence) return;
-    const controller = new AbortController();
-    void agentService.checkBash(undefined, { signal: controller.signal }).then((state) => {
-      if (!controller.signal.aborted) setPiShellEnabled(state.enabled);
-    })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [runtimeChoice]);
-
   const handleRuntimeChange = async (value: 'DEFAULT' | 'PI') => {
     if (runtimeSwitching || !clientRuntime.usesLocalPersistence) return;
     if (value === 'DEFAULT') {
@@ -2406,31 +2399,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
     } finally {
       setRuntimeSwitching(false);
-    }
-  };
-
-  const handlePiShellChange = async (enabled: boolean) => {
-    if (piShellChangingRef.current) return;
-    piShellChangingRef.current = true;
-    try {
-      if (enabled) {
-        const confirmed = await confirmBetaFeature(modal, {
-          title: i18n('setting.agent.bash.confirmTitle'),
-          content: i18n('setting.agent.bash.confirmContent'),
-          okText: i18n('common.button.confirm'),
-          cancelText: i18n('common.button.cancel'),
-        });
-        if (!confirmed) return;
-      }
-      const state = enabled ? await agentService.enableBash({ confirmed: true }) : await agentService.disableBash();
-      setPiShellEnabled(state.enabled);
-      if (enabled && !state.enabled) {
-        feedback.error(Object.values(state.diagnostics).join('; ') || i18n('setting.agent.enableFailed'));
-      }
-    } catch (error) {
-      feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
-    } finally {
-      piShellChangingRef.current = false;
     }
   };
 
@@ -2628,8 +2596,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 modelOptions={modelOptions}
                 runtimeChoice={clientRuntime.usesLocalPersistence ? runtimeChoice : undefined}
                 onRuntimeChange={runtimeSwitching ? undefined : handleRuntimeChange}
-                piShellEnabled={piShellEnabled}
-                onPiShellChange={handlePiShellChange}
                 showCustomModelEntry={canManageCustomModels}
                 onCustomModelClick={canManageCustomModels ? () => setOpenSettings(true) : undefined}
                 customModelText={i18n('setting.modelConfig.entry')}

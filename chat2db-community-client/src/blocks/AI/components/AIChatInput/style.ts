@@ -151,32 +151,6 @@ export const useStyles = createStyles(({ css, token }) => {
         padding: 0 4px !important;
       }
     `,
-    runtimeConfigButton: css`
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      padding: 0;
-      border: 0;
-      border-radius: 4px;
-      color: ${token.colorTextSecondary};
-      background: transparent;
-      cursor: pointer;
-
-      &:hover {
-        color: ${token.colorPrimary};
-        background: ${token.colorFillSecondary};
-      }
-    `,
-    runtimeConfigPanel: css`
-      min-width: 180px;
-    `,
-    runtimeConfigTitle: css`
-      margin-bottom: 8px;
-      color: ${token.colorText};
-      font-weight: 500;
-    `,
     runtimeOption: css`
       display: flex;
       align-items: center;

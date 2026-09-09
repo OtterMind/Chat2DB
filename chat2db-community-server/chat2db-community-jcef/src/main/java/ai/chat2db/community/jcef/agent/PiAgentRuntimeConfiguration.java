@@ -111,8 +111,15 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
-    public ai.chat2db.community.domain.api.service.agent.AgentShellExecutor agentShellExecutor() {
-        return new BashSandboxExecutor();
+    public ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService agentShellSettingsService() {
+        return new BashSettingsService(new SettingsAgentShellSettingsStorage(),
+                Path.of(ConfigUtils.getEnvBasePath()).resolve("storage/ai-chat-history-v2/workspaces"));
+    }
+
+    @Bean
+    public ai.chat2db.community.domain.api.service.agent.AgentShellExecutor agentShellExecutor(
+            ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService settings) {
+        return new BashSandboxExecutor(settings);
     }
 
     @Bean

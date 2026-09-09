@@ -1,7 +1,9 @@
 package ai.chat2db.community.jcef.agent;
 
 import ai.chat2db.community.domain.api.service.agent.AgentShellExecutor;
-import ai.chat2db.community.tools.util.ConfigUtils;
+import ai.chat2db.community.domain.api.service.agent.AgentShellSettingsService;
+import ai.chat2db.community.domain.api.model.agent.AgentShellCommand;
+import ai.chat2db.community.tools.exception.BusinessException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -16,29 +18,28 @@ import java.util.function.BooleanSupplier;
 
 public class BashSandboxExecutor implements AgentShellExecutor {
     private static final int OUTPUT_LIMIT = 64 * 1024;
-    private final Path workspaces;
+    private final AgentShellSettingsService settings;
 
-    public BashSandboxExecutor() {
-        this(Path.of(ConfigUtils.getEnvBasePath()).resolve("storage/ai-chat-history-v2/workspaces"));
-    }
-
-    BashSandboxExecutor(Path workspaces) {
-        this.workspaces = workspaces.toAbsolutePath().normalize();
+    public BashSandboxExecutor(AgentShellSettingsService settings) {
+        this.settings = settings;
     }
 
     @Override
-    public String execute(String sessionId, String command, BooleanSupplier cancelled) throws Exception {
-        if (!sessionId.matches("[A-Za-z0-9_-]+")) throw new IllegalArgumentException("Invalid session id");
+    public AgentShellCommand prepare(String sessionId, String command) {
         if (command == null || command.isBlank() || command.length() > 16 * 1024) {
             throw new IllegalArgumentException("Invalid shell command");
         }
-        Path workspace = workspaces.resolve(sessionId);
-        Files.createDirectories(workspace);
-        if (Files.isSymbolicLink(workspace)
-                || !workspace.toRealPath().startsWith(workspaces.toRealPath())) {
-            throw new IOException("Shell workspace is unsafe");
+        return new AgentShellCommand(sessionId, settings.resolveWorkingDirectory(sessionId), command);
+    }
+
+    @Override
+    public String execute(AgentShellCommand invocation, BooleanSupplier cancelled) throws Exception {
+        String sessionId = invocation.sessionId();
+        Path workspace = BashSettingsService.existingDirectory(invocation.workingDirectory());
+        if (!workspace.toString().equals(invocation.workingDirectory())) {
+            throw new BusinessException("agent.bash.directory.changed");
         }
-        ProcessBuilder builder = new ProcessBuilder(command(workspace.toRealPath(), command));
+        ProcessBuilder builder = new ProcessBuilder(command(workspace, invocation.command()));
         builder.directory(workspace.toFile()).redirectErrorStream(true);
         builder.environment().clear();
         builder.environment().put("PATH", "/usr/bin:/bin");
@@ -46,7 +47,8 @@ public class BashSandboxExecutor implements AgentShellExecutor {
         if (cancelled.getAsBoolean()) throw new IOException("Shell command was cancelled");
         Process process = builder.start();
         ai.chat2db.community.tools.util.AgentTrace.record("shell.started", sessionId, null,
-                java.util.Map.of("pid", process.pid(), "sandbox", builder.command().get(0)));
+                java.util.Map.of("pid", process.pid(), "sandbox", builder.command().get(0),
+                        "workingDirectory", workspace.toString()));
         process.getOutputStream().close();
         var reader = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "agent-shell-output");

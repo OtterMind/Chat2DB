@@ -93,6 +93,25 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         return names;
     }
 
+    @Override
+    public List<AgentToolState> listTools() {
+        List<AgentToolState> catalog = new ArrayList<>();
+        tools.values().forEach(callback -> catalog.add(new AgentToolState(
+                callback.getToolDefinition().name(), callback.getToolDefinition().description(),
+                AgentToolState.Category.DATABASE, AgentToolState.Status.ENABLED)));
+        AgentFeatureState bash = features.stream().filter(feature -> feature.feature() == AgentFeature.BASH)
+                .map(AgentFeatureService::check).findFirst().orElse(null);
+        AgentToolState.Status status = bash == null || !bash.available() || shells.isEmpty()
+                ? AgentToolState.Status.UNAVAILABLE
+                : bash.enabled() ? AgentToolState.Status.ENABLED : AgentToolState.Status.DISABLED;
+        catalog.add(new AgentToolState("bash", "Execute shell commands in the configured working directory.",
+                AgentToolState.Category.BUILTIN, status));
+        for (String name : List.of("read", "edit", "write", "grep", "find", "ls", "powershell")) {
+            catalog.add(new AgentToolState(name, name, AgentToolState.Category.BUILTIN, AgentToolState.Status.UNAVAILABLE));
+        }
+        return List.copyOf(catalog);
+    }
+
     public String execute(String ticket, String address, String toolCallId, String toolName,
             Map<String, Object> arguments) throws Exception {
         Access access = requireAccess(ticket, address);
@@ -105,8 +124,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         if (callback == null && !"bash".equals(toolName)) throw new IllegalArgumentException("Unknown Agent tool");
         String body = json.writeValueAsString(arguments);
         if (body.length() > 64 * 1024) throw new IllegalArgumentException("Tool arguments exceed the size limit");
+        AgentShellCommand shellCommand = "bash".equals(toolName) ? prepareShell(access.sessionId, arguments) : null;
         String digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                .digest((toolName + "\n" + body).getBytes(StandardCharsets.UTF_8)));
+                .digest((toolName + "\n" + body
+                        + (shellCommand == null ? "" : "\n" + shellCommand.workingDirectory()))
+                        .getBytes(StandardCharsets.UTF_8)));
         String executionId = run.id() + ":" + toolCallId;
         Execution execution = new Execution(digest, new CompletableFuture<>());
         Execution existing = access.executions.putIfAbsent(executionId, execution);
@@ -125,19 +147,15 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 throw new IllegalStateException("Session tool call limit reached");
             }
             String result;
-            if ("bash".equals(toolName)) {
-                if (!bashEnabled()) throw new IllegalStateException("Bash is disabled or unavailable");
-                Object raw = arguments.get("command");
-                if (!(raw instanceof String command) || command.isBlank()) {
-                    throw new IllegalArgumentException("Shell command must not be blank");
-                }
+            if (shellCommand != null) {
                 AgentApproval approval = new AgentApproval(UUID.randomUUID().toString(), access.sessionId, run.id(),
                         toolCallId, AgentApprovalStatus.PENDING, AgentApprovalScope.ONCE, digest,
                         LocalDateTime.now().plusMinutes(2));
                 boolean approved = approvals.awaitDecision(approval, access.userId, () ->
                         access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
                                 AgentEventType.APPROVAL_REQUESTED,
-                                Map.of("approvalId", approval.id(), "toolName", toolName, "command", command),
+                                Map.of("approvalId", approval.id(), "toolName", toolName,
+                                        "command", shellCommand.command(), "workingDirectory", shellCommand.workingDirectory()),
                                 LocalDateTime.now())), () -> isActive(access, run.id()) && bashEnabled());
                 if (isActive(access, run.id())) {
                     access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
@@ -147,7 +165,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 if (!approved || !bashEnabled()) throw new IllegalStateException("Shell command was not approved");
                 AgentTrace.record("tool.executing", access.sessionId, run.id(),
                         Map.of("toolCallId", toolCallId, "tool", toolName));
-                result = shells.get(0).execute(access.sessionId, command,
+                result = shells.get(0).execute(shellCommand,
                         () -> !isActive(access, run.id()) || !bashEnabled());
             } else {
                 if (!isActive(access, run.id())) throw new IllegalStateException("Agent run has stopped");
@@ -178,6 +196,14 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private boolean bashEnabled() {
         return !shells.isEmpty() && features.stream().filter(feature -> feature.feature() == AgentFeature.BASH)
                 .anyMatch(feature -> feature.check().enabled());
+    }
+
+    private AgentShellCommand prepareShell(String sessionId, Map<String, Object> arguments) {
+        if (!bashEnabled()) throw new IllegalStateException("Bash is disabled or unavailable");
+        if (!(arguments.get("command") instanceof String command) || command.isBlank()) {
+            throw new IllegalArgumentException("Shell command must not be blank");
+        }
+        return shells.get(0).prepare(sessionId, command);
     }
 
     private boolean isActive(Access access, String runId) {
