@@ -2,11 +2,9 @@ package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.service.agent.*;
-import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
-import ai.chat2db.community.web.api.adapter.ai.AiToolAdapter;
-import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -18,15 +16,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AgentToolGatewayServiceTest {
     @Test
-    void reusesDatabaseToolsWithSessionIdentityAndDeduplicatesExecution() throws Exception {
+    void runsIndependentDatabaseToolsWithSessionIdentityAndDeduplicatesExecution() throws Exception {
         Context owner = new Context();
         Context caller = new Context();
         AtomicInteger executions = new AtomicInteger();
-        IAiToolService domainTools = (IAiToolService) Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{IAiToolService.class}, (proxy, method, args) -> {
+        AgentDatabaseService domainTools = (AgentDatabaseService) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{AgentDatabaseService.class}, (proxy, method, args) -> {
                     assertSame(owner, ContextUtils.queryThreadContext());
                     executions.incrementAndGet();
-                    return "database-list";
+                    return AgentDatabaseResult.success(null, List.of("database-list"), null, null, List.of());
                 });
         LocalDateTime now = LocalDateTime.now();
         AgentSession session = new AgentSession(2, "session", 1L,
@@ -42,29 +40,29 @@ class AgentToolGatewayServiceTest {
                 new Class<?>[]{AgentRunStorage.class}, (proxy, method, args) ->
                         method.getName().equals("list") ? List.of(run) : run);
         AgentToolGatewayService gateway = new AgentToolGatewayService(
-                new AiToolAdapter(domainTools, new AiToolContextConverter()), sessions, runs, () -> 1L,
+                new AgentDatabaseToolRegistry(domainTools), sessions, runs, () -> 1L,
                 null, List.of(), 11837);
         try {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
             var catalog = gateway.listTools();
             assertEquals(7, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
-            assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("list_all_datasources")
+            assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("db_list_datasources")
                     && tool.status() == AgentToolState.Status.ENABLED));
             assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN)
                     .allMatch(tool -> tool.status() == AgentToolState.Status.UNAVAILABLE));
             ContextUtils.setContext(caller);
-            assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("list_all_datasources"));
+            assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("db_list_datasources"));
             assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("bash"));
             assertThrows(SecurityException.class, () -> gateway.activeTools(access.ticket(), "192.0.2.1"));
-            assertEquals("\"database-list\"", gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "list_all_datasources", Map.of()));
-            assertEquals("\"database-list\"", gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "list_all_datasources", Map.of()));
+            assertEquals(List.of("database-list"), gateway.execute(
+                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of()).data());
+            assertEquals(List.of("database-list"), gateway.execute(
+                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of()).data());
             assertEquals(1, executions.get());
             assertSame(caller, ContextUtils.queryThreadContext());
             assertThrows(IllegalArgumentException.class, () -> gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "list_all_datasources", Map.of("changed", true)));
+                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of("changed", true)));
             gateway.revoke(access.ticket());
             assertThrows(SecurityException.class, () -> gateway.activeTools(access.ticket(), "127.0.0.1"));
         } finally {

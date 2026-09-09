@@ -7,14 +7,15 @@ import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
-import ai.chat2db.community.web.api.adapter.agent.AgentToolGatewayService;
+import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
+import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
+import ai.chat2db.community.tools.wrapper.result.DataResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -22,12 +23,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v3/ai")
 public class AgentToolGatewayController {
-    private final AgentToolGatewayService gateway;
+    private final AgentToolAccessService gateway;
     private final AgentApprovalService approvals;
     private final AgentApprovalStorage approvalStorage;
     private final IIdentityService identity;
 
-    public AgentToolGatewayController(AgentToolGatewayService gateway, AgentApprovalService approvals,
+    public AgentToolGatewayController(AgentToolAccessService gateway, AgentApprovalService approvals,
             AgentApprovalStorage approvalStorage,
             IIdentityService identity) {
         this.gateway = gateway;
@@ -42,14 +43,10 @@ public class AgentToolGatewayController {
     }
 
     @PostMapping("/agent-tools/execute")
-    public ResponseEntity<Map<String, String>> execute(@RequestHeader("Authorization") String authorization,
+    public DataResult<AgentDatabaseResult<?>> execute(@RequestHeader("Authorization") String authorization,
             @RequestBody @Valid ToolRequest body, HttpServletRequest request) throws Exception {
-        try {
-            return ResponseEntity.ok(Map.of("content", gateway.execute(ticket(authorization), request.getRemoteAddr(),
-                    body.toolCallId(), body.toolName(), body.arguments())));
-        } catch (IllegalStateException error) {
-            return ResponseEntity.badRequest().body(Map.of("errorMessage", error.getMessage()));
-        }
+        return DataResult.of(gateway.execute(ticket(authorization), request.getRemoteAddr(),
+                body.toolCallId(), body.toolName(), body.arguments()));
     }
 
     @PostMapping("/agent-tools/prepare-native")

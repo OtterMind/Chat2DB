@@ -2,11 +2,9 @@ package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.service.agent.*;
-import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
-import ai.chat2db.community.web.api.adapter.ai.AiToolAdapter;
-import ai.chat2db.community.web.api.converter.ai.AiToolContextConverter;
 import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -45,8 +43,8 @@ class AgentNativeToolApprovalTest {
             if (disableWhileWaiting.get()) enabledTools.remove(AgentNativeTools.currentPlatform().get(0));
             return ((java.util.function.BooleanSupplier) args[3]).getAsBoolean();
         });
-        IAiToolService database = proxy(IAiToolService.class, (method, args) -> "database");
-        var gateway = new AgentToolGatewayService(new AiToolAdapter(database, new AiToolContextConverter()),
+        AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
+        var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database),
                 sessions, runs, () -> 1L, approvals, List.of(workspace), 11847);
         var events = new ArrayList<ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent>();
         try {

@@ -22,16 +22,26 @@ export default function (pi) {
       label: tool.name,
       description: tool.description,
       parameters: tool.parameters,
+      promptSnippet: tool.promptSnippet,
+      promptGuidelines: tool.promptGuidelines,
       async execute(toolCallId, args, signal) {
-        const result = await request("/execute", {
+        const response = await request("/execute", {
           method: "POST",
           body: JSON.stringify({ toolCallId, toolName: tool.name, arguments: args }),
           signal,
         });
-        return { content: [{ type: "text", text: result.content }], details: {} };
+        const result = response.data;
+        return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
       },
     });
   }
+
+  const databaseTools = new Set(access.tools.map(tool => tool.name));
+  pi.on("tool_result", event => {
+    if (databaseTools.has(event.toolName) && typeof event.details?.ok === "boolean") {
+      return { isError: !event.details.ok };
+    }
+  });
 
   const factories = { read: createReadTool, edit: createEditTool, write: createWriteTool,
     grep: createGrepTool, find: createFindTool, ls: createLsTool,
