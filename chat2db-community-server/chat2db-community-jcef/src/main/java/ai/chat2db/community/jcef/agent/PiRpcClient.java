@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public class PiRpcClient implements AutoCloseable {
+public class PiRpcClient implements PiRpcTransport {
 
     public static final int DEFAULT_MAXIMUM_FRAME_BYTES = 8 * 1024 * 1024;
 
