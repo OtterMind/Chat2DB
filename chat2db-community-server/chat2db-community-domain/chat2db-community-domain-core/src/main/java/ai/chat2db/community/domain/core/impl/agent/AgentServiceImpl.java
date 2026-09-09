@@ -33,6 +33,7 @@ public class AgentServiceImpl implements AgentService {
     private final AgentSessionStorage sessionStorage;
     private final AgentRunCoordinator runCoordinator;
     private final AgentEventStorage eventStorage;
+    private final AgentRuntimeHandleRegistry handleRegistry;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -40,8 +41,9 @@ public class AgentServiceImpl implements AgentService {
             AgentRuntimeRegistry runtimeRegistry,
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
-            AgentEventStorage eventStorage) {
-        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage,
+            AgentEventStorage eventStorage,
+            AgentRuntimeHandleRegistry handleRegistry) {
+        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -50,12 +52,14 @@ public class AgentServiceImpl implements AgentService {
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
+            AgentRuntimeHandleRegistry handleRegistry,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
         this.sessionStorage = Objects.requireNonNull(sessionStorage, "sessionStorage");
         this.runCoordinator = Objects.requireNonNull(runCoordinator, "runCoordinator");
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
+        this.handleRegistry = Objects.requireNonNull(handleRegistry, "handleRegistry");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -130,6 +134,31 @@ public class AgentServiceImpl implements AgentService {
             throw new IllegalArgumentException("limit must be between 1 and 1000");
         }
         return eventStorage.list(sessionId, userId, afterSequence, limit);
+    }
+
+    @Override
+    public AgentSession renameSession(String sessionId, Long userId, String title) {
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("title must not be blank");
+        }
+        return sessionStorage.rename(sessionId, userId, title.trim());
+    }
+
+    @Override
+    public void deleteSession(String sessionId, Long userId) {
+        AgentSession session = sessionStorage.get(sessionId, userId);
+        if (session == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        if (session.status() == AgentSessionStatus.RUNNING
+                || session.status() == AgentSessionStatus.WAITING_APPROVAL) {
+            throw new IllegalStateException("Active agent session cannot be deleted");
+        }
+        handleRegistry.close(sessionId);
+        runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
+                new ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionDeleteRequest(
+                        session.id(), session.runtimeBinding()));
+        sessionStorage.delete(sessionId, userId);
     }
 
     private String requireGeneratedId(String id) {

@@ -64,6 +64,22 @@ class LocalAgentSessionStorageTest {
     }
 
     @Test
+    void renamesAndDeletesTheCompleteV2SessionDirectory() throws IOException {
+        AgentV2StoragePaths paths = paths();
+        LocalAgentSessionStorage storage = new LocalAgentSessionStorage(paths, new StorageFileUtils());
+        storage.create(session("session-one", 1L, "Initial", AgentSessionStatus.READY, 0));
+        Files.createDirectories(paths.resourceDirectory("session-one", "events"));
+        Files.writeString(paths.eventFile("session-one", 1), "event");
+
+        AgentSession renamed = storage.rename("session-one", 1L, " Renamed ");
+        storage.delete("session-one", 1L);
+
+        assertEquals("Renamed", renamed.title());
+        assertFalse(Files.exists(paths.sessionDirectory("session-one")));
+        assertThrows(IllegalArgumentException.class, () -> storage.delete("session-one", 1L));
+    }
+
+    @Test
     void hidesOtherUsersSessionsAndRejectsOwnerChanges() {
         AgentV2StoragePaths paths = paths();
         LocalAgentSessionStorage storage = new LocalAgentSessionStorage(paths, new StorageFileUtils());

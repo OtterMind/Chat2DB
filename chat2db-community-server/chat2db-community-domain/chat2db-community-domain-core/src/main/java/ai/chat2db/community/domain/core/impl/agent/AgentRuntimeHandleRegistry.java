@@ -47,6 +47,16 @@ public class AgentRuntimeHandleRegistry {
         return true;
     }
 
+    public boolean close(String sessionId) {
+        String id = requireSessionId(sessionId);
+        AgentRuntimeSessionHandle handle = handles.remove(id);
+        if (handle == null) {
+            return false;
+        }
+        handle.close();
+        return true;
+    }
+
     public void closeAll() {
         closed.set(true);
         for (Map.Entry<String, AgentRuntimeSessionHandle> entry : new ArrayList<>(handles.entrySet())) {

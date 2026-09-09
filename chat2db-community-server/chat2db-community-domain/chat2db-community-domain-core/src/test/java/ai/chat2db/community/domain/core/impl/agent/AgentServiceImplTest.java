@@ -40,6 +40,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         AgentSession session = service.createSession(command());
@@ -62,6 +63,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -76,6 +78,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of());
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -93,6 +96,7 @@ class AgentServiceImplTest {
                 storage,
                 unusedCoordinator(registry, storage),
                 new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one",
                 CLOCK);
         service.createSession(command());
@@ -108,6 +112,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(),
                 () -> "session-one", CLOCK);
         service.createSession(command());
 
@@ -118,6 +123,23 @@ class AgentServiceImplTest {
                 () -> service.listEvents("session-one", 1L, -1, 200));
         assertThrows(IllegalArgumentException.class,
                 () -> service.listEvents("session-one", 1L, 0, 1001));
+    }
+
+    @Test
+    void renamesAndDeletesAnIdleV2Session() {
+        FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
+        MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
+        AgentServiceImpl service = new AgentServiceImpl(
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(), () -> "session-one", CLOCK);
+        service.createSession(command());
+
+        assertEquals("Renamed", service.renameSession("session-one", 1L, " Renamed ").title());
+        service.deleteSession("session-one", 1L);
+
+        assertNull(service.getSession("session-one", 1L));
+        assertEquals("session-one", adapter.deletedSessionId());
     }
 
     private AgentSessionCreateCommand command() {
@@ -194,6 +216,25 @@ class AgentServiceImplTest {
             }
             sessions.put(session.id(), session);
             return true;
+        }
+
+        @Override
+        public AgentSession rename(String sessionId, Long userId, String title) {
+            AgentSession session = get(sessionId, userId);
+            AgentSession renamed = new AgentSession(
+                    session.schemaVersion(), session.id(), session.userId(), session.definition(),
+                    session.runtimeBinding(), session.status(), title, session.lastEventSequence(),
+                    session.gmtCreate(), session.gmtModified());
+            sessions.put(sessionId, renamed);
+            return renamed;
+        }
+
+        @Override
+        public void delete(String sessionId, Long userId) {
+            if (get(sessionId, userId) == null) {
+                throw new IllegalArgumentException();
+            }
+            sessions.remove(sessionId);
         }
 
         int createCount() {

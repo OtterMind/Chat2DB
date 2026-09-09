@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
+import java.util.Comparator;
+import java.util.List;
 
 @Component
 public class StorageFileUtils {
@@ -92,6 +94,27 @@ public class StorageFileUtils {
             Files.deleteIfExists(directory);
         } catch (IOException ignored) {
             // Preserve the original storage failure; a later create rejects the incomplete directory.
+        }
+    }
+
+    public void deleteTree(Path root, Path target) {
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        if (normalizedTarget.equals(normalizedRoot)) {
+            throw new StorageException("Storage root cannot be deleted as a resource tree");
+        }
+        if (!Files.exists(normalizedTarget, LinkOption.NOFOLLOW_LINKS)) {
+            return;
+        }
+        verifyInsideRoot(normalizedRoot, normalizedTarget);
+        try (var entries = Files.walk(normalizedTarget)) {
+            List<Path> paths = entries.toList();
+            paths.forEach(this::rejectSymbolicLink);
+            for (Path path : paths.stream().sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        } catch (IOException exception) {
+            throw new StorageException("Failed to delete storage resource tree", exception);
         }
     }
 

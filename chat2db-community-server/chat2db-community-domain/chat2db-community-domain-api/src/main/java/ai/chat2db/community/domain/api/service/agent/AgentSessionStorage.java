@@ -14,4 +14,8 @@ public interface AgentSessionStorage {
     List<AgentSession> listByUserId(Long userId);
 
     boolean compareAndSet(AgentSession session, AgentSessionStatus expectedStatus);
+
+    AgentSession rename(String sessionId, Long userId, String title);
+
+    void delete(String sessionId, Long userId);
 }

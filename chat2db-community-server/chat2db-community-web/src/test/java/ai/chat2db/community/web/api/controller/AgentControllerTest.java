@@ -111,6 +111,10 @@ class AgentControllerTest {
             return List.of(new AgentEvent(
                     "event", sessionId, "run-one", 1, AgentEventType.RUN_STARTED, Map.of(), now));
         }
+        @Override public AgentSession renameSession(String sessionId, Long userId, String title) {
+            return session;
+        }
+        @Override public void deleteSession(String sessionId, Long userId) { }
         private AgentRun run() {
             return new AgentRun(
                     "run-one", "session-one", AgentRunStatus.RUNNING, model(),

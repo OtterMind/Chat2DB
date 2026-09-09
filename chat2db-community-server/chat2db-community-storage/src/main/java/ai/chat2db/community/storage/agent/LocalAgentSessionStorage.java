@@ -116,6 +116,32 @@ public class LocalAgentSessionStorage implements AgentSessionStorage {
         return true;
     }
 
+    @Override
+    public synchronized AgentSession rename(String sessionId, Long userId, String title) {
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("title must not be blank");
+        }
+        AgentSession session = get(sessionId, userId);
+        if (session == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        AgentSession renamed = new AgentSession(
+                session.schemaVersion(), session.id(), session.userId(), session.definition(),
+                session.runtimeBinding(), session.status(), title.trim(), session.lastEventSequence(),
+                session.gmtCreate(), java.time.LocalDateTime.now());
+        writeSession(paths.sessionFile(sessionId), renamed);
+        return renamed;
+    }
+
+    @Override
+    public synchronized void delete(String sessionId, Long userId) {
+        AgentSession session = get(sessionId, userId);
+        if (session == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        storageFileUtils.deleteTree(paths.root(), paths.sessionDirectory(sessionId));
+    }
+
     private void ensureStorage() {
         storageFileUtils.createPrivateDirectory(paths.root());
         storageFileUtils.rejectSymbolicLink(paths.root());

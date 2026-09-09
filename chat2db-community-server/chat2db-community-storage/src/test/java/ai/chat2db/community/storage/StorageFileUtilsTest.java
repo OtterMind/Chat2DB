@@ -12,6 +12,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class StorageFileUtilsTest {
 
@@ -64,5 +65,18 @@ class StorageFileUtilsTest {
             return;
         }
         assertThrows(StorageException.class, () -> storageFileUtils.verifyInsideRoot(root, link));
+    }
+
+    @Test
+    void deletesOnlyAValidatedChildTree() throws IOException {
+        StorageFileUtils storageFileUtils = new StorageFileUtils();
+        Path root = Files.createDirectory(temporaryDirectory.resolve("root"));
+        Path child = Files.createDirectories(root.resolve("session/events"));
+        Files.writeString(child.resolve("event.json"), "event");
+
+        storageFileUtils.deleteTree(root, root.resolve("session"));
+
+        assertFalse(Files.exists(root.resolve("session")));
+        assertThrows(StorageException.class, () -> storageFileUtils.deleteTree(root, root));
     }
 }

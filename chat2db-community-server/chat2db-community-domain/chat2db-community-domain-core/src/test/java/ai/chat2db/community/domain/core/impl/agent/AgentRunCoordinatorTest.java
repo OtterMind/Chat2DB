@@ -198,6 +198,10 @@ class AgentRunCoordinatorTest {
             sessions.put(session.id(), session);
             return true;
         }
+        @Override public AgentSession rename(String sessionId, Long userId, String title) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public void delete(String sessionId, Long userId) { throw new UnsupportedOperationException(); }
         @Override public AgentRun create(AgentRun run, Long userId) { runs.put(run.id(), run); return run; }
         @Override public AgentRun get(String sessionId, String runId, Long userId) {
             AgentRun run = runs.get(runId);

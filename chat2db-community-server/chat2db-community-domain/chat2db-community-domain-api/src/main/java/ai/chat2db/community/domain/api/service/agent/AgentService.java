@@ -23,4 +23,8 @@ public interface AgentService {
     CompletionStage<AgentRun> cancelRun(AgentRunCancelCommand command);
 
     List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit);
+
+    AgentSession renameSession(String sessionId, Long userId, String title);
+
+    void deleteSession(String sessionId, Long userId);
 }

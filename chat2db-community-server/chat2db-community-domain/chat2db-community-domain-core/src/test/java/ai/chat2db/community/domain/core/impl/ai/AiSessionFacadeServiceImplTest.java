@@ -96,5 +96,11 @@ class AiSessionFacadeServiceImplTest {
         @Override public List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit) {
             return List.of();
         }
+        @Override public AgentSession renameSession(String sessionId, Long userId, String title) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public void deleteSession(String sessionId, Long userId) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

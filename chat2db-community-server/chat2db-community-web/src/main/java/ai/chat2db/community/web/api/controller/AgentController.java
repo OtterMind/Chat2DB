@@ -16,6 +16,7 @@ import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunCancelRequest;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunStartRequest;
 import ai.chat2db.community.web.api.model.request.agent.AgentSessionCreateRequest;
+import ai.chat2db.community.web.api.model.request.agent.AgentSessionRenameRequest;
 import ai.chat2db.community.web.api.model.response.agent.AgentEventResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import ai.chat2db.community.tools.wrapper.result.ActionResult;
 
 import java.util.List;
 import java.util.concurrent.CompletionStage;
@@ -100,6 +102,20 @@ public class AgentController {
         List<AgentEvent> events = agentService.listEvents(
                 sessionId, identityService.currentUserId(), afterSequence, limit);
         return ListResult.of(events.stream().map(AgentEventResponse::from).toList());
+    }
+
+    @PostMapping("/sessions/{sessionId}/rename")
+    public DataResult<AgentSession> renameSession(
+            @PathVariable String sessionId,
+            @RequestBody @Valid AgentSessionRenameRequest request) {
+        return DataResult.of(agentService.renameSession(
+                sessionId, identityService.currentUserId(), request.title()));
+    }
+
+    @PostMapping("/sessions/{sessionId}/delete")
+    public ActionResult deleteSession(@PathVariable String sessionId) {
+        agentService.deleteSession(sessionId, identityService.currentUserId());
+        return ActionResult.isSuccess();
     }
 
     private void requireV2(Integer sessionVersion) {
