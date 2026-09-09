@@ -9,6 +9,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -124,8 +125,12 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
     }
 
     private void extractTarGzip(byte[] archive, Path target) throws IOException {
+        ByteArrayOutputStream tarBytes = new ByteArrayOutputStream();
+        try (GzipCompressorInputStream gzip = new GzipCompressorInputStream(new ByteArrayInputStream(archive))) {
+            gzip.transferTo(tarBytes);
+        }
         try (TarArchiveInputStream input = new TarArchiveInputStream(
-                new GzipCompressorInputStream(new ByteArrayInputStream(archive)))) {
+                new ByteArrayInputStream(tarBytes.toByteArray()))) {
             long extractedBytes = 0;
             int fileCount = 0;
             TarArchiveEntry entry;
