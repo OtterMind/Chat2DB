@@ -75,6 +75,7 @@ export default function AboutUs() {
       ]);
       setPiFeature(pi);
       setBashFeature(bash);
+      window.dispatchEvent(new CustomEvent('agent:featuresChanged'));
     } finally {
       setAgentFeatureLoading(false);
     }
@@ -91,6 +92,7 @@ export default function AboutUs() {
         try {
           const state = await agentService.enablePi({ confirmed: true });
           setPiFeature(state);
+          window.dispatchEvent(new CustomEvent('agent:featuresChanged'));
           if (!state.enabled) {
             staticMessage.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
           }

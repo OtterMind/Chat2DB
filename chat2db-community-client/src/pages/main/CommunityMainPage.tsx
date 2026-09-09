@@ -30,6 +30,7 @@ import { useStyles } from './style';
 import { clientRuntime } from '@client-runtime';
 import { IframeType } from '@/constants';
 import aiStreamService, { IChatSession } from '@/service/aiStream';
+import agentService from '@/service/agent';
 import { useWorkspaceStore } from '@/store/workspace';
 import { isDesktop, isHashHistoryEnv } from '@/utils/env';
 import {
@@ -66,6 +67,7 @@ function CommunityMainPage() {
   const [sidebarSessions, setSidebarSessions] = useState<IChatSession[]>([]);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchKeyword, setSidebarSearchKeyword] = useState('');
+  const [agentEnabled, setAgentEnabled] = useState(false);
   const sidebarSearchInputRef = useRef<InputRef>(null);
   const { styles } = useStyles({});
   const { tab: settingTab } = useParams<{ tab: string }>();
@@ -106,6 +108,16 @@ function CommunityMainPage() {
       setSidebarSessions(result);
     } catch (error) {
       console.warn('loadSidebarSessions failed', error);
+    }
+  }, []);
+
+  const loadAgentAvailability = useCallback(async () => {
+    if (!isDesktop) return;
+    try {
+      const features = (await agentService.listRuntimeFeatures(undefined as void)) || [];
+      setAgentEnabled(features.some((feature) => feature.runtimeType === 'PI' && feature.enabled));
+    } catch {
+      setAgentEnabled(false);
     }
   }, []);
 
@@ -245,6 +257,29 @@ function CommunityMainPage() {
   }, [activeSessionId, loadSidebarSessions]);
 
   useEffect(() => {
+    loadAgentAvailability();
+    const handler = () => loadAgentAvailability();
+    window.addEventListener('agent:featuresChanged', handler);
+    return () => window.removeEventListener('agent:featuresChanged', handler);
+  }, [loadAgentAvailability]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string }>).detail;
+      if (!detail?.sessionId) return;
+      setActiveSessionId(detail.sessionId);
+      handleChangePageTab({
+        page: 'stream',
+        navConfigTmp: navConfig,
+        pathName: `/stream/${detail.sessionId}`,
+      });
+      loadSidebarSessions();
+    };
+    window.addEventListener('stream:agentSessionCreated', handler);
+    return () => window.removeEventListener('stream:agentSessionCreated', handler);
+  }, [handleChangePageTab, loadSidebarSessions, navConfig]);
+
+  useEffect(() => {
     const handler = () => loadSidebarSessions();
     window.addEventListener('stream:sessionsChanged', handler);
     return () => window.removeEventListener('stream:sessionsChanged', handler);
@@ -317,6 +352,12 @@ function CommunityMainPage() {
     setActiveSessionId(null);
     handleChangePageTab({ page: 'stream', navConfigTmp: navConfig, pathName: '/stream' });
     window.dispatchEvent(new CustomEvent('stream:newChat'));
+  }, [handleChangePageTab, navConfig]);
+
+  const handleSidebarNewAgentChat = useCallback(() => {
+    setActiveSessionId(null);
+    handleChangePageTab({ page: 'stream', navConfigTmp: navConfig, pathName: '/stream' });
+    window.dispatchEvent(new CustomEvent('stream:newAgentChat'));
   }, [handleChangePageTab, navConfig]);
 
   const handleSidebarSearchBlur = useCallback(() => {
@@ -485,6 +526,8 @@ function CommunityMainPage() {
           onSearchKeywordChange={setSidebarSearchKeyword}
           onSearchBlur={handleSidebarSearchBlur}
           onNewChat={handleSidebarNewChat}
+          agentEnabled={agentEnabled}
+          onNewAgentChat={handleSidebarNewAgentChat}
           onSessionClick={handleSidebarSessionClick}
           onSessionDelete={handleSidebarDeleteSession}
           onSessionRename={handleSidebarRenameSession}

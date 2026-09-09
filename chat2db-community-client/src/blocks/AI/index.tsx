@@ -56,6 +56,7 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
+import AgentChat from './AgentChat';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -544,6 +545,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
+  const [agentSession, setAgentSession] = useState<{ id?: string; title?: string } | null>(null);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
@@ -1001,7 +1003,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const fetchSessionList = useCallback(async () => {
     try {
       const sessions = (await aiStreamService.getChatSessions(undefined as void)) || [];
-      setSessionList(sessions);
+      setSessionList(sessions.filter((session) => session.sessionVersion === 1));
     } catch {
       // silent
     }
@@ -1494,7 +1496,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!isPanel) {
       const chatId = getChatIdFromPath();
       if (chatId) {
-        handleLoadSessionById(chatId);
+        aiStreamService
+          .getChatSessions(undefined as void)
+          .then((sessions) => {
+            const session = (sessions || []).find((item) => item.id === chatId);
+            if (session?.sessionVersion === 2) {
+              setAgentSession({ id: session.id, title: session.title });
+              return;
+            }
+            handleLoadSessionById(chatId, session?.title);
+          })
+          .catch(() => handleLoadSessionById(chatId));
       }
     }
   }, []);
@@ -1503,6 +1515,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     const handleNewChatEvent = () => {
+      setAgentSession(null);
       handleNewChat();
     };
     window.addEventListener('stream:newChat', handleNewChatEvent);
@@ -1511,13 +1524,29 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     };
   }, [handleNewChat]);
 
+  useEffect(() => {
+    if (isPanel) return;
+    const handleNewAgentChat = () => {
+      handleNewChat();
+      setAgentSession({});
+    };
+    window.addEventListener('stream:newAgentChat', handleNewAgentChat);
+    return () => window.removeEventListener('stream:newAgentChat', handleNewAgentChat);
+  }, [handleNewChat, isPanel]);
+
   // Handle sidebar events only in page mode.
 
   useEffect(() => {
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title } = (e as CustomEvent).detail;
+      const { sessionId, title, sessionVersion } = (e as CustomEvent).detail;
+      if (sessionVersion === 2) {
+        stop();
+        setAgentSession({ id: sessionId, title });
+        return;
+      }
+      setAgentSession(null);
       handleLoadSessionById(sessionId, title);
     };
 
@@ -1525,7 +1554,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return () => {
       window.removeEventListener('stream:loadSession', handleLoadEvent);
     };
-  }, [isPanel, handleLoadSessionById]);
+  }, [isPanel, handleLoadSessionById, stop]);
 
   useEffect(() => {
     const handleSessionRenamed = (event: Event) => {
@@ -2167,6 +2196,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       {sessionLoading && <div className={styles.topLoadingBar} />}
     </div>
   );
+
+  if (!isPanel && agentSession) {
+    return <AgentChat initialSessionId={agentSession.id} initialTitle={agentSession.title} />;
+  }
 
   return (
     <div className={styles.main}>
