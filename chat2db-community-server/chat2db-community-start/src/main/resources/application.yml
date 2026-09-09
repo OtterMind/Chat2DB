@@ -55,6 +55,18 @@ spring:
 
 chat2db:
   version: 5.3.0
+  agent:
+    pi:
+      version: ${CHAT2DB_PI_RUNTIME_VERSION:0.85.1}
+      source: ${CHAT2DB_PI_RUNTIME_SOURCE:}
+      max-processes: ${CHAT2DB_PI_MAX_PROCESSES:3}
+      manifest-sha256:
+        macos-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_MACOS_ARM64:}
+        macos-x64: ${CHAT2DB_PI_MANIFEST_SHA256_MACOS_X64:}
+        windows-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_WINDOWS_ARM64:}
+        windows-x64: ${CHAT2DB_PI_MANIFEST_SHA256_WINDOWS_X64:}
+        linux-arm64: ${CHAT2DB_PI_MANIFEST_SHA256_LINUX_ARM64:}
+        linux-x64: ${CHAT2DB_PI_MANIFEST_SHA256_LINUX_X64:}
 
 # Print the HTTP log
 logbook:

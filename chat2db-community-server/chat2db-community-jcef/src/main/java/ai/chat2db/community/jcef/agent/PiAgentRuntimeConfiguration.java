@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import java.io.IOException;
 import java.net.URI;
@@ -54,13 +55,19 @@ public class PiAgentRuntimeConfiguration {
     public PiRuntimeInstallation piRuntimeInstallation(
             PiRuntimePaths paths,
             @Value("${chat2db.agent.pi.version:0.85.1}") String version,
-            @Value("${chat2db.agent.pi.source:}") String source) {
+            @Value("${chat2db.agent.pi.source:}") String source,
+            Environment springEnvironment) {
         if (source == null || source.isBlank()) {
             return environment -> {
                 throw new IOException("Pi runtime download source is not configured");
             };
         }
-        return new PiRuntimeInstaller(paths, version, URI.create(source));
+        return new PiRuntimeInstaller(
+                paths,
+                version,
+                URI.create(source),
+                new PinnedPiRuntimeManifestTrust(platform -> springEnvironment.getProperty(
+                        "chat2db.agent.pi.manifest-sha256." + platform)));
     }
 
     @Bean

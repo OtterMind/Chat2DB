@@ -33,7 +33,7 @@ class PiRuntimeInstallerTest {
         Map<String, byte[]> resources = resources(source, os, architecture, executable, "runtime");
         AtomicInteger downloads = new AtomicInteger();
         PiRuntimeInstaller installer = new PiRuntimeInstaller(
-                paths, "0.85.1", source, (uri, maximumBytes) -> {
+                paths, "0.85.1", source, trust(resources), (uri, maximumBytes) -> {
                     downloads.incrementAndGet();
                     byte[] bytes = resources.get(uri.toString());
                     if (bytes == null) throw new java.io.IOException("missing resource");
@@ -60,7 +60,8 @@ class PiRuntimeInstallerTest {
         String fileUri = source.resolve("0.85.1/" + os + "-" + architecture + "/" + executable).toString();
         resources.put(fileUri, "changed".getBytes());
         PiRuntimeInstaller installer = new PiRuntimeInstaller(
-                paths, "0.85.1", source, (uri, maximumBytes) -> resources.get(uri.toString()));
+                paths, "0.85.1", source, trust(resources),
+                (uri, maximumBytes) -> resources.get(uri.toString()));
 
         assertThrows(java.io.IOException.class, () -> installer.install(environment()));
 
@@ -71,7 +72,25 @@ class PiRuntimeInstallerTest {
     @Test
     void requiresHttpsDownloadSource() {
         assertThrows(IllegalArgumentException.class, () -> new PiRuntimeInstaller(
-                new PiRuntimePaths(temporaryDirectory), "0.85.1", URI.create("http://runtime.example/pi/")));
+                new PiRuntimePaths(temporaryDirectory), "0.85.1", URI.create("http://runtime.example/pi/"),
+                (platform, manifest) -> { }));
+    }
+
+    @Test
+    void rejectsAManifestThatDoesNotMatchThePinnedDigest() throws Exception {
+        PiRuntimePaths paths = new PiRuntimePaths(temporaryDirectory.resolve("runtime/agent/pi"));
+        URI source = URI.create("https://runtime.example/pi/");
+        String os = PiRuntimeLayout.normalizeOperatingSystem(System.getProperty("os.name"));
+        String architecture = PiRuntimeLayout.normalizeArchitecture(System.getProperty("os.arch"));
+        String executable = "windows".equals(os) ? "pi.exe" : "pi";
+        Map<String, byte[]> resources = resources(source, os, architecture, executable, "runtime");
+        PiRuntimeInstaller installer = new PiRuntimeInstaller(
+                paths, "0.85.1", source,
+                new PinnedPiRuntimeManifestTrust(platform -> "0".repeat(64)),
+                (uri, maximumBytes) -> resources.get(uri.toString()));
+
+        assertThrows(java.io.IOException.class, () -> installer.install(environment()));
+        assertFalse(Files.exists(paths.installations().resolve("0.85.1")));
     }
 
     private Map<String, byte[]> resources(
@@ -94,6 +113,27 @@ class PiRuntimeInstallerTest {
 
     private String sha256(byte[] bytes) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+    }
+
+    private PiRuntimeManifestTrust trust(Map<String, byte[]> resources) {
+        byte[] manifest = null;
+        for (Map.Entry<String, byte[]> resource : resources.entrySet()) {
+            if (resource.getKey().endsWith("runtime-manifest.json")) {
+                manifest = resource.getValue();
+                break;
+            }
+        }
+        if (manifest == null) {
+            throw new AssertionError("manifest fixture is missing");
+        }
+        byte[] trustedManifest = manifest;
+        return new PinnedPiRuntimeManifestTrust(platform -> {
+            try {
+                return sha256(trustedManifest);
+            } catch (Exception error) {
+                throw new AssertionError(error);
+            }
+        });
     }
 
     private AgentRuntimeEnvironmentRequest environment() {

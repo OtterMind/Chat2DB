@@ -27,20 +27,31 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
     private final String version;
     private final URI sourceRoot;
     private final ResourceFetcher fetcher;
+    private final PiRuntimeManifestTrust manifestTrust;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
-    public PiRuntimeInstaller(PiRuntimePaths paths, String version, URI sourceRoot) {
-        this(paths, version, sourceRoot, new HttpResourceFetcher(HttpClient.newHttpClient()));
+    public PiRuntimeInstaller(
+            PiRuntimePaths paths,
+            String version,
+            URI sourceRoot,
+            PiRuntimeManifestTrust manifestTrust) {
+        this(paths, version, sourceRoot, manifestTrust, new HttpResourceFetcher(HttpClient.newHttpClient()));
     }
 
-    PiRuntimeInstaller(PiRuntimePaths paths, String version, URI sourceRoot, ResourceFetcher fetcher) {
+    PiRuntimeInstaller(
+            PiRuntimePaths paths,
+            String version,
+            URI sourceRoot,
+            PiRuntimeManifestTrust manifestTrust,
+            ResourceFetcher fetcher) {
         if (!"https".equalsIgnoreCase(sourceRoot.getScheme())) {
             throw new IllegalArgumentException("Pi runtime source must use HTTPS");
         }
         this.paths = paths;
         this.version = version;
         this.sourceRoot = sourceRoot.toString().endsWith("/") ? sourceRoot : URI.create(sourceRoot + "/");
+        this.manifestTrust = manifestTrust;
         this.fetcher = fetcher;
     }
 
@@ -65,6 +76,7 @@ public class PiRuntimeInstaller implements PiRuntimeInstallation {
             Files.createDirectories(staging);
             URI platformRoot = sourceRoot.resolve(version + "/" + platform + "/");
             byte[] manifestBytes = fetcher.fetch(platformRoot.resolve("runtime-manifest.json"), MAX_MANIFEST_BYTES);
+            manifestTrust.verify(platform, manifestBytes);
             PiRuntimeManifest manifest = objectMapper.readValue(manifestBytes, PiRuntimeManifest.class);
             write(staging.resolve("runtime-manifest.json"), manifestBytes);
             validateIdentity(manifest, os, architecture);
