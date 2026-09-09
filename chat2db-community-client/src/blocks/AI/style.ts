@@ -60,6 +60,16 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       min-width: 0;
     `,
 
+    panelHeaderLeading: css`
+      min-width: 0;
+      flex: 1;
+    `,
+
+    runtimeSelect: css`
+      width: 108px;
+      flex: 0 0 108px;
+    `,
+
     panelHeaderBtn: css`
       display: inline-flex;
       align-items: center;

@@ -52,6 +52,8 @@ export default {
   'stream.source.files': 'Archivos',
   'stream.sidebar.newAgentChat': 'Nuevo chat de Agent',
   'stream.sidebar.agent': 'Agent',
+  'stream.runtime.default': 'Predeterminado',
+  'stream.runtime.pi': 'Pi Agent',
   'stream.agent.title': 'Chat de Agent',
   'stream.agent.runtimePi': 'Pi Beta',
   'stream.agent.empty': 'Iniciar una conversación con Agent',
