@@ -48,7 +48,7 @@ export default function AboutUs() {
   };
 
   const loadAgentFeatures = useCallback(async () => {
-    if (!isDesktop) return;
+    if (!clientRuntime.usesLocalPersistence) return;
     try {
       const [runtimeFeatures, bash] = await Promise.all([
         agentService.listRuntimeFeatures(undefined as void),
@@ -226,7 +226,7 @@ export default function AboutUs() {
           </div>
         </div>
       </div>
-      {isDesktop && (
+      {clientRuntime.usesLocalPersistence && (
         <div className={styles.updateRule}>
           <div className={styles.updateRuleTitle}>{i18n('setting.agent.title')}</div>
           <div className={styles.checkboxBox}>

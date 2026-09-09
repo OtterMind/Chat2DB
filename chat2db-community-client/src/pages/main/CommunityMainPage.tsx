@@ -112,7 +112,7 @@ function CommunityMainPage() {
   }, []);
 
   const loadAgentAvailability = useCallback(async () => {
-    if (!isDesktop) return;
+    if (!clientRuntime.usesLocalPersistence) return;
     try {
       const features = (await agentService.listRuntimeFeatures(undefined as void)) || [];
       setAgentEnabled(features.some((feature) => feature.runtimeType === 'PI' && feature.enabled));

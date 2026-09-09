@@ -14,7 +14,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 @Configuration
-@Conditional(DesktopAgentRuntimeCondition.class)
+@Conditional(LocalAgentRuntimeCondition.class)
 public class PiAgentRuntimeConfiguration {
 
     @Bean
