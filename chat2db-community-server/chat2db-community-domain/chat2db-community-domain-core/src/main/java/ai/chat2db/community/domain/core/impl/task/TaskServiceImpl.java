@@ -6,8 +6,10 @@ import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContext
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportPreview;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskDownload;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -26,6 +28,7 @@ import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFileProbe;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportParallelAdmission;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportTaskSourceSupport;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.ImportPreviewListener;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.support.ExcelTypeEnum;
@@ -100,7 +103,19 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Long submitImport(ImportTaskSpec spec) {
-        validateImportSource(spec.getSourceFile());
+        if (spec.getTableSources() == null || spec.getTableSources().isEmpty()) {
+            validateImportSource(spec.getSourceFile());
+        } else {
+            spec.getTableSources().stream().filter(Objects::nonNull)
+                    .map(ImportTableSource::getSourceFile).forEach(this::validateImportSource);
+        }
+        if (TaskType.DATA_FILE_IMPORT.name().equals(spec.getTaskType())
+                || spec.getTableSources() != null && !spec.getTableSources().isEmpty()) {
+            ImportTaskSourceSupport.effectiveSources(spec);
+        }
+        if (TaskType.SQL_FILE_IMPORT.name().equals(spec.getTaskType())) {
+            ImportTaskSourceSupport.validateSqlImportControls(spec);
+        }
         return submit(spec);
     }
 
@@ -424,25 +439,43 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public TaskDownload resolveArtifact(Long taskId) {
         Task task = get(taskId);
-        if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus())
-                || StringUtils.isBlank(task.getArtifactId())) {
+        if (task == null || StringUtils.isBlank(task.getArtifactId())) {
             throw new DataNotFoundException();
         }
-        return downloadFor(task.getArtifactId());
+        if (TaskStatus.SUCCESS.name().equals(task.getStatus())) {
+            // Preserve primary-download compatibility for tasks created before artifact rows were
+            // introduced. The path still comes only from the owned task row.
+            return downloadFor(task.getArtifactId());
+        }
+        return resolveStoredArtifact(task, task.getArtifactId());
     }
 
     @Override
     public TaskDownload resolveArtifact(Long taskId, String artifactId) {
         Task task = get(taskId);
-        if (task == null || !TaskStatus.SUCCESS.name().equals(task.getStatus())) {
+        if (task == null) {
+            throw new DataNotFoundException();
+        }
+        return resolveStoredArtifact(task, artifactId);
+    }
+
+    private TaskDownload resolveStoredArtifact(Task task, String artifactId) {
+        if (StringUtils.isBlank(artifactId)) {
             throw new DataNotFoundException();
         }
         // The parameter is only a lookup key; the served path always comes from the stored row, so
         // a caller cannot name an arbitrary file.
-        TaskArtifact artifact = taskStorage.listArtifacts(taskId).stream()
-                .filter(candidate -> candidate.getArtifactId().equals(artifactId))
+        TaskArtifact artifact = taskStorage.listArtifacts(task.getId()).stream()
+                .filter(candidate -> Objects.equals(candidate.getArtifactId(), artifactId))
                 .findFirst()
                 .orElseThrow(DataNotFoundException::new);
+        boolean successArtifact = TaskStatus.SUCCESS.name().equals(task.getStatus());
+        boolean terminalDiagnostic = (TaskStatus.FAILED.name().equals(task.getStatus())
+                || TaskStatus.CANCELLED.name().equals(task.getStatus()))
+                && TaskArtifactRole.isDiagnostic(artifact.getRole());
+        if (!successArtifact && !terminalDiagnostic) {
+            throw new DataNotFoundException();
+        }
         return downloadFor(artifact.getArtifactId());
     }
 
@@ -452,6 +485,9 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private TaskDownload downloadFor(String artifactPath) {
+        if (StringUtils.isBlank(artifactPath)) {
+            throw new DataNotFoundException();
+        }
         File file = new File(artifactPath);
         if (!file.isFile() || !file.canRead()) {
             throw new DataNotFoundException();

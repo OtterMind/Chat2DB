@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.IImportTaskSubmissionService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
@@ -8,6 +9,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ImportTaskSubmissionServiceImpl implements IImportTaskSubmissionService {
@@ -24,19 +31,55 @@ public class ImportTaskSubmissionServiceImpl implements IImportTaskSubmissionSer
 
     @Override
     public Long submit(ImportTaskSpec spec, String stagedFileId) {
-        if (StringUtils.isBlank(stagedFileId)) {
+        String legacyFileId = StringUtils.firstNonBlank(stagedFileId, spec.getImportFileId());
+        Set<String> fileIds = new LinkedHashSet<>();
+        if (StringUtils.isNotBlank(legacyFileId)) {
+            fileIds.add(legacyFileId);
+        }
+        if (spec.getTableSources() != null) {
+            spec.getTableSources().stream().filter(java.util.Objects::nonNull)
+                    .map(ImportTableSource::getImportFileId).filter(StringUtils::isNotBlank)
+                    .forEach(fileIds::add);
+        }
+        if (fileIds.isEmpty()) {
             return taskService.submitImport(spec);
         }
 
-        File stagedFile = importFileStagingService.resolve(stagedFileId);
-        importFileStagingService.claimForTask(stagedFileId);
-        spec.setSourceFile(stagedFile.getAbsolutePath());
-        spec.setImportFileId(stagedFileId);
+        Map<String, File> resolved = new LinkedHashMap<>();
+        List<String> claimed = new ArrayList<>();
         try {
+            for (String fileId : fileIds) {
+                resolved.put(fileId, importFileStagingService.resolve(fileId));
+            }
+            for (String fileId : fileIds) {
+                importFileStagingService.claimForTask(fileId);
+                claimed.add(fileId);
+            }
+            if (StringUtils.isNotBlank(legacyFileId)) {
+                spec.setSourceFile(resolved.get(legacyFileId).getAbsolutePath());
+                spec.setImportFileId(legacyFileId);
+            }
+            if (spec.getTableSources() != null) {
+                for (ImportTableSource source : spec.getTableSources()) {
+                    if (source != null && StringUtils.isNotBlank(source.getImportFileId())) {
+                        source.setSourceFile(resolved.get(source.getImportFileId()).getAbsolutePath());
+                    }
+                }
+            }
             return taskService.submitImport(spec);
         } catch (RuntimeException e) {
-            importFileStagingService.release(stagedFileId);
+            releaseClaims(claimed, e);
             throw e;
+        }
+    }
+
+    private void releaseClaims(List<String> claimed, RuntimeException failure) {
+        for (int index = claimed.size() - 1; index >= 0; index--) {
+            try {
+                importFileStagingService.release(claimed.get(index));
+            } catch (RuntimeException releaseFailure) {
+                failure.addSuppressed(releaseFailure);
+            }
         }
     }
 }

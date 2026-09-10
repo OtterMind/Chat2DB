@@ -53,6 +53,9 @@ final class ImportShardRetryPolicy {
     }
 
     static boolean isDeadlock(Throwable failure) {
+        if (ImportManifestScheduler.isCommitOutcomeUnknown(failure)) {
+            return false;
+        }
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
             if (cause instanceof SQLException sql
                     && (sql.getErrorCode() == 1213 || "40P01".equalsIgnoreCase(sql.getSQLState()))) {

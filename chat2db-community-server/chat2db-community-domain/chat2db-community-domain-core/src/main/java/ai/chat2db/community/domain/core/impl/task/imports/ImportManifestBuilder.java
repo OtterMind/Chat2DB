@@ -14,13 +14,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
 /** Validates and freezes the shard contract that preprocessing and execution must share. */
 public final class ImportManifestBuilder {
 
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     private ImportManifestBuilder() {
     }
@@ -62,6 +63,7 @@ public final class ImportManifestBuilder {
                 .admissionVerdict(admissionVerdict)
                 .sourceFingerprint(sourceFingerprint)
                 .totalEstimatedRows(totalRows)
+                .dependencyPlan(copy(plan))
                 .dependencies(List.copyOf(frozenDependencies))
                 .shards(List.copyOf(shards))
                 .build();
@@ -94,7 +96,7 @@ public final class ImportManifestBuilder {
             if (!ids.add(shard.getShardId())) {
                 throw new IllegalArgumentException("Duplicate manifest shard id: " + shard.getShardId());
             }
-            Integer plannedLayer = plannedLayers.get(shard.getTableName().toLowerCase(Locale.ROOT));
+            Integer plannedLayer = plannedLayers.get(tableNode(shard).toLowerCase(Locale.ROOT));
             if (plannedLayer == null || plannedLayer != shard.getLayer()) {
                 throw new IllegalArgumentException("Shard layer does not match dependency plan: " + shard.getShardId());
             }
@@ -136,7 +138,10 @@ public final class ImportManifestBuilder {
         }
         return ImportManifestShard.builder()
                 .shardId(StringUtils.trimToEmpty(source.getShardId()))
+                .databaseName(StringUtils.trimToNull(source.getDatabaseName()))
+                .schemaName(StringUtils.trimToNull(source.getSchemaName()))
                 .tableName(StringUtils.trimToEmpty(source.getTableName()))
+                .tableKey(StringUtils.trimToNull(source.getTableKey()))
                 .layer(source.getLayer())
                 .shardKey(StringUtils.trimToNull(source.getShardKey()))
                 .lowerBound(StringUtils.trimToNull(source.getLowerBound()))
@@ -154,9 +159,40 @@ public final class ImportManifestBuilder {
             throw new IllegalArgumentException("Manifest dependency requires parent and child tables");
         }
         return ImportTableDependency.builder()
+                .parentDatabaseName(source.getParentDatabaseName())
+                .parentSchemaName(source.getParentSchemaName())
                 .parentTable(source.getParentTable()).parentColumn(source.getParentColumn())
+                .parentTableKey(source.getParentTableKey())
+                .childDatabaseName(source.getChildDatabaseName())
+                .childSchemaName(source.getChildSchemaName())
                 .childTable(source.getChildTable()).childColumn(source.getChildColumn())
+                .childTableKey(source.getChildTableKey())
+                .constraintName(source.getConstraintName())
+                .keySequence(source.getKeySequence())
+                .deferrability(source.getDeferrability())
                 .logical(source.isLogical()).build();
+    }
+
+    private static ImportDependencyPlan copy(ImportDependencyPlan source) {
+        return ImportDependencyPlan.builder()
+                .mode(source.getMode())
+                .layers(copyNested(source.getLayers()))
+                .cyclicComponents(copyNested(source.getCyclicComponents()))
+                .selfReferencingTables(source.getSelfReferencingTables() == null ? List.of()
+                        : List.copyOf(source.getSelfReferencingTables()))
+                .shardKeys(source.getShardKeys() == null ? Map.of()
+                        : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(source.getShardKeys())))
+                .stagingRequired(source.isStagingRequired())
+                .cycleResolutionRequired(source.isCycleResolutionRequired())
+                .build();
+    }
+
+    private static List<List<String>> copyNested(List<List<String>> source) {
+        return source == null ? List.of() : source.stream().map(List::copyOf).toList();
+    }
+
+    private static String tableNode(ImportManifestShard shard) {
+        return StringUtils.defaultIfBlank(shard.getTableKey(), shard.getTableName());
     }
 
 }

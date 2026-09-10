@@ -49,6 +49,33 @@ class CsvShardPreprocessorTest {
     }
 
     @Test
+    void skipsSourceRowsOnceBeforeShardBoundariesCountsAndChecksums() throws Exception {
+        Path source = Files.writeString(tempDirectory.resolve("source-with-prefix.csv"),
+                "ID,NAME\n1,discard-a\n2,discard-b\n3,Carol\n4,David\n5,Eve\n6,Frank\n",
+                StandardCharsets.UTF_8);
+        Path staging = tempDirectory.resolve("skipped-staging");
+
+        List<ImportManifestShard> shards = CsvShardPreprocessor.preprocess(source.toFile(),
+                StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "app", "public",
+                "CUSTOMER", "app.public.CUSTOMER", 0, 22L, 2);
+
+        assertTrue(shards.size() > 1);
+        assertEquals(4L, shards.stream().mapToLong(ImportManifestShard::getEstimatedRows).sum());
+        List<List<String>> rows = new ArrayList<>();
+        for (ImportManifestShard shard : shards) {
+            CsvShardPreprocessor.verify(Path.of(shard.getSourcePath()).toFile(), shard);
+            try (CSVParser parser = CSVParser.parse(Path.of(shard.getSourcePath()),
+                    StandardCharsets.UTF_8, CSVFormat.DEFAULT)) {
+                List<org.apache.commons.csv.CSVRecord> records = parser.getRecords();
+                assertEquals(List.of("ID", "NAME"), records.get(0).toList());
+                records.stream().skip(1).map(org.apache.commons.csv.CSVRecord::toList).forEach(rows::add);
+            }
+        }
+        assertEquals(List.of(List.of("3", "Carol"), List.of("4", "David"),
+                List.of("5", "Eve"), List.of("6", "Frank")), rows);
+    }
+
+    @Test
     void refusesToOverwriteAnExistingShard() throws Exception {
         Path source = Files.writeString(tempDirectory.resolve("source.csv"), "ID\n1\n", StandardCharsets.UTF_8);
         Path staging = Files.createDirectories(tempDirectory.resolve("staging"));

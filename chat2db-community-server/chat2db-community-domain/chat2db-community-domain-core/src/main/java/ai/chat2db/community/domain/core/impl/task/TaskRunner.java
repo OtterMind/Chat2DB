@@ -80,12 +80,19 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
             logArtifactWritten(executionContext, drafts);
             completeSuccessfully(drafts);
         } catch (TaskCancelledException | CancellationException e) {
-            completeCancelled(executionContext.artifactDrafts());
+            if (runningTask.isCommitPhase()) {
+                completeFailed(TaskErrorCode.TASK_INTERNAL_ERROR.name(),
+                        "Task execution failed after database commit started", null, e,
+                        executionContext.artifactDrafts());
+            } else {
+                completeCancelled(executionContext.artifactDrafts());
+            }
         } catch (TaskExecutionException e) {
             completeFailed(e.getCode(), e.publicMessage(), e.getSafeReason(), e,
                     executionContext.artifactDrafts());
         } catch (Throwable e) {
-            if (runningTask.cancellationToken().isCancelled() || Thread.currentThread().isInterrupted()) {
+            if (!runningTask.isCommitPhase()
+                    && (runningTask.cancellationToken().isCancelled() || Thread.currentThread().isInterrupted())) {
                 completeCancelled(executionContext.artifactDrafts());
             } else {
                 completeFailed(TaskErrorCode.TASK_INTERNAL_ERROR.name(), "Task execution failed", null, e,
@@ -234,17 +241,19 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
 
     private void completeFailedLocked(String code, String message, String safeReason, Throwable cause,
             List<ArtifactDraft> drafts) {
-        for (ArtifactDraft draft : drafts) {
-            artifactService.deleteDraft(draft);
-        }
+        FailureArtifacts diagnostics = publishFailureDiagnostics(drafts);
         log.error("Task {} failed", submission.taskId(), cause);
         Date now = new Date();
-        taskStorage.compareAndSetStatus(submission.taskId(), TaskStatus.RUNNING.name(), TaskStatus.FAILED.name(),
+        boolean transitioned = taskStorage.compareAndSetStatus(
+                submission.taskId(), TaskStatus.RUNNING.name(), TaskStatus.FAILED.name(),
                 TaskStatusPatch.builder()
                         .stage(TaskStage.FAILED.name())
                         .progressMessage(message)
                         .errorCode(code)
                         .errorMessage(message)
+                        .artifactId(diagnostics.primaryArtifactId())
+                        .artifactIds(diagnostics.artifactIds().isEmpty()
+                                ? null : diagnostics.artifactIds())
                         .finishedAt(now)
                         .updatedAt(now)
                         .build(),
@@ -255,6 +264,77 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                         .message(message)
                         .details(failureDetails(code, safeReason))
                         .build());
+        if (!transitioned) {
+            rollbackPublishedArtifacts(diagnostics.artifactIds());
+        }
+    }
+
+    private FailureArtifacts publishFailureDiagnostics(List<ArtifactDraft> drafts) {
+        List<ArtifactDraft> ordered = drafts.stream()
+                .filter(this::isFailureDiagnostic)
+                .sorted(java.util.Comparator.comparingInt(this::diagnosticPriority))
+                .toList();
+        List<String> published = new ArrayList<>();
+        for (ArtifactDraft draft : drafts) {
+            if (!ordered.contains(draft)) {
+                artifactService.deleteDraft(draft);
+            }
+        }
+        for (ArtifactDraft draft : ordered) {
+            String artifactId = null;
+            try {
+                if (draft.getTemporaryFile() == null || !draft.getTemporaryFile().isFile()) {
+                    artifactService.deleteDraft(draft);
+                    continue;
+                }
+                artifactId = artifactService.publish(draft);
+                taskStorage.saveArtifact(submission.taskId(), TaskArtifact.builder()
+                        .artifactId(artifactId)
+                        .role(draft.getRole())
+                        .mediaType(draft.getMediaType())
+                        .sizeBytes(new File(artifactId).length())
+                        .createdAt(new Date())
+                        .build());
+                published.add(artifactId);
+                taskStorage.appendEvent(TaskEvent.builder()
+                        .taskId(submission.taskId())
+                        .level(TaskEventLevel.WARN.name())
+                        .code(TaskEventCode.ARTIFACT_PUBLISHED.name())
+                        .stage(TaskStage.FAILED.name())
+                        .message("Failure diagnostic artifact published")
+                        .details(Map.of(TaskConstants.ARTIFACT_ID_DETAIL_KEY, artifactId,
+                                TaskConstants.ARTIFACT_ROLE_DETAIL_KEY, draft.getRole()))
+                        .build());
+            } catch (Throwable diagnosticFailure) {
+                log.warn("Could not publish failure diagnostic {} for task {}",
+                        draft.getRole(), submission.taskId(), diagnosticFailure);
+                if (artifactId != null) {
+                    artifactService.deletePublished(artifactId);
+                    taskStorage.deleteArtifact(submission.taskId(), artifactId);
+                    published.remove(artifactId);
+                } else {
+                    artifactService.deleteDraft(draft);
+                }
+            }
+        }
+        return new FailureArtifacts(published.isEmpty() ? null : published.get(0), List.copyOf(published));
+    }
+
+    private boolean isFailureDiagnostic(ArtifactDraft draft) {
+        return draft != null && TaskArtifactRole.isDiagnostic(draft.getRole());
+    }
+
+    private int diagnosticPriority(ArtifactDraft draft) {
+        if (TaskArtifactRole.IMPORT_REPORT.equals(draft.getRole())) {
+            return 0;
+        }
+        if (TaskArtifactRole.REJECT_SUMMARY.equals(draft.getRole())) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private record FailureArtifacts(String primaryArtifactId, List<String> artifactIds) {
     }
 
     private Map<String, Object> failureDetails(String code, String safeReason) {

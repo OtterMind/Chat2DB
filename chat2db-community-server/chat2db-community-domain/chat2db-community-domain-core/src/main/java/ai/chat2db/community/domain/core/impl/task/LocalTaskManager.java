@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
@@ -246,7 +247,13 @@ public class LocalTaskManager {
                         continue;
                     }
                     boolean wasRunning = TaskStatus.RUNNING.name().equals(currentTask.getStatus());
-                    runningTask.requestCancellation(wasRunning);
+                    boolean cancellationRequested = runningTask.requestCancellation(wasRunning);
+                    if (!cancellationRequested && runningTask.isCommitPhase()) {
+                        if (wasRunning) {
+                            tasksToAwait.add(runningTask);
+                        }
+                        continue;
+                    }
                     if (failPersistedTask(currentTask, errorCode, eventCode, message)) {
                         tasksToCleanup.add(task.getId());
                     }
@@ -375,6 +382,11 @@ public class LocalTaskManager {
     private List<String> taskTableNames(TaskSpec spec, TaskTargetSnapshot target) {
         if (spec instanceof ExportTaskSpec exportSpec && exportSpec.getTableNames() != null) {
             return exportSpec.getTableNames();
+        }
+        if (spec instanceof ImportTaskSpec importSpec && importSpec.getTableSources() != null
+                && !importSpec.getTableSources().isEmpty()) {
+            return importSpec.getTableSources().stream().filter(Objects::nonNull)
+                    .map(ImportTableSource::getTableName).filter(Objects::nonNull).distinct().toList();
         }
         if (spec instanceof ImportTaskSpec && target != null && target.getTableName() != null) {
             return List.of(target.getTableName());

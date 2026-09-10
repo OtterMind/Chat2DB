@@ -30,6 +30,20 @@ public final class CsvShardPreprocessor {
     public static List<ImportManifestShard> preprocess(File source, Charset sourceCharset,
             CSVFormat sourceFormat, Path outputDirectory, String tableName, int layer, long targetBytes)
             throws IOException {
+        return preprocess(source, sourceCharset, sourceFormat, outputDirectory, null, null, tableName,
+                tableName, layer, targetBytes);
+    }
+
+    public static List<ImportManifestShard> preprocess(File source, Charset sourceCharset,
+            CSVFormat sourceFormat, Path outputDirectory, String databaseName, String schemaName,
+            String tableName, String tableKey, int layer, long targetBytes) throws IOException {
+        return preprocess(source, sourceCharset, sourceFormat, outputDirectory, databaseName, schemaName,
+                tableName, tableKey, layer, targetBytes, 0);
+    }
+
+    public static List<ImportManifestShard> preprocess(File source, Charset sourceCharset,
+            CSVFormat sourceFormat, Path outputDirectory, String databaseName, String schemaName,
+            String tableName, String tableKey, int layer, long targetBytes, int skipRows) throws IOException {
         if (source == null || !source.isFile() || !source.canRead()) {
             throw new IllegalArgumentException("CSV preprocessing requires a readable source file");
         }
@@ -53,13 +67,20 @@ public final class CsvShardPreprocessor {
                 header.set(0, StringUtils.removeStart(header.get(0), "\uFEFF"));
             }
             int shardNumber = 0;
-            current = openShard(outputDirectory, tableName, layer, shardNumber++, header, created);
+            current = openShard(outputDirectory, databaseName, schemaName, tableName, tableKey,
+                    layer, shardNumber++, header, created);
+            int remainingSkipRows = Math.max(0, skipRows);
             while (records.hasNext()) {
                 CSVRecord record = records.next();
+                if (remainingSkipRows > 0) {
+                    remainingSkipRows--;
+                    continue;
+                }
                 long recordBytes = estimateUtf8Bytes(record);
                 if (current.rows > 0L && current.estimatedBytes + recordBytes > targetBytes) {
                     result.add(current.publish());
-                    current = openShard(outputDirectory, tableName, layer, shardNumber++, header, created);
+                    current = openShard(outputDirectory, databaseName, schemaName, tableName, tableKey,
+                            layer, shardNumber++, header, created);
                 }
                 current.write(record, recordBytes);
             }
@@ -84,9 +105,11 @@ public final class CsvShardPreprocessor {
         }
     }
 
-    private static ShardWriter openShard(Path outputDirectory, String tableName, int layer, int shardNumber,
+    private static ShardWriter openShard(Path outputDirectory, String databaseName, String schemaName,
+            String tableName, String tableKey, int layer, int shardNumber,
             List<String> header, List<Path> created) throws IOException {
-        String safeTable = tableName.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+        String effectiveTableKey = StringUtils.defaultIfBlank(tableKey, tableName).trim();
+        String safeTable = effectiveTableKey.replaceAll("[^A-Za-z0-9._-]", "_");
         String shardId = safeTable.toLowerCase(Locale.ROOT) + "-" + String.format(Locale.ROOT, "%05d", shardNumber);
         Path target = outputDirectory.resolve(shardId + ".csv").toAbsolutePath().normalize();
         if (!target.startsWith(outputDirectory.toAbsolutePath().normalize())) {
@@ -96,7 +119,8 @@ public final class CsvShardPreprocessor {
             throw new IllegalStateException("CSV shard target already exists: " + target.getFileName());
         }
         created.add(target);
-        return new ShardWriter(shardId, tableName.trim(), layer, target, header);
+        return new ShardWriter(shardId, databaseName, schemaName, tableName.trim(), effectiveTableKey,
+                layer, target, header);
     }
 
     private static Path partPath(Path target) {
@@ -159,7 +183,10 @@ public final class CsvShardPreprocessor {
 
     private static final class ShardWriter {
         private final String shardId;
+        private final String databaseName;
+        private final String schemaName;
         private final String tableName;
+        private final String tableKey;
         private final int layer;
         private final Path target;
         private final Path temporary;
@@ -170,10 +197,13 @@ public final class CsvShardPreprocessor {
         private long estimatedBytes;
         private boolean closed;
 
-        private ShardWriter(String shardId, String tableName, int layer, Path target, List<String> header)
-                throws IOException {
+        private ShardWriter(String shardId, String databaseName, String schemaName, String tableName,
+                String tableKey, int layer, Path target, List<String> header) throws IOException {
             this.shardId = shardId;
+            this.databaseName = databaseName;
+            this.schemaName = schemaName;
             this.tableName = tableName;
+            this.tableKey = tableKey;
             this.layer = layer;
             this.target = target;
             this.temporary = partPath(target);
@@ -200,7 +230,10 @@ public final class CsvShardPreprocessor {
             }
             return ImportManifestShard.builder()
                     .shardId(shardId)
+                    .databaseName(databaseName)
+                    .schemaName(schemaName)
                     .tableName(tableName)
+                    .tableKey(tableKey)
                     .layer(layer)
                     .sourcePath(target.toString())
                     .estimatedRows(rows)

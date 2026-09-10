@@ -55,4 +55,11 @@ public class ImportOptions {
     private String onError;
 
     private Integer maxErrors;
+
+    /**
+     * Explicit SQL-exporter profile used for data-only imports of third-party dump files.
+     * {@code null} keeps the historical complete-script behavior only for trusted imports;
+     * third-party SQL imports require an explicit supported profile.
+     */
+    private String sqlExporterProfile;
 }

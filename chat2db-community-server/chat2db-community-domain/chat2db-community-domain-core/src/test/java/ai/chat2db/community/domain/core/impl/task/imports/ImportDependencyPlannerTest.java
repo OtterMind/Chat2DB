@@ -71,6 +71,17 @@ class ImportDependencyPlannerTest {
         assertEquals(ImportPlanMode.SERIAL_SAFE, moderate.getMode());
     }
 
+    @Test
+    void excludesExternalValidationParentsFromTheExecutionDag() {
+        ImportDependencyPlan plan = plan(List.of("orders"),
+                List.of(edge("tenants", "orders")), Map.of(),
+                "PARALLEL_SAFE", ImportAdmissionPolicy.STRICT, true);
+
+        assertEquals(List.of(List.of("orders")), plan.getLayers());
+        assertTrue(plan.getCyclicComponents().isEmpty());
+        assertFalse(plan.isCycleResolutionRequired());
+    }
+
     private ImportDependencyPlan plan(List<String> tables, List<ImportTableDependency> dependencies,
             Map<String, String> shardKeys, String verdict, ImportAdmissionPolicy policy, boolean trusted) {
         return ImportDependencyPlanner.plan(tables, dependencies, shardKeys, verdict, policy, trusted);

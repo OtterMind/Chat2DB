@@ -18,8 +18,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,7 +36,8 @@ class ImportManifestSchedulerTest {
         AtomicBoolean childStartedBeforeParentsCommitted = new AtomicBoolean();
         AtomicInteger committedParents = new AtomicInteger();
 
-        Thread run = new Thread(() -> new ImportManifestScheduler(memory.proxy()).execute(manifest, 2, null, shard -> {
+        Thread run = new Thread(() -> new ImportManifestScheduler(memory.proxy()).execute(manifest, 2, null,
+                (shard, cancellationCheck) -> {
             if (shard.getLayer() == 0) {
                 parentsStarted.countDown();
                 assertTrue(releaseParents.await(5, TimeUnit.SECONDS));
@@ -59,21 +62,23 @@ class ImportManifestSchedulerTest {
     }
 
     @Test
-    void recoversRunningShardsAndSkipsAlreadyCommittedShards() {
+    void refusesToReplayAShardWithAnUnknownRunningOutcome() {
         MemoryResumeStorage memory = new MemoryResumeStorage();
         ImportManifest manifest = manifest();
         memory.save(state(0, ImportManifestScheduler.DONE, cursor(manifest, manifest.getShards().get(0)), 10L));
         memory.save(state(1, ImportManifestScheduler.RUNNING, cursor(manifest, manifest.getShards().get(1)), 0L));
         AtomicInteger executions = new AtomicInteger();
 
-        new ImportManifestScheduler(memory.proxy()).execute(manifest, 2, null, shard -> {
-            executions.incrementAndGet();
-            return new ImportManifestScheduler.ShardResult(shard.getEstimatedRows(), 10L);
-        });
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> new ImportManifestScheduler(memory.proxy()).execute(manifest, 2, null,
+                        (shard, cancellationCheck) -> {
+                            executions.incrementAndGet();
+                            return new ImportManifestScheduler.ShardResult(shard.getEstimatedRows(), 10L);
+                        }));
 
-        assertEquals(2, executions.get());
-        assertEquals(ImportManifestScheduler.DONE, memory.states().get(1).getKind());
-        assertEquals(ImportManifestScheduler.DONE, memory.states().get(2).getKind());
+        assertTrue(failure.getMessage().contains("unknown commit outcome"));
+        assertEquals(0, executions.get());
+        assertEquals(ImportManifestScheduler.RUNNING, memory.states().get(1).getKind());
     }
 
     @Test
@@ -83,7 +88,7 @@ class ImportManifestSchedulerTest {
         AtomicBoolean childStarted = new AtomicBoolean();
 
         assertThrows(IllegalStateException.class, () -> new ImportManifestScheduler(memory.proxy())
-                .execute(manifest, 2, null, shard -> {
+                .execute(manifest, 2, null, (shard, cancellationCheck) -> {
                     if (shard.getLayer() == 1) {
                         childStarted.set(true);
                     }
@@ -98,6 +103,103 @@ class ImportManifestSchedulerTest {
     }
 
     @Test
+    void cancelsQueuedShardsAndWaitsForBlockingWorkerCleanupBeforeFailureReturns() throws Exception {
+        MemoryResumeStorage memory = new MemoryResumeStorage();
+        ImportManifest manifest = failingLayerManifest();
+        CountDownLatch activeWorkersStarted = new CountDownLatch(2);
+        CountDownLatch blockForever = new CountDownLatch(1);
+        CountDownLatch blockingWorkerCleanupStarted = new CountDownLatch(1);
+        CountDownLatch allowBlockingWorkerCleanup = new CountDownLatch(1);
+        CountDownLatch schedulerFinished = new CountDownLatch(1);
+        AtomicBoolean blockingWorkerCleanupFinished = new AtomicBoolean();
+        AtomicBoolean queuedShardStarted = new AtomicBoolean();
+        AtomicReference<Throwable> schedulerFailure = new AtomicReference<>();
+
+        Thread run = new Thread(() -> {
+            try {
+                new ImportManifestScheduler(memory.proxy()).execute(manifest, 2, null,
+                        (shard, cancellationCheck) -> {
+                    if ("blocking-1".equals(shard.getShardId())) {
+                        activeWorkersStarted.countDown();
+                        assertTrue(activeWorkersStarted.await(5, TimeUnit.SECONDS));
+                        try {
+                            try {
+                                blockForever.await();
+                            } catch (InterruptedException ignored) {
+                                Thread.interrupted();
+                            }
+                            cancellationCheck.run();
+                            return new ImportManifestScheduler.ShardResult(1L, 1L);
+                        } finally {
+                            blockingWorkerCleanupStarted.countDown();
+                            try {
+                                assertTrue(awaitUninterruptibly(allowBlockingWorkerCleanup, 5, TimeUnit.SECONDS));
+                            } finally {
+                                blockingWorkerCleanupFinished.set(true);
+                            }
+                        }
+                    }
+                    if ("failing-1".equals(shard.getShardId())) {
+                        activeWorkersStarted.countDown();
+                        assertTrue(activeWorkersStarted.await(5, TimeUnit.SECONDS));
+                        throw new IllegalStateException("controlled fast failure");
+                    }
+                    queuedShardStarted.set(true);
+                    return new ImportManifestScheduler.ShardResult(1L, 1L);
+                });
+            } catch (Throwable failure) {
+                schedulerFailure.set(failure);
+            } finally {
+                schedulerFinished.countDown();
+            }
+        }, "manifest-scheduler-regression");
+        run.setDaemon(true);
+        run.start();
+
+        try {
+            assertTrue(blockingWorkerCleanupStarted.await(5, TimeUnit.SECONDS));
+            assertFalse(schedulerFinished.await(200, TimeUnit.MILLISECONDS));
+            assertFalse(blockingWorkerCleanupFinished.get());
+            assertFalse(queuedShardStarted.get());
+        } finally {
+            blockForever.countDown();
+            allowBlockingWorkerCleanup.countDown();
+        }
+        assertTrue(schedulerFinished.await(5, TimeUnit.SECONDS));
+        run.join(5000);
+        assertFalse(run.isAlive());
+        assertTrue(blockingWorkerCleanupFinished.get());
+        assertFalse(queuedShardStarted.get());
+        assertTrue(schedulerFailure.get() instanceof IllegalStateException);
+        assertEquals("controlled fast failure", schedulerFailure.get().getMessage());
+        assertEquals(List.of(ImportManifestScheduler.FAILED, ImportManifestScheduler.FAILED,
+                        ImportManifestScheduler.PENDING),
+                memory.states().stream().map(ResumeState::getKind).toList());
+    }
+
+    private boolean awaitUninterruptibly(CountDownLatch latch, long timeout, TimeUnit unit) {
+        boolean interrupted = Thread.interrupted();
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        try {
+            while (true) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0L) {
+                    return latch.getCount() == 0L;
+                }
+                try {
+                    return latch.await(remaining, TimeUnit.NANOSECONDS);
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    @Test
     void rejectsResumeStateFromAnotherManifest() {
         MemoryResumeStorage memory = new MemoryResumeStorage();
         ImportManifest manifest = manifest();
@@ -105,7 +207,8 @@ class ImportManifestSchedulerTest {
                 "{\"manifestFingerprint\":\"old\",\"shardId\":\"orders-1\",\"layer\":0}", 10L));
 
         assertThrows(IllegalStateException.class, () -> new ImportManifestScheduler(memory.proxy())
-                .execute(manifest, 2, null, shard -> new ImportManifestScheduler.ShardResult(0, 0)));
+                .execute(manifest, 2, null,
+                        (shard, cancellationCheck) -> new ImportManifestScheduler.ShardResult(0, 0)));
     }
 
     @Test
@@ -116,7 +219,8 @@ class ImportManifestSchedulerTest {
         ImportShardRetryPolicy retry = new ImportShardRetryPolicy(1, 0L, 0L,
                 ignored -> { }, ignored -> 0L);
 
-        new ImportManifestScheduler(memory.proxy(), retry).execute(manifest, 2, null, shard -> {
+        new ImportManifestScheduler(memory.proxy(), retry).execute(manifest, 2, null,
+                (shard, cancellationCheck) -> {
             if ("orders-1".equals(shard.getShardId()) && attempts.incrementAndGet() == 1) {
                 throw new SQLException("deadlock", "40001", 1213);
             }
@@ -127,6 +231,46 @@ class ImportManifestSchedulerTest {
         assertEquals(ImportManifestScheduler.DONE, memory.states().get(0).getKind());
     }
 
+    @Test
+    void marksCommittedShardUnknownWhenDoneCheckpointCannotBePersisted() {
+        MemoryResumeStorage memory = new MemoryResumeStorage();
+        ImportManifest manifest = singleShardManifest();
+        memory.failDoneTransition(0);
+        AtomicInteger executions = new AtomicInteger();
+
+        ImportManifestScheduler.CommitOutcomeUnknownException failure = assertThrows(
+                ImportManifestScheduler.CommitOutcomeUnknownException.class,
+                () -> new ImportManifestScheduler(memory.proxy()).execute(manifest, 1, null,
+                        (shard, cancellationCheck) -> {
+                            executions.incrementAndGet();
+                            return new ImportManifestScheduler.ShardResult(1L, 10L);
+                        }));
+
+        assertTrue(failure.getMessage().contains("durable completion state"));
+        assertEquals(1, executions.get());
+        assertEquals(ImportManifestScheduler.COMMIT_UNKNOWN, memory.states().get(0).getKind());
+    }
+
+    @Test
+    void doesNotDeadlockRetryAnExplicitUnknownCommitOutcome() {
+        MemoryResumeStorage memory = new MemoryResumeStorage();
+        ImportManifest manifest = singleShardManifest();
+        AtomicInteger attempts = new AtomicInteger();
+        ImportShardRetryPolicy retry = new ImportShardRetryPolicy(2, 0L, 0L,
+                ignored -> { }, ignored -> 0L);
+
+        assertThrows(ImportManifestScheduler.CommitOutcomeUnknownException.class,
+                () -> new ImportManifestScheduler(memory.proxy(), retry).execute(manifest, 1, null,
+                        (shard, cancellationCheck) -> {
+                            attempts.incrementAndGet();
+                            throw new ImportManifestScheduler.CommitOutcomeUnknownException(
+                                    "commit unknown", new SQLException("deadlock", "40P01"));
+                        }));
+
+        assertEquals(1, attempts.get());
+        assertEquals(ImportManifestScheduler.COMMIT_UNKNOWN, memory.states().get(0).getKind());
+    }
+
     private ImportManifest manifest() {
         ImportManifestShard orders = shard("orders-1", "orders", 0, 10, List.of());
         ImportManifestShard customers = shard("customers-1", "customers", 0, 20, List.of());
@@ -135,6 +279,21 @@ class ImportManifestSchedulerTest {
         return ImportManifest.builder().schemaVersion(1).taskId(42L).mode(ImportPlanMode.PARALLEL_LAYER)
                 .sourceFingerprint("source").manifestFingerprint("manifest-abc")
                 .shards(List.of(orders, customers, items)).build();
+    }
+
+    private ImportManifest failingLayerManifest() {
+        ImportManifestShard blocking = shard("blocking-1", "blocking", 0, 1, List.of());
+        ImportManifestShard failing = shard("failing-1", "failing", 0, 1, List.of());
+        ImportManifestShard queued = shard("queued-1", "queued", 0, 1, List.of());
+        return ImportManifest.builder().schemaVersion(1).taskId(43L).mode(ImportPlanMode.PARALLEL_LAYER)
+                .sourceFingerprint("source").manifestFingerprint("manifest-failure")
+                .shards(List.of(blocking, failing, queued)).build();
+    }
+
+    private ImportManifest singleShardManifest() {
+        return ImportManifest.builder().schemaVersion(1).taskId(44L).mode(ImportPlanMode.SERIAL_SAFE)
+                .sourceFingerprint("source").manifestFingerprint("manifest-single")
+                .shards(List.of(shard("single-1", "single", 0, 1, List.of()))).build();
     }
 
     private ImportManifestShard shard(String id, String table, int layer, long rows, List<String> dependencies) {
@@ -154,6 +313,11 @@ class ImportManifestSchedulerTest {
 
     private static final class MemoryResumeStorage {
         private final Map<Integer, ResumeState> states = new HashMap<>();
+        private Integer failDoneIndex;
+
+        private synchronized void failDoneTransition(int index) {
+            failDoneIndex = index;
+        }
 
         private synchronized void save(ResumeState state) {
             states.put(state.getShardNo(), copy(state));
@@ -183,6 +347,10 @@ class ImportManifestSchedulerTest {
         private synchronized boolean compareAndSet(Integer index, String expected, ResumeState target) {
             ResumeState current = states.get(index);
             if (current == null || !expected.equals(current.getKind())) {
+                return false;
+            }
+            if (index.equals(failDoneIndex) && ImportManifestScheduler.DONE.equals(target.getKind())) {
+                failDoneIndex = null;
                 return false;
             }
             states.put(index, copy(target));

@@ -1,17 +1,27 @@
 package ai.chat2db.community.domain.core.impl.task.imports;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
+import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportManifestIntegrity;
 import ai.chat2db.community.domain.api.model.task.ImportManifestShard;
+import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
+import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
+import ai.chat2db.community.domain.api.model.task.ImportScope;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,11 +33,13 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,6 +107,76 @@ class CsvManifestImporterTest {
     }
 
     @Test
+    void entersTheParentCommitPhaseBeforeTheShardCommit(@TempDir Path directory) throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-commit-phase.csv"), "id\n1\n");
+        AtomicInteger commitPhaseEntries = new AtomicInteger();
+        TaskExecutionContext context = (TaskExecutionContext) Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{TaskExecutionContext.class}, (proxy, method, args) -> {
+                    if ("taskId".equals(method.getName())) {
+                        return 42L;
+                    }
+                    if ("enterCommitPhase".equals(method.getName())) {
+                        commitPhaseEntries.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        JdbcProbe jdbc = new JdbcProbe();
+        jdbc.beforeCommit = () -> assertEquals(1, commitPhaseEntries.get());
+        ImportManifest manifest = manifest(source);
+
+        importer((ignored, shardContext) -> { }, jdbc, new AtomicInteger()).executeShard(spec(), context,
+                connectInfo(), manifest, manifest.getShards().get(0));
+
+        assertEquals(1, commitPhaseEntries.get());
+        assertEquals(1, jdbc.commits.get());
+    }
+
+    @Test
+    void multiTableShardUsesItsOwnQualifiedTargetMappingAndConnection(@TempDir Path directory) throws Exception {
+        Path source = Files.writeString(directory.resolve("items-0.csv"), "source_id\n10\n");
+        ImportManifest manifest = manifest(source);
+        ImportManifestShard shard = manifest.getShards().get(0);
+        shard.setDatabaseName("app");
+        shard.setSchemaName("tenant");
+        shard.setTableName("order_items");
+        shard.setTableKey("app.tenant.order_items");
+        ImportTaskSpec spec = ImportTaskSpec.builder().scope(ImportScope.SCHEMA).format("CSV")
+                .mode(TaskExecutionMode.STANDARD)
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("tenant").build())
+                .tableSources(List.of(
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("orders").sourceFile("orders.csv").format("CSV").build(),
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("order_items").sourceFile("items.csv").format("CSV")
+                                .columnMappings(List.of(ImportColumnMapping.builder()
+                                        .sourceColumn("source_id").targetColumn("id").build()))
+                                .options(ImportOptions.builder().onError("ABORT").build()).build()))
+                .build();
+        JdbcProbe jdbc = new JdbcProbe();
+        AtomicReference<ConnectInfo> opened = new AtomicReference<>();
+        TaskStorage unusedStorage = (TaskStorage) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> defaultValue(method.getReturnType()));
+        CsvManifestImporter importer = new CsvManifestImporter(new ImportManifestScheduler(unusedStorage),
+                (shardSpec, context) -> {
+                    assertEquals("app", shardSpec.getTarget().getDatabaseName());
+                    assertEquals("tenant", shardSpec.getTarget().getSchemaName());
+                    assertEquals("order_items", shardSpec.getTarget().getTableName());
+                    assertEquals("source_id", shardSpec.getColumnMappings().get(0).getSourceColumn());
+                    assertEquals("id", shardSpec.getColumnMappings().get(0).getTargetColumn());
+                }, connectInfo -> {
+                    opened.set(connectInfo);
+                    return jdbc.connection;
+                }, ignored -> { });
+
+        importer.executeShard(spec, context(new AtomicInteger(), new AtomicReference<>()),
+                connectInfo(), manifest, shard);
+
+        assertEquals("app", opened.get().getDatabaseName());
+        assertEquals("tenant", opened.get().getSchemaName());
+        assertEquals(1, jdbc.commits.get());
+    }
+
+    @Test
     void shardFailureRollsBackAndReleasesConnection(@TempDir Path directory) throws Exception {
         Path source = Files.writeString(directory.resolve("orders-0.csv"), "id\n1\n");
         JdbcProbe jdbc = new JdbcProbe();
@@ -113,6 +195,104 @@ class CsvManifestImporterTest {
         assertTrue(jdbc.autoCommit.get());
         assertEquals(1, releases.get());
         assertEquals(null, Chat2DBContext.getConnectInfo());
+    }
+
+    @Test
+    void commitFailureIsOutcomeUnknownAndDiscardsConnectionWithoutRetryableRollback(@TempDir Path directory)
+            throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-commit-unknown.csv"), "id\n1\n");
+        JdbcProbe jdbc = new JdbcProbe();
+        jdbc.commitFailure = new SQLException("commit deadlock", "40P01");
+        AtomicInteger releases = new AtomicInteger();
+        ImportManifest manifest = manifest(source);
+
+        ImportManifestScheduler.CommitOutcomeUnknownException failure = assertThrows(
+                ImportManifestScheduler.CommitOutcomeUnknownException.class,
+                () -> importer((spec, context) -> { }, jdbc, releases).executeShard(spec(),
+                        context(new AtomicInteger(), new AtomicReference<>()), connectInfo(), manifest,
+                        manifest.getShards().get(0)));
+
+        assertTrue(failure.getMessage().contains("verify target data before retrying"));
+        assertEquals(1, jdbc.commits.get());
+        assertEquals(0, jdbc.rollbacks.get());
+        assertEquals(0, releases.get());
+        assertTrue(jdbc.closed.get());
+        assertFalse(ImportShardRetryPolicy.isDeadlock(failure));
+    }
+
+    @Test
+    void skipSummaryPreservesCommitUnknownOutcome(@TempDir Path directory) throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-commit-unknown.csv"), "id\n1\n");
+        Path summary = directory.resolve("reject-summary.json");
+        JdbcProbe jdbc = new JdbcProbe();
+        jdbc.commitFailure = new SQLException("commit outcome unknown", "08007");
+        TaskStorage storage = (TaskStorage) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> switch (method.getName()) {
+                    case "listResumeStates" -> List.of();
+                    case "compareAndSetResumeState" -> true;
+                    default -> defaultValue(method.getReturnType());
+                });
+        CsvManifestImporter importer = new CsvManifestImporter(new ImportManifestScheduler(storage),
+                (ignored, context) -> { }, ignored -> jdbc.connection, ignored -> { });
+        ImportTaskSpec spec = spec();
+        spec.getOptions().setOnError("SKIP");
+        ImportManifest manifest = manifest(source);
+        TaskExecutionContext context = context(new AtomicInteger(), new AtomicReference<>(),
+                new AtomicReference<>(), summary);
+        Chat2DBContext.putContext(connectInfo());
+
+        assertThrows(ImportManifestScheduler.CommitOutcomeUnknownException.class,
+                () -> importer.execute(spec, context, manifest));
+
+        JSONObject report = JSON.parseObject(Files.readString(summary));
+        assertEquals("COMMIT_UNKNOWN", report.getJSONArray("shards")
+                .getJSONObject(0).getString("status"));
+        assertEquals(0, jdbc.rollbacks.get());
+        assertTrue(jdbc.closed.get());
+    }
+
+    @Test
+    void committedShardWarnsAndDiscardsConnectionWhenStateRestoreFails(@TempDir Path directory)
+            throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-restore-failure.csv"), "id\n1\n");
+        JdbcProbe jdbc = new JdbcProbe();
+        jdbc.autoCommitRestoreFailure = new SQLException("restore failed", "08006");
+        AtomicInteger releases = new AtomicInteger();
+        AtomicReference<String> eventCode = new AtomicReference<>();
+        TaskExecutionContext context = context(new AtomicInteger(), new AtomicReference<>(), eventCode);
+        ImportManifest manifest = manifest(source);
+
+        importer((ignored, shardContext) -> { }, jdbc, releases).executeShard(spec(), context,
+                connectInfo(), manifest, manifest.getShards().get(0));
+
+        assertEquals(1, jdbc.commits.get());
+        assertEquals(0, jdbc.rollbacks.get());
+        assertEquals(0, releases.get());
+        assertTrue(jdbc.closed.get());
+        assertEquals("IMPORT_CONNECTION_DISCARDED", eventCode.get());
+    }
+
+    @Test
+    void sharedLayerCancellationIsCheckedInsideTheImporterAndBeforeCommit(@TempDir Path directory)
+            throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-0.csv"), "id\n1\n");
+        ImportManifest manifest = manifest(source);
+        JdbcProbe jdbc = new JdbcProbe();
+        AtomicInteger cancellationChecks = new AtomicInteger();
+        IImportStrategy strategy = (spec, shardContext) -> shardContext.checkCancelled();
+        Runnable cancellationCheck = () -> {
+            if (cancellationChecks.incrementAndGet() == 2) {
+                throw new CancellationException("peer shard failed");
+            }
+        };
+
+        assertThrows(CancellationException.class, () -> importer(strategy, jdbc, new AtomicInteger())
+                .executeShard(spec(), context(new AtomicInteger(), new AtomicReference<>()),
+                        connectInfo(), manifest, manifest.getShards().get(0), cancellationCheck));
+
+        assertEquals(2, cancellationChecks.get());
+        assertEquals(0, jdbc.commits.get());
+        assertEquals(1, jdbc.rollbacks.get());
     }
 
     @Test
@@ -153,6 +333,53 @@ class CsvManifestImporterTest {
         assertEquals(null, Chat2DBContext.getConnectInfo());
     }
 
+    @Test
+    void skipModeUsesAShardScopedRejectArtifact(@TempDir Path directory) throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-0.csv"), "id\n1\n");
+        ImportManifest manifest = manifest(source);
+        JdbcProbe jdbc = new JdbcProbe();
+        AtomicReference<String> artifactRole = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> eventDetails = new AtomicReference<>();
+        TaskExecutionContext context = context(new AtomicInteger(), eventDetails, artifactRole,
+                directory.resolve("reject.ndjson"));
+        IImportStrategy strategy = (spec, shardContext) -> {
+            shardContext.createArtifact(TaskArtifactRole.REJECT, directory.toString(),
+                    "orders.rejects.ndjson", "application/x-ndjson");
+            shardContext.logWarn("IMPORT_ROW_REJECTED", "bad row", Map.of("rejectedRows", 1));
+            shardContext.logInfo("IMPORT_SUMMARY", "done",
+                    Map.of("importedRows", 0L, "rejectedRows", 1L));
+        };
+        ImportTaskSpec spec = spec();
+        spec.getOptions().setOnError("SKIP");
+        spec.getOptions().setMaxErrors(2);
+
+        importer(strategy, jdbc, new AtomicInteger())
+                .executeShard(spec, context, connectInfo(), manifest, manifest.getShards().get(0));
+
+        assertEquals(TaskArtifactRole.rejectForShard("orders-0"), artifactRole.get());
+        assertEquals("orders-0", eventDetails.get().get("shardId"));
+        assertEquals(1, jdbc.commits.get());
+    }
+
+    @Test
+    void skipModeEnforcesTaskWideRejectLimitInsideTheShardTransaction(@TempDir Path directory) throws Exception {
+        Path source = Files.writeString(directory.resolve("orders-0.csv"), "id\n1\n");
+        ImportManifest manifest = manifest(source);
+        JdbcProbe jdbc = new JdbcProbe();
+        ImportTaskSpec spec = spec();
+        spec.getOptions().setOnError("SKIP");
+        spec.getOptions().setMaxErrors(0);
+        IImportStrategy strategy = (ignored, shardContext) -> shardContext.logWarn(
+                "IMPORT_ROW_REJECTED", "bad row", Map.of("rejectedRows", 1));
+
+        assertThrows(TaskExecutionException.class, () -> importer(strategy, jdbc, new AtomicInteger())
+                .executeShard(spec, context(new AtomicInteger(), new AtomicReference<>()),
+                        connectInfo(), manifest, manifest.getShards().get(0)));
+
+        assertEquals(0, jdbc.commits.get());
+        assertEquals(1, jdbc.rollbacks.get());
+    }
+
     private CsvManifestImporter importer(IImportStrategy strategy, JdbcProbe jdbc, AtomicInteger releases) {
         TaskStorage unusedStorage = (TaskStorage) Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> defaultValue(method.getReturnType()));
@@ -176,10 +403,10 @@ class CsvManifestImporterTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
-        return ImportManifest.builder()
+        ImportManifest manifest = ImportManifest.builder()
                 .schemaVersion(1)
                 .taskId(42L)
-                .manifestFingerprint("manifest-abc")
+                .mode(ImportPlanMode.SERIAL_SAFE)
                 .shards(List.of(ImportManifestShard.builder()
                         .shardId("orders-0")
                         .tableName("orders")
@@ -190,6 +417,8 @@ class CsvManifestImporterTest {
                         .dependencyShardIds(List.of())
                         .build()))
                 .build();
+        manifest.setManifestFingerprint(ImportManifestIntegrity.calculate(manifest));
+        return manifest;
     }
 
     private ConnectInfo connectInfo() {
@@ -204,6 +433,25 @@ class CsvManifestImporterTest {
     @SuppressWarnings("unchecked")
     private TaskExecutionContext context(AtomicInteger checkpoints,
             AtomicReference<Map<String, Object>> eventDetails) {
+        return context(checkpoints, eventDetails, new AtomicReference<>());
+    }
+
+    private TaskExecutionContext context(AtomicInteger checkpoints,
+            AtomicReference<Map<String, Object>> eventDetails, AtomicReference<String> eventCode) {
+        return context(checkpoints, eventDetails, eventCode, new AtomicReference<>(), null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private TaskExecutionContext context(AtomicInteger checkpoints,
+            AtomicReference<Map<String, Object>> eventDetails, AtomicReference<String> artifactRole,
+            Path artifactPath) {
+        return context(checkpoints, eventDetails, new AtomicReference<>(), artifactRole, artifactPath);
+    }
+
+    @SuppressWarnings("unchecked")
+    private TaskExecutionContext context(AtomicInteger checkpoints,
+            AtomicReference<Map<String, Object>> eventDetails, AtomicReference<String> eventCode,
+            AtomicReference<String> artifactRole, Path artifactPath) {
         return (TaskExecutionContext) Proxy.newProxyInstance(getClass().getClassLoader(),
                 new Class<?>[]{TaskExecutionContext.class}, (proxy, method, args) -> {
                     if ("taskId".equals(method.getName())) {
@@ -212,11 +460,20 @@ class CsvManifestImporterTest {
                     if ("checkpoint".equals(method.getName())) {
                         checkpoints.incrementAndGet();
                     }
-                    if ("logInfo".equals(method.getName()) && args.length == 3) {
+                    if (("logInfo".equals(method.getName()) || "logWarn".equals(method.getName()))
+                            && args.length == 3) {
+                        eventCode.set((String) args[0]);
                         eventDetails.set((Map<String, Object>) args[2]);
                     }
                     if ("resumeStates".equals(method.getName())) {
                         return List.of(ResumeState.builder().shardNo(0).kind("MANIFEST_RUNNING").build());
+                    }
+                    if ("createArtifact".equals(method.getName()) && args.length == 4) {
+                        artifactRole.set((String) args[0]);
+                        return ArtifactDraft.builder().role((String) args[0])
+                                .temporaryFile(artifactPath == null ? null : artifactPath.toFile())
+                                .targetFile(artifactPath == null ? null : artifactPath.toFile())
+                                .mediaType((String) args[3]).build();
                     }
                     return defaultValue(method.getReturnType());
                 });
@@ -248,16 +505,35 @@ class CsvManifestImporterTest {
 
     private static final class JdbcProbe {
         private final AtomicBoolean autoCommit = new AtomicBoolean(true);
+        private final AtomicBoolean closed = new AtomicBoolean();
         private final AtomicInteger commits = new AtomicInteger();
         private final AtomicInteger rollbacks = new AtomicInteger();
+        private SQLException commitFailure;
+        private SQLException autoCommitRestoreFailure;
+        private Runnable beforeCommit = () -> { };
         private final Connection connection = (Connection) Proxy.newProxyInstance(
                 CsvManifestImporterTest.class.getClassLoader(), new Class<?>[]{Connection.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getAutoCommit" -> autoCommit.get();
-                    case "setAutoCommit" -> { autoCommit.set((Boolean) args[0]); yield null; }
-                    case "commit" -> { commits.incrementAndGet(); yield null; }
+                    case "setAutoCommit" -> {
+                        boolean value = (Boolean) args[0];
+                        if (value && autoCommitRestoreFailure != null) {
+                            throw autoCommitRestoreFailure;
+                        }
+                        autoCommit.set(value);
+                        yield null;
+                    }
+                    case "commit" -> {
+                        beforeCommit.run();
+                        commits.incrementAndGet();
+                        if (commitFailure != null) {
+                            throw commitFailure;
+                        }
+                        yield null;
+                    }
                     case "rollback" -> { rollbacks.incrementAndGet(); yield null; }
-                    case "isClosed" -> false;
+                    case "close" -> { closed.set(true); yield null; }
+                    case "isClosed" -> closed.get();
                     case "unwrap" -> proxy;
                     case "isWrapperFor" -> false;
                     default -> defaultValue(method.getReturnType());

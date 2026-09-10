@@ -37,18 +37,17 @@ public final class ImportDependencyPlanner {
             requestedTables.stream().filter(StringUtils::isNotBlank).map(String::trim).forEach(tables::add);
         }
         List<ImportTableDependency> edges = dependencies == null ? List.of() : dependencies.stream()
-                .filter(ImportDependencyPlanner::valid).toList();
-        edges.forEach(edge -> {
-            tables.add(edge.getParentTable().trim());
-            tables.add(edge.getChildTable().trim());
-        });
+                .filter(ImportDependencyPlanner::valid)
+                .filter(edge -> containsIgnoreCase(tables, parentNode(edge))
+                        && containsIgnoreCase(tables, childNode(edge)))
+                .toList();
 
         Map<String, Set<String>> graph = new LinkedHashMap<>();
         tables.forEach(table -> graph.put(table, new TreeSet<>(TABLE_ORDER)));
         Set<String> selfReferences = new TreeSet<>(TABLE_ORDER);
         for (ImportTableDependency edge : edges) {
-            String parent = canonical(tables, edge.getParentTable());
-            String child = canonical(tables, edge.getChildTable());
+            String parent = canonical(tables, parentNode(edge));
+            String child = canonical(tables, childNode(edge));
             if (parent.equalsIgnoreCase(child)) {
                 selfReferences.add(parent);
             } else {
@@ -87,8 +86,20 @@ public final class ImportDependencyPlanner {
     }
 
     private static boolean valid(ImportTableDependency edge) {
-        return edge != null && StringUtils.isNotBlank(edge.getParentTable())
-                && StringUtils.isNotBlank(edge.getChildTable());
+        return edge != null && StringUtils.isNotBlank(parentNode(edge))
+                && StringUtils.isNotBlank(childNode(edge));
+    }
+
+    private static String parentNode(ImportTableDependency edge) {
+        return StringUtils.defaultIfBlank(edge.getParentTableKey(), edge.getParentTable()).trim();
+    }
+
+    private static String childNode(ImportTableDependency edge) {
+        return StringUtils.defaultIfBlank(edge.getChildTableKey(), edge.getChildTable()).trim();
+    }
+
+    private static boolean containsIgnoreCase(Set<String> values, String candidate) {
+        return values.stream().anyMatch(value -> value.equalsIgnoreCase(candidate));
     }
 
     private static String canonical(Set<String> tables, String candidate) {

@@ -26,6 +26,9 @@ public class ImportManifest {
 
     private long totalEstimatedRows;
 
+    /** Full SCC-compressed dependency plan used to build and resume this manifest. */
+    private ImportDependencyPlan dependencyPlan;
+
     private List<ImportTableDependency> dependencies;
 
     private List<ImportManifestShard> shards;

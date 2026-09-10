@@ -6,10 +6,12 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.task.ImportPreview;
+import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskDownload;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
@@ -105,6 +107,47 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void terminalTaskDownloadsOnlyPersistedDiagnosticArtifacts() throws Exception {
+        Path report = Files.writeString(tempDirectory.resolve("import-report.json"), "{}");
+        Path rejectSummary = Files.writeString(tempDirectory.resolve("reject-summary.json"), "{}");
+        Path shardReject = Files.writeString(tempDirectory.resolve("reject.ndjson"), "{}");
+        Path partialOutput = Files.writeString(tempDirectory.resolve("partial.csv"), "partial");
+        Path unregistered = Files.writeString(tempDirectory.resolve("unregistered.json"), "{}");
+        Task failed = task(1L, 10L, 100L, TaskStatus.FAILED.name(), report);
+        Task cancelled = task(2L, 10L, 100L, TaskStatus.CANCELLED.name(), shardReject);
+        Task running = task(3L, 10L, 100L, TaskStatus.RUNNING.name(), report);
+        OwnershipTaskStorage storage = new OwnershipTaskStorage(List.of(failed, cancelled, running))
+                .withArtifacts(1L, List.of(
+                        artifact(report, TaskArtifactRole.IMPORT_REPORT),
+                        artifact(rejectSummary, TaskArtifactRole.REJECT_SUMMARY),
+                        artifact(shardReject, TaskArtifactRole.REJECT + ":shard-1"),
+                        artifact(partialOutput, TaskArtifactRole.OUTPUT)))
+                .withArtifacts(2L, List.of(
+                        artifact(shardReject, TaskArtifactRole.REJECT),
+                        artifact(partialOutput, null)))
+                .withArtifacts(3L, List.of(artifact(report, TaskArtifactRole.IMPORT_REPORT)));
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        ContextUtils.setContext(Context.builder()
+                .loginUser(LoginUser.builder().id(10L).build())
+                .organizationId(100L)
+                .build());
+
+        assertEquals("import-report.json", service.resolveArtifact(1L).getFileName());
+        assertEquals("reject-summary.json", service.resolveArtifact(1L, rejectSummary.toString()).getFileName());
+        assertEquals("reject.ndjson", service.resolveArtifact(1L, shardReject.toString()).getFileName());
+        assertEquals("reject.ndjson", service.resolveArtifact(2L).getFileName());
+        assertThrows(DataNotFoundException.class,
+                () -> service.resolveArtifact(1L, partialOutput.toString()));
+        assertThrows(DataNotFoundException.class,
+                () -> service.resolveArtifact(1L, unregistered.toString()));
+        assertThrows(DataNotFoundException.class, () -> service.resolveArtifact(1L, " "));
+        assertThrows(DataNotFoundException.class,
+                () -> service.resolveArtifact(2L, partialOutput.toString()));
+        assertThrows(DataNotFoundException.class,
+                () -> service.resolveArtifact(3L, report.toString()));
+    }
+
+    @Test
     void importAllowlistResolvesSymbolicLinksBeforeAuthorizingTheSource() throws Exception {
         Path allowed = Files.createDirectory(tempDirectory.resolve("allowed"));
         Path outside = Files.createDirectory(tempDirectory.resolve("outside"));
@@ -126,6 +169,24 @@ class TaskServiceImplTest {
                 .build();
 
         assertThrows(BusinessException.class, () -> service.submitImport(spec));
+    }
+
+    @Test
+    void rejectsThirdPartySqlWithoutExporterProfileBeforePersistingTask() throws Exception {
+        Path source = Files.writeString(tempDirectory.resolve("third-party.sql"),
+                "INSERT INTO orders VALUES (1);\n");
+        TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
+                new ArtifactService());
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .taskType("SQL_FILE_IMPORT")
+                .sourceKind("THIRD_PARTY")
+                .sourceFile(source.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .options(ImportOptions.builder().build())
+                .build();
+
+        assertEquals("THIRD_PARTY SQL imports require an explicit SQL exporter profile",
+                assertThrows(IllegalArgumentException.class, () -> service.submitImport(spec)).getMessage());
     }
 
     @Test
@@ -264,14 +325,22 @@ class TaskServiceImplTest {
     }
 
     private Task task(Long id, Long userId, Long organizationId, Path artifact) {
+        return task(id, userId, organizationId, TaskStatus.SUCCESS.name(), artifact);
+    }
+
+    private Task task(Long id, Long userId, Long organizationId, String status, Path artifact) {
         return Task.builder()
                 .id(id)
                 .name("task-" + id)
-                .status(TaskStatus.SUCCESS.name())
+                .status(status)
                 .artifactId(artifact.toString())
                 .userId(userId)
                 .organizationId(organizationId)
                 .build();
+    }
+
+    private TaskArtifact artifact(Path path, String role) {
+        return TaskArtifact.builder().artifactId(path.toString()).role(role).build();
     }
 
     private static final class OwnershipTaskStorage implements TaskStorage {
@@ -279,6 +348,8 @@ class TaskServiceImplTest {
         private final Map<Long, Task> tasks = new LinkedHashMap<>();
 
         private final Map<Long, List<TaskEvent>> events = new LinkedHashMap<>();
+
+        private final Map<Long, List<TaskArtifact>> artifacts = new LinkedHashMap<>();
 
         private OwnershipTaskStorage(List<Task> initialTasks) {
             for (Task task : initialTasks) {
@@ -289,6 +360,11 @@ class TaskServiceImplTest {
                         .message("created")
                         .build()));
             }
+        }
+
+        private OwnershipTaskStorage withArtifacts(Long taskId, List<TaskArtifact> taskArtifacts) {
+            artifacts.put(taskId, new ArrayList<>(taskArtifacts));
+            return this;
         }
 
         @Override
@@ -353,17 +429,18 @@ class TaskServiceImplTest {
 
         @Override
         public List<TaskArtifact> listArtifacts(Long taskId) {
-            return List.of();
+            return new ArrayList<>(artifacts.getOrDefault(taskId, List.of()));
         }
 
         @Override
         public void saveArtifact(Long taskId, TaskArtifact artifact) {
-            throw new UnsupportedOperationException();
+            artifacts.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(artifact);
         }
 
         @Override
         public void deleteArtifact(Long taskId, String artifactId) {
-            throw new UnsupportedOperationException();
+            artifacts.getOrDefault(taskId, List.of())
+                    .removeIf(artifact -> java.util.Objects.equals(artifactId, artifact.getArtifactId()));
         }
 
         @Override

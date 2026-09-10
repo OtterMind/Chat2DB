@@ -6,7 +6,11 @@ import ai.chat2db.community.domain.api.model.task.ImportAdmissionReport;
 import ai.chat2db.community.domain.api.model.task.ImportDependencyPlan;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.ImportManifestShard;
+import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
+import ai.chat2db.community.domain.api.model.task.ImportTableDependency;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
@@ -30,7 +34,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,16 +49,24 @@ public final class CsvManifestPreparer {
 
     private final TaskStorage storage;
     private final AdmissionEnforcer admissionEnforcer;
+    private final DependencyResolver dependencyResolver;
     private final Path outputRoot;
 
     public CsvManifestPreparer(TaskStorage storage) {
         this(storage, CsvManifestPreparer::enforceAdmission,
+                (spec, sources) -> new ImportDependencyResolver().resolve(spec, sources),
                 Path.of(ConfigUtils.getBasePath(), "import-shards"));
     }
 
     CsvManifestPreparer(TaskStorage storage, AdmissionEnforcer admissionEnforcer, Path outputRoot) {
+        this(storage, admissionEnforcer, (spec, sources) -> List.of(), outputRoot);
+    }
+
+    CsvManifestPreparer(TaskStorage storage, AdmissionEnforcer admissionEnforcer,
+            DependencyResolver dependencyResolver, Path outputRoot) {
         this.storage = storage;
         this.admissionEnforcer = admissionEnforcer;
+        this.dependencyResolver = dependencyResolver;
         this.outputRoot = outputRoot.toAbsolutePath().normalize();
     }
 
@@ -59,20 +75,32 @@ public final class CsvManifestPreparer {
             throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
                     "CSV manifest preparation requires durable task storage");
         }
-        ImportAdmissionReport admission = admissionEnforcer.enforce(spec, context);
-        if (!TaskExecutionMode.isUltraFast(spec.getMode())) {
+        List<ImportTableSource> sources = ImportTaskSourceSupport.effectiveSources(spec);
+        boolean scopedManifest = ImportTaskSourceSupport.isMultiTable(spec);
+        List<ImportAdmissionReport> admissions = new ArrayList<>();
+        boolean parallel = TaskExecutionMode.isUltraFast(spec.getMode());
+        for (ImportTableSource source : sources) {
+            ImportTaskSpec sourceSpec = scopedManifest ? ImportTaskSourceSupport.specForSource(spec, source) : spec;
+            ImportAdmissionReport admission = admissionEnforcer.enforce(sourceSpec, context);
+            admissions.add(admission);
+            parallel &= TaskExecutionMode.isUltraFast(sourceSpec.getMode())
+                    && TaskExecutionMode.isUltraFast(admission.getEffectiveMode());
+        }
+        if (!scopedManifest && !parallel) {
             return null;
         }
-        if (spec.getOptions() != null && "SKIP".equalsIgnoreCase(spec.getOptions().getOnError())) {
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "Ultra-fast CSV import does not yet support per-shard reject artifacts");
+        if (!parallel) {
+            spec.setMode(TaskExecutionMode.STANDARD);
         }
-
-        File source = new File(StringUtils.defaultString(spec.getSourceFile()));
-        String tableName = spec.getTarget() == null ? null : spec.getTarget().getTableName();
-        if (!source.isFile() || !source.canRead() || StringUtils.isBlank(tableName)) {
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "CSV manifest preparation requires a readable source and target table");
+        List<SourcePreparation> preparations = sources.stream().map(source -> preparation(spec, source)).toList();
+        String admissionVerdict = aggregateVerdict(admissions);
+        List<ImportTableDependency> dependencies = dependencyResolver.resolve(spec, sources);
+        List<String> tableKeys = sources.stream().map(ImportTaskSourceSupport::tableKey).toList();
+        boolean trustedSource = !"THIRD_PARTY".equalsIgnoreCase(StringUtils.trimToEmpty(spec.getSourceKind()));
+        ImportDependencyPlan plan = ImportDependencyPlanner.plan(tableKeys, dependencies, Map.of(),
+                admissionVerdict, ImportAdmissionPolicy.MODERATE, trustedSource);
+        if (!parallel && plan.getMode() != ImportPlanMode.STAGING_FIRST) {
+            plan.setMode(ImportPlanMode.SERIAL_SAFE);
         }
 
         Path taskRoot = taskRoot(context.taskId());
@@ -83,30 +111,30 @@ public final class CsvManifestPreparer {
         try {
             context.checkCancelled();
             context.reportProgress(10, TaskStage.READING.name(), "Preprocessing CSV shards");
-            Charset charset = ImportFileProbe.effectiveCharset(source,
-                    spec.getOptions() == null ? null : spec.getOptions().getCharset());
-            char quote = ImportFileProbe.quoteChar(
-                    spec.getOptions() == null ? null : spec.getOptions().getQuoteChar());
-            char delimiter = ImportFileProbe.delimiterChar(
-                    spec.getOptions() == null ? null : spec.getOptions().getDelimiter(), charset, source);
-            CSVFormat csvFormat = ImportFileProbe.csvFormat(delimiter, quote);
             long targetBytes = Long.getLong("chat2db.task.import.csv-shard-target-bytes", DEFAULT_TARGET_BYTES);
-            String sourceFingerprint = sourceFingerprint(source.toPath());
-            List<ImportManifestShard> shards = CsvShardPreprocessor.preprocess(source, charset, csvFormat,
-                    attemptDirectory, tableName, 0, targetBytes);
-            context.checkCancelled();
-            if (!sourceFingerprint.equals(sourceFingerprint(source.toPath()))) {
-                throw new IllegalStateException("CSV source changed while shards were being prepared");
+            Map<String, String> sourceFingerprints = fingerprints(preparations);
+            String sourceFingerprint = combinedFingerprint(sourceFingerprints);
+            List<ImportManifestShard> shards = new ArrayList<>();
+            for (SourcePreparation preparation : preparations) {
+                int layer = layer(plan, preparation.tableKey());
+                shards.addAll(CsvShardPreprocessor.preprocess(preparation.file(), preparation.charset(),
+                        preparation.csvFormat(), attemptDirectory, preparation.source().getDatabaseName(),
+                        preparation.source().getSchemaName(), preparation.source().getTableName(),
+                        preparation.tableKey(), layer, targetBytes, preparation.skipRows()));
             }
-            ImportDependencyPlan plan = ImportDependencyPlanner.plan(List.of(tableName), List.of(), Map.of(),
-                    admission.getVerdict(), ImportAdmissionPolicy.STRICT, true);
-            ImportManifest manifest = ImportManifestBuilder.build(context.taskId(), admission.getVerdict(),
-                    sourceFingerprint, plan, List.of(), shards);
+            context.checkCancelled();
+            if (!sourceFingerprints.equals(fingerprints(preparations))) {
+                throw new IllegalStateException("A CSV source changed while shards were being prepared");
+            }
+            attachDependencyShards(shards, dependencies);
+            ImportManifest manifest = ImportManifestBuilder.build(context.taskId(), admissionVerdict,
+                    sourceFingerprint, plan, dependencies, shards);
             storage.saveImportManifest(context.taskId(), manifest);
             context.logInfo("IMPORT_MANIFEST_PREPARED", "CSV shards and manifest are ready",
                     Map.of("manifestFingerprint", manifest.getManifestFingerprint(),
                             "sourceFingerprint", manifest.getSourceFingerprint(),
                             "shards", manifest.getShards().size(),
+                            "tables", sources.size(),
                             "estimatedRows", manifest.getTotalEstimatedRows()));
             return manifest;
         } catch (Exception failure) {
@@ -150,9 +178,113 @@ public final class CsvManifestPreparer {
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         IDbMetaData metadata = Chat2DBContext.getDbMetaData();
         List<TableColumn> columns = metadata.columns(Chat2DBContext.getConnection(),
-                new TableMetadataRequest(connectInfo.getDatabaseName(), connectInfo.getSchemaName(),
-                        spec.getTarget().getTableName()));
+                admissionMetadataRequest(spec, connectInfo));
         return ImportParallelAdmission.enforce(spec, columns, context);
+    }
+
+    static TableMetadataRequest admissionMetadataRequest(ImportTaskSpec spec, ConnectInfo connectInfo) {
+        TaskTargetSnapshot target = spec.getTarget();
+        return new TableMetadataRequest(StringUtils.defaultIfBlank(target.getDatabaseName(),
+                connectInfo.getDatabaseName()), StringUtils.defaultIfBlank(target.getSchemaName(),
+                connectInfo.getSchemaName()), target.getTableName());
+    }
+
+    private static SourcePreparation preparation(ImportTaskSpec parent, ImportTableSource source) {
+        ImportTaskSpec sourceSpec = ImportTaskSourceSupport.specForSource(parent, source);
+        File file = new File(StringUtils.defaultString(source.getSourceFile()));
+        if (!file.isFile() || !file.canRead() || StringUtils.isBlank(source.getTableName())) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "CSV manifest preparation requires a readable source for every target table");
+        }
+        if (!"CSV".equalsIgnoreCase(StringUtils.defaultString(sourceSpec.getFormat()))) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Schema/database manifest import currently requires CSV for every table source");
+        }
+        try {
+            Charset charset = ImportFileProbe.effectiveCharset(file,
+                    sourceSpec.getOptions() == null ? null : sourceSpec.getOptions().getCharset());
+            char quote = ImportFileProbe.quoteChar(
+                    sourceSpec.getOptions() == null ? null : sourceSpec.getOptions().getQuoteChar());
+            char delimiter = ImportFileProbe.delimiterChar(
+                    sourceSpec.getOptions() == null ? null : sourceSpec.getOptions().getDelimiter(), charset, file);
+            int skipRows = sourceSpec.getOptions() == null || sourceSpec.getOptions().getSkipRows() == null
+                    ? 0 : Math.max(0, sourceSpec.getOptions().getSkipRows());
+            return new SourcePreparation(source, file, ImportTaskSourceSupport.tableKey(source), charset,
+                    ImportFileProbe.csvFormat(delimiter, quote), skipRows);
+        } catch (IOException failure) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Could not detect CSV dialect for target table " + source.getTableName(), failure);
+        }
+    }
+
+    private static String aggregateVerdict(List<ImportAdmissionReport> admissions) {
+        if (admissions.stream().anyMatch(report -> ImportParallelAdmission.FORBIDDEN.equals(report.getVerdict()))) {
+            return ImportParallelAdmission.FORBIDDEN;
+        }
+        if (admissions.stream().anyMatch(report -> ImportParallelAdmission.DEGRADED.equals(report.getVerdict()))) {
+            return ImportParallelAdmission.DEGRADED;
+        }
+        return ImportParallelAdmission.SAFE;
+    }
+
+    private static Map<String, String> fingerprints(List<SourcePreparation> preparations) {
+        Map<String, String> result = new LinkedHashMap<>();
+        preparations.stream().sorted(Comparator.comparing(SourcePreparation::tableKey,
+                        String.CASE_INSENSITIVE_ORDER))
+                .forEach(preparation -> {
+                    try {
+                        result.put(preparation.tableKey(), sourceFingerprint(preparation.file().toPath()));
+                    } catch (IOException failure) {
+                        throw new IllegalStateException("Could not fingerprint CSV source: "
+                                + preparation.file().getName(), failure);
+                    }
+                });
+        return Map.copyOf(result);
+    }
+
+    private static String combinedFingerprint(Map<String, String> fingerprints) {
+        if (fingerprints.size() == 1) {
+            return fingerprints.values().iterator().next();
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            fingerprints.entrySet().stream().sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+                    .forEach(entry -> digest.update((entry.getKey() + "\u0000" + entry.getValue() + "\n")
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            return "SHA-256:" + HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private static int layer(ImportDependencyPlan plan, String tableKey) {
+        for (int index = 0; index < plan.getLayers().size(); index++) {
+            if (plan.getLayers().get(index).stream().anyMatch(tableKey::equalsIgnoreCase)) {
+                return index;
+            }
+        }
+        throw new IllegalStateException("Target table is missing from the dependency plan: " + tableKey);
+    }
+
+    private static void attachDependencyShards(List<ImportManifestShard> shards,
+            List<ImportTableDependency> dependencies) {
+        Map<String, List<String>> shardIdsByTable = new LinkedHashMap<>();
+        for (ImportManifestShard shard : shards) {
+            shardIdsByTable.computeIfAbsent(shard.getTableKey().toLowerCase(Locale.ROOT), ignored -> new ArrayList<>())
+                    .add(shard.getShardId());
+        }
+        for (ImportManifestShard shard : shards) {
+            List<String> required = dependencies.stream()
+                    .filter(edge -> shard.getTableKey().equalsIgnoreCase(edge.getChildTableKey()))
+                    .filter(edge -> !edge.getParentTableKey().equalsIgnoreCase(edge.getChildTableKey()))
+                    .flatMap(edge -> shardIdsByTable.getOrDefault(
+                            edge.getParentTableKey().toLowerCase(Locale.ROOT), List.of()).stream())
+                    .filter(parentShardId -> shards.stream().anyMatch(parentShard ->
+                            parentShard.getShardId().equals(parentShardId)
+                                    && parentShard.getLayer() < shard.getLayer()))
+                    .distinct().sorted().toList();
+            shard.setDependencyShardIds(required);
+        }
     }
 
     private static String sourceFingerprint(Path source) throws IOException {
@@ -215,5 +347,14 @@ public final class CsvManifestPreparer {
     @FunctionalInterface
     interface AdmissionEnforcer {
         ImportAdmissionReport enforce(ImportTaskSpec spec, TaskExecutionContext context);
+    }
+
+    @FunctionalInterface
+    interface DependencyResolver {
+        List<ImportTableDependency> resolve(ImportTaskSpec spec, List<ImportTableSource> sources);
+    }
+
+    private record SourcePreparation(ImportTableSource source, File file, String tableKey,
+            Charset charset, CSVFormat csvFormat, int skipRows) {
     }
 }

@@ -19,6 +19,31 @@ public class ImportTaskSpec implements TaskSpec {
 
     private TaskTargetSnapshot target;
 
+    /** TABLE (legacy default), SCHEMA or DATABASE. */
+    private String scope;
+
+    /** Per-table sources for schema/database imports; absent for the legacy single-table contract. */
+    private List<ImportTableSource> tableSources;
+
+    /** Operator-supplied relationships that are not represented by database constraints. */
+    private List<ImportTableDependency> logicalDependencies;
+
+    /** TRUSTED or THIRD_PARTY; absent retains the legacy trusted-source behavior. */
+    private String sourceKind;
+
+    /** REJECT, DEFER_CONSTRAINTS or STAGING_TWO_PHASE. */
+    private String cycleStrategy;
+
+    private ImportStagingPolicy stagingPolicy;
+
+    private ImportValidationOptions validationOptions;
+
+    private ImportFinalizationOptions finalizationOptions;
+
+    private ImportRollbackOptions rollbackOptions;
+
+    private Integer performanceSamplePercent;
+
     private String sourceFile;
 
     /** Opaque ID of a server-staged source file, when the import originated from preview. */

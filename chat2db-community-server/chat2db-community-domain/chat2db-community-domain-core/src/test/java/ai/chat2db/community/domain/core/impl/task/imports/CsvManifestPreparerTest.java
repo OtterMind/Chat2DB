@@ -3,17 +3,24 @@ package ai.chat2db.community.domain.core.impl.task.imports;
 import ai.chat2db.community.domain.api.model.task.ImportAdmissionReport;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
+import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
+import ai.chat2db.community.domain.api.model.task.ImportScope;
+import ai.chat2db.community.domain.api.model.task.ImportTableDependency;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.request.TableMetadataRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -83,6 +90,89 @@ class CsvManifestPreparerTest {
         assertFalse(Files.exists(tempDirectory.resolve("shards")));
     }
 
+    @Test
+    void persistsAStandardMultiTableDagManifestWithQualifiedTargets() throws Exception {
+        Path orders = Files.writeString(tempDirectory.resolve("orders.csv"), "id\n1\n");
+        Path items = Files.writeString(tempDirectory.resolve("items.csv"), "id,order_id\n10,1\n");
+        ImportTableSource ordersSource = tableSource("orders", orders);
+        ImportTableSource itemsSource = tableSource("order_items", items);
+        ImportTableDependency dependency = ImportTableDependency.builder()
+                .parentDatabaseName("app").parentSchemaName("public").parentTable("orders")
+                .parentColumn("id").parentTableKey("app.public.orders")
+                .childDatabaseName("app").childSchemaName("public").childTable("order_items")
+                .childColumn("order_id").childTableKey("app.public.order_items").build();
+        ImportTaskSpec spec = ImportTaskSpec.builder().scope(ImportScope.SCHEMA)
+                .mode(TaskExecutionMode.STANDARD).format("CSV")
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("public").build())
+                .tableSources(List.of(ordersSource, itemsSource)).build();
+        AtomicReference<ImportManifest> saved = new AtomicReference<>();
+        CsvManifestPreparer preparer = new CsvManifestPreparer(storage(saved, null), this::safeAdmission,
+                (task, sources) -> List.of(dependency), tempDirectory.resolve("multi-shards"));
+
+        ImportManifest manifest = preparer.prepare(spec, context(84L));
+
+        assertEquals(manifest, saved.get());
+        assertEquals(ImportPlanMode.SERIAL_SAFE, manifest.getMode());
+        assertEquals(List.of(List.of("app.public.orders"), List.of("app.public.order_items")),
+                manifest.getDependencyPlan().getLayers());
+        assertEquals(2, manifest.getShards().size());
+        assertTrue(manifest.getShards().stream().allMatch(shard -> "app".equals(shard.getDatabaseName())
+                && "public".equals(shard.getSchemaName())));
+        String ordersShardId = manifest.getShards().stream()
+                .filter(shard -> "orders".equals(shard.getTableName())).findFirst().orElseThrow().getShardId();
+        assertEquals(List.of(ordersShardId), manifest.getShards().stream()
+                .filter(shard -> "order_items".equals(shard.getTableName())).findFirst().orElseThrow()
+                .getDependencyShardIds());
+    }
+
+    @Test
+    void appliesEachSourceSkipRowsBeforeBuildingTheManifest() throws Exception {
+        Path orders = Files.writeString(tempDirectory.resolve("orders-with-prefix.csv"),
+                "id\nignore\n1\n2\n");
+        Path items = Files.writeString(tempDirectory.resolve("items-with-prefix.csv"),
+                "id\nignore-a\nignore-b\n10\n");
+        ImportTableSource ordersSource = tableSource("orders", orders);
+        ordersSource.getOptions().setSkipRows(1);
+        ImportTableSource itemsSource = tableSource("order_items", items);
+        itemsSource.getOptions().setSkipRows(2);
+        ImportTaskSpec spec = ImportTaskSpec.builder().scope(ImportScope.SCHEMA)
+                .mode(TaskExecutionMode.STANDARD).format("CSV")
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("public").build())
+                .tableSources(List.of(ordersSource, itemsSource)).build();
+        CsvManifestPreparer preparer = new CsvManifestPreparer(storage(new AtomicReference<>(), null),
+                this::safeAdmission, (task, sources) -> List.of(), tempDirectory.resolve("skip-shards"));
+
+        ImportManifest manifest = preparer.prepare(spec, context(85L));
+
+        assertEquals(3L, manifest.getTotalEstimatedRows());
+        assertEquals(2L, manifest.getShards().stream()
+                .filter(shard -> "orders".equals(shard.getTableName()))
+                .mapToLong(shard -> shard.getEstimatedRows()).sum());
+        assertEquals(1L, manifest.getShards().stream()
+                .filter(shard -> "order_items".equals(shard.getTableName()))
+                .mapToLong(shard -> shard.getEstimatedRows()).sum());
+    }
+
+    @Test
+    void admissionUsesTheSourceTargetNamespaceInsteadOfTheCurrentConnectionNamespace() {
+        ConnectInfo connectInfo = new ConnectInfo();
+        connectInfo.setDatabaseName("catalog_a");
+        connectInfo.setSchemaName("schema_a");
+        ImportTaskSpec sourceSpec = ImportTaskSpec.builder()
+                .target(TaskTargetSnapshot.builder()
+                        .databaseName("catalog_b")
+                        .schemaName("schema_b")
+                        .tableName("orders")
+                        .build())
+                .build();
+
+        TableMetadataRequest request = CsvManifestPreparer.admissionMetadataRequest(sourceSpec, connectInfo);
+
+        assertEquals("catalog_b", request.getDatabaseName());
+        assertEquals("schema_b", request.getSchemaName());
+        assertEquals("orders", request.getTableName());
+    }
+
     private ImportAdmissionReport safeAdmission(ImportTaskSpec spec, TaskExecutionContext context) {
         return ImportAdmissionReport.builder().verdict(ImportParallelAdmission.SAFE)
                 .requestedMode(TaskExecutionMode.ULTRA_FAST).effectiveMode(spec.getMode())
@@ -94,6 +184,13 @@ class CsvManifestPreparerTest {
                 .mode(TaskExecutionMode.ULTRA_FAST).importFileId("staged")
                 .confirmedNoStrongRelations(true)
                 .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .options(ImportOptions.builder().charset("UTF-8").delimiter(",").quoteChar("\"").build())
+                .build();
+    }
+
+    private static ImportTableSource tableSource(String tableName, Path source) {
+        return ImportTableSource.builder().databaseName("app").schemaName("public")
+                .tableName(tableName).sourceFile(source.toString()).format("CSV")
                 .options(ImportOptions.builder().charset("UTF-8").delimiter(",").quoteChar("\"").build())
                 .build();
     }

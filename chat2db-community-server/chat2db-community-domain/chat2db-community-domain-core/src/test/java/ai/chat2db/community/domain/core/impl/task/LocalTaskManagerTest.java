@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
+import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -222,6 +223,43 @@ class LocalTaskManagerTest {
         assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
                 .anyMatch(event -> TaskEventCode.USER_EXITED.name().equals(event.getCode())));
         assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void userExitCannotPreemptTaskAfterIrreversibleCommitPhaseBegins() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch commitPhaseEntered = new CountDownLatch(1);
+        CountDownLatch releaseCommitPhase = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        taskManager = manager(storage, (spec, context) -> {
+            context.enterCommitPhase();
+            commitPhaseEntered.countDown();
+            try {
+                releaseCommitPhase.await();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+                Thread.currentThread().interrupt();
+            }
+            context.checkCancelled();
+        });
+        Task task = newTask();
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(commitPhaseEntered.await(5, TimeUnit.SECONDS));
+
+        try {
+            taskManager.prepareForUserExit(null, null);
+            assertEquals(TaskStatus.RUNNING.name(), storage.get(task.getId()).orElseThrow().getStatus());
+        } finally {
+            releaseCommitPhase.countDown();
+        }
+
+        assertTrue(storage.awaitTerminal());
+        Task completed = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.SUCCESS.name(), completed.getStatus());
+        assertFalse(interrupted.get());
+        assertEquals(1, storage.terminalTransitionCount());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .noneMatch(event -> TaskEventCode.USER_EXITED.name().equals(event.getCode())));
     }
 
     @Test
@@ -504,6 +542,44 @@ class LocalTaskManagerTest {
         assertTrue(publishedArtifacts.stream()
                 .anyMatch(artifact -> artifact.getArtifactId().equals(finished.getArtifactId())));
         for (TaskArtifact artifact : publishedArtifacts) {
+            Files.deleteIfExists(Path.of(artifact.getArtifactId()));
+        }
+    }
+
+    @Test
+    void failedTaskPublishesDiagnosticsButDeletesOrdinaryOutput() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        taskManager = manager(storage, (spec, context) -> {
+            ArtifactDraft output = context.createArtifact(tempDirectory.toString(),
+                    "partial.csv", "text/csv");
+            writeQuietly(output.getTemporaryFile().toPath(), "partial\n");
+            ArtifactDraft reject = context.createArtifact(TaskArtifactRole.REJECT + ":shard-1",
+                    tempDirectory.toString(), "reject.ndjson", "application/x-ndjson");
+            writeQuietly(reject.getTemporaryFile().toPath(), "{\"row\":1}\n");
+            ArtifactDraft report = context.createArtifact(TaskArtifactRole.IMPORT_REPORT,
+                    tempDirectory.toString(), "rollback.json", "application/json");
+            writeQuietly(report.getTemporaryFile().toPath(), "{\"rolledBack\":true}\n");
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Import failed", "Rejected source row", null);
+        });
+        Task task = newTask();
+
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+
+        assertTrue(storage.awaitTerminal());
+        Task failed = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.FAILED.name(), failed.getStatus());
+        assertFalse(Files.exists(tempDirectory.resolve("partial.csv")));
+        List<TaskArtifact> diagnostics = storage.listArtifacts(task.getId());
+        assertEquals(List.of(TaskArtifactRole.IMPORT_REPORT, TaskArtifactRole.REJECT + ":shard-1"),
+                diagnostics.stream().map(TaskArtifact::getRole).toList());
+        assertEquals(diagnostics.get(0).getArtifactId(), failed.getArtifactId());
+        assertTrue(diagnostics.stream().allMatch(
+                artifact -> Files.isRegularFile(Path.of(artifact.getArtifactId()))));
+        assertEquals(2L, storage.listEvents(task.getId(), 0, 100).stream()
+                .filter(item -> TaskEventCode.ARTIFACT_PUBLISHED.name().equals(item.getCode()))
+                .count());
+        for (TaskArtifact artifact : diagnostics) {
             Files.deleteIfExists(Path.of(artifact.getArtifactId()));
         }
     }

@@ -40,6 +40,8 @@ final class RunningTask {
 
     private volatile boolean closed;
 
+    private volatile boolean commitPhase;
+
     RunningTask(Long taskId) {
         this.taskId = taskId;
     }
@@ -61,20 +63,42 @@ final class RunningTask {
     }
 
     boolean requestCancellation(boolean mayInterruptIfRunning) {
-        if (closed) {
-            return false;
+        completionLock.lock();
+        try {
+            if (closed || commitPhase) {
+                return false;
+            }
+            if (!cancellationToken.cancel()) {
+                return false;
+            }
+            Future<?> currentFuture = future;
+            if (currentFuture != null) {
+                currentFuture.cancel(mayInterruptIfRunning);
+            }
+            for (TaskCancelable resource : cancelables) {
+                cancelRegisteredResourceAsync(resource);
+            }
+            return true;
+        } finally {
+            completionLock.unlock();
         }
-        if (!cancellationToken.cancel()) {
-            return false;
+    }
+
+    boolean enterCommitPhase() {
+        completionLock.lock();
+        try {
+            if (closed || cancellationToken.isCancelled()) {
+                return false;
+            }
+            commitPhase = true;
+            return true;
+        } finally {
+            completionLock.unlock();
         }
-        Future<?> currentFuture = future;
-        if (currentFuture != null) {
-            currentFuture.cancel(mayInterruptIfRunning);
-        }
-        for (TaskCancelable resource : cancelables) {
-            cancelRegisteredResourceAsync(resource);
-        }
-        return true;
+    }
+
+    boolean isCommitPhase() {
+        return commitPhase;
     }
 
     void registerCancelable(TaskCancelable resource) {

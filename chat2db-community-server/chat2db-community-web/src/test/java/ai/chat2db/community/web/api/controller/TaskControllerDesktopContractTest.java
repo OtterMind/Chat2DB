@@ -1,16 +1,26 @@
 package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
+import ai.chat2db.community.domain.api.model.task.TaskDownload;
+import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.tools.console.ConsoleResult;
 import ai.chat2db.community.web.api.config.console.ConsoleHelper;
+import ai.chat2db.community.web.api.converter.task.TaskDownloadWebConverter;
 import ai.chat2db.community.web.api.model.request.task.TaskEventQueryRequest;
+import ai.chat2db.community.web.api.model.request.task.TaskIdRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.RequestMapping;
 
+import java.lang.reflect.Proxy;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskControllerDesktopContractTest {
+
+    @TempDir
+    Path tempDirectory;
 
     @Test
     void previewRejectsRawServerPathsBeforeReadingFiles() {
@@ -72,6 +85,35 @@ class TaskControllerDesktopContractTest {
         assertEquals(42L, request.getTaskId());
         assertEquals(10L, request.getAfterSequence());
         assertEquals(20, request.effectiveLimit());
+    }
+
+    @Test
+    void artifactEndpointForwardsThePersistedArtifactLookupKey() throws Exception {
+        Path diagnostic = Files.writeString(tempDirectory.resolve("rollback-report.json"), "{}");
+        AtomicReference<Object[]> invocation = new AtomicReference<>();
+        TaskService service = (TaskService) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[] {TaskService.class}, (proxy, method, args) -> {
+                    if ("resolveArtifact".equals(method.getName()) && args.length == 2) {
+                        invocation.set(args);
+                        return TaskDownload.builder()
+                                .fileName(diagnostic.getFileName().toString())
+                                .fileUri(diagnostic.toUri().toString())
+                                .build();
+                    }
+                    throw new UnsupportedOperationException(method.toString());
+                });
+        TaskController controller = new TaskController(service, null, new TaskDownloadWebConverter(), null);
+        TaskIdRequest request = new TaskIdRequest();
+        request.setTaskId(42L);
+        request.setArtifactId(diagnostic.toString());
+
+        var response = controller.artifact(request);
+
+        assertEquals(42L, invocation.get()[0]);
+        assertEquals(diagnostic.toString(), invocation.get()[1]);
+        assertEquals("attachment; filename=\"rollback-report.json\"",
+                response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION));
+        assertEquals(diagnostic.toUri(), response.getBody().getURI());
     }
 
     private RequestMapping requestMapping(Method method) {

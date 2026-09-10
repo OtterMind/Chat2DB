@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -106,8 +105,22 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void checkCancelled() {
-        if (runningTask.cancellationToken().isCancelled() || Thread.currentThread().isInterrupted()) {
+        if (!runningTask.isCommitPhase()
+                && (runningTask.cancellationToken().isCancelled() || Thread.currentThread().isInterrupted())) {
             throw new TaskCancelledException();
+        }
+    }
+
+    @Override
+    public void enterCommitPhase() {
+        runningTask.completionLock().lock();
+        try {
+            checkCancelled();
+            if (!runningTask.enterCommitPhase()) {
+                throw new TaskCancelledException();
+            }
+        } finally {
+            runningTask.completionLock().unlock();
         }
     }
 

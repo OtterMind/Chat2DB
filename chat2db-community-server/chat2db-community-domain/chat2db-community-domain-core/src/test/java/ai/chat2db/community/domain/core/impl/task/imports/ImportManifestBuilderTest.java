@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ImportManifestBuilderTest {
@@ -30,6 +31,9 @@ class ImportManifestBuilderTest {
         assertEquals(List.of("orders-1", "items-1"),
                 first.getShards().stream().map(ImportManifestShard::getShardId).toList());
         assertEquals(first.getManifestFingerprint(), second.getManifestFingerprint());
+        assertEquals(plan.getLayers(), first.getDependencyPlan().getLayers());
+        assertNotSame(plan, first.getDependencyPlan());
+        assertEquals(2, first.getSchemaVersion());
     }
 
     @Test

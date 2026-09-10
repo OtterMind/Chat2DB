@@ -16,7 +16,14 @@ public class ImportManifestShard {
 
     private String shardId;
 
+    private String databaseName;
+
+    private String schemaName;
+
     private String tableName;
+
+    /** Canonical qualified node matching an entry in the dependency plan. */
+    private String tableKey;
 
     private int layer;
 

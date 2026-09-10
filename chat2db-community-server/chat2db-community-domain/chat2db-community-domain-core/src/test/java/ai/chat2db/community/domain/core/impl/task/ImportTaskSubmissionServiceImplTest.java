@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,10 @@ import java.io.File;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,7 +68,43 @@ class ImportTaskSubmissionServiceImplTest {
         assertTrue(stagingService.released);
     }
 
-    private static ImportTaskSubmissionServiceImpl service(RecordingStagingService stagingService,
+    @Test
+    void claimsEveryTableSourceAndResolvesItsServerPath(@TempDir Path directory) throws Exception {
+        File orders = Files.writeString(directory.resolve("orders.csv"), "id\n1\n").toFile();
+        File items = Files.writeString(directory.resolve("items.csv"), "id\n2\n").toFile();
+        MultiRecordingStagingService staging = new MultiRecordingStagingService(
+                Map.of("orders-id", orders, "items-id", items));
+        AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
+        ImportTaskSubmissionServiceImpl service = service(staging, submitted, null);
+        ImportTaskSpec spec = ImportTaskSpec.builder().tableSources(List.of(
+                ImportTableSource.builder().tableName("orders").importFileId("orders-id").build(),
+                ImportTableSource.builder().tableName("items").importFileId("items-id").build())).build();
+
+        assertEquals(42L, service.submit(spec, null));
+
+        assertEquals(List.of("orders-id", "items-id"), staging.claimedIds);
+        assertEquals(orders.getAbsolutePath(), submitted.get().getTableSources().get(0).getSourceFile());
+        assertEquals(items.getAbsolutePath(), submitted.get().getTableSources().get(1).getSourceFile());
+        assertTrue(staging.releasedIds.isEmpty());
+    }
+
+    @Test
+    void releasesAllTableSourceClaimsWhenSubmissionFails(@TempDir Path directory) throws Exception {
+        MultiRecordingStagingService staging = new MultiRecordingStagingService(new LinkedHashMap<>(Map.of(
+                "orders-id", Files.writeString(directory.resolve("orders.csv"), "id\n1\n").toFile(),
+                "items-id", Files.writeString(directory.resolve("items.csv"), "id\n2\n").toFile())));
+        ImportTaskSpec spec = ImportTaskSpec.builder().tableSources(List.of(
+                ImportTableSource.builder().tableName("orders").importFileId("orders-id").build(),
+                ImportTableSource.builder().tableName("items").importFileId("items-id").build())).build();
+
+        assertThrows(IllegalStateException.class, () -> service(staging, new AtomicReference<>(),
+                new IllegalStateException("failed")).submit(spec, null));
+
+        assertEquals(List.of("orders-id", "items-id"), staging.claimedIds);
+        assertEquals(List.of("items-id", "orders-id"), staging.releasedIds);
+    }
+
+    private static ImportTaskSubmissionServiceImpl service(IImportFileStagingService stagingService,
             AtomicReference<ImportTaskSpec> submitted, RuntimeException failure) {
         TaskService taskService = (TaskService) Proxy.newProxyInstance(
                 ImportTaskSubmissionServiceImplTest.class.getClassLoader(), new Class<?>[] {TaskService.class},
@@ -111,5 +152,20 @@ class ImportTaskSubmissionServiceImplTest {
         public void release(String fileId) {
             released = true;
         }
+    }
+
+    private static final class MultiRecordingStagingService implements IImportFileStagingService {
+        private final Map<String, File> files;
+        private final List<String> claimedIds = new ArrayList<>();
+        private final List<String> releasedIds = new ArrayList<>();
+
+        private MultiRecordingStagingService(Map<String, File> files) {
+            this.files = files;
+        }
+
+        @Override public String stage(File source, String originalFileName) { throw new UnsupportedOperationException(); }
+        @Override public File resolve(String fileId) { return files.get(fileId); }
+        @Override public void claimForTask(String fileId) { claimedIds.add(fileId); }
+        @Override public void release(String fileId) { releasedIds.add(fileId); }
     }
 }
