@@ -45,7 +45,7 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
             if (resultSet.next()) {
                 String tableComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(tableComment)) {
-                    ddlBuilder.append(buildTableCommentDdl(tableName, tableComment));
+                    ddlBuilder.append(buildTableCommentDdl(schemaName, tableName, tableComment));
                 }
             }
         });
@@ -54,7 +54,7 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
                 String columnName = resultSet.getString("column_name");
                 String columnComment = resultSet.getString("comments");
                 if (StringUtils.isNotBlank(columnComment)) {
-                    ddlBuilder.append(buildColumnCommentDdl(tableName, columnName, columnComment));
+                    ddlBuilder.append(buildColumnCommentDdl(schemaName, tableName, columnName, columnComment));
                 }
             }
         });
@@ -124,14 +124,16 @@ public class OceanbaseOracleMetaData extends OracleMetaData implements IDbMetaDa
                 OceanbaseOracleIdentifierProcessor.INSTANCE.escapeString(schemaName));
     }
 
-    static String buildTableCommentDdl(String tableName, String comment) {
+    static String buildTableCommentDdl(String schemaName, String tableName, String comment) {
         return "\nCOMMENT ON TABLE "
+                + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "."
                 + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName)
                 + " IS " + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteStringLiteral(comment) + ";";
     }
 
-    static String buildColumnCommentDdl(String tableName, String columnName, String comment) {
+    static String buildColumnCommentDdl(String schemaName, String tableName, String columnName, String comment) {
         return "\nCOMMENT ON COLUMN "
+                + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "."
                 + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName) + "."
                 + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName)
                 + " IS " + OceanbaseOracleIdentifierProcessor.INSTANCE.quoteStringLiteral(comment) + ";";
