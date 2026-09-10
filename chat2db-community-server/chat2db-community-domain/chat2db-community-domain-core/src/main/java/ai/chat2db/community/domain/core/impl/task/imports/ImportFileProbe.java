@@ -8,6 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.Charset;
@@ -30,9 +31,53 @@ public final class ImportFileProbe {
     }
 
     public static Charset detectCharset(File file) {
+        Charset bom = detectBom(file);
+        if (bom != null) {
+            return bom;
+        }
         Charset detected = CharsetDetector.detect(file, StandardCharsets.UTF_8,
                 Charset.forName("GBK"), StandardCharsets.ISO_8859_1);
         return detected == null ? StandardCharsets.UTF_8 : detected;
+    }
+
+    private static Charset detectBom(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+        byte[] prefix;
+        try (InputStream input = Files.newInputStream(file.toPath())) {
+            prefix = input.readNBytes(4);
+        } catch (IOException unreadable) {
+            return null;
+        }
+        if (startsWith(prefix, 0x00, 0x00, 0xFE, 0xFF)) {
+            return Charset.forName("UTF-32BE");
+        }
+        if (startsWith(prefix, 0xFF, 0xFE, 0x00, 0x00)) {
+            return Charset.forName("UTF-32LE");
+        }
+        if (startsWith(prefix, 0xEF, 0xBB, 0xBF)) {
+            return StandardCharsets.UTF_8;
+        }
+        if (startsWith(prefix, 0xFE, 0xFF)) {
+            return StandardCharsets.UTF_16BE;
+        }
+        if (startsWith(prefix, 0xFF, 0xFE)) {
+            return StandardCharsets.UTF_16LE;
+        }
+        return null;
+    }
+
+    private static boolean startsWith(byte[] actual, int... expected) {
+        if (actual.length < expected.length) {
+            return false;
+        }
+        for (int index = 0; index < expected.length; index++) {
+            if ((actual[index] & 0xFF) != expected[index]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static Charset effectiveCharset(File file, String requested) {
