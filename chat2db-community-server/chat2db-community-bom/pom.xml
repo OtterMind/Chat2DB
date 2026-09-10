@@ -131,6 +131,11 @@
             </dependency>
             <dependency>
                 <groupId>ai.chat2db</groupId>
+                <artifactId>chat2db-community-agent</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.chat2db</groupId>
                 <artifactId>chat2db-server-admin-api</artifactId>
                 <version>${revision}</version>
             </dependency>

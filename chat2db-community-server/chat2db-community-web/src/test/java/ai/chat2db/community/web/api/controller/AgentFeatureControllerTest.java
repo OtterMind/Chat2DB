@@ -3,7 +3,7 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentFeatureState;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentRuntimeFeatureService;
 import ai.chat2db.community.tools.enums.agent.AgentFeature;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
@@ -35,7 +35,7 @@ class AgentFeatureControllerTest {
         assertEquals("5.3.0", service.environment.applicationVersion());
     }
 
-    private static final class RecordingService implements AgentRuntimeFeatureService {
+    private static final class RecordingService implements IAiAgentRuntimeFeatureService {
         private AgentRuntimeEnvironmentRequest environment;
         @Override public AgentRuntimeType runtimeType() { return AgentRuntimeType.PI; }
         @Override public AgentRuntimeFeatureState check(AgentRuntimeEnvironmentRequest environment) {

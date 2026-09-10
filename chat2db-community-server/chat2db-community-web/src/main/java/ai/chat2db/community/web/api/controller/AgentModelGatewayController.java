@@ -1,23 +1,22 @@
 package ai.chat2db.community.web.api.controller;
 
-import ai.chat2db.community.web.api.adapter.agent.AgentModelGatewayService;
+import ai.chat2db.community.web.api.adapter.agent.AgentModelAccessProviderImpl;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-
-import java.io.IOException;
 
 @RestController
 public class AgentModelGatewayController {
 
-    private final AgentModelGatewayService gatewayService;
+    private final AgentModelAccessProviderImpl gatewayService;
 
-    public AgentModelGatewayController(AgentModelGatewayService gatewayService) {
+    public AgentModelGatewayController(AgentModelAccessProviderImpl gatewayService) {
         this.gatewayService = gatewayService;
     }
 
@@ -26,7 +25,7 @@ public class AgentModelGatewayController {
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
             @RequestBody byte[] body,
             HttpServletRequest request) {
-        AgentModelGatewayService.GatewayResponse upstream;
+        AgentModelAccessProviderImpl.GatewayResponse upstream;
         try {
             upstream = gatewayService.forward(bearerToken(authorization), request.getRemoteAddr(), body);
         } catch (IOException error) {

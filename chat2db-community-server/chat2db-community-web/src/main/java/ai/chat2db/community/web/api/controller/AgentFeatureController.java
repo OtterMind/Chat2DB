@@ -4,7 +4,7 @@ import ai.chat2db.community.domain.api.model.agent.feature.AgentFeatureState;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeEnableResult;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentRuntimeFeatureService;
 import ai.chat2db.community.tools.enums.agent.AgentFeature;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -25,16 +25,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v3/ai/features")
 public class AgentFeatureController {
 
-    private final Map<AgentRuntimeType, AgentRuntimeFeatureService> services;
+    private final Map<AgentRuntimeType, IAiAgentRuntimeFeatureService> services;
     private final Map<AgentFeature, AgentFeatureService> featureServices;
     private final AgentHostEnvironmentProvider environmentProvider;
 
     public AgentFeatureController(
-            List<AgentRuntimeFeatureService> services,
+            List<IAiAgentRuntimeFeatureService> services,
             List<AgentFeatureService> featureServices,
             AgentHostEnvironmentProvider environmentProvider) {
-        Map<AgentRuntimeType, AgentRuntimeFeatureService> indexed = new EnumMap<>(AgentRuntimeType.class);
-        for (AgentRuntimeFeatureService service : services) {
+        Map<AgentRuntimeType, IAiAgentRuntimeFeatureService> indexed = new EnumMap<>(AgentRuntimeType.class);
+        for (IAiAgentRuntimeFeatureService service : services) {
             if (indexed.putIfAbsent(service.runtimeType(), service) != null) {
                 throw new IllegalStateException("Duplicate agent runtime feature service: " + service.runtimeType());
             }
@@ -89,8 +89,8 @@ public class AgentFeatureController {
         return DataResult.of(require(AgentFeature.BASH).disable());
     }
 
-    private AgentRuntimeFeatureService require(AgentRuntimeType runtimeType) {
-        AgentRuntimeFeatureService service = services.get(runtimeType);
+    private IAiAgentRuntimeFeatureService require(AgentRuntimeType runtimeType) {
+        IAiAgentRuntimeFeatureService service = services.get(runtimeType);
         if (service == null) {
             throw new IllegalStateException("Agent runtime is unavailable: " + runtimeType);
         }

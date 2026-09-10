@@ -20,10 +20,6 @@
             <artifactId>chat2db-community-tools</artifactId>
         </dependency>
         <dependency>
-            <groupId>ai.chat2db</groupId>
-            <artifactId>chat2db-community-domain-api</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>

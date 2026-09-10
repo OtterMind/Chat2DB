@@ -19,6 +19,7 @@
         <module>chat2db-community-storage</module>
         <module>chat2db-community-start</module>
         <module>chat2db-community-tools</module>
+        <module>chat2db-community-agent</module>
         <module>chat2db-community-web</module>
         <module>chat2db-community-jcef</module>
         <module>chat2db-community-plugins</module>

@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.service.agent.*;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
@@ -29,7 +30,7 @@ class AgentNativeToolApprovalTest {
         AtomicInteger decisions = new AtomicInteger();
         Set<String> enabledTools = new HashSet<>();
         var disableWhileWaiting = new java.util.concurrent.atomic.AtomicBoolean();
-        AgentWorkspaceService workspace = new AgentWorkspaceService() {
+        IAiAgentWorkspaceService workspace = new IAiAgentWorkspaceService() {
             public AgentWorkspaceSettings get() { return new AgentWorkspaceSettings(directory.get()); }
             public AgentWorkspaceSettings update(String value) { directory.set(value); return get(); }
             public String resolveWorkingDirectory(String sessionId) { return directory.get(); }

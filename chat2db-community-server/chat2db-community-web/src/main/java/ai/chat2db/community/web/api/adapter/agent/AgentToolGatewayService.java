@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.service.agent.*;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
 import ai.chat2db.community.tools.agent.tool.IAgentToolResult;
@@ -40,11 +41,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final AgentRunStorage runs;
     private final IIdentityService identity;
     private final AgentApprovalService approvals;
-    private final List<AgentWorkspaceService> workspaces;
+    private final List<IAiAgentWorkspaceService> workspaces;
     private final int port;
 
     public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentSessionStorage sessions, AgentRunStorage runs,
-            IIdentityService identity, AgentApprovalService approvals, List<AgentWorkspaceService> workspaces, @Value("${server.port:10825}") int port) {
+            IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, @Value("${server.port:10825}") int port) {
         this.tools = tools;
         this.questionTool = questionTool;
         this.sessions = sessions;

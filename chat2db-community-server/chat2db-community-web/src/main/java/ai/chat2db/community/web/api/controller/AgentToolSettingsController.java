@@ -3,7 +3,7 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
-import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
@@ -16,9 +16,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v3/ai/features")
 public class AgentToolSettingsController {
     private final AgentToolAccessService tools;
-    private final List<AgentWorkspaceService> settings;
+    private final List<IAiAgentWorkspaceService> settings;
 
-    public AgentToolSettingsController(AgentToolAccessService tools, List<AgentWorkspaceService> settings) {
+    public AgentToolSettingsController(AgentToolAccessService tools, List<IAiAgentWorkspaceService> settings) {
         this.tools = tools;
         this.settings = settings;
     }
@@ -54,7 +54,7 @@ public class AgentToolSettingsController {
         return DataResult.of(tools.listTools().stream().filter(tool -> tool.name().equals(toolName)).findFirst().orElseThrow());
     }
 
-    private AgentWorkspaceService settings() {
+    private IAiAgentWorkspaceService settings() {
         if (settings.isEmpty()) throw new AgentRuntimeUnavailableException("PI", "Local workspace settings are unavailable");
         return settings.get(0);
     }

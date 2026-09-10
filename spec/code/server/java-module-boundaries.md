@@ -18,6 +18,7 @@ These boundaries apply only to Chat2DB modules. They do not restrict third-party
 | `chat2db-community-plugins/*` | Implement database-specific plugin capabilities | Depend on web, domain-core, or storage |
 | `chat2db-community-web` | Provide HTTP, MCP, and CLI adapters, request/response DTOs, controllers, and web converters | Depend on domain-core, storage, SPI, or plugins |
 | `chat2db-community-jcef` | Provide desktop-shell adapters | Contain domain business logic or depend on web, domain-core, storage, SPI, or plugins |
+| `chat2db-community-agent` | Implement agent runtime adapters, process/RPC transport, installation, and runtime resources | Depend on JCEF, web, domain, storage, SPI, or plugin modules; contain product business workflows |
 | `chat2db-community-start` | Provide the startup entry point and runtime assembly | Contain business logic |
 
 ## 3. Allowed Project Dependencies
@@ -32,7 +33,8 @@ These boundaries apply only to Chat2DB modules. They do not restrict third-party
 | `chat2db-community-plugins/*` | `chat2db-community-spi`, other `chat2db-community-plugins/*` modules |
 | `chat2db-community-web` | `chat2db-community-domain-api`, `chat2db-community-tools` |
 | `chat2db-community-jcef` | `chat2db-community-tools` |
-| `chat2db-community-start` | `chat2db-community-web`, `chat2db-community-jcef`, `chat2db-community-domain-core`, `chat2db-community-storage`, `chat2db-community-plugins/*` |
+| `chat2db-community-agent` | `chat2db-community-tools` |
+| `chat2db-community-start` | `chat2db-community-web`, `chat2db-community-jcef`, `chat2db-community-agent`, `chat2db-community-domain-core`, `chat2db-community-storage`, `chat2db-community-plugins/*` |
 
 ## 4. Prohibited Dependencies
 
@@ -45,6 +47,7 @@ These boundaries apply only to Chat2DB modules. They do not restrict third-party
 7. `plugins/*` must not import or depend on `web`, `domain-core`, or `storage`.
 8. Code must not bypass module boundaries through `ApplicationContext`, reflection, class-name strings, or bean names.
 9. Domain service interfaces must not return web DTOs or HTTP result wrappers.
+10. Agent runtime implementations belong in `agent`, not `jcef` or `tools`. `agent` and `jcef` must not depend on each other; `start` assembles them through the shared contracts in `tools`.
 
 ## 5. Review Checklist
 
