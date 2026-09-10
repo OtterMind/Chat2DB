@@ -10,6 +10,7 @@ public interface AgentDatabaseService {
     AgentDatabaseResult<Names> listDatabases(Databases request);
     AgentDatabaseResult<Names> listSchemas(Schemas request);
     AgentDatabaseResult<List<TableSummary>> listTables(Tables request);
+    AgentDatabaseResult<List<ColumnSummary>> listColumns(Columns request);
     AgentDatabaseResult<List<TableDetail>> describeTables(Describe request);
     AgentDatabaseResult<QueryData> query(Query request);
 }

@@ -1,19 +1,19 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult.*;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
-import ai.chat2db.community.domain.api.model.request.datasource.DbDatabaseQueryAllRequest;
 import ai.chat2db.community.domain.api.model.request.db.*;
 import ai.chat2db.community.domain.api.model.request.operation.OpsSqlOperationLogListResultRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.agent.AgentDatabaseService;
+import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
 import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
@@ -27,19 +27,17 @@ import java.util.function.Function;
 public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     private final IWorkspaceStorageFacade storage;
     private final IDbConnectionContextService connections;
-    private final IDbDatabaseService databases;
-    private final IDbTableService tables;
+    private final AgentMetadataService metadata;
     private final IDbDlTemplateService executor;
     private final IDbSqlService sqlService;
     private final IOpsSqlOperationLogService audit;
 
     public AgentDatabaseServiceImpl(IWorkspaceStorageFacade storage, IDbConnectionContextService connections,
-            IDbDatabaseService databases, IDbTableService tables, IDbDlTemplateService executor,
+            AgentMetadataService metadata, IDbDlTemplateService executor,
             IDbSqlService sqlService, IOpsSqlOperationLogService audit) {
         this.storage = storage;
         this.connections = connections;
-        this.databases = databases;
-        this.tables = tables;
+        this.metadata = metadata;
         this.executor = executor;
         this.sqlService = sqlService;
         this.audit = audit;
@@ -48,13 +46,16 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     @Override
     public AgentDatabaseResult<List<Source>> listSources(AgentDatabaseRequest.Sources request) {
         int page = page(request.page()), size = size(request.pageSize());
+        String search = search(request.search());
+        if (!blank(search)) {
+            var items = matchingSources(search);
+            return metadataPage(null, items, page, size, "db_list_datasources", new LinkedHashMap<>(Map.of("search", search)));
+        }
         var query = new DbDataSourcePageQueryRequest();
         query.setPageNo(page);
         query.setPageSize(size);
-        query.setSearchKey(search(request.search()));
         var response = Objects.requireNonNull(storage.listDataSources(query), "Datasource lookup returned no response");
-        var items = response.getData().stream().map(item -> new Source(String.valueOf(item.getId()),
-                item.getAlias(), item.getType(), item.getEnvType())).toList();
+        var items = response.getData().stream().map(AgentDatabaseServiceImpl::source).toList();
         Page pagination = pageInfo(page, size, items.size(), response.getTotal(), response.getHasNextPage());
         return AgentDatabaseResult.success(null, items, pagination, Boolean.TRUE.equals(pagination.hasMore())
                 ? next("db_list_datasources", nextPageArguments(request.search(), page + 1, size)) : null, List.of());
@@ -64,9 +65,12 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     public AgentDatabaseResult<Names> listDatabases(AgentDatabaseRequest.Databases request) {
         return scoped(new AgentDatabaseRequest.Scope(request.dataSourceId(), null, null), false, profile -> {
             int page = page(request.page()), size = size(request.pageSize());
-            var items = databases.queryAll(DbDatabaseQueryAllRequest.builder().dataSourceId(profile.getDataSourceId())
-                    .refresh(false).build()).stream().map(db -> new Name(db.getName(), db.getComment(), db.isSystem())).toList();
-            return names(profile, items, page, size, "db_list_databases", Map.of("dataSourceId", request.dataSourceId()));
+            String pattern = AgentMetadataPattern.validate(request.databasePattern(), "databasePattern");
+            var items = metadata.databases(pattern, Boolean.TRUE.equals(request.refresh())).stream()
+                    .map(db -> new Name(db.getName(), db.getComment(), db.isSystem())).toList();
+            Map<String, Object> args = new LinkedHashMap<>(Map.of("dataSourceId", request.dataSourceId()));
+            put(args, "databasePattern", pattern);
+            return names(profile, items, page, size, "db_list_databases", args);
         });
     }
 
@@ -75,30 +79,55 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         return scoped(new AgentDatabaseRequest.Scope(request.dataSourceId(), request.database(), null), false, profile -> {
             int page = page(request.page()), size = size(request.pageSize());
             requireDatabase(profile, request.database());
+            String pattern = AgentMetadataPattern.validate(request.schemaPattern(), "schemaPattern");
             var items = connections.supportSchema()
-                    ? databases.querySchema(DbSchemaQueryRequest.builder().dataSourceId(profile.getDataSourceId())
-                        .dataBaseName(profile.getDatabaseName()).refresh(false).build()).stream()
+                    ? metadata.schemas(profile.getDatabaseName(), pattern, Boolean.TRUE.equals(request.refresh())).stream()
                         .map(schema -> new Name(schema.getName(), schema.getComment(), schema.isSystem())).toList()
                     : List.<Name>of();
             Map<String, Object> args = scopeArguments(profile); args.remove("schema");
+            put(args, "schemaPattern", pattern);
             return names(profile, items, page, size, "db_list_schemas", args);
         });
     }
 
     @Override
     public AgentDatabaseResult<List<TableSummary>> listTables(AgentDatabaseRequest.Tables request) {
-        return scoped(request.scope(), true, profile -> {
-            int page = page(request.page()), size = size(request.pageSize());
-            var query = DbTablePageQueryRequest.builder().dataSourceId(profile.getDataSourceId())
-                    .databaseName(profile.getDatabaseName()).schemaName(profile.getSchemaName())
-                    .searchKey(search(request.search())).pageNo(page).pageSize(size).refresh(false).build();
-            PageResponse<Table> response = tables.pageQuery(query, TableSelector.builder().columnList(false).indexList(false).build());
-            var items = response.getData().stream().map(table -> new TableSummary(table.getName(), table.getType(), table.getComment())).toList();
-            var pagination = pageInfo(page, size, items.size(), response.getTotal(), response.getHasNextPage());
-            Map<String, Object> args = scopeArguments(profile);
-            args.putAll(nextPageArguments(request.search(), page + 1, size));
-            return AgentDatabaseResult.success(scope(profile), items, pagination,
-                    Boolean.TRUE.equals(pagination.hasMore()) ? next("db_list_tables", args) : null, List.of());
+        int page = page(request.page()), size = size(request.pageSize());
+        return scoped(request.scope(), false, profile -> {
+            requireDatabase(profile, request.database());
+            String schemaPattern = metadataSchema(request.schema(), request.schemaPattern());
+            String tablePattern = AgentMetadataPattern.validate(request.tablePattern(), "tablePattern");
+            String search = search(request.search());
+            if (tablePattern != null && search != null) throw invalid("search", "Use tablePattern or search, not both.", null);
+            if (search != null) tablePattern = "%" + AgentMetadataPattern.literal(search) + "%";
+            var items = metadata.tables(request.database(), schemaPattern, tablePattern, Boolean.TRUE.equals(request.refresh())).stream()
+                    .map(table -> new TableSummary(table.getName(), table.getType(), table.getComment(), table.getDatabaseName(), table.getSchemaName()))
+                    .sorted(Comparator.comparing(TableSummary::database, Comparator.nullsFirst(String::compareTo))
+                            .thenComparing(TableSummary::schema, Comparator.nullsFirst(String::compareTo)).thenComparing(TableSummary::name)).toList();
+            Map<String, Object> args = metadataArguments(request.dataSourceId(), request.database(), request.schema(), request.schemaPattern());
+            put(args, "search", search); put(args, "tablePattern", request.tablePattern());
+            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_list_tables", args);
+        });
+    }
+
+    @Override
+    public AgentDatabaseResult<List<ColumnSummary>> listColumns(AgentDatabaseRequest.Columns request) {
+        int page = page(request.page()), size = size(request.pageSize());
+        return scoped(request.scope(), false, profile -> {
+            requireDatabase(profile, request.database());
+            String schemaPattern = metadataSchema(request.schema(), request.schemaPattern());
+            String tablePattern = AgentMetadataPattern.validate(request.tablePattern(), "tablePattern");
+            String columnPattern = AgentMetadataPattern.validate(request.columnPattern(), "columnPattern");
+            var items = metadata.columns(request.database(), schemaPattern, tablePattern, columnPattern, Boolean.TRUE.equals(request.refresh())).stream()
+                    .map(c -> new ColumnSummary(c.getDatabaseName(), c.getSchemaName(), c.getTableName(), c.getName(), c.getColumnType(),
+                            c.getDataType(), c.getNullable() == null || c.getNullable() == 2 ? null : c.getNullable() == 1,
+                            c.getDefaultValue(), c.getComment(), c.getOrdinalPosition()))
+                    .sorted(Comparator.comparing(ColumnSummary::database, Comparator.nullsFirst(String::compareTo))
+                            .thenComparing(ColumnSummary::schema, Comparator.nullsFirst(String::compareTo)).thenComparing(ColumnSummary::table)
+                            .thenComparing(ColumnSummary::ordinalPosition, Comparator.nullsFirst(Integer::compareTo)).thenComparing(ColumnSummary::name)).toList();
+            Map<String, Object> args = metadataArguments(request.dataSourceId(), request.database(), request.schema(), request.schemaPattern());
+            put(args, "tablePattern", tablePattern); put(args, "columnPattern", columnPattern);
+            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_list_columns", args);
         });
     }
 
@@ -118,9 +147,9 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             var details = new ArrayList<TableDetail>();
             var warnings = new ArrayList<String>();
             for (String name : request.tables()) {
-                var query = DbTableQueryRequest.builder().dataSourceId(profile.getDataSourceId())
-                        .databaseName(profile.getDatabaseName()).schemaName(profile.getSchemaName()).tableName(name).refresh(false).build();
-                Table table = tables.query(query, TableSelector.builder().columnList(true).indexList(true).build());
+                AgentMetadataService.Description description = metadata.describe(profile.getDatabaseName(), profile.getSchemaName(), name, Boolean.TRUE.equals(request.refresh()));
+                Table table = description.table();
+                warnings.addAll(description.warnings());
                 if (table == null || table.getColumnList() == null || table.getColumnList().isEmpty()) {
                     throw new AgentDatabaseException("TABLE_NOT_FOUND", "tables", "Table metadata not found: " + name,
                             next("db_list_tables", scopeArguments(profile)));
@@ -131,20 +160,10 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 var indexes = table.getIndexList() == null ? List.<Index>of() : table.getIndexList().stream()
                         .map(index -> new Index(index.getName(), index.getUnique(), index.getColumnList() == null ? List.of()
                                 : index.getColumnList().stream().map(column -> column.getColumnName()).toList())).toList();
-                List<ForeignKey> foreignKeys = List.of();
-                try {
-                    foreignKeys = connections.getImportedKeys(profile.getDatabaseName(), profile.getSchemaName(), name).stream()
-                            .map(fk -> new ForeignKey(fk.getFkName(), fk.getFkColumnName(), fk.getPkTableCat(), fk.getPkTableSchem(),
-                                    fk.getPkTableName(), fk.getPkColumnName(), fk.getKeySeq())).toList();
-                } catch (RuntimeException error) { // impl-contract: best-effort - foreign keys enrich otherwise complete column metadata.
-                    warnings.add("Foreign keys unavailable for " + name); }
-                String ddl = null;
-                try {
-                    ddl = tables.showCreateTable(DbTableShowCreateRequest.builder().dataSourceId(profile.getDataSourceId())
-                            .databaseName(profile.getDatabaseName()).schemaName(profile.getSchemaName()).tableName(name).build());
-                } catch (RuntimeException error) { // impl-contract: fallback - structured columns and indexes remain authoritative when DDL is unavailable.
-                    warnings.add("DDL unavailable for " + name + "; use structured columns and indexes."); }
-                details.add(new TableDetail(name, table.getComment(), columns, indexes, foreignKeys, ddl));
+                var foreignKeys = table.getForeignKeyList() == null ? List.<ForeignKey>of() : table.getForeignKeyList().stream()
+                        .map(fk -> new ForeignKey(fk.getFkName(), fk.getFkColumnName(), fk.getPkTableCat(), fk.getPkTableSchem(),
+                                fk.getPkTableName(), fk.getPkColumnName(), fk.getKeySeq())).toList();
+                details.add(new TableDetail(name, table.getComment(), columns, indexes, foreignKeys, description.ddl()));
             }
             return AgentDatabaseResult.success(scope(profile), details, null, null, warnings);
         });
@@ -224,6 +243,28 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         });
     }
 
+    private List<Source> matchingSources(String search) {
+        String needle = search.toLowerCase(Locale.ROOT);
+        var matches = new ArrayList<Source>();
+        var query = new DbDataSourcePageQueryRequest();
+        query.setPageSize(200);
+        // Storage providers do not consistently filter aliases. Apply V2 search before V2 pagination.
+        for (int page = 1; ; page++) {
+            query.setPageNo(page);
+            var response = Objects.requireNonNull(storage.listDataSources(query), "Datasource lookup returned no response");
+            response.getData().stream().filter(item -> item.getAlias() != null && item.getAlias().toLowerCase(Locale.ROOT).contains(needle))
+                    .map(AgentDatabaseServiceImpl::source).forEach(matches::add);
+            if (response.getData().isEmpty() || Boolean.FALSE.equals(response.getHasNextPage())
+                    || response.getHasNextPage() == null && (response.getTotal() != null
+                        ? (long) page * query.getPageSize() >= response.getTotal() : response.getData().size() < query.getPageSize())) break;
+        }
+        return matches;
+    }
+
+    private static Source source(WorkspaceDataSource item) {
+        return new Source(String.valueOf(item.getId()), item.getAlias(), item.getType(), item.getEnvType());
+    }
+
     private <T> AgentDatabaseResult<T> scoped(AgentDatabaseRequest.Scope request, boolean requireScope,
             Function<ConnectionProfile, AgentDatabaseResult<T>> action) {
         required(request.dataSourceId(), "dataSourceId", next("db_list_datasources", Map.of()));
@@ -270,6 +311,28 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         var nextArgs = new LinkedHashMap<>(args); nextArgs.put("page", page + 1); nextArgs.put("pageSize", size);
         return AgentDatabaseResult.success(scope(profile), new Names(items.subList(start, end), connections.supportDatabase(), connections.supportSchema()),
                 pagination, end < items.size() ? next(tool, nextArgs) : null, List.of());
+    }
+
+    private static String metadataSchema(String schema, String pattern) {
+        if (schema != null && pattern != null) throw invalid("schemaPattern", "Use an exact schema or schemaPattern, not both.", null);
+        return schema != null ? AgentMetadataPattern.literal(schema) : AgentMetadataPattern.validate(pattern, "schemaPattern");
+    }
+    private static Scope metadataScope(ConnectionProfile profile, String schema) {
+        return new Scope(String.valueOf(profile.getDataSourceId()), profile.getDbType(), profile.getDatabaseName(), schema);
+    }
+    private static Map<String, Object> metadataArguments(String id, String database, String schema, String schemaPattern) {
+        var args = new LinkedHashMap<String, Object>(); args.put("dataSourceId", id);
+        put(args, "database", database); put(args, "schema", schema); put(args, "schemaPattern", schemaPattern);
+        return args;
+    }
+    private static void put(Map<String, Object> args, String key, String value) { if (value != null) args.put(key, value); }
+    private static <T> AgentDatabaseResult<List<T>> metadataPage(Scope scope, List<T> items, Integer requestedPage,
+            Integer requestedSize, String tool, Map<String, Object> args) {
+        int page = page(requestedPage), size = size(requestedSize);
+        int start = Math.min((page - 1) * size, items.size()), end = Math.min(start + size, items.size());
+        args.put("page", page + 1); args.put("pageSize", size);
+        return AgentDatabaseResult.success(scope, items.subList(start, end), pageInfo(page, size, end - start, (long) items.size(), end < items.size()),
+                end < items.size() ? next(tool, args) : null, List.of());
     }
 
     private static boolean isQuery(String type) {

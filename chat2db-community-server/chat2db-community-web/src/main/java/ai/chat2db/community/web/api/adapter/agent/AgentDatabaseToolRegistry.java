@@ -29,18 +29,27 @@ public class AgentDatabaseToolRegistry {
                 .setCoercion(com.fasterxml.jackson.databind.cfg.CoercionInputShape.Boolean, com.fasterxml.jackson.databind.cfg.CoercionAction.Fail);
         add("db_list_datasources", "Discover available connections. Start here when the datasource id is unknown. IDs are strings; copy an id exactly into later tools. Optional search filters connection names. Results are paginated; use nextAction when present.",
                 "Discover datasource ids and database types.", List.of("Never invent a datasource id. Use an id returned by db_list_datasources."),
-                paged(Map.of("search", text("Filter by connection name.", 256))), List.of(), Sources.class, service::listSources);
-        add("db_list_databases", "List databases for one explicit datasource id. Returns supportsDatabases/supportsSchemas to guide scope selection. If schemas are supported, call db_list_schemas after choosing a database; otherwise call db_list_tables. Does not use UI selection.",
+                paged(Map.of("search", text("Case-insensitive literal connection-name substring. Filtering happens before pagination.", 256))), List.of(), Sources.class, service::listSources);
+        add("db_list_databases", "List databases for one explicit datasource id. Optional databasePattern filters names using %, _ and backslash escape; database matching is case-sensitive. JDBC getCatalogs has no pattern argument, so catalog filtering occurs in V2 before pagination. Returns supportsDatabases/supportsSchemas to guide scope selection. If schemas are supported, call db_list_schemas after choosing a database; otherwise call db_list_tables. Does not use UI selection.",
                 "Discover databases and scope capabilities.", List.of("Keep the same datasource id when using returned database names."),
-                paged(Map.of("dataSourceId", sourceId())), List.of("dataSourceId"), Databases.class, service::listDatabases);
-        add("db_list_schemas", "List schemas for a datasource and database. database is required when supportsDatabases=true; omit it for dialects without databases. If supportsSchemas=false, an empty items list is expected; proceed to db_list_tables without schema.",
+                metadataPaged(Map.of("dataSourceId", sourceId(), "databasePattern", pattern("Match database names, e.g. sales% or %analytics%."))), List.of("dataSourceId"), Databases.class, service::listDatabases);
+        add("db_list_schemas", "List schemas for a datasource and exact database. schemaPattern is passed to JDBC so unrelated schemas need not be returned. database is required when supportsDatabases=true; omit it for dialects without databases. If supportsSchemas=false, an empty items list is expected; proceed to db_list_tables without schema.",
                 "Discover schemas when supported by the connection.", List.of("Do not guess a schema such as public or dbo; discover it."),
-                paged(Map.of("dataSourceId", sourceId(), "database", database())), List.of("dataSourceId"), Schemas.class, service::listSchemas);
-        var tableFields = scopeFields(); tableFields.put("search", text("Filter table names before describing them; do not enumerate every table in a large database.", 256));
-        add("db_list_tables", "Find tables/views in an explicit datasource/database/schema scope. Supply database and schema when the dialect supports them. Returns exact names, types and comments with page information. Use search to narrow the list, then db_describe_tables for selected names.",
+                metadataPaged(Map.of("dataSourceId", sourceId(), "database", database(), "schemaPattern", pattern("Match schemas, e.g. tenant% or analytics\\_% for a literal underscore."))), List.of("dataSourceId"), Schemas.class, service::listSchemas);
+        var tableFields = metadataFields();
+        tableFields.put("search", text("Literal table-name substring, converted to a JDBC contains pattern. Use search OR tablePattern. Does not search comments.", 256));
+        tableFields.put("tablePattern", pattern("Match table/view names, e.g. %order% or order\\_% for a literal underscore. Prefer this to listing all tables."));
+        add("db_list_tables", "Find tables/views using JDBC tablePattern and optional schemaPattern. database/catalog is exact, never a pattern. schema is exact and mutually exclusive with schemaPattern; omit both to search visible schemas. Use a narrow tablePattern such as %order% before describing tables. Results include database/schema identity; preserve that exact scope for subsequent queries. Filters apply before pagination and use an isolated V2 metadata cache.",
                 "Find relevant table names before inspecting columns.", List.of("Use table comments and names to select relevant tables; inspect their columns before writing SQL."),
-                paged(tableFields), List.of("dataSourceId"), Tables.class, service::listTables);
-        var describeFields = scopeFields(); describeFields.put("tables", Map.of("type", "array", "items", text("Exact unqualified table name from db_list_tables.", 256), "minItems", 1, "maxItems", 10, "uniqueItems", true,
+                metadataPaged(tableFields), List.of("dataSourceId"), Tables.class, service::listTables);
+        var columnFields = metadataFields();
+        columnFields.put("tablePattern", pattern("Limit matching tables, e.g. order% or an exact table name with wildcard characters escaped."));
+        columnFields.put("columnPattern", pattern("Find columns by name, e.g. %email% or customer\\_id. Use this before fetching full schemas across many tables."));
+        add("db_list_columns", "Search column metadata with JDBC schemaPattern/tablePattern/columnPattern. Returns only matching columns with database, schema and table identity, types, nullability and comments. Use narrow patterns to locate relevant tables; then call db_describe_tables with exact names for full keys and DDL. database is an exact catalog name.",
+                "Find relevant columns without loading full schemas.", List.of("Prefer db_list_columns with columnPattern when the task identifies a field but not a table. Copy the returned database/schema/table into follow-up calls."),
+                metadataPaged(columnFields), List.of("dataSourceId"), Columns.class, service::listColumns);
+        var describeFields = scopeFields();
+        describeFields.put("refresh", refresh()); describeFields.put("tables", Map.of("type", "array", "items", text("Exact unqualified table name from db_list_tables.", 256), "minItems", 1, "maxItems", 10, "uniqueItems", true,
                 "description", "1 to 10 exact table names in the supplied scope, e.g. [\"orders\", \"customers\"]."));
         add("db_describe_tables", "Inspect up to 10 tables. Always returns structured columns with types, nullability, keys and indexes when available; DDL and foreign keys are supplemental. warnings report unavailable metadata. Do not infer column names from the table name alone.",
                 "Read structured table schemas and relationships.", List.of("Use returned column names and databaseType to generate dialect-correct SQL."),
@@ -61,7 +70,13 @@ public class AgentDatabaseToolRegistry {
         AgentDatabaseResult<?> result;
         try { result = tool.execute.apply(arguments); }
         catch (AgentDatabaseException error) {
-            return AgentDatabaseResult.failure(error.code(), error.field(), error.getMessage(), error.nextAction());
+            var nextAction = error.nextAction();
+            if (nextAction == null && ("schemaPattern".equals(error.field()) && arguments.get("schema") != null
+                    || "search".equals(error.field()) && arguments.get("tablePattern") != null)) {
+                var corrected = new LinkedHashMap<>(arguments); corrected.remove(error.field());
+                nextAction = new AgentDatabaseResult.NextAction(name, corrected);
+            }
+            return AgentDatabaseResult.failure(error.code(), error.field(), error.getMessage(), nextAction);
         } catch (RuntimeException error) {
             return AgentDatabaseResult.failure("DATABASE_ERROR", null,
                     "Database operation failed: " + Objects.toString(error.getMessage(), error.getClass().getSimpleName()), null);
@@ -86,7 +101,12 @@ public class AgentDatabaseToolRegistry {
     private <T> void add(String name, String description, String snippet, List<String> guidelines,
             Map<String, Object> properties, List<String> required, Class<T> type,
             Function<T, AgentDatabaseResult<?>> action) {
-        Map<String, Object> schema = Map.of("type", "object", "properties", properties, "required", required, "additionalProperties", false);
+        var modelProperties = new LinkedHashMap<String, Object>();
+        properties.forEach((field, definition) -> modelProperties.put(field, required.contains(field) ? definition :
+                Map.of("anyOf", List.of(definition, Map.of("type", "null")),
+                        "description", Objects.toString(((Map<?, ?>) definition).get("description"), "")
+                                + " Optional: omit or pass null when unused. Never use a placeholder value.")));
+        Map<String, Object> schema = Map.of("type", "object", "properties", modelProperties, "required", required, "additionalProperties", false);
         var definition = new AgentToolAccess.Tool(name, description, schema, snippet, guidelines);
         tools.put(name, new Entry(definition, arguments -> {
             T request;
@@ -105,6 +125,21 @@ public class AgentDatabaseToolRegistry {
     }
     private static Map<String, Object> text(String description, int maxLength) {
         return Map.of("type", "string", "minLength", 1, "maxLength", maxLength, "description", description);
+    }
+    private static Map<String, Object> pattern(String description) {
+        return text(description + " JDBC patterns use % for any sequence and _ for one character; backslash escapes %, _ or backslash. Matching is case-sensitive; use names as returned by discovery tools. Omit to match all.", 256);
+    }
+    private static Map<String, Object> refresh() {
+        return Map.of("type", "boolean", "default", false, "description", "Bypass the isolated V2 metadata cache for this lookup. Cached entries expire after 60 seconds; nextAction reuses the refreshed result.");
+    }
+    private static Map<String, Object> metadataPaged(Map<String, Object> fields) {
+        var properties = new LinkedHashMap<>(paged(fields)); properties.put("refresh", refresh()); return properties;
+    }
+    private static LinkedHashMap<String, Object> metadataFields() {
+        var fields = scopeFields();
+        fields.put("schema", text("Exact schema name. Mutually exclusive with schemaPattern; omit both to search visible schemas.", 256));
+        fields.put("schemaPattern", pattern("Match schemas, e.g. tenant% or analytics\\_%. Mutually exclusive with schema."));
+        return fields;
     }
     private static Map<String, Object> sourceId() {
         return Map.of("type", "string", "pattern", "^[1-9][0-9]*$", "description", "Required datasource id string returned by db_list_datasources. Never use a connection name or UI selection.");

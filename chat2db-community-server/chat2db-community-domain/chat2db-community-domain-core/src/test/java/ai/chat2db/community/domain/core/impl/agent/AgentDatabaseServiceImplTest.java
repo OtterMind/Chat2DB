@@ -6,10 +6,13 @@ import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
+import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.community.domain.api.service.db.*;
+import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import org.junit.jupiter.api.Test;
@@ -20,19 +23,41 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AgentDatabaseServiceImplTest {
     @Test
+    void datasourceSearchFiltersBeforePaginationEvenWhenStorageIgnoresSearch() {
+        Fixture f = new Fixture();
+        for (int i = 0; i < 203; i++) {
+            var source = new WorkspaceDataSource(); source.setId((long) i + 1);
+            source.setAlias(i == 0 ? "SALES_main" : i == 202 ? "sales_archive" : "noise_" + i);
+            f.sources.add(source);
+        }
+        var first = f.service.listSources(new Sources("sales_", 1, 1));
+        assertEquals(List.of("SALES_main"), first.data().stream().map(AgentDatabaseResult.Source::name).toList());
+        assertEquals(2L, first.page().total());
+        assertEquals(Map.of("search", "sales_", "page", 2, "pageSize", 1), first.nextAction().arguments());
+        assertEquals(2, f.sourceCalls);
+        var second = f.service.listSources(new Sources("sales_", 2, 1));
+        assertEquals("sales_archive", second.data().get(0).name());
+        assertNull(second.nextAction());
+        assertTrue(f.service.listSources(new Sources("missing", 1, 50)).data().isEmpty());
+        var unfiltered = f.service.listSources(new Sources(null, 2, 200));
+        assertEquals(3, unfiltered.data().size());
+        assertEquals(203L, unfiltered.page().total());
+    }
+
+    @Test
     void explicitScopeIsRequiredAndThePreviousConnectionIsRestored() {
         Fixture f = new Fixture();
-        var missing = failure(() -> f.service.listTables(new Tables(null, null, null, null, null, null)));
+        var missing = failure(() -> f.service.listTables(new Tables(null, null, null, null, null, null, null, null, null)));
         assertNotNull(missing);
         assertEquals("MISSING_DATASOURCE", missing.code());
         assertEquals("db_list_datasources", missing.nextAction().tool());
         assertEquals(0, f.binds);
-        var database = failure(() -> f.service.listTables(new Tables("7", null, null, null, null, null)));
+        var database = failure(() -> f.service.listTables(new Tables("7", null, null, null, null, null, null, null, null)));
         assertEquals("database", database.field());
         assertEquals(Map.of("dataSourceId", "7"), database.nextAction().arguments());
         assertSame(f.previous, f.current);
         f.schemas = true;
-        var schema = failure(() -> f.service.listTables(new Tables("7", "app", null, null, null, null)));
+        var schema = failure(() -> f.service.query(new Query("7", "app", null, "SELECT 1", null, null)));
         assertEquals("schema", schema.field());
         assertEquals("db_list_schemas", schema.nextAction().tool());
         assertFalse(schema.nextAction().arguments().containsKey("schema"));
@@ -105,14 +130,14 @@ class AgentDatabaseServiceImplTest {
     @Test
     void schemaKeepsStructuredColumnsWhenDdlIsUnavailable() {
         Fixture f = new Fixture();
-        var result = f.service.describeTables(new Describe("7", "app", null, List.of("samples")));
+        var result = f.service.describeTables(new Describe("7", "app", null, List.of("samples"), null));
         assertTrue(result.ok());
         var detail = (AgentDatabaseResult.TableDetail) ((List<?>) result.data()).get(0);
         assertEquals("id", detail.columns().get(0).name());
         assertEquals(false, detail.columns().get(0).nullable());
         assertEquals(true, detail.columns().get(0).primaryKey());
         assertEquals(1, result.warnings().size());
-        assertThrows(AgentDatabaseException.class, () -> f.service.describeTables(new Describe("7", "app", null, List.of("samples", "samples"))));
+        assertThrows(AgentDatabaseException.class, () -> f.service.describeTables(new Describe("7", "app", null, List.of("samples", "samples"), null)));
     }
 
     @Test
@@ -125,6 +150,26 @@ class AgentDatabaseServiceImplTest {
         assertFalse(AgentSelectQueryPolicy.accepts("WITH x AS (DELETE FROM samples RETURNING id) SELECT * FROM x", "POSTGRESQL"));
     }
 
+    @Test
+    void metadataFiltersAreForwardedAndPreservedAcrossPages() {
+        Fixture f = new Fixture();
+        f.metadataTables = List.of(Table.builder().name("orders_b").databaseName("app").schemaName("tenant_one").build(),
+                Table.builder().name("orders_a").databaseName("app").schemaName("tenant_two").build());
+        var result = f.service.listTables(new Tables("7", "app", null, null, "tenant%", "order%", 1, 1, true));
+        assertEquals("tenant%", f.metadataArgs[1]);
+        assertEquals("order%", f.metadataArgs[2]);
+        assertEquals(true, f.metadataArgs[3]);
+        assertEquals("order%", result.nextAction().arguments().get("tablePattern"));
+        assertEquals("tenant%", result.nextAction().arguments().get("schemaPattern"));
+        assertEquals(2, result.nextAction().arguments().get("page"));
+        assertEquals("tenant_one", result.data().get(0).schema());
+        assertNull(result.scope().schema());
+        f.service.listTables(new Tables("7", "app", "tenant_one", "order_", null, null, 1, 50, null));
+        assertEquals("tenant\\_one", f.metadataArgs[1]);
+        assertEquals("%order\\_%", f.metadataArgs[2]);
+        assertThrows(AgentDatabaseException.class, () -> f.service.listTables(new Tables("7", "app", "tenant_one", null, "%", "order%", 1, 50, null)));
+    }
+
     private static AgentDatabaseException failure(java.util.function.Supplier<AgentDatabaseResult<?>> operation) {
         return assertThrows(AgentDatabaseException.class, operation::get);
     }
@@ -133,6 +178,10 @@ class AgentDatabaseServiceImplTest {
         ConnectionProfile previous = new ConnectionProfile(), current = previous;
         boolean schemas; int binds, audits; String queryType = "SELECT";
         DbDlExecuteRequest executed;
+        Object[] metadataArgs;
+        List<Table> metadataTables = List.of();
+        List<WorkspaceDataSource> sources = new ArrayList<>();
+        int sourceCalls;
         ExecuteResponse response = new ExecuteResponse();
         AgentDatabaseServiceImpl service;
         Fixture() {
@@ -148,16 +197,24 @@ class AgentDatabaseServiceImplTest {
                 case "getImportedKeys" -> List.of();
                 default -> throw new AssertionError(method);
             });
-            IDbTableService tables = proxy(IDbTableService.class, (method, args) -> switch (method) {
-                case "query" -> Table.builder().name("samples").columnList(List.of(TableColumn.builder().name("id").columnType("INTEGER").nullable(0).primaryKey(true).build())).build();
-                case "showCreateTable" -> throw new UnsupportedOperationException("DDL unsupported");
-                default -> PageResponse.empty(1, 50);
+            AgentMetadataService metadata = proxy(AgentMetadataService.class, (method, args) -> switch (method) {
+                case "tables" -> { metadataArgs = args; yield metadataTables; }
+                case "describe" -> new AgentMetadataService.Description(Table.builder().name("samples")
+                        .columnList(List.of(TableColumn.builder().name("id").columnType("INTEGER").nullable(0).primaryKey(true).build())).build(),
+                        null, List.of("DDL unsupported"));
+                default -> List.of();
             });
             IDbDlTemplateService executor = proxy(IDbDlTemplateService.class, (method, args) -> { executed = (DbDlExecuteRequest) args[0]; return List.of(response); });
             IDbSqlService sql = proxy(IDbSqlService.class, (method, args) -> { var statement = new SimpleSqlStatement(); statement.setSqlType(queryType); return List.of(statement); });
             IOpsSqlOperationLogService audit = proxy(IOpsSqlOperationLogService.class, (method, args) -> { audits++; return null; });
-            service = new AgentDatabaseServiceImpl(proxy(IWorkspaceStorageFacade.class, (m,a) -> PageResponse.empty(1,50)), connection,
-                    proxy(IDbDatabaseService.class, (m,a) -> List.of()), tables, executor, sql, audit);
+            service = new AgentDatabaseServiceImpl(proxy(IWorkspaceStorageFacade.class, (m,a) -> {
+                sourceCalls++;
+                var request = (DbDataSourcePageQueryRequest) a[0];
+                int start = Math.min((request.getPageNo() - 1) * request.getPageSize(), sources.size());
+                return PageResponse.of(sources.subList(start, Math.min(start + request.getPageSize(), sources.size())),
+                        (long) sources.size(), request.getPageNo(), request.getPageSize());
+            }), connection,
+                    metadata, executor, sql, audit);
         }
     }
     private interface Call { Object invoke(String method, Object[] args); }

@@ -20,7 +20,9 @@ public record AgentDatabaseResult<T>(boolean ok, Scope scope, T data, Page page,
     public record Source(String id, String name, String type, String environment) { }
     public record Name(String name, String comment, boolean system) { }
     public record Names(List<Name> items, boolean supportsDatabases, boolean supportsSchemas) { }
-    public record TableSummary(String name, String type, String comment) { }
+    public record TableSummary(String name, String type, String comment, String database, String schema) { }
+    public record ColumnSummary(String database, String schema, String table, String name, String type,
+                                Integer jdbcType, Boolean nullable, String defaultValue, String comment, Integer ordinalPosition) { }
     public record Column(String name, String type, Integer jdbcType, Boolean nullable, String defaultValue,
                          String comment, Boolean primaryKey, Boolean generated) { }
     public record Index(String name, Boolean unique, List<String> columns) { }
