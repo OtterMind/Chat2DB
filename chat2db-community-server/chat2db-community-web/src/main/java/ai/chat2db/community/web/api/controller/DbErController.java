@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.model.er.ERModel;
 import ai.chat2db.community.domain.api.service.db.IDbErService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
@@ -50,7 +52,7 @@ public class DbErController {
      * @return operation result for the request.
      */
     @PostMapping("/save_position")
-    public ActionResult savePosition(@RequestBody ERModelPositionSaveRequest request) {
+    public ActionResult savePosition(@Valid @RequestBody ERModelPositionSaveRequest request) {
         erService.savePosition(erWebConverter.request2position(request));
         return ActionResult.isSuccess();
     }
