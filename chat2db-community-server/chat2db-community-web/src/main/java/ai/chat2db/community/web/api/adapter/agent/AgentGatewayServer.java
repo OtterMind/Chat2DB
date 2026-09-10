@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
@@ -16,7 +17,7 @@ import org.slf4j.LoggerFactory;
 /** A loopback listener exposing only the Agent tool and model transports. */
 public final class AgentGatewayServer implements AutoCloseable {
     private static final String TOOLS = "/api/v3/ai/agent-tools/";
-    private static final String MODEL = "/api/v3/ai/agent-model/v1/responses";
+    private static final String MODEL = "/api/v3/ai/agent-model/";
     private static final int MAX_BODY_BYTES = 8 * 1024 * 1024;
     private final AgentGatewayAddress address;
     private final Supplier<AgentToolAccessService> tools;
@@ -71,16 +72,19 @@ public final class AgentGatewayServer implements AutoCloseable {
             boolean catalog = (TOOLS + "catalog").equals(path) && "GET".equals(method);
             boolean execute = (TOOLS + "execute").equals(path) && "POST".equals(method);
             boolean nativeTool = (TOOLS + "prepare-native").equals(path) && "POST".equals(method);
-            boolean model = MODEL.equals(path) && "POST".equals(method);
+            boolean model = path.startsWith(MODEL) && "POST".equals(method);
             if (!catalog && !execute && !nativeTool && !model) {
                 writeJson(exchange, 404, Map.of("success", false, "errorMessage", "Unknown Agent endpoint"));
                 return;
             }
-            String authorization = exchange.getRequestHeaders().getFirst("Authorization");
-            if (authorization == null || !authorization.startsWith("Bearer ") || authorization.length() <= 7) {
-                throw new SecurityException("Agent ticket is required");
+            String ticket = model ? exchange.getRequestHeaders().getFirst("X-Chat2DB-Model-Ticket") : null;
+            if (ticket == null || ticket.isBlank()) {
+                String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+                if (authorization == null || !authorization.startsWith("Bearer ") || authorization.length() <= 7) {
+                    throw new SecurityException("Agent ticket is required");
+                }
+                ticket = authorization.substring(7);
             }
-            String ticket = authorization.substring(7);
             String remote = exchange.getRemoteAddress().getAddress().getHostAddress();
             if (catalog) {
                 writeJson(exchange, 200, tools.get().activeTools(ticket, remote));
@@ -92,7 +96,11 @@ public final class AgentGatewayServer implements AutoCloseable {
                 return;
             }
             if (model) {
-                try (var response = models.get().forward(ticket, remote, body)) {
+                Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                exchange.getRequestHeaders().forEach((name, values) -> headers.put(name, String.join(",", values)));
+                String modelPath = exchange.getRequestURI().getRawPath().substring(MODEL.length() - 1);
+                if (exchange.getRequestURI().getRawQuery() != null) modelPath += "?" + exchange.getRequestURI().getRawQuery();
+                try (var response = models.get().forward(ticket, remote, modelPath, headers, body)) {
                     exchange.getResponseHeaders().set("Content-Type", response.contentType());
                     exchange.sendResponseHeaders(response.statusCode(), 0);
                     byte[] buffer = new byte[16384];

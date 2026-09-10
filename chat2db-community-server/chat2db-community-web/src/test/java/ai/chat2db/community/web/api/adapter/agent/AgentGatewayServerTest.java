@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -69,7 +70,7 @@ class AgentGatewayServerTest {
         IAgentModelGateway models = new IAgentModelGateway() {
             public AgentModelAccess issue(String session, AgentModelSnapshot model) { throw new AssertionError(); }
             public void revoke(String ticket) { throw new AssertionError(); }
-            public AgentModelGatewayResponse forward(String ticket, String remote, byte[] body) {
+            public AgentModelGatewayResponse forward(String ticket, String remote, String path, Map<String, String> headers, byte[] body) {
                 assertEquals("valid", ticket);
                 assertEquals("127.0.0.1", remote);
                 assertEquals("{}", new String(body, StandardCharsets.UTF_8));

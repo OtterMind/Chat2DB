@@ -55,6 +55,7 @@ public abstract class ChatConverter {
         param.setName(request.getName());
         param.setProvider(request.getProvider() == null ? null : request.getProvider().name());
         param.setModel(request.getModel());
+        param.setAgentApi(request.getAgentApi());
         param.setApiKey(request.getApiKey());
         param.setBaseUrl(request.getBaseUrl());
         param.setProjectId(request.getProjectId());
@@ -74,6 +75,7 @@ public abstract class ChatConverter {
         param.setId(request.getId());
         param.setProvider(request.getProvider() == null ? null : request.getProvider().name());
         param.setModel(request.getModel());
+        param.setAgentApi(request.getAgentApi());
         param.setApiKey(request.getApiKey());
         param.setBaseUrl(request.getBaseUrl());
         param.setProjectId(request.getProjectId());

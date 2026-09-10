@@ -4,6 +4,8 @@ import ai.chat2db.community.web.api.adapter.agent.IAgentModelGateway;
 import ai.chat2db.community.web.api.model.response.agent.AgentModelGatewayResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,11 +30,12 @@ public class AgentModelGatewayController {
             HttpServletRequest request) {
         AgentModelGatewayResponse upstream;
         try {
-            upstream = gatewayService.forward(bearerToken(authorization), request.getRemoteAddr(), body);
+            upstream = gatewayService.forward(bearerToken(authorization), request.getRemoteAddr(),
+                    "/v1/responses", Map.of(), body);
         } catch (IOException error) {
             byte[] failure = """
                     {"error":{"type":"model_connection_failed","message":"Cannot connect to the configured model endpoint. Check the model URL and service availability."}}
-                    """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    """.getBytes(StandardCharsets.UTF_8);
             return ResponseEntity.status(502).header(HttpHeaders.CONTENT_TYPE, "application/json")
                     .body(output -> output.write(failure));
         }

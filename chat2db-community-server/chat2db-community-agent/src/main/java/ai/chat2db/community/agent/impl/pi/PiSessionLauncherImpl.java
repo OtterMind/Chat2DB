@@ -19,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.core.io.ClassPathResource;
 
 public class PiSessionLauncherImpl implements IPiSessionLauncher {
 
@@ -68,7 +69,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             writeModelConfiguration(configuration, modelAccess, model);
             objectMapper.writeValue(configuration.resolve("tools.json").toFile(), toolAccess);
             Path extension = configuration.resolve("chat2db-tools.mjs");
-            try (var resource = new org.springframework.core.io.ClassPathResource("agent/chat2db-tools.mjs").getInputStream()) {
+            try (var resource = new ClassPathResource("agent/chat2db-tools.mjs").getInputStream()) {
                 Files.copy(resource, extension, StandardCopyOption.REPLACE_EXISTING);
             }
             List<Path> loadedExtensions = new ArrayList<>(extensions);
@@ -118,7 +119,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
         var modelNode = objectMapper.createObjectNode();
         modelNode.put("id", access.modelId());
         modelNode.put("name", access.modelId());
-        modelNode.put("reasoning", true);
+        modelNode.put("reasoning", "openai-responses".equals(access.api()));
         if (model.contextWindow() != null) {
             modelNode.put("contextWindow", model.contextWindow());
         }
@@ -129,6 +130,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
         provider.put("baseUrl", access.baseUrl());
         provider.put("api", access.api());
         provider.put("apiKey", "$CHAT2DB_MODEL_TICKET");
+        provider.putObject("headers").put("X-Chat2DB-Model-Ticket", "$CHAT2DB_MODEL_TICKET");
         provider.putArray("models").add(modelNode);
         var root = objectMapper.createObjectNode();
         root.putObject("providers").set(access.provider(), provider);

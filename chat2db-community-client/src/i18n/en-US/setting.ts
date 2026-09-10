@@ -1,4 +1,5 @@
 export default {
+  'setting.modelConfig.agentApi': 'Agent API protocol',
   "setting.agent.tool.enable": "Enable",
   "setting.agent.workingDirectory.choose": "Choose folder",
   "setting.agent.tools.title": "Pi Agent tools",

@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
+import ai.chat2db.community.domain.api.enums.ai.AiAgentModelApi;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
@@ -7,24 +8,29 @@ import ai.chat2db.community.tools.agent.runtime.IAgentModelAccessProvider;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import ai.chat2db.community.tools.util.AgentTrace;
+import ai.chat2db.community.web.api.model.response.agent.AgentModelGatewayResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
-import ai.chat2db.community.web.api.model.response.agent.AgentModelGatewayResponse;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -74,22 +80,22 @@ public class AgentModelAccessProviderImpl implements IAgentModelGateway {
         request.setProvider(model.provider());
         request.setModel(model.modelId());
         AiRuntimeModel runtimeModel = modelConfigService.resolveRuntimeModel(request);
-        if (runtimeModel == null || blank(runtimeModel.getApiKey()) || blank(runtimeModel.getBaseUrl())) {
+        if (runtimeModel == null || blank(runtimeModel.getApiKey())) {
             throw new IllegalStateException("Agent model credentials are unavailable");
         }
         if (!model.modelId().equals(runtimeModel.getModel())) {
             throw new IllegalStateException("Resolved Agent model does not match its snapshot");
         }
-        if (!"OPENAI".equalsIgnoreCase(runtimeModel.getProvider())) {
-            throw new IllegalStateException("Pi model gateway currently requires an OpenAI Responses provider");
-        }
+        AiAgentModelApi api = AiAgentModelApi.resolve(runtimeModel.getAgentApi(), runtimeModel.getProvider(), runtimeModel.getBaseUrl());
         String ticket = newTicket();
         tickets.put(ticket, new Ticket(
-                sessionId, model.modelId(), runtimeModel.getBaseUrl(), runtimeModel.getApiKey(),
+                sessionId, model.modelId(), api, runtimeModel.getBaseUrl(), runtimeModel.getApiKey(),
                 now.plus(TICKET_TTL)));
         return new AgentModelAccess(
-                "chat2db", model.modelId(), "openai-responses",
-                address.baseUrl() + "/api/v3/ai/agent-model/v1",
+                "chat2db", model.modelId(), api.getCode(),
+                address.baseUrl() + "/api/v3/ai/agent-model"
+                        + (api == AiAgentModelApi.GOOGLE_GENERATIVE_AI ? "/v1beta"
+                        : api == AiAgentModelApi.OPENAI_COMPLETIONS || api == AiAgentModelApi.OPENAI_RESPONSES ? "/v1" : ""),
                 ticket);
     }
 
@@ -101,7 +107,7 @@ public class AgentModelAccessProviderImpl implements IAgentModelGateway {
     }
 
     @Override
-    public AgentModelGatewayResponse forward(String ticketValue, String remoteAddress, byte[] body) throws IOException {
+    public AgentModelGatewayResponse forward(String ticketValue, String remoteAddress, String path, Map<String, String> headers, byte[] body) throws IOException {
         if (body.length > MAX_REQUEST_BYTES) {
             throw new IllegalArgumentException("Agent model request is too large");
         }
@@ -114,28 +120,38 @@ public class AgentModelAccessProviderImpl implements IAgentModelGateway {
             throw new SecurityException("Agent model ticket is invalid or expired");
         }
         JsonNode requestBody = objectMapper.readTree(body);
-        if (!requestBody.isObject() || !ticket.modelId().equals(requestBody.path("model").asText())) {
+        if (requestBody == null || !requestBody.isObject()
+                || ticket.api() != AiAgentModelApi.GOOGLE_GENERATIVE_AI && !ticket.modelId().equals(requestBody.path("model").asText())) {
             throw new SecurityException("Agent model request does not match its ticket");
         }
+        URI endpoint = endpoint(ticket, path);
         long started = System.nanoTime();
         AgentTrace.record("model.request", ticket.sessionId(), null,
                 Map.of("model", ticket.modelId(), "requestBytes", body.length));
         try {
+            HttpRequest.Builder upstream = HttpRequest.newBuilder(endpoint)
+                    .timeout(Duration.ofMinutes(10))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "text/event-stream, application/json");
+            switch (ticket.api()) {
+                case OPENAI_COMPLETIONS, OPENAI_RESPONSES -> upstream.header("Authorization", "Bearer " + ticket.apiKey());
+                case ANTHROPIC_MESSAGES -> {
+                    upstream.header("x-api-key", ticket.apiKey());
+                    upstream.header("anthropic-version", headers.getOrDefault("anthropic-version", "2023-06-01"));
+                    if (headers.containsKey("anthropic-beta")) upstream.header("anthropic-beta", headers.get("anthropic-beta"));
+                }
+                case GOOGLE_GENERATIVE_AI -> upstream.header("x-goog-api-key", ticket.apiKey());
+            }
+            if (headers.containsKey("OpenAI-Beta")) upstream.header("OpenAI-Beta", headers.get("OpenAI-Beta"));
             HttpResponse<InputStream> response = httpClient.send(
-                    HttpRequest.newBuilder(responsesUri(ticket.baseUrl()))
-                            .timeout(Duration.ofMinutes(10))
-                            .header("Authorization", "Bearer " + ticket.apiKey())
-                            .header("Content-Type", "application/json")
-                            .header("Accept", "text/event-stream, application/json")
-                            .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                            .build(),
+                    upstream.POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),
                     HttpResponse.BodyHandlers.ofInputStream());
-            java.util.List<String> contentTypes = response.headers().map().get("content-type");
+            List<String> contentTypes = response.headers().map().get("content-type");
             String contentType = contentTypes == null || contentTypes.isEmpty()
                     ? "application/octet-stream" : contentTypes.get(0);
             AgentTrace.record("model.response.headers", ticket.sessionId(), null,
                     Map.of("status", response.statusCode(), "durationMs", elapsedMillis(started)));
-            InputStream monitored = new java.io.FilterInputStream(response.body()) {
+            InputStream monitored = new FilterInputStream(response.body()) {
                 private long bytes;
                 private boolean ended;
                 private boolean closed;
@@ -172,18 +188,47 @@ public class AgentModelAccessProviderImpl implements IAgentModelGateway {
         }
     }
 
-    private URI responsesUri(String baseUrl) {
-        String normalized = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        if (normalized.endsWith("/responses")) {
-            return URI.create(normalized);
+    private URI endpoint(Ticket ticket, String path) {
+        URI local = URI.create(path);
+        if (local.isAbsolute() || local.getRawAuthority() != null || local.getRawFragment() != null) {
+            throw new SecurityException("Invalid model request path");
         }
-        return URI.create(normalized.endsWith("/v1")
-                ? normalized + "/responses"
-                : normalized + "/v1/responses");
+        String requested = local.getPath();
+        String suffix;
+        String defaultBase;
+        switch (ticket.api()) {
+            case OPENAI_RESPONSES -> { suffix = "/responses"; defaultBase = "https://api.openai.com"; }
+            case OPENAI_COMPLETIONS -> { suffix = "/chat/completions"; defaultBase = "https://api.openai.com"; }
+            case ANTHROPIC_MESSAGES -> { suffix = "/messages"; defaultBase = "https://api.anthropic.com"; }
+            case GOOGLE_GENERATIVE_AI -> {
+                String model = ticket.modelId().startsWith("models/") ? ticket.modelId().substring(7) : ticket.modelId();
+                String expected = "/v1beta/models/" + model;
+                boolean streaming = (expected + ":streamGenerateContent").equals(requested);
+                if (!streaming && !(expected + ":generateContent").equals(requested)) {
+                    throw new SecurityException("Gemini model request does not match its ticket");
+                }
+                String encodedModel = URLEncoder.encode(model, StandardCharsets.UTF_8).replace("+", "%20");
+                String base = blank(ticket.baseUrl()) ? "https://generativelanguage.googleapis.com" : stripSlash(ticket.baseUrl());
+                if (!base.matches(".*/v1(?:beta|alpha)?$")) base += "/v1beta";
+                return URI.create(base + "/models/" + encodedModel + (streaming ? ":streamGenerateContent?alt=sse" : ":generateContent"));
+            }
+            default -> throw new IllegalStateException("Unsupported Agent protocol");
+        }
+        boolean beta = ticket.api() == AiAgentModelApi.ANTHROPIC_MESSAGES && "beta=true".equals(local.getRawQuery());
+        if (!("/v1" + suffix).equals(requested) || local.getRawQuery() != null && !beta) {
+            throw new SecurityException("Model API request does not match its ticket");
+        }
+        String base = blank(ticket.baseUrl()) ? defaultBase : stripSlash(ticket.baseUrl());
+        String target = base.endsWith(suffix) ? base : base + (base.endsWith("/v1") ? "" : "/v1") + suffix;
+        return URI.create(target + (beta ? "?beta=true" : ""));
+    }
+
+    private String stripSlash(String value) {
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private long elapsedMillis(long started) {
-        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     }
 
     private boolean isLoopback(String address) {
@@ -207,6 +252,7 @@ public class AgentModelAccessProviderImpl implements IAgentModelGateway {
     private record Ticket(
             String sessionId,
             String modelId,
+            AiAgentModelApi api,
             String baseUrl,
             String apiKey,
             Instant expiresAt) {

@@ -3,12 +3,14 @@ import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
 export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'MINIMAX';
+export type AgentModelApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai';
 
 export interface IAIModelConfigItem {
   id: string;
   name: string;
   provider: AIProvider;
   model: string;
+  agentApi?: AgentModelApi;
   apiKey?: string;
   baseUrl?: string;
   projectId?: string;
@@ -27,6 +29,7 @@ export interface IAIModelConfigSaveRequest {
   name: string;
   provider: AIProvider;
   model: string;
+  agentApi?: AgentModelApi;
   apiKey?: string;
   baseUrl?: string;
   projectId?: string;
@@ -230,6 +233,7 @@ export const prepareAgentModelOption = async (option: IModelOptionItem): Promise
     name: config.name,
     provider: config.provider,
     model: config.model,
+    agentApi: config.agentApi,
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     projectId: config.projectId,
