@@ -138,7 +138,7 @@ public class DbDatabaseServiceImpl implements IDbDatabaseService {
     @Override
     public void modifyDatabase(DbDatabaseCreateRequest param) {
         Chat2DBContext.getDbManager().modifyDatabase(Chat2DBContext.getConnection(), param.getName(),
-                param.getName());
+                param.getNewName());
     }
 
     @Override
