@@ -2,10 +2,46 @@ import { readFileSync, realpathSync } from "node:fs";
 import { createReadTool, createEditTool, createWriteTool, createGrepTool, createFindTool, createLsTool,
   createBashTool, createPowerShellTool } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
+import { request as httpRequest } from "node:http";
 
 export default function (pi) {
   const access = JSON.parse(readFileSync(join(process.env.PI_CODING_AGENT_DIR, "tools.json"), "utf8"));
   const headers = { Authorization: `Bearer ${access.ticket}`, "Content-Type": "application/json" };
+
+  // A user decision can outlast fetch's transport timeout. Cancellation still uses the tool signal.
+  function waitForUser(path, options) {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => options.signal?.removeEventListener("abort", abort);
+      const fail = error => { cleanup(); reject(error); };
+      const request = httpRequest(access.baseUrl + path, {
+        method: options.method, headers, timeout: 0,
+      }, response => {
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", chunk => { text += chunk; });
+        response.on("error", fail);
+        response.on("aborted", () => fail(new Error("Question connection closed")));
+        response.on("end", () => {
+          cleanup();
+          try {
+            const body = JSON.parse(text);
+            if (response.statusCode >= 400 || body.success === false) {
+              throw new Error(body.errorMessage || `Tool request failed (${response.statusCode})`);
+            }
+            resolve(body);
+          } catch (error) { reject(error); }
+        });
+      });
+      const abort = () => {
+        fail(options.signal.reason || new Error("Question cancelled"));
+        request.destroy();
+      };
+      request.on("error", fail);
+      if (options.signal?.aborted) { abort(); return; }
+      options.signal?.addEventListener("abort", abort, { once: true });
+      request.end(options.body);
+    });
+  }
 
   async function request(path, options = {}) {
     const response = await fetch(access.baseUrl + path, { ...options, headers });
@@ -25,7 +61,8 @@ export default function (pi) {
       promptSnippet: tool.promptSnippet,
       promptGuidelines: tool.promptGuidelines,
       async execute(toolCallId, args, signal) {
-        const response = await request("/execute", {
+        const execute = tool.name === "askUserQuestion" ? waitForUser : request;
+        const response = await execute("/execute", {
           method: "POST",
           body: JSON.stringify({ toolCallId, toolName: tool.name, arguments: args }),
           signal,
@@ -36,9 +73,9 @@ export default function (pi) {
     });
   }
 
-  const databaseTools = new Set(access.tools.map(tool => tool.name));
+  const hostTools = new Set(access.tools.map(tool => tool.name));
   pi.on("tool_result", event => {
-    if (databaseTools.has(event.toolName) && typeof event.details?.ok === "boolean") {
+    if (hostTools.has(event.toolName) && typeof event.details?.ok === "boolean") {
       return { isError: !event.details.ok };
     }
   });

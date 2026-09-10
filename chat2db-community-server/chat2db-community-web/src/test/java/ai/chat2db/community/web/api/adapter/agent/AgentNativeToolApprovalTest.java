@@ -44,7 +44,7 @@ class AgentNativeToolApprovalTest {
             return ((java.util.function.BooleanSupplier) args[3]).getAsBoolean();
         });
         AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
-        var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database),
+        var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database), new AgentQuestionTool(null),
                 sessions, runs, () -> 1L, approvals, List.of(workspace), 11847);
         var events = new ArrayList<ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent>();
         try {

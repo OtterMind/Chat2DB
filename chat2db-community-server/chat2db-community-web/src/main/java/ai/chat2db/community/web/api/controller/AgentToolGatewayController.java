@@ -8,7 +8,9 @@ import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
+import ai.chat2db.community.domain.api.model.agent.runtime.IAgentToolResult;
+import ai.chat2db.community.domain.api.model.agent.AgentQuestion;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -27,14 +29,16 @@ public class AgentToolGatewayController {
     private final AgentApprovalService approvals;
     private final AgentApprovalStorage approvalStorage;
     private final IIdentityService identity;
+    private final IAiAgentQuestionService questions;
 
     public AgentToolGatewayController(AgentToolAccessService gateway, AgentApprovalService approvals,
             AgentApprovalStorage approvalStorage,
-            IIdentityService identity) {
+            IIdentityService identity, IAiAgentQuestionService questions) {
         this.gateway = gateway;
         this.approvals = approvals;
         this.approvalStorage = approvalStorage;
         this.identity = identity;
+        this.questions = questions;
     }
 
     @GetMapping("/agent-tools/catalog")
@@ -43,7 +47,7 @@ public class AgentToolGatewayController {
     }
 
     @PostMapping("/agent-tools/execute")
-    public DataResult<AgentDatabaseResult<?>> execute(@RequestHeader("Authorization") String authorization,
+    public DataResult<IAgentToolResult<?>> execute(@RequestHeader("Authorization") String authorization,
             @RequestBody @Valid ToolRequest body, HttpServletRequest request) throws Exception {
         return DataResult.of(gateway.execute(ticket(authorization), request.getRemoteAddr(),
                 body.toolCallId(), body.toolName(), body.arguments()));
@@ -70,6 +74,20 @@ public class AgentToolGatewayController {
                 .filter(approval -> approval.status() == AgentApprovalStatus.PENDING
                         && approval.expiresAt().isAfter(java.time.LocalDateTime.now())).toList());
     }
+
+    @GetMapping("/sessions/{sessionId}/questions")
+    public ListResult<AgentQuestion> pendingQuestions(@PathVariable String sessionId) {
+        return ListResult.of(questions.pending(sessionId, identity.currentUserId()));
+    }
+
+    @PostMapping("/sessions/{sessionId}/questions/answer")
+    public DataResult<AgentQuestion.Answer> answerQuestion(@PathVariable String sessionId,
+            @RequestBody @Valid QuestionAnswerRequest answer) {
+        return DataResult.of(questions.answer(sessionId, answer.questionId(), identity.currentUserId(),
+                new AgentQuestion.Response(answer.optionId(), answer.text())));
+    }
+
+    public record QuestionAnswerRequest(@NotBlank String questionId, @Size(max = 64) String optionId, @Size(max = 4000) String text) { }
 
     private String ticket(String authorization) {
         if (!authorization.startsWith("Bearer ")) throw new SecurityException("Agent ticket is required");

@@ -1,9 +1,9 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.agent.*;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
+import ai.chat2db.community.domain.api.model.agent.runtime.IAgentToolResult;
 import ai.chat2db.community.domain.api.service.agent.*;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.tools.model.Context;
@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AgentToolGatewayService implements AgentToolAccessService {
     private final AgentDatabaseToolRegistry tools;
+    private final AgentQuestionTool questionTool;
     private final Map<String, Access> tickets = new ConcurrentHashMap<>();
     private final ObjectMapper json = new ObjectMapper();
     private final AgentSessionStorage sessions;
@@ -33,9 +34,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final List<AgentWorkspaceService> workspaces;
     private final int port;
 
-    public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentSessionStorage sessions, AgentRunStorage runs,
+    public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentSessionStorage sessions, AgentRunStorage runs,
             IIdentityService identity, AgentApprovalService approvals, List<AgentWorkspaceService> workspaces, @Value("${server.port:10825}") int port) {
         this.tools = tools;
+        this.questionTool = questionTool;
         this.sessions = sessions;
         this.runs = runs;
         this.identity = identity;
@@ -53,7 +55,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         tickets.entrySet().removeIf(entry -> entry.getValue().expiresAt.isBefore(Instant.now()));
         tickets.put(ticket, new Access(sessionId, userId, context, eventSink));
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
-        return new AgentToolAccess("http://127.0.0.1:" + port + "/api/v3/ai/agent-tools", ticket, tools.definitions());
+        var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
+        return new AgentToolAccess("http://127.0.0.1:" + port + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions));
     }
 
     @Override
@@ -65,6 +68,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     public List<String> activeTools(String ticket, String address) {
         requireAccess(ticket, address);
         List<String> names = new ArrayList<>(tools.names());
+        names.add(AgentQuestionTool.NAME);
         AgentNativeTools.currentPlatform().stream().filter(this::nativeToolEnabled).forEach(names::add);
         return names;
     }
@@ -74,6 +78,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         List<AgentToolState> catalog = new ArrayList<>();
         tools.definitions().forEach(tool -> catalog.add(new AgentToolState(tool.name(), tool.description(),
                 AgentToolState.Category.DATABASE, AgentToolState.Status.ENABLED)));
+        catalog.add(new AgentToolState(AgentQuestionTool.NAME, questionTool.definition().description(),
+                AgentToolState.Category.INTERACTION, AgentToolState.Status.ENABLED));
         for (String name : AgentNativeTools.currentPlatform()) {
             AgentToolState.Status status = workspaces.isEmpty() ? AgentToolState.Status.UNAVAILABLE
                     : nativeToolEnabled(name) ? AgentToolState.Status.ENABLED : AgentToolState.Status.DISABLED;
@@ -83,7 +89,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     }
 
     @Override
-    public AgentDatabaseResult<?> execute(String ticket, String address, String toolCallId, String toolName,
+    public IAgentToolResult<?> execute(String ticket, String address, String toolCallId, String toolName,
             Map<String, Object> arguments) throws Exception {
         Access access = requireAccess(ticket, address);
         AgentRun run = runs.list(access.sessionId, access.userId).stream()
@@ -91,7 +97,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                         || candidate.status() == AgentRunStatus.ACCEPTED
                         || candidate.status() == AgentRunStatus.WAITING_APPROVAL)
                 .findFirst().orElseThrow(() -> new IllegalStateException("Agent run is not active"));
-        if (!tools.names().contains(toolName)) return tools.execute(toolName, arguments);
+        if (!tools.names().contains(toolName) && !AgentQuestionTool.NAME.equals(toolName)) return tools.execute(toolName, arguments);
         String body = json.writeValueAsString(arguments);
         if (body.length() > 64 * 1024) throw new IllegalArgumentException("Tool arguments exceed the size limit");
         String digest = digest(toolName + "\n" + body);
@@ -115,11 +121,13 @@ public class AgentToolGatewayService implements AgentToolAccessService {
             if (!isActive(access, run.id())) throw new IllegalStateException("Agent run has stopped");
             AgentTrace.record("tool.executing", access.sessionId, run.id(),
                     Map.of("toolCallId", toolCallId, "tool", toolName));
-            AgentDatabaseResult<?> result;
+            IAgentToolResult<?> result;
             Context previous = ContextUtils.queryThreadContext();
             try {
                 ContextUtils.setContext(access.context);
-                result = tools.execute(toolName, arguments);
+                result = AgentQuestionTool.NAME.equals(toolName)
+                        ? questionTool.execute(access.sessionId, run.id(), toolCallId, access.userId, arguments, access.sink, () -> isActive(access, run.id()))
+                        : tools.execute(toolName, arguments);
             } finally {
                 if (previous == null) ContextUtils.removeContext(); else ContextUtils.setContext(previous);
             }
@@ -243,5 +251,5 @@ public class AgentToolGatewayService implements AgentToolAccessService {
 
     private record NativePreparation(String digest, CompletableFuture<AgentWorkspaceSettings> result) { }
 
-    private record Execution(String digest, CompletableFuture<AgentDatabaseResult<?>> result) { }
+    private record Execution(String digest, CompletableFuture<IAgentToolResult<?>> result) { }
 }

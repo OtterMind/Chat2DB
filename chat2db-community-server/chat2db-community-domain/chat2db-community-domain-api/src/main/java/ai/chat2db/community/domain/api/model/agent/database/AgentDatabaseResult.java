@@ -1,12 +1,13 @@
 package ai.chat2db.community.domain.api.model.agent.database;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import ai.chat2db.community.domain.api.model.agent.runtime.IAgentToolResult;
 import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AgentDatabaseResult<T>(boolean ok, Scope scope, T data, Page page, Error error,
-                                      NextAction nextAction, List<String> warnings) {
+                                      NextAction nextAction, List<String> warnings) implements IAgentToolResult<T> {
     public static <T> AgentDatabaseResult<T> success(Scope scope, T data, Page page, NextAction nextAction, List<String> warnings) {
         return new AgentDatabaseResult<>(true, scope, data, page, null, nextAction, List.copyOf(warnings));
     }

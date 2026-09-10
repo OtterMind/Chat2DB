@@ -39,7 +39,7 @@ class AgentRunCoordinatorTest {
             }
         };
         coordinator = new AgentRunCoordinator(
-                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver,
+                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver, new AiAgentQuestionServiceImpl(),
                 () -> "generated-" + ids.incrementAndGet(),
                 Clock.fixed(Instant.parse("2026-09-08T16:00:00Z"), ZoneOffset.UTC));
     }

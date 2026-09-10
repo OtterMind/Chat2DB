@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 import ai.chat2db.community.tools.util.AgentTrace;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -43,6 +44,7 @@ public class AgentRunCoordinator {
     private final AgentRunStorage runStorage;
     private final AgentEventStorage eventStorage;
     private final AgentModelResolver modelResolver;
+    private final IAiAgentQuestionService questions;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -53,8 +55,9 @@ public class AgentRunCoordinator {
             AgentSessionStorage sessionStorage,
             AgentRunStorage runStorage,
             AgentEventStorage eventStorage,
-            AgentModelResolver modelResolver) {
-        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver,
+            AgentModelResolver modelResolver,
+            IAiAgentQuestionService questions) {
+        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver, questions,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -65,6 +68,7 @@ public class AgentRunCoordinator {
             AgentRunStorage runStorage,
             AgentEventStorage eventStorage,
             AgentModelResolver modelResolver,
+            IAiAgentQuestionService questions,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -73,6 +77,7 @@ public class AgentRunCoordinator {
         this.runStorage = Objects.requireNonNull(runStorage, "runStorage");
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
         this.modelResolver = Objects.requireNonNull(modelResolver, "modelResolver");
+        this.questions = Objects.requireNonNull(questions, "questions");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -147,8 +152,10 @@ public class AgentRunCoordinator {
                     if (externalRunId == null) {
                         throw new IllegalStateException("Agent run has not started: " + run.id());
                     }
-                    return handle.cancel(new AgentRuntimeCancelRequest(
+                    var cancellation = handle.cancel(new AgentRuntimeCancelRequest(
                             command.sessionId(), command.runId(), externalRunId));
+                    questions.cancel(command.sessionId(), command.runId(), command.userId());
+                    return cancellation;
                 })
                 .thenApply(ignored -> requireRun(command.sessionId(), command.runId(), command.userId()));
     }

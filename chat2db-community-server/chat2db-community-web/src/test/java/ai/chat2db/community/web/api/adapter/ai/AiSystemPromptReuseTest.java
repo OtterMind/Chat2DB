@@ -19,7 +19,7 @@ class AiSystemPromptReuseTest {
                 getClass().getClassLoader(), new Class<?>[]{IAiAttachmentService.class},
                 (proxy, method, args) -> false);
         AiChatStreamAdapter adapter = new AiChatStreamAdapter(
-                null, null, new AiToolAdapter(null, null), null, null, attachments, null, null, null);
+                null, null, new AiToolAdapter(null, null), null, attachments, null, null, null);
         var existing = AiChatStreamAdapter.class.getDeclaredMethod("resolveSystemPrompt", ChatRequest.class, Map.class);
         existing.setAccessible(true);
         Locale previous = LocaleContextHolder.getLocale();
