@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
-import ai.chat2db.community.domain.api.model.task.TaskConstants;
-import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
@@ -18,15 +17,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class ArtifactService {
+public class ArtifactServiceImpl implements ArtifactService {
 
     private static final String DRAFT_FILE_SUFFIX = ".part";
 
-    private static final String DELETION_FILE_MARKER = ".task-delete-";
-
     private final Set<Path> reservedTargets = ConcurrentHashMap.newKeySet();
 
-    ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType) {
+    @Override
+    public ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType) {
         File directory = resolveDirectory(outputDirectory);
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IllegalStateException("Could not create artifact directory");
@@ -42,7 +40,8 @@ public class ArtifactService {
                 .build();
     }
 
-    String publish(ArtifactDraft draft) {
+    @Override
+    public String publish(ArtifactDraft draft) {
         if (draft == null) {
             throw new IllegalArgumentException("Artifact draft is incomplete");
         }
@@ -68,7 +67,8 @@ public class ArtifactService {
         }
     }
 
-    void deleteDraft(ArtifactDraft draft) {
+    @Override
+    public void deleteDraft(ArtifactDraft draft) {
         if (draft == null) {
             return;
         }
@@ -83,7 +83,8 @@ public class ArtifactService {
         }
     }
 
-    void deletePublished(String artifactId) {
+    @Override
+    public void deletePublished(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return;
         }
@@ -94,50 +95,18 @@ public class ArtifactService {
         }
     }
 
-    PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
-        if (StringUtils.isBlank(artifactId)) {
-            return PublishedArtifactDeletion.empty();
-        }
-        Path original = Path.of(artifactId).toAbsolutePath().normalize();
-        if (!Files.exists(original)) {
-            return PublishedArtifactDeletion.empty();
-        }
-        if (!Files.isRegularFile(original)) {
-            throw artifactDeletionFailure(artifactId, null);
-        }
-        Path staged = original.resolveSibling("." + original.getFileName()
-                + DELETION_FILE_MARKER + UUID.randomUUID());
-        try {
-            move(original, staged);
-            return new PublishedArtifactDeletion(original, staged);
-        } catch (Exception e) {
-            throw artifactDeletionFailure(artifactId, e);
+    @Override
+    public void stageForDeletion(Path original, Path staged) throws IOException {
+        if (Files.notExists(staged) && Files.exists(original)) {
+            if (!Files.isRegularFile(original)) {
+                throw new IOException("Task artifact is not a regular file: " + original);
+            }
+            Files.move(original, staged);
         }
     }
 
-    void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
-        if (deletion == null || deletion.stagedPath() == null) {
-            return;
-        }
-        try {
-            Files.deleteIfExists(deletion.stagedPath());
-        } catch (Exception e) {
-            throw artifactDeletionFailure(deletion.originalPath().toString(), e);
-        }
-    }
-
-    void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
-        if (deletion == null || deletion.stagedPath() == null || !Files.exists(deletion.stagedPath())) {
-            return;
-        }
-        try {
-            move(deletion.stagedPath(), deletion.originalPath());
-        } catch (Exception e) {
-            throw artifactDeletionFailure(deletion.originalPath().toString(), e);
-        }
-    }
-
-    boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
+    @Override
+    public boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
         boolean cleaned = true;
         if (StringUtils.isNotBlank(temporaryPath)) {
             Path temporary = Path.of(temporaryPath).toAbsolutePath().normalize();
@@ -214,23 +183,4 @@ public class ArtifactService {
         }
     }
 
-    private void move(Path source, Path target) throws IOException {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(source, target);
-        }
-    }
-
-    private BusinessException artifactDeletionFailure(String artifactId, Exception cause) {
-        return new BusinessException(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE,
-                new Object[]{artifactId}, cause);
-    }
-
-    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
-
-        private static PublishedArtifactDeletion empty() {
-            return new PublishedArtifactDeletion(null, null);
-        }
-    }
 }
