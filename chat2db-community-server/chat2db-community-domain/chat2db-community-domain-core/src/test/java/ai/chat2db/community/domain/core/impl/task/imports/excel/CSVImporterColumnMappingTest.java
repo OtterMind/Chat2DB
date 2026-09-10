@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -52,6 +54,8 @@ class CSVImporterColumnMappingTest {
                     + "name VARCHAR(64) NOT NULL, "
                     + "status VARCHAR(16) DEFAULT 'NEW', "
                     + "note VARCHAR(64))");
+            statement.execute("CREATE TABLE formatted_rows ("
+                    + "name VARCHAR(64) NOT NULL, event_date DATE, event_time TIMESTAMP, amount DECIMAL(10,2))");
         }
         ConnectInfo connectInfo = new ConnectInfo();
         connectInfo.setDataSourceId(7L);
@@ -130,6 +134,84 @@ class CSVImporterColumnMappingTest {
             resultSet.next();
             assertEquals(null, resultSet.getString("status"));
             assertEquals(null, resultSet.getString("note"));
+        }
+    }
+
+    @Test
+    void csvOptionsDriveExecutionWithoutChangingFormulaPrefixedData(@TempDir Path directory) throws Exception {
+        Path input = directory.resolve("orders.csv");
+        Files.writeString(input, "Full Name;Note\nAlice;=1+1\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .csvOptions(CsvOptions.builder()
+                        .encoding("UTF-8")
+                        .delimiter(";")
+                        .quote("\"")
+                        .escape("\"")
+                        .hasHeader(true)
+                        .emptyAsNull(true)
+                        .build())
+                .columnMappings(List.of(
+                        ImportColumnMapping.builder().sourceColumn("Full Name").targetColumn("name").build(),
+                        ImportColumnMapping.builder().sourceColumn("Note").targetColumn("note").build()))
+                .unmappedTarget(UnmappedTargetStrategy.DEFAULT)
+                .build();
+
+        new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns());
+
+        try (Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT name, note FROM orders")) {
+            resultSet.next();
+            assertEquals("Alice", resultSet.getString("name"));
+            assertEquals("=1+1", resultSet.getString("note"));
+        }
+    }
+
+    @Test
+    void csvRowRangeAndFormatsDriveThePersistedValues(@TempDir Path directory) throws Exception {
+        Path input = directory.resolve("formatted.csv");
+        Files.writeString(input, "Generated report\n"
+                + "name,event_date,event_time,amount\n"
+                + "Alice,24/8/23,24/August/2023 15:30:38,\"12,50\"\n"
+                + "Skipped,25/8/23,25/August/2023 16:30:38,\"99,99\"\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("formatted_rows").build())
+                .csvOptions(CsvOptions.builder()
+                        .headerRow(2)
+                        .dataStartRow(3)
+                        .dataEndRow(3)
+                        .dateOrder("DMY")
+                        .dateTimeOrder("DATE_TIME")
+                        .dateDelimiter("/")
+                        .timeDelimiter(":")
+                        .decimalSymbol(",")
+                        .build())
+                .columnMappings(List.of(
+                        ImportColumnMapping.builder().sourceColumn("name").targetColumn("name").build(),
+                        ImportColumnMapping.builder().sourceColumn("event_date").targetColumn("event_date").build(),
+                        ImportColumnMapping.builder().sourceColumn("event_time").targetColumn("event_time").build(),
+                        ImportColumnMapping.builder().sourceColumn("amount").targetColumn("amount").build()))
+                .unmappedTarget(UnmappedTargetStrategy.DEFAULT)
+                .build();
+        List<TableColumn> targetColumns = List.of(
+                TableColumn.builder().name("name").columnType("VARCHAR").dataType(Types.VARCHAR).build(),
+                TableColumn.builder().name("event_date").columnType("DATE").dataType(Types.DATE).build(),
+                TableColumn.builder().name("event_time").columnType("TIMESTAMP").dataType(Types.TIMESTAMP).build(),
+                TableColumn.builder().name("amount").columnType("DECIMAL").dataType(Types.DECIMAL).build());
+
+        new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), targetColumns);
+
+        try (Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery(
+                        "SELECT name, event_date, event_time, amount FROM formatted_rows")) {
+            resultSet.next();
+            assertEquals("Alice", resultSet.getString("name"));
+            assertEquals("2023-08-24", resultSet.getString("event_date"));
+            assertEquals("2023-08-24 15:30:38", resultSet.getString("event_time"));
+            assertEquals("12.50", resultSet.getString("amount"));
+            assertEquals(false, resultSet.next());
         }
     }
 

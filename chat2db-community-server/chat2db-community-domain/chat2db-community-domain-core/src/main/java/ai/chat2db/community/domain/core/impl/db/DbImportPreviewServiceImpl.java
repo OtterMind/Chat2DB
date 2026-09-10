@@ -3,13 +3,11 @@ package ai.chat2db.community.domain.core.impl.db;
 import ai.chat2db.community.domain.api.model.db.ImportPreview;
 import ai.chat2db.community.domain.api.model.db.ImportTargetColumn;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.service.db.IDbImportPreviewService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.support.ExcelTypeEnum;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -22,23 +20,34 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Database-independent import preview. CSV/XLS/XLSX are parsed through EasyExcel; the
- * preview reads only the first {@link #PREVIEW_ROW_LIMIT} rows and never writes.
+ * Database-independent import preview. File parsing is delegated by format; this service
+ * resolves target metadata, suggests mappings, and assembles a bounded preview.
  */
-@Slf4j
 @Service
 public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
 
     private static final int PREVIEW_ROW_LIMIT = 10;
 
+    private final ImportPreviewFileParser fileParser;
+
+    public DbImportPreviewServiceImpl(ImportPreviewFileParser fileParser) {
+        this.fileParser = fileParser;
+    }
+
     @Override
     public ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
                                  String tableName, File file) {
-        List<Map<Integer, String>> rows = parseRows(file, PREVIEW_ROW_LIMIT);
-        if (rows.isEmpty()) {
+        return preview(dataSourceId, databaseName, schemaName, tableName, file, null);
+    }
+
+    @Override
+    public ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
+                                 String tableName, File file, CsvOptions csvOptions) {
+        ImportPreviewFileParser.ParsedRows parsedRows = fileParser.parse(file, PREVIEW_ROW_LIMIT, csvOptions);
+        if (parsedRows.header().isEmpty()) {
             throw new BusinessException("import.preview.emptyFile");
         }
-        Map<Integer, String> header = rows.get(0);
+        Map<Integer, String> header = parsedRows.header();
         List<String> sourceNames = new ArrayList<>();
         for (int i = 0; i < header.size(); i++) {
             String name = StringUtils.defaultIfBlank(header.get(i), "column_" + (i + 1));
@@ -47,10 +56,10 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         requireUniqueSourceColumns(sourceNames);
 
         List<List<String>> previewData = new ArrayList<>();
-        for (int rowIndex = 1; rowIndex < rows.size(); rowIndex++) {
+        for (Map<Integer, String> row : parsedRows.data()) {
             List<String> values = new ArrayList<>();
             for (int columnIndex = 0; columnIndex < sourceNames.size(); columnIndex++) {
-                values.add(StringUtils.defaultString(rows.get(rowIndex).get(columnIndex)));
+                values.add(StringUtils.defaultString(row.get(columnIndex)));
             }
             previewData.add(values);
         }
@@ -59,15 +68,27 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
                 tableName);
         List<ImportTargetColumn> targetColumns = targetColumns(targetRequest);
         List<ImportColumnMapping> suggested = new ArrayList<>();
-        for (String source : sourceNames) {
-            targetColumns.stream()
-                    .filter(target -> StringUtils.equalsIgnoreCase(target.getName(), source))
-                    .findFirst()
-                    .map(target -> ImportColumnMapping.builder()
-                            .sourceColumn(source)
-                            .targetColumn(target.getName())
-                            .build())
-                    .ifPresent(suggested::add);
+        if (parsedRows.syntheticHeader()) {
+            List<ImportTargetColumn> importableTargets = targetColumns.stream()
+                    .filter(target -> !target.isAutoIncrement())
+                    .toList();
+            for (int index = 0; index < Math.min(sourceNames.size(), importableTargets.size()); index++) {
+                suggested.add(ImportColumnMapping.builder()
+                        .sourceColumn(sourceNames.get(index))
+                        .targetColumn(importableTargets.get(index).getName())
+                        .build());
+            }
+        } else {
+            for (String source : sourceNames) {
+                targetColumns.stream()
+                        .filter(target -> StringUtils.equalsIgnoreCase(target.getName(), source))
+                        .findFirst()
+                        .map(target -> ImportColumnMapping.builder()
+                                .sourceColumn(source)
+                                .targetColumn(target.getName())
+                                .build())
+                        .ifPresent(suggested::add);
+            }
         }
 
         return ImportPreview.builder()
@@ -104,26 +125,4 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         }
     }
 
-    /**
-     * Parses the file with EasyExcel (same code path for preview and execution). The first
-     * row is treated as the header; without a header the columns are named column_1..N.
-     */
-    private static List<Map<Integer, String>> parseRows(File file, int limit) {
-        try {
-            ImportPreviewListener listener = new ImportPreviewListener(limit);
-            EasyExcel.read(file, listener).excelType(excelType(file)).sheet().headRowNumber(1).doRead();
-            return listener.rows();
-        } catch (Exception e) {
-            log.warn("import preview parse failed for {}", file, e);
-            throw new BusinessException("import.preview.parseFailed", new Object[]{e.getMessage()}, e);
-        }
-    }
-
-    private static ExcelTypeEnum excelType(File file) {
-        String name = file.getName().toLowerCase(Locale.ROOT);
-        if (name.endsWith(".csv")) {
-            return ExcelTypeEnum.CSV;
-        }
-        return name.endsWith(".xls") ? ExcelTypeEnum.XLS : ExcelTypeEnum.XLSX;
-    }
 }

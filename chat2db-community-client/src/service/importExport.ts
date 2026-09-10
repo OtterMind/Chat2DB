@@ -1,7 +1,7 @@
 import createRequest from './base';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
-import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
+import type { ICsvOptions, ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 
 export interface GenerateJavaClassParams extends IDatabaseBaseInfo {
@@ -64,6 +64,7 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   displayFileName?: string;
   format: ImportExportFileType;
   dataTimeFormat?: string;
+  csvOptions?: ICsvOptions;
 }
 
 const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });

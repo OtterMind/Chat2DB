@@ -4,8 +4,10 @@ import ai.chat2db.community.domain.api.enums.ExportSizeEnum;
 import ai.chat2db.community.domain.api.enums.ExportScopeTypeEnum;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.web.api.model.request.task.TaskExportRequest;
 import ai.chat2db.community.web.api.model.request.task.TaskImportRequest;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TaskWebConverterTest {
 
@@ -106,6 +109,68 @@ class TaskWebConverterTest {
         assertEquals("Import table data - app.public.orders", dataSpec.getTaskName());
         assertEquals("public", dataSpec.getTarget().getSchemaName());
         assertEquals("Import SQL file - app.public.orders", sqlSpec.getTaskName());
+    }
+
+    @Test
+    void preservesValidatedCsvOptionsForImportTasks() {
+        CsvOptions csvOptions = CsvOptions.builder()
+                .encoding("AUTO")
+                .delimiter("|")
+                .quote("\"")
+                .escape("\\")
+                .newline("CRLF")
+                .hasHeader(true)
+                .emptyAsNull(true)
+                .headerRow(3)
+                .dataStartRow(4)
+                .dataEndRow(20)
+                .dateOrder("DMY")
+                .dateTimeOrder("TIME_TIMEZONE_DATE")
+                .dateDelimiter("/")
+                .timeDelimiter(":")
+                .decimalSymbol(",")
+                .build();
+        TaskImportRequest importRequest = importRequest(TaskType.DATA_FILE_IMPORT.name());
+        importRequest.setCsvOptions(csvOptions);
+
+        ImportTaskSpec importSpec = converter.importRequest2spec(importRequest);
+
+        assertEquals("AUTO", importSpec.getCsvOptions().getEncoding());
+        assertEquals("\\", importSpec.getCsvOptions().getEscape());
+        assertEquals(3, importSpec.getCsvOptions().getHeaderRow());
+        assertEquals(20, importSpec.getCsvOptions().getDataEndRow());
+        assertEquals("DMY", importSpec.getCsvOptions().getDateOrder());
+        assertEquals("TIME_TIMEZONE_DATE", importSpec.getCsvOptions().getDateTimeOrder());
+        assertEquals(",", importSpec.getCsvOptions().getDecimalSymbol());
+    }
+
+    @Test
+    void rejectsUnsupportedCsvOptionsBeforeTaskSubmission() {
+        TaskImportRequest request = importRequest(TaskType.DATA_FILE_IMPORT.name());
+        request.setCsvOptions(CsvOptions.builder()
+                .encoding("UTF-8")
+                .delimiter(",")
+                .quote("\"")
+                .escape("\n")
+                .newline("LF")
+                .hasHeader(true)
+                .emptyAsNull(true)
+                .build());
+
+        assertEquals("import.preview.invalidCsvOptions",
+                assertThrows(BusinessException.class, () -> converter.importRequest2spec(request)).getCode());
+
+        request.setCsvOptions(CsvOptions.builder()
+                .encoding("NO_SUCH_CHARSET")
+                .delimiter(",")
+                .quote("\"")
+                .escape("\"")
+                .newline("LF")
+                .hasHeader(true)
+                .emptyAsNull(true)
+                .build());
+        assertEquals("import.preview.invalidEncoding",
+                assertThrows(BusinessException.class, () -> converter.importRequest2spec(request)).getCode());
     }
 
     private TaskExportRequest exportRequest(String taskType, String databaseName, String tableName) {

@@ -43,4 +43,5 @@ export enum ImportUnmappedTarget {
 
 export enum ImportPreviewErrorCode {
   DUPLICATE_SOURCE_COLUMNS = 'import.preview.duplicateSourceColumns',
+  INVALID_CSV_OPTIONS = 'import.preview.invalidCsvOptions',
 }

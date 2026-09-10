@@ -1,4 +1,5 @@
 import createRequest from './base';
+import type { ICsvOptions } from '@/typings/importExport';
 import { ImportUnmappedTarget } from '@/constants/importExport';
 import {
   IPageResponse,
@@ -465,15 +466,22 @@ const uploadImportFile = createRequest<{ file: File }, string>('/api/rdb/import_
   contentType: 'formData',
 });
 
-const stageDesktopImportFile = createRequest<
-  { sourceFile: string; originalFileName: string },
-  string
->('/api/rdb/import_preview/upload_local', { method: 'post' });
+const stageDesktopImportFile = createRequest<{ sourceFile: string; originalFileName: string }, string>(
+  '/api/rdb/import_preview/upload_local',
+  { method: 'post' },
+);
 
 const getImportPreview = createRequest<
-  { dataSourceId: number; databaseName: string; schemaName?: string; tableName: string; fileId: string },
+  {
+    dataSourceId: number;
+    databaseName: string;
+    schemaName?: string;
+    tableName: string;
+    fileId: string;
+    csvOptions?: ICsvOptions;
+  },
   IImportPreview
->('/api/rdb/import_preview/preview', { method: 'post' });
+>('/api/rdb/import_preview/preview', { method: 'post', errorLevel: false });
 
 const executeImportWithMapping = createRequest<
   {
@@ -484,6 +492,7 @@ const executeImportWithMapping = createRequest<
     fileId: string;
     mappings: { sourceColumn: string | null; targetColumn: string }[];
     unmappedTarget: ImportUnmappedTarget;
+    csvOptions?: ICsvOptions;
   },
   IImportTaskSubmitResult
 >('/api/rdb/import_preview/execute', { method: 'post' });

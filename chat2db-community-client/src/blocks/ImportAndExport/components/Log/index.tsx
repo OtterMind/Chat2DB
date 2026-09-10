@@ -23,16 +23,13 @@ import {
   TASK_EVENT_PAGE_SIZE,
 } from '@/store/importExport/taskCenterUtils';
 import { ConsoleOutputEmpty, ConsoleOutputMessageLine } from '@/components/ConsoleOutput';
+import { formatTaskEventMessage } from './eventMessage';
 
 interface IProps {
   className?: string;
   taskId: number;
   onTaskChange?: (taskDetails: ImportExportTaskDetails) => void;
 }
-
-const LEGACY_EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}:?\s*/;
-
-const formatEventMessage = (message?: string) => message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
 
 interface ScrollRestore {
   anchorSequence: number;
@@ -312,7 +309,7 @@ const Log = (props: IProps) => {
                   className={styles.virtualListItem}
                   timestamp={event.createdAt}
                   level={event.level}
-                  message={formatEventMessage(event.message)}
+                  message={formatTaskEventMessage(event, i18n)}
                 />
               )}
             </VirtualList>

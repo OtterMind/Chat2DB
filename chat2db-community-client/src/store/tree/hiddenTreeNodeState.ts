@@ -7,13 +7,15 @@ export class HiddenTreeNodeStateCoordinator<T> {
 
   private writeQueue: Promise<void> = Promise.resolve();
 
-  initialize(read: () => Promise<T>, commit: (value: T) => void): Promise<boolean> {
-    if (this.initialized) {
-      return Promise.resolve(false);
+  initialize(read: () => Promise<T>, commit: (value: T) => void, force = false): Promise<boolean> {
+    if (force) {
+      this.initialized = false;
     }
-
     if (this.pendingInitialization) {
       return this.pendingInitialization;
+    }
+    if (this.initialized) {
+      return Promise.resolve(false);
     }
 
     const revision = this.revision;

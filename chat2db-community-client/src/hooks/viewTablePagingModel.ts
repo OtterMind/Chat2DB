@@ -73,7 +73,7 @@ export function reduceViewTablePagingEvent(
   const nextState = { ...state, result };
   return {
     state: nextState,
-    completedResult: event.eventType === 'resultFinished' ? result : undefined,
+    completedResult: event.eventType === 'resultFinished' && result.success ? result : undefined,
   };
 }
 

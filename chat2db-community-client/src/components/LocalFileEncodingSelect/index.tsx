@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Select, Tooltip } from 'antd';
+import { Select, Tooltip, type SelectProps } from 'antd';
 import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import { LOCAL_FILE_CHARSETS, formatLocalFileEncoding } from '@/utils/localFileEncoding';
@@ -8,16 +8,22 @@ import styles from './index.less';
 const AUTO_DETECT_VALUE = '__auto_detect__';
 
 interface LocalFileEncodingSelectProps {
+  className?: string;
   charset?: string;
   bom?: boolean;
   disabled?: boolean;
+  size?: SelectProps['size'];
+  variant?: SelectProps['variant'];
   onEncodingChange: (charset?: string) => Promise<void>;
 }
 
 const LocalFileEncodingSelect = ({
+  className,
   charset,
   bom,
   disabled,
+  size = 'small',
+  variant = 'borderless',
   onEncodingChange,
 }: LocalFileEncodingSelectProps) => {
   const [loading, setLoading] = useState(false);
@@ -47,14 +53,14 @@ const LocalFileEncodingSelect = ({
   const selectedLabel = charset ? currentLabel : autoDetectLabel;
   return (
     <Tooltip title={label}>
-      <span className={styles.wrapper}>
+      <span className={`${styles.wrapper} ${className || ''}`}>
         <span className={styles.sizer} aria-hidden="true">
           {selectedLabel}
         </span>
         <Select<string>
           className={styles.selector}
-          size="small"
-          variant="borderless"
+          size={size}
+          variant={variant}
           value={charset || AUTO_DETECT_VALUE}
           loading={loading}
           disabled={disabled || loading}
