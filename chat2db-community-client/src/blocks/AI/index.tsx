@@ -13,6 +13,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChartCardBox from '@/blocks/BI/ChartCardBox';
+import AgentChartCard from './components/AgentChartCard';
+import { AgentChart, updateAgentCharts } from './agentCharts';
 import { IChartItem } from '@/typings/dashboard';
 import { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { ChartType, LineType, OrderByType, OrderByRule } from '@/blocks/BI/Chart/constants';
@@ -568,6 +570,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const agentSessionRef = useRef<{ id: string; sequence: number }>();
   const agentOperationRef = useRef<AgentOperation>();
   const [agentRunning, setAgentRunning] = useState(false);
+  const [agentCharts, setAgentCharts] = useState<AgentChart[]>([]);
   const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
   const [agentQuestions, setAgentQuestions] = useState<AgentQuestionItem[]>([]);
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
@@ -982,6 +985,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, [status]);
 
   const stopAgentPolling = useCallback((cancelRun = false) => {
+    if (!cancelRun) setAgentCharts([]);
     setAgentApprovals([]);
     setAgentQuestions((current) => cancelRun ? current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item) : []);
     const operation = agentOperationRef.current;
@@ -1063,6 +1067,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       streamTraceEntriesRef.current = [...streamTraceEntriesRef.current, ...traces];
       setStreamTraceEntries(streamTraceEntriesRef.current);
     }
+    setAgentCharts((current) => updateAgentCharts(current, events));
     setAgentApprovals((current) => updateAgentApprovals(current, events));
     setAgentQuestions((current) => updateAgentQuestions(current, events));
   }, []);
@@ -1647,8 +1652,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         const accepted = [...events].reverse().find((event) => event.type === 'RUN_ACCEPTED');
         const activeRunId = accepted?.runId && !events.some((event) =>
           event.runId === accepted.runId && isTerminalAgentEvent(event)) ? accepted.runId : undefined;
+        const charts = updateAgentCharts([], events);
+        setAgentCharts(charts);
         const transcript = buildAgentTranscript(events)
-          .filter((message) => message.content || message.traceEntries.length);
+          .filter((message) => message.content || message.traceEntries.length
+            || charts.some((chart) => chart.runId === message.runId));
         setAgentApprovals(updateAgentApprovals([], events).map((item) =>
           item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
             ? { ...item, status: 'closed' } : item));
@@ -2298,6 +2306,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   <div className={styles.assistantContent}>
                     {renderThoughtStrip(round.assistant.traceEntries || [], `trace-${round.assistant.id}`)}
                     {renderMarkdown(round.assistant.content)}
+                    {agentCharts.filter((chart) => chart.runId === round.assistant?.runId)
+                      .map((chart) => <AgentChartCard key={chart.id} chart={chart} />)}
                     {renderApprovals(round.assistant.runId)}
                     {renderQuestions(round.assistant.runId)}
                   </div>
@@ -2311,7 +2321,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   streamThoughtPulse,
                 )}
               {isCurrentRound &&
-                (streamingText || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)
+                (streamingText || agentCharts.some((chart) => chart.runId === agentOperationRef.current?.runId)
+                  || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)
                   || agentQuestions.some((item) => item.runId === agentOperationRef.current?.runId)) &&
                 (() => {
                   const { textBeforeChart, hasIncompleteChart } = splitIncompleteChartBlock(streamingText);
@@ -2334,6 +2345,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                         ) : (
                           renderMarkdown(streamingText)
                         )}
+                        {agentCharts.filter((chart) => chart.runId === agentOperationRef.current?.runId)
+                          .map((chart) => <AgentChartCard key={chart.id} chart={chart} />)}
                         {renderApprovals(agentOperationRef.current?.runId)}
                         {renderQuestions(agentOperationRef.current?.runId)}
                       </div>

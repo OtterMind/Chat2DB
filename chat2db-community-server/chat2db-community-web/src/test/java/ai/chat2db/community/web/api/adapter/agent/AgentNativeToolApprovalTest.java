@@ -12,13 +12,16 @@ import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.community.tools.util.agent.AgentNativeTools;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -29,7 +32,7 @@ class AgentNativeToolApprovalTest {
         AtomicReference<String> directory = new AtomicReference<>("/first");
         AtomicInteger decisions = new AtomicInteger();
         Set<String> enabledTools = new HashSet<>();
-        var disableWhileWaiting = new java.util.concurrent.atomic.AtomicBoolean();
+        var disableWhileWaiting = new AtomicBoolean();
         IAiAgentWorkspaceService workspace = new IAiAgentWorkspaceService() {
             public AgentWorkspaceSettings get() { return new AgentWorkspaceSettings(directory.get()); }
             public AgentWorkspaceSettings update(String value) { directory.set(value); return get(); }
@@ -51,12 +54,12 @@ class AgentNativeToolApprovalTest {
             ((Runnable) args[2]).run();
             directory.set("/second");
             if (disableWhileWaiting.get()) enabledTools.remove(AgentNativeTools.currentPlatform().get(0));
-            return ((java.util.function.BooleanSupplier) args[3]).getAsBoolean();
+            return ((BooleanSupplier) args[3]).getAsBoolean();
         });
         AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
-        var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database), new AgentQuestionTool(null),
+        var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database), new AgentQuestionTool(null), new AgentChartTool(null, null, null),
                 sessions, runs, () -> 1L, approvals, List.of(workspace), address());
-        var events = new ArrayList<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent>();
+        var events = new ArrayList<AgentRuntimeEvent>();
         try {
             ContextUtils.setContext(new Context());
             var access = gateway.issue("session", events::add);

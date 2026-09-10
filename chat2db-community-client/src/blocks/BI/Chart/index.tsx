@@ -29,8 +29,8 @@ const Chart = (props: ChartProps) => {
 
   // parameter normalization
   const data = useMemo(() => {
-    return newFormattedSqlExecuteData(metaData);
-  }, [metaData]);
+    return metaData ? newFormattedSqlExecuteData(metaData) : chartSchema?.data || [];
+  }, [metaData, chartSchema?.data]);
 
   const dispatcher = () => {
     if (!chartSchema) {

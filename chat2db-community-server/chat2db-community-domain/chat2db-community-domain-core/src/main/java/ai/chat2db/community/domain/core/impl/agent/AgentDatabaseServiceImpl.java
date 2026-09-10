@@ -1,8 +1,11 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
-import ai.chat2db.community.domain.core.converter.agent.AgentSqlResultConverter;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
@@ -14,24 +17,23 @@ import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseRespo
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
 import ai.chat2db.community.domain.api.service.agent.AgentDatabaseService;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
-import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
-import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
-import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
-import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
-import ai.chat2db.community.tools.enums.agent.AgentEventType;
-import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
-import java.time.LocalDateTime;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentChartService;
 import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
+import ai.chat2db.community.domain.core.converter.agent.AgentSqlResultConverter;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import ai.chat2db.community.tools.model.agent.tool.AgentToolNextAction;
+import com.alibaba.fastjson2.JSON;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
@@ -45,10 +47,11 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     private final IDbSqlService sqlService;
     private final IOpsSqlOperationLogService audit;
     private final AgentApprovalService approvals;
+    private final IAiAgentChartService charts;
 
     public AgentDatabaseServiceImpl(IWorkspaceStorageFacade storage, IDbConnectionContextService connections,
             AgentMetadataService metadata, IDbDlTemplateService executor,
-            IDbSqlService sqlService, IOpsSqlOperationLogService audit, AgentApprovalService approvals) {
+            IDbSqlService sqlService, IOpsSqlOperationLogService audit, AgentApprovalService approvals, IAiAgentChartService charts) {
         this.storage = storage;
         this.connections = connections;
         this.metadata = metadata;
@@ -56,6 +59,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         this.sqlService = sqlService;
         this.audit = audit;
         this.approvals = approvals;
+        this.charts = charts;
     }
 
     @Override
@@ -228,7 +232,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             var failed = responses.stream().filter(item -> !Boolean.TRUE.equals(item.getSuccess())).findFirst();
             audit.recordListResultAsync(OpsSqlOperationLogListResultRequest.of(request.sql(), failed.isEmpty(),
                     failed.map(ExecuteResponse::getMessage).orElse(null), responses, SqlOperationLogSourceEnum.AI_TOOL.name()));
-            return AgentSqlResultConverter.toResponse(request, profile, responses, statements.size(), automatic);
+            return charts.captureQueryResults(AgentSqlResultConverter.toResponse(request, profile, responses, statements.size(), automatic), context);
 
         });
     }
@@ -247,7 +251,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         String digest;
         try {
             digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(
-                    com.alibaba.fastjson2.JSON.toJSONString(payload).getBytes(StandardCharsets.UTF_8)));
+                    JSON.toJSONString(payload).getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException error) {
             throw new IllegalStateException("Cannot identify SQL approval", error);
         }

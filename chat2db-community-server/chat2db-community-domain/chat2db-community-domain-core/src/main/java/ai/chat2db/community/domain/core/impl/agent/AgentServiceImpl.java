@@ -16,10 +16,12 @@ import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableExcepti
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
 import ai.chat2db.community.tools.util.AgentTrace;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
@@ -79,12 +81,14 @@ public class AgentServiceImpl implements AgentService {
                 提问时尽量给出基于实际发现的可选方向及简短理由，保留自由回答；让用户做选择，不要求用户替你定位答案。一次只问一个问题并等待真实回答。
                 区分已验证的事实、推测和未检查的范围，不将局部结果表述为全局结论。
                 需要审批时等待用户确认；工具不可用或执行失败时如实说明。
+                用户请求图表时，先用 db_query 查询真实数据，再用返回的 resultId 调用 render_chart。聚合和计算在 SQL 中完成。
+                render_chart 成功后图表已展示并保存，只需解释结论，不重复输出 chart 代码块或重写查询数据；查询结果不完整时说明展示范围。
                 """,
                 command.runtimeType(), command.modelConfigId(), 1);
         IAgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());
         AgentTrace.record("session.environment", null, null,
-                java.util.Map.of("runtime", command.runtimeType(), "status", environment.status()));
+                Map.of("runtime", command.runtimeType(), "status", environment.status()));
         if (environment.runtimeType() != definition.runtimeType()) {
             throw new IllegalStateException("Agent runtime environment report type does not match its adapter");
         }
@@ -116,7 +120,7 @@ public class AgentServiceImpl implements AgentService {
                 now);
         AgentSession created = sessionStorage.create(session);
         AgentTrace.record("session.created", session.id(), null,
-                java.util.Map.of("runtime", definition.runtimeType(), "modelConfigId", definition.modelConfigId(),
+                Map.of("runtime", definition.runtimeType(), "modelConfigId", definition.modelConfigId(),
                         "status", session.status(), "promptCharacters", definition.systemPrompt().length()));
         return created;
     }
@@ -175,7 +179,7 @@ public class AgentServiceImpl implements AgentService {
         }
         handleRegistry.close(sessionId);
         runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
-                new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest(
+                new AgentRuntimeSessionDeleteRequest(
                         session.id(), session.runtimeBinding()));
         sessionStorage.delete(sessionId, userId);
     }

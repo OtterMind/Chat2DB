@@ -1,22 +1,30 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest.*;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
+import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentChartService;
 import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import java.lang.reflect.Proxy;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -264,7 +272,7 @@ class AgentDatabaseServiceImplTest {
         return statement;
     }
 
-    private static AgentDatabaseException failure(java.util.function.Supplier<DbAgentDatabaseResponse<?>> operation) {
+    private static AgentDatabaseException failure(Supplier<DbAgentDatabaseResponse<?>> operation) {
         return assertThrows(AgentDatabaseException.class, operation::get);
     }
 
@@ -275,8 +283,8 @@ class AgentDatabaseServiceImplTest {
         int executions, decisions;
         boolean approved;
         boolean cancelDuringApproval;
-        final java.util.concurrent.atomic.AtomicBoolean active = new java.util.concurrent.atomic.AtomicBoolean(true);
-        final List<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent> events = new ArrayList<>();
+        final AtomicBoolean active = new AtomicBoolean(true);
+        final List<AgentRuntimeEvent> events = new ArrayList<>();
         List<SimpleSqlStatement> statements;
         List<ExecuteResponse> resultBatch;
         Object[] metadataArgs;
@@ -285,8 +293,8 @@ class AgentDatabaseServiceImplTest {
         int sourceCalls;
         ExecuteResponse response = new ExecuteResponse();
         AgentDatabaseServiceImpl service;
-        ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext context() {
-            return new ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext(
+        AgentToolExecutionContext context() {
+            return new AgentToolExecutionContext(
                     "session", "run", "call", 1L, events::add, active::get);
         }
         Fixture() {
@@ -295,7 +303,7 @@ class AgentDatabaseServiceImplTest {
             IDbConnectionContextService connection = proxy(IDbConnectionContextService.class, (method, args) -> switch (method) {
                 case "currentProfileSnapshot" -> current;
                 case "buildProfile" -> {
-                    var request = (ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest) args[0];
+                    var request = (DbConnectionContextRequest) args[0];
                     var p = new ConnectionProfile(); p.setDataSourceId(request.getDataSourceId()); p.setDbType("SQLITE");
                     p.setDatabaseName(request.getDatabaseName()); p.setSchemaName(request.getSchemaName()); yield p;
                 }
@@ -328,12 +336,12 @@ class AgentDatabaseServiceImplTest {
                 return PageResponse.of(sources.subList(start, Math.min(start + request.getPageSize(), sources.size())),
                         (long) sources.size(), request.getPageNo(), request.getPageSize());
             }), connection,
-                    metadata, executor, sql, audit, proxy(ai.chat2db.community.domain.api.service.agent.AgentApprovalService.class, (m,a) -> {
+                    metadata, executor, sql, audit, proxy(AgentApprovalService.class, (m,a) -> {
                         decisions++;
                         ((Runnable) a[2]).run();
                         if (cancelDuringApproval) active.set(false);
-                        return approved && ((java.util.function.BooleanSupplier) a[3]).getAsBoolean();
-                    }));
+                        return approved && ((BooleanSupplier) a[3]).getAsBoolean();
+                    }), proxy(IAiAgentChartService.class, (method, arguments) -> arguments[0]));
         }
     }
     private interface Call { Object invoke(String method, Object[] args); }

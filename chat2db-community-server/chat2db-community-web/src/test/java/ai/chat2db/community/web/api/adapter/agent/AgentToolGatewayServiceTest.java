@@ -47,7 +47,7 @@ class AgentToolGatewayServiceTest {
                 new Class<?>[]{AgentRunStorage.class}, (proxy, method, args) ->
                         method.getName().equals("list") ? List.of(run) : run);
         AgentToolGatewayService gateway = new AgentToolGatewayService(
-                new AgentDatabaseToolRegistry(domainTools), new AgentQuestionTool(null), sessions, runs, () -> 1L,
+                new AgentDatabaseToolRegistry(domainTools), new AgentQuestionTool(null), new AgentChartTool(null, null, null), sessions, runs, () -> 1L,
                 null, List.of(), address());
         try {
             ContextUtils.setContext(owner);

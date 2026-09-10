@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest.*;
 import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
@@ -8,29 +9,32 @@ import ai.chat2db.community.domain.api.service.agent.AgentDatabaseService;
 import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
 import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
 import ai.chat2db.community.tools.model.agent.tool.AgentToolNextAction;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import java.util.*;
-import java.util.function.Function;
 import java.util.function.BiFunction;
-import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
+import java.util.function.Function;
 import org.springframework.stereotype.Component;
 
 /** V2 owns its model-facing schemas and structured results independently of V1 tools. */
 @Component
 public class AgentDatabaseToolRegistry {
     private final JsonMapper json = JsonMapper.builder().disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
-            .disable(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT).build();
+            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT).build();
     private final Map<String, Entry> tools = new LinkedHashMap<>();
     private static final int MAX_RESULT_BYTES = 512 * 1024;
 
     public AgentDatabaseToolRegistry(AgentDatabaseService service) {
-        json.coercionConfigFor(com.fasterxml.jackson.databind.type.LogicalType.Textual)
-                .setCoercion(com.fasterxml.jackson.databind.cfg.CoercionInputShape.Integer, com.fasterxml.jackson.databind.cfg.CoercionAction.Fail)
-                .setCoercion(com.fasterxml.jackson.databind.cfg.CoercionInputShape.Float, com.fasterxml.jackson.databind.cfg.CoercionAction.Fail)
-                .setCoercion(com.fasterxml.jackson.databind.cfg.CoercionInputShape.Boolean, com.fasterxml.jackson.databind.cfg.CoercionAction.Fail);
+        json.coercionConfigFor(LogicalType.Textual)
+                .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
+                .setCoercion(CoercionInputShape.Float, CoercionAction.Fail)
+                .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
         add("db_search_datasources", "Search available connections by name. Start here when the datasource id is unknown. IDs are strings; copy an id exactly into later tools. search is a case-insensitive literal substring; omit it to browse all available connections. Results are paginated; use nextAction when present.",
                 "Discover datasource ids and database types.", List.of("Never invent a datasource id. Use an id returned by db_search_datasources."),
                 paged(Map.of("search", text("Case-insensitive literal connection-name substring. Filtering happens before pagination.", 256))), List.of(), Sources.class, service::listSources);
@@ -67,7 +71,7 @@ public class AgentDatabaseToolRegistry {
                         "Use returned column names and databaseType to generate dialect-correct SQL; inspect definition and warnings before treating it as executable DDL."),
                 describeFields, List.of("dataSourceId", "objects"), Describe.class, service::describeObjects);
         var queryFields = scopeFields(); queryFields.put("sql", text("One SQL statement or a complete SQL batch. All-SELECT batches run automatically; any other statement requires approval of the whole batch before execution. Use ORDER BY for stable query pagination.", 32768));
-        add("db_query", "Execute SQL statements in an explicit scope. A batch containing only SELECT queries runs automatically; if any statement needs approval, the entire batch waits for approval before any statement executes. Statements execute in order and stop at the first failure. Rejection or cancellation means no execution; never retry it without a new user request. Each outcome is in data.results with statementIndex, sql, success, data, page and error. DML/DDL outcomes include data.affectedRows when reported by the driver. page defaults to 1; pageSize defaults to 50, maximum 200. Each result has rows aligned with columns; values use database text, SQL NULL is JSON null. No 50-row preview or cell shortening is applied. hasMore/nextAction indicate another page; each page reruns the SQL, so results may change if data changes. Inspect schema before querying unknown tables.",
+        add("db_query", "Execute SQL statements in an explicit scope. A batch containing only SELECT queries runs automatically; if any statement needs approval, the entire batch waits for approval before any statement executes. Statements execute in order and stop at the first failure. Rejection or cancellation means no execution; never retry it without a new user request. Each outcome is in data.results with statementIndex, sql, success, data, page and error. Successful row results include resultId; pass that exact id to render_chart to visualize the saved data. DML/DDL outcomes include data.affectedRows when reported by the driver. page defaults to 1; pageSize defaults to 50, maximum 200. Each result has rows aligned with columns; values use database text, SQL NULL is JSON null. No 50-row preview or cell shortening is applied. hasMore/nextAction indicate another page; each page reruns the SQL, so results may change if data changes. Inspect schema before querying unknown tables.",
                 "Query data with typed column metadata and explicit pagination.", List.of("Check ok before using data. On error follow error.field and nextAction; never treat an error as an empty result.",
                         "Use explicit column lists and a stable ORDER BY. Check each result page.hasMore and data.cellWarnings before claiming results are complete."),
                 paged(queryFields), List.of("dataSourceId", "sql"), Query.class, service::query);

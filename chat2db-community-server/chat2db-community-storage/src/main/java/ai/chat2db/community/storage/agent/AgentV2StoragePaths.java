@@ -77,7 +77,7 @@ public class AgentV2StoragePaths {
     }
 
     private void validateResourceName(String resourceName) {
-        if (!Set.of("runs", "events", "approvals", "artifacts").contains(resourceName)) {
+        if (!Set.of("runs", "events", "approvals", "artifacts", "query-results").contains(resourceName)) {
             throw new IllegalArgumentException("Invalid agent resource name: " + resourceName);
         }
     }

@@ -13,6 +13,7 @@ export type AgentEventType =
   | 'TOOL_CALL_RUNNING'
   | 'TOOL_CALL_COMPLETED'
   | 'TOOL_CALL_FAILED'
+  | 'CHART_CREATED'
   | 'APPROVAL_REQUESTED'
   | 'APPROVAL_DECIDED'
   | 'QUESTION_REQUESTED'
@@ -60,7 +61,7 @@ export interface AgentToolFeatureState {
 export interface AgentToolState {
   name: string;
   description: string;
-  category: 'DATABASE' | 'BUILTIN' | 'INTERACTION';
+  category: 'DATABASE' | 'BUILTIN' | 'INTERACTION' | 'VISUALIZATION';
   status: 'ENABLED' | 'DISABLED' | 'UNAVAILABLE';
 }
 

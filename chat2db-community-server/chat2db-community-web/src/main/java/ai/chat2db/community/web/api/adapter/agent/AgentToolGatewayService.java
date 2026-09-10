@@ -7,8 +7,8 @@ import ai.chat2db.community.domain.api.enums.agent.AgentToolCategory;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
-import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.service.agent.*;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
@@ -24,17 +24,20 @@ import ai.chat2db.community.tools.util.agent.AgentNativeTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AgentToolGatewayService implements AgentToolAccessService {
     private final AgentDatabaseToolRegistry tools;
     private final AgentQuestionTool questionTool;
+    private final AgentChartTool chartTool;
     private final Map<String, Access> tickets = new ConcurrentHashMap<>();
     private final ObjectMapper json = new ObjectMapper();
     private final AgentSessionStorage sessions;
@@ -44,10 +47,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final List<IAiAgentWorkspaceService> workspaces;
     private final AgentGatewayAddress address;
 
-    public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentSessionStorage sessions, AgentRunStorage runs,
+    public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
             IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address) {
         this.tools = tools;
         this.questionTool = questionTool;
+        this.chartTool = chartTool;
         this.sessions = sessions;
         this.runs = runs;
         this.identity = identity;
@@ -66,6 +70,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         tickets.put(ticket, new Access(sessionId, userId, context, eventSink));
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
         var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
+        definitions.add(chartTool.definition());
         return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions));
     }
 
@@ -79,6 +84,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         requireAccess(ticket, address);
         List<String> names = new ArrayList<>(tools.names());
         names.add(AgentQuestionTool.NAME);
+        names.add(AgentChartTool.NAME);
         AgentNativeTools.currentPlatform().stream().filter(this::nativeToolEnabled).forEach(names::add);
         return names;
     }
@@ -90,6 +96,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 AgentToolCategory.DATABASE, AgentToolStatus.ENABLED)));
         catalog.add(new AgentToolState(AgentQuestionTool.NAME, questionTool.definition().description(),
                 AgentToolCategory.INTERACTION, AgentToolStatus.ENABLED));
+        catalog.add(new AgentToolState(AgentChartTool.NAME, chartTool.definition().description(),
+                AgentToolCategory.VISUALIZATION, AgentToolStatus.ENABLED));
         for (String name : AgentNativeTools.currentPlatform()) {
             AgentToolStatus status = workspaces.isEmpty() ? AgentToolStatus.UNAVAILABLE
                     : nativeToolEnabled(name) ? AgentToolStatus.ENABLED : AgentToolStatus.DISABLED;
@@ -107,7 +115,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                         || candidate.status() == AgentRunStatus.ACCEPTED
                         || candidate.status() == AgentRunStatus.WAITING_APPROVAL)
                 .findFirst().orElseThrow(() -> new IllegalStateException("Agent run is not active"));
-        if (!tools.names().contains(toolName) && !AgentQuestionTool.NAME.equals(toolName)) return tools.execute(toolName, arguments);
+        if (!tools.names().contains(toolName) && !AgentQuestionTool.NAME.equals(toolName) && !AgentChartTool.NAME.equals(toolName)) return tools.execute(toolName, arguments);
         String body = json.writeValueAsString(arguments);
         if (body.length() > 64 * 1024) throw new IllegalArgumentException("Tool arguments exceed the size limit");
         String digest = digest(toolName + "\n" + body);
@@ -135,17 +143,21 @@ public class AgentToolGatewayService implements AgentToolAccessService {
             Context previous = ContextUtils.queryThreadContext();
             try {
                 ContextUtils.setContext(access.context);
-                result = AgentQuestionTool.NAME.equals(toolName)
-                        ? questionTool.execute(access.sessionId, run.id(), toolCallId, access.userId, arguments, access.sink, () -> isActive(access, run.id()))
-                        : tools.execute(toolName, arguments, new AgentToolExecutionContext(access.sessionId, run.id(),
-                                toolCallId, access.userId, access.sink, () -> isActive(access, run.id())));
+                AgentToolExecutionContext executionContext = new AgentToolExecutionContext(access.sessionId, run.id(),
+                        toolCallId, access.userId, access.sink, () -> isActive(access, run.id()));
+                result = switch (toolName) {
+                    case AgentQuestionTool.NAME -> questionTool.execute(access.sessionId, run.id(), toolCallId,
+                            access.userId, arguments, access.sink, executionContext.active());
+                    case AgentChartTool.NAME -> chartTool.execute(arguments, executionContext);
+                    default -> tools.execute(toolName, arguments, executionContext);
+                };
             } finally {
                 if (previous == null) ContextUtils.removeContext(); else ContextUtils.setContext(previous);
             }
             execution.result.complete(result);
             AgentTrace.record(result.ok() ? "tool.completed" : "tool.failed", access.sessionId, run.id(),
                     Map.of("toolCallId", toolCallId, "tool", toolName, "ok", result.ok(),
-                            "durationMs", java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)));
+                            "durationMs", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)));
             return result;
         } catch (Exception error) {
             execution.result.completeExceptionally(error);
@@ -216,7 +228,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         }
     }
 
-    private String digest(String value) throws java.security.NoSuchAlgorithmException {
+    private String digest(String value) throws NoSuchAlgorithmException {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(value.getBytes(StandardCharsets.UTF_8)));
     }

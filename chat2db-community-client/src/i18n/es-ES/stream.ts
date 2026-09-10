@@ -1,4 +1,8 @@
 export default {
+  "stream.chart.partialResult": "Este gráfico muestra una página de los resultados. Comprueba el alcance antes de interpretar los totales.",
+  "stream.chart.viewQueryData": "Ver datos de la consulta",
+  "stream.chart.queryData": "Datos de la consulta del gráfico",
+
   "stream.question.title": "Necesitamos tu respuesta",
   "stream.question.pending": "Esperando respuesta",
   "stream.question.answered": "Respondido",

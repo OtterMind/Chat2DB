@@ -1,4 +1,8 @@
 export default {
+  "stream.chart.partialResult": "このグラフはクエリ結果の1ページ分です。集計範囲を確認してください。",
+  "stream.chart.viewQueryData": "クエリデータを表示",
+  "stream.chart.queryData": "グラフのクエリデータ",
+
   "stream.question.title": "回答をお願いします",
   "stream.question.pending": "回答待ち",
   "stream.question.answered": "回答済み",

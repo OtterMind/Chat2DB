@@ -37,5 +37,10 @@ public record DbAgentDatabaseResponse<T>(boolean ok, Scope scope, T data, Page p
     public record QueryData(List<QueryColumn> columns, List<List<String>> rows, String valueEncoding,
                             Long durationMs, List<CellWarning> cellWarnings, Integer affectedRows) { }
     public record SqlExecutionData(List<SqlResult> results, int statementCount, boolean readOnly) { }
-    public record SqlResult(int statementIndex, String sql, boolean success, QueryData data, Page page, Error error) { }
+    public record SqlResult(int statementIndex, String sql, boolean success, QueryData data, Page page, Error error,
+                            String resultId) {
+        public SqlResult(int statementIndex, String sql, boolean success, QueryData data, Page page, Error error) {
+            this(statementIndex, sql, success, data, page, error, null);
+        }
+    }
 }

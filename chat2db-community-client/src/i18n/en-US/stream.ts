@@ -1,4 +1,8 @@
 export default {
+  "stream.chart.partialResult": "This chart shows one page of query results. Check the scope before interpreting totals.",
+  "stream.chart.viewQueryData": "View query data",
+  "stream.chart.queryData": "Chart query data",
+
   "stream.question.title": "Your input is needed",
   "stream.question.pending": "Awaiting answer",
   "stream.question.answered": "Answered",
