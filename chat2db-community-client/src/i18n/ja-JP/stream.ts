@@ -1,4 +1,13 @@
 export default {
+  "stream.question.title": "回答をお願いします",
+  "stream.question.pending": "回答待ち",
+  "stream.question.answered": "回答済み",
+  "stream.question.closed": "終了",
+  "stream.question.input": "回答を直接入力することもできます",
+  "stream.question.cancel": "このタスクを停止",
+  "stream.question.submit": "回答を送信",
+  "stream.question.failed": "送信に失敗しました。もう一度お試しください。",
+
   "stream.approval.title": "コマンドの承認",
   "stream.approval.pending": "確認待ち",
   "stream.approval.approved": "許可済み",

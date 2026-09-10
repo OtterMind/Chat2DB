@@ -54,6 +54,9 @@ import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
 import AgentApprovalCard from './components/AgentApprovalCard';
+import QuestionCard from '@/components/QuestionCard';
+import type { QuestionResponse } from '@/types/question';
+import { AgentQuestionItem, updateAgentQuestions } from './agentQuestions';
 import agentService, { AgentEvent } from '@/service/agent';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
@@ -331,6 +334,7 @@ const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const MESSAGE_TOP_ALIGNMENT_GAP = 20;
 const COLLAPSED_THOUGHT_PREVIEW_MAX_LENGTH = 48;
 const AI_RUNTIME_STORAGE_KEY = 'chat2db-ai-runtime';
+const ACTIVE_AGENT_SESSION_KEY = 'chat2db-active-agent-session';
 
 const agentRequestId = () =>
   globalThis.crypto?.randomUUID?.() ||
@@ -565,6 +569,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const agentOperationRef = useRef<AgentOperation>();
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
+  const [agentQuestions, setAgentQuestions] = useState<AgentQuestionItem[]>([]);
   const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
     clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
   );
@@ -978,6 +983,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const stopAgentPolling = useCallback((cancelRun = false) => {
     setAgentApprovals([]);
+    setAgentQuestions((current) => cancelRun ? current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item) : []);
     const operation = agentOperationRef.current;
     if (!operation) return;
     operation.cancelRequested = cancelRun;
@@ -993,6 +999,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   }, []);
 
   const finishAgentReply = useCallback((error?: unknown) => {
+    setAgentQuestions((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     setAgentApprovals((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     const content = streamingRef.current;
     const traceEntries = [...streamTraceEntriesRef.current];
@@ -1025,6 +1032,23 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
   };
 
+  const respondToAgentQuestion = async (question: AgentQuestionItem, response?: QuestionResponse) => {
+    const operation = agentOperationRef.current;
+    if (!operation || operation.controller.signal.aborted || operation.sessionId !== question.sessionId
+        || operation.runId !== question.runId) throw new Error(i18n('stream.question.closed'));
+    if (!response) {
+      await agentService.cancelRun({ sessionId: question.sessionId, runId: question.runId });
+      return;
+    }
+    const answer = await agentService.answerQuestion(
+      { sessionId: question.sessionId, questionId: question.id, ...response },
+      { signal: operation.controller.signal });
+    if (!operation.controller.signal.aborted) {
+      setAgentQuestions((current) => current.map((item) =>
+        item.id === question.id ? { ...item, status: 'answered', answer } : item));
+    }
+  };
+
   const applyAgentEvents = useCallback((events: AgentEvent[]) => {
     const session = agentSessionRef.current;
     if (!session || !events.length) return;
@@ -1040,6 +1064,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       setStreamTraceEntries(streamTraceEntriesRef.current);
     }
     setAgentApprovals((current) => updateAgentApprovals(current, events));
+    setAgentQuestions((current) => updateAgentQuestions(current, events));
   }, []);
 
   const pollAgentRun = useCallback(async (operation: AgentOperation, sessionId: string, runId: string) => {
@@ -1334,6 +1359,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     streamingText,
     streamTraceEntries.length,
     agentApprovals,
+    agentQuestions,
     currentRoundUserMessageId,
     messageListContentHeight,
     isCurrentRoundOverflowingViewport,
@@ -1344,6 +1370,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Start a new conversation.
 
   const handleNewChat = useCallback(() => {
+    sessionStorage.removeItem(ACTIVE_AGENT_SESSION_KEY);
     stop();
     stopAgentPolling(true);
     setSessionLoading(false);
@@ -1462,6 +1489,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       agentSessionRef.current = undefined;
       setRuntimeChoice('DEFAULT');
       localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'DEFAULT');
+      sessionStorage.removeItem(ACTIVE_AGENT_SESSION_KEY);
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1608,10 +1636,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       agentOperationRef.current = operation;
       setSessionLoading(true);
       try {
-        const [session, events, approvals, availableModels] = await Promise.all([
+        const [session, events, approvals, questions, availableModels] = await Promise.all([
           agentService.getSession({ sessionId, sessionVersion: 2 }, { signal: operation.controller.signal }),
           readAgentHistory(agentService.listEvents, sessionId, operation.controller.signal),
           agentService.listApprovals({ sessionId }, { signal: operation.controller.signal }),
+          agentService.listQuestions({ sessionId }, { signal: operation.controller.signal }),
           listAvailableModelOptions(),
         ]);
         if (operation.controller.signal.aborted) return;
@@ -1622,6 +1651,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           .filter((message) => message.content || message.traceEntries.length);
         setAgentApprovals(updateAgentApprovals([], events).map((item) =>
           item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
+            ? { ...item, status: 'closed' } : item));
+        setAgentQuestions(updateAgentQuestions([], events).map((item) =>
+          item.status === 'pending' && !questions.some((question) => question.id === item.id)
             ? { ...item, status: 'closed' } : item));
         const activeReply = activeRunId
           ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId)
@@ -1635,6 +1667,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setStreamTraceEntries(streamTraceEntriesRef.current);
         setRuntimeChoice('PI');
         localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'PI');
+        sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, sessionId);
         agentSessionRef.current = { id: sessionId, modelConfigId: session.modelConfigId || '',
           sequence: events.length ? events[events.length - 1].sequence : 0 };
         traceAgentStage('session.restored', { sessionId, events: events.length, activeRunId });
@@ -1668,8 +1701,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     let active = true;
-    if (!isPanel) {
-      const chatId = getChatIdFromPath();
+    {
+      const chatId = isPanel ? sessionStorage.getItem(ACTIVE_AGENT_SESSION_KEY) : getChatIdFromPath();
       if (chatId) {
         aiStreamService
           .getChatSessions(undefined as void)
@@ -1818,6 +1851,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             session = { id: created.id, modelConfigId, sequence: 0 };
             traceAgentStage('session.created', { sessionId: created.id, modelConfigId });
             agentSessionRef.current = session;
+            sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, created.id);
             setCurrentSessionId(created.id);
             currentSessionIdRef.current = created.id;
             setCurrentSessionTitle(created.title);
@@ -2178,6 +2212,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
+  const renderQuestions = (runId?: string) => agentQuestions
+    .filter((item) => item.runId === runId).map((item) => (
+      <QuestionCard key={item.id} question={item.question} options={item.options}
+        status={item.status} answer={item.answer}
+        onAnswer={(answer) => respondToAgentQuestion(item, answer)} onCancel={() => respondToAgentQuestion(item)}
+      />
+    ));
+
   const renderApprovals = (runId?: string) => agentApprovals.filter((item) => item.runId === runId).map((item) =>
     <AgentApprovalCard key={item.id} approval={item} onDecide={(approved) => decideAgentApproval(item, approved)} />);
 
@@ -2260,6 +2302,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                     {renderThoughtStrip(round.assistant.traceEntries || [], `trace-${round.assistant.id}`)}
                     {renderMarkdown(round.assistant.content)}
                     {renderApprovals(round.assistant.runId)}
+                    {renderQuestions(round.assistant.runId)}
                   </div>
                 </div>
               )}
@@ -2271,7 +2314,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   streamThoughtPulse,
                 )}
               {isCurrentRound &&
-                (streamingText || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)) &&
+                (streamingText || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)
+                  || agentQuestions.some((item) => item.runId === agentOperationRef.current?.runId)) &&
                 (() => {
                   const { textBeforeChart, hasIncompleteChart } = splitIncompleteChartBlock(streamingText);
                   return (
@@ -2294,6 +2338,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                           renderMarkdown(streamingText)
                         )}
                         {renderApprovals(agentOperationRef.current?.runId)}
+                        {renderQuestions(agentOperationRef.current?.runId)}
                       </div>
                     </div>
                   );

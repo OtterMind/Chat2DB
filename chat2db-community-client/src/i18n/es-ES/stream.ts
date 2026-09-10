@@ -1,4 +1,13 @@
 export default {
+  "stream.question.title": "Necesitamos tu respuesta",
+  "stream.question.pending": "Esperando respuesta",
+  "stream.question.answered": "Respondido",
+  "stream.question.closed": "Cerrado",
+  "stream.question.input": "También puedes escribir tu respuesta",
+  "stream.question.cancel": "Detener esta tarea",
+  "stream.question.submit": "Enviar respuesta",
+  "stream.question.failed": "No se pudo enviar. Inténtalo de nuevo.",
+
   "stream.approval.title": "Aprobación de comando",
   "stream.approval.pending": "Pendiente de aprobación",
   "stream.approval.approved": "Permitido",

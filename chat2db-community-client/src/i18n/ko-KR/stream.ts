@@ -1,4 +1,13 @@
 export default {
+  "stream.question.title": "답변이 필요합니다",
+  "stream.question.pending": "답변 대기 중",
+  "stream.question.answered": "답변 완료",
+  "stream.question.closed": "종료됨",
+  "stream.question.input": "직접 답변을 입력할 수도 있습니다",
+  "stream.question.cancel": "이 작업 중지",
+  "stream.question.submit": "답변 제출",
+  "stream.question.failed": "제출하지 못했습니다. 다시 시도해 주세요.",
+
   "stream.approval.title": "명령 승인",
   "stream.approval.pending": "승인 대기",
   "stream.approval.approved": "허용됨",

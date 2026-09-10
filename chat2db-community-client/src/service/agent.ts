@@ -1,4 +1,5 @@
 import createRequest from './base';
+import type { QuestionAnswer, QuestionResponse } from '@/types/question';
 import type { IChatSession } from './aiStream';
 
 export type AgentRuntimeType = 'PI' | 'CODEX' | 'DSH';
@@ -14,6 +15,9 @@ export type AgentEventType =
   | 'TOOL_CALL_FAILED'
   | 'APPROVAL_REQUESTED'
   | 'APPROVAL_DECIDED'
+  | 'QUESTION_REQUESTED'
+  | 'QUESTION_ANSWERED'
+  | 'QUESTION_CLOSED'
   | 'USAGE_UPDATED'
   | 'CHECKPOINT_COMMITTED'
   | 'RUN_COMPLETED'
@@ -56,7 +60,7 @@ export interface AgentToolFeatureState {
 export interface AgentToolState {
   name: string;
   description: string;
-  category: 'DATABASE' | 'BUILTIN';
+  category: 'DATABASE' | 'BUILTIN' | 'INTERACTION';
   status: 'ENABLED' | 'DISABLED' | 'UNAVAILABLE';
 }
 
@@ -149,7 +153,16 @@ const decideApproval = createRequest<{ sessionId: string; approvalId: string; ap
   '/api/v3/ai/sessions/:sessionId/approvals', { method: 'post', errorLevel: false },
 );
 
+const listQuestions = createRequest<{ sessionId: string }, { id: string }[]>(
+  '/api/v3/ai/sessions/:sessionId/questions', { errorLevel: false },
+);
+const answerQuestion = createRequest<{ sessionId: string; questionId: string } & QuestionResponse, QuestionAnswer>(
+  '/api/v3/ai/sessions/:sessionId/questions/answer', { method: 'post', errorLevel: false },
+);
+
 export default {
+  listQuestions,
+  answerQuestion,
   listRuntimeFeatures,
   checkPi,
   enablePi,

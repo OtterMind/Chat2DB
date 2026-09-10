@@ -1,4 +1,13 @@
 export default {
+  "stream.question.title": "需要你的选择",
+  "stream.question.pending": "等待回答",
+  "stream.question.answered": "已回答",
+  "stream.question.closed": "已结束",
+  "stream.question.input": "也可以直接输入你的答案",
+  "stream.question.cancel": "停止本次任务",
+  "stream.question.submit": "提交答案",
+  "stream.question.failed": "提交失败，请重试。",
+
   "stream.approval.title": "命令审批",
   "stream.approval.pending": "等待确认",
   "stream.approval.approved": "已允许",
