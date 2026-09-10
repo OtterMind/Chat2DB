@@ -15,7 +15,7 @@ class AgentDatabaseToolRegistryTest {
     void exposesIndependentSchemasAndRejectsLegacyOrCoercedArguments() {
         AtomicReference<Object> input = new AtomicReference<>();
         var registry = registry(input, AgentDatabaseResult.success(null, List.of(), null, null, List.of()));
-        assertEquals(Set.of("db_list_datasources", "db_list_databases", "db_list_schemas", "db_list_tables", "db_list_columns", "db_describe_tables", "db_query"), registry.names());
+        assertEquals(Set.of("db_search_datasources", "db_search_databases", "db_search_schemas", "db_search_tables", "db_search_columns", "db_describe_tables", "db_query"), registry.names());
         var query = registry.definitions().stream().filter(t -> t.name().equals("db_query")).findFirst().orElseThrow();
         assertEquals(List.of("dataSourceId", "sql"), query.parameters().get("required"));
         assertEquals(false, query.parameters().get("additionalProperties"));
@@ -48,6 +48,20 @@ class AgentDatabaseToolRegistryTest {
         String json = new ObjectMapper().writeValueAsString(result);
         assertFalse(new ObjectMapper().readTree(json).get("ok").asBoolean());
         assertFalse(json.contains("Output truncated"));
+        for (String name : registry.names().stream().filter(n -> n.startsWith("db_search_")).toList()) {
+            Map<String, Object> args = new LinkedHashMap<>(Map.of("page", 3, "pageSize", 100));
+            switch (name) {
+                case "db_search_datasources" -> args.put("search", "sales");
+                case "db_search_databases" -> args.put("databasePattern", "sales%");
+                case "db_search_schemas" -> args.put("schemaPattern", "sales%");
+                default -> args.put("tablePattern", "orders%");
+            }
+            var oversized = registry.execute(name, args);
+            assertEquals("RESULT_TOO_LARGE", oversized.error().code());
+            assertEquals(name, oversized.nextAction().tool());
+            args.put("page", 1); args.put("pageSize", 50);
+            assertEquals(args, oversized.nextAction().arguments());
+        }
     }
     private AgentDatabaseToolRegistry registry(AtomicReference<Object> input, AgentDatabaseResult<?> result) {
         var service = (AgentDatabaseService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{AgentDatabaseService.class},

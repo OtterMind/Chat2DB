@@ -50,7 +50,7 @@ class AgentDatabaseServiceImplTest {
         var missing = failure(() -> f.service.listTables(new Tables(null, null, null, null, null, null, null, null, null)));
         assertNotNull(missing);
         assertEquals("MISSING_DATASOURCE", missing.code());
-        assertEquals("db_list_datasources", missing.nextAction().tool());
+        assertEquals("db_search_datasources", missing.nextAction().tool());
         assertEquals(0, f.binds);
         var database = failure(() -> f.service.listTables(new Tables("7", null, null, null, null, null, null, null, null)));
         assertEquals("database", database.field());
@@ -59,7 +59,7 @@ class AgentDatabaseServiceImplTest {
         f.schemas = true;
         var schema = failure(() -> f.service.query(new Query("7", "app", null, "SELECT 1", null, null)));
         assertEquals("schema", schema.field());
-        assertEquals("db_list_schemas", schema.nextAction().tool());
+        assertEquals("db_search_schemas", schema.nextAction().tool());
         assertFalse(schema.nextAction().arguments().containsKey("schema"));
     }
 
@@ -107,7 +107,7 @@ class AgentDatabaseServiceImplTest {
         assertNotNull(failure);
         assertEquals("SQL_ERROR", failure.code());
         assertEquals("sql", failure.field());
-        assertEquals("db_list_tables", failure.nextAction().tool());
+        assertEquals("db_search_tables", failure.nextAction().tool());
         assertEquals(1, f.audits);
         var invalidPage = failure(() -> f.service.query(new Query("7", "app", null, "SELECT 1", 0, 500)));
         assertNotNull(invalidPage);

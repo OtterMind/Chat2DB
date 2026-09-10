@@ -47,22 +47,22 @@ class AgentToolGatewayServiceTest {
             var access = gateway.issue("session", event -> {});
             var catalog = gateway.listTools();
             assertEquals(7, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
-            assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("db_list_datasources")
+            assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("db_search_datasources")
                     && tool.status() == AgentToolState.Status.ENABLED));
             assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN)
                     .allMatch(tool -> tool.status() == AgentToolState.Status.UNAVAILABLE));
             ContextUtils.setContext(caller);
-            assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("db_list_datasources"));
+            assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("db_search_datasources"));
             assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("bash"));
             assertThrows(SecurityException.class, () -> gateway.activeTools(access.ticket(), "192.0.2.1"));
             assertEquals(List.of("database-list"), gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of()).data());
+                    access.ticket(), "127.0.0.1", "call", "db_search_datasources", Map.of()).data());
             assertEquals(List.of("database-list"), gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of()).data());
+                    access.ticket(), "127.0.0.1", "call", "db_search_datasources", Map.of()).data());
             assertEquals(1, executions.get());
             assertSame(caller, ContextUtils.queryThreadContext());
             assertThrows(IllegalArgumentException.class, () -> gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "db_list_datasources", Map.of("changed", true)));
+                    access.ticket(), "127.0.0.1", "call", "db_search_datasources", Map.of("changed", true)));
             gateway.revoke(access.ticket());
             assertThrows(SecurityException.class, () -> gateway.activeTools(access.ticket(), "127.0.0.1"));
         } finally {

@@ -49,7 +49,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         String search = search(request.search());
         if (!blank(search)) {
             var items = matchingSources(search);
-            return metadataPage(null, items, page, size, "db_list_datasources", new LinkedHashMap<>(Map.of("search", search)));
+            return metadataPage(null, items, page, size, "db_search_datasources", new LinkedHashMap<>(Map.of("search", search)));
         }
         var query = new DbDataSourcePageQueryRequest();
         query.setPageNo(page);
@@ -58,7 +58,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         var items = response.getData().stream().map(AgentDatabaseServiceImpl::source).toList();
         Page pagination = pageInfo(page, size, items.size(), response.getTotal(), response.getHasNextPage());
         return AgentDatabaseResult.success(null, items, pagination, Boolean.TRUE.equals(pagination.hasMore())
-                ? next("db_list_datasources", nextPageArguments(request.search(), page + 1, size)) : null, List.of());
+                ? next("db_search_datasources", nextPageArguments(request.search(), page + 1, size)) : null, List.of());
     }
 
     @Override
@@ -70,7 +70,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                     .map(db -> new Name(db.getName(), db.getComment(), db.isSystem())).toList();
             Map<String, Object> args = new LinkedHashMap<>(Map.of("dataSourceId", request.dataSourceId()));
             put(args, "databasePattern", pattern);
-            return names(profile, items, page, size, "db_list_databases", args);
+            return names(profile, items, page, size, "db_search_databases", args);
         });
     }
 
@@ -86,7 +86,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                     : List.<Name>of();
             Map<String, Object> args = scopeArguments(profile); args.remove("schema");
             put(args, "schemaPattern", pattern);
-            return names(profile, items, page, size, "db_list_schemas", args);
+            return names(profile, items, page, size, "db_search_schemas", args);
         });
     }
 
@@ -106,7 +106,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                             .thenComparing(TableSummary::schema, Comparator.nullsFirst(String::compareTo)).thenComparing(TableSummary::name)).toList();
             Map<String, Object> args = metadataArguments(request.dataSourceId(), request.database(), request.schema(), request.schemaPattern());
             put(args, "search", search); put(args, "tablePattern", request.tablePattern());
-            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_list_tables", args);
+            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_search_tables", args);
         });
     }
 
@@ -127,14 +127,14 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                             .thenComparing(ColumnSummary::ordinalPosition, Comparator.nullsFirst(Integer::compareTo)).thenComparing(ColumnSummary::name)).toList();
             Map<String, Object> args = metadataArguments(request.dataSourceId(), request.database(), request.schema(), request.schemaPattern());
             put(args, "tablePattern", tablePattern); put(args, "columnPattern", columnPattern);
-            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_list_columns", args);
+            return metadataPage(metadataScope(profile, request.schema()), items, page, size, "db_search_columns", args);
         });
     }
 
     @Override
     public AgentDatabaseResult<List<TableDetail>> describeTables(AgentDatabaseRequest.Describe request) {
         if (request.tables() == null || request.tables().isEmpty() || request.tables().size() > 10) {
-            throw invalid("tables", "Provide 1 to 10 exact table names returned by db_list_tables.", null);
+            throw invalid("tables", "Provide 1 to 10 exact table names returned by db_search_tables.", null);
         }
         if (new HashSet<>(request.tables()).size() != request.tables().size()) {
             throw invalid("tables", "Table names must be unique.", null);
@@ -152,7 +152,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 warnings.addAll(description.warnings());
                 if (table == null || table.getColumnList() == null || table.getColumnList().isEmpty()) {
                     throw new AgentDatabaseException("TABLE_NOT_FOUND", "tables", "Table metadata not found: " + name,
-                            next("db_list_tables", scopeArguments(profile)));
+                            next("db_search_tables", scopeArguments(profile)));
                 }
                 var columns = table.getColumnList().stream().map(c -> new Column(c.getName(), c.getColumnType(),
                         c.getDataType(), c.getNullable() == null || c.getNullable() == 2 ? null : c.getNullable() == 1,
@@ -194,14 +194,14 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             try { responses = executor.execute(execute); }
             catch (RuntimeException failure) {
                 audit.recordFailureAsync(request.sql(), SqlOperationLogSourceEnum.AI_TOOL.name(), failure.getMessage());
-                throw new AgentDatabaseException("SQL_ERROR", "sql", failure.getMessage(), next("db_list_tables", scopeArguments(profile)), failure);
+                throw new AgentDatabaseException("SQL_ERROR", "sql", failure.getMessage(), next("db_search_tables", scopeArguments(profile)), failure);
             }
             var failed = responses.stream().filter(item -> !Boolean.TRUE.equals(item.getSuccess())).findFirst();
             audit.recordListResultAsync(OpsSqlOperationLogListResultRequest.of(request.sql(), failed.isEmpty(),
                     failed.map(ExecuteResponse::getMessage).orElse(null), responses, SqlOperationLogSourceEnum.AI_TOOL.name()));
             if (failed.isPresent()) {
                 throw new AgentDatabaseException("SQL_ERROR", "sql", failed.get().getMessage(),
-                        next("db_list_tables", scopeArguments(profile)));
+                        next("db_search_tables", scopeArguments(profile)));
             }
             if (responses.size() != 1) throw new AgentDatabaseException("UNEXPECTED_RESULT", "sql", "Expected one query result set.", null);
             ExecuteResponse response = responses.get(0);
@@ -267,11 +267,11 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
 
     private <T> AgentDatabaseResult<T> scoped(AgentDatabaseRequest.Scope request, boolean requireScope,
             Function<ConnectionProfile, AgentDatabaseResult<T>> action) {
-        required(request.dataSourceId(), "dataSourceId", next("db_list_datasources", Map.of()));
+        required(request.dataSourceId(), "dataSourceId", next("db_search_datasources", Map.of()));
         long id;
         try { id = Long.parseLong(request.dataSourceId()); }
-        catch (NumberFormatException error) { throw invalid("dataSourceId", "Copy the datasource id string from db_list_datasources.", next("db_list_datasources", Map.of())); }
-        if (id <= 0) throw invalid("dataSourceId", "Datasource id must be a positive integer string.", next("db_list_datasources", Map.of()));
+        catch (NumberFormatException error) { throw invalid("dataSourceId", "Copy the datasource id string from db_search_datasources.", next("db_search_datasources", Map.of())); }
+        if (id <= 0) throw invalid("dataSourceId", "Datasource id must be a positive integer string.", next("db_search_datasources", Map.of()));
         for (String name : List.of("database", "schema")) {
             String value = name.equals("database") ? request.database() : request.schema();
             if (value != null && (value.isBlank() || value.length() > 256)) {
@@ -288,7 +288,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 requireDatabase(profile, request.database());
                 if (connections.supportSchema() && blank(request.schema())) {
                     Map<String, Object> args = scopeArguments(profile); args.remove("schema");
-                    throw invalid("schema", "Choose an exact schema name from db_list_schemas.", next("db_list_schemas", args));
+                    throw invalid("schema", "Choose an exact schema name from db_search_schemas.", next("db_search_schemas", args));
                 }
             }
             return action.apply(profile);
@@ -300,8 +300,8 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
 
     private void requireDatabase(ConnectionProfile profile, String requested) {
         if (connections.supportDatabase() && blank(requested)) {
-            throw invalid("database", "Choose an exact database name from db_list_databases.",
-                    next("db_list_databases", Map.of("dataSourceId", String.valueOf(profile.getDataSourceId()))));
+            throw invalid("database", "Choose an exact database name from db_search_databases.",
+                    next("db_search_databases", Map.of("dataSourceId", String.valueOf(profile.getDataSourceId()))));
         }
     }
 
