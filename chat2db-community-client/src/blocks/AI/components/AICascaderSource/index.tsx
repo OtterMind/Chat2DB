@@ -3,7 +3,6 @@ import { ILoadDataOptions, switchIcon, treeConfig } from '@/blocks/NewTree/treeC
 import { TreeNodeType, databaseMap } from '@/constants';
 import i18n from '@/i18n';
 import { useTreeStore } from '@/store/tree';
-import { TreeNodeData } from '@/typings';
 import { IDBContextInfo } from '@/typings/database';
 import { findNode } from '@/utils';
 import { IconfontSvg } from '@chat2db/ui';
@@ -11,6 +10,7 @@ import { Cascader, Tooltip } from 'antd';
 import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useStyles } from './style';
+import { buildAIContextTree } from './contextTree';
 
 export type IAICascaderData = IDBContextInfo | null;
 
@@ -43,29 +43,8 @@ const AICascaderSource = (props: IProps) => {
     handleLoadData: state.handleLoadData,
   }));
 
-  // recursively processes treeData
-  const handleTreeData = (data: TreeNodeData[]) => {
-    const list = data.map((item) => {
-      let isLeaf = false;
-      if (
-        (item?.treeNodeType === TreeNodeType.DATABASE && !item?.extraParams?.supportSchema) ||
-        item?.treeNodeType === TreeNodeType.SCHEMA
-      ) {
-        isLeaf = true;
-        item.children = undefined;
-      }
-
-      return {
-        ...item,
-        isLeaf,
-        children: item.children?.length ? handleTreeData(item.children) : undefined,
-      };
-    });
-    return list.filter((item) => !(item?.treeNodeType === TreeNodeType.GROUP && !item.children?.length));
-  };
-
   const treeDataOptions = useMemo(() => {
-    return handleTreeData(treeData || []);
+    return buildAIContextTree(treeData || []);
   }, [treeData]);
 
   const options = useMemo(() => {

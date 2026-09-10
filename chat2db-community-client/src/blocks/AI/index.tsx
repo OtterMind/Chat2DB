@@ -24,8 +24,6 @@ import aiStreamService, {
   IChatMessage,
   IChatSession,
   IModelOptionItem,
-  ISelectedKnowledge,
-  KnowledgeSelectionType,
 } from '@/service/aiStream';
 import { IChatAttachment } from '@/service/aiAttachment';
 import { useAIStore } from '@/store/ai';
@@ -48,7 +46,6 @@ import { listAvailableModelOptions, prepareAgentModelOption, resolveModelRequest
 import { isDesktop } from '@/utils/env';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
-import { toKnowledgeSelectionReferences } from './knowledgeSelection';
 import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import type { IConnectionEnv } from '@/typings';
 import { resolveAIDataSourceContext } from './dataSourceContext';
@@ -360,15 +357,8 @@ interface IChatItem {
   role: ChatRole;
   content: string;
   attachments?: IChatAttachment[];
-  selectedKnowledge?: ISelectedKnowledge[];
   traceEntries?: ITraceEntry[];
 }
-
-const knowledgeTypeLabel: Record<KnowledgeSelectionType, string> = {
-  KNOWLEDGE_TERM: '知识名词',
-  BUSINESS_LOGIC: '业务逻辑',
-  SQL_TEMPLATE: 'SQL 模板',
-};
 
 interface IChatRound {
   key: string;
@@ -1558,7 +1548,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           role: m.role as ChatRole,
           content: m.content,
           attachments: m.attachments,
-          selectedKnowledge: m.selectedKnowledge,
           traceEntries: parseTraceEntries(m.reasoningContent),
         }));
         const latestInProgressSession = inProgressSessionRef.current;
@@ -1804,7 +1793,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             role: 'user' as const,
             content,
             attachments: params.attachments,
-            selectedKnowledge: params.selectedKnowledge,
           },
         ];
         messagesRef.current = next;
@@ -1903,7 +1891,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         databaseType: params.databaseType,
         tableName: params.tableName,
         questionType: params.questionType,
-        selectedKnowledge: toKnowledgeSelectionReferences(params.selectedKnowledge),
         attachments: params.attachments,
       });
 
@@ -2260,27 +2247,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                             {attachment.fileName}
                           </div>
                         ))}
-                      </div>
-                    ) : null}
-                    {round.user.selectedKnowledge?.some((knowledge) => knowledge.key) ? (
-                      <div className={styles.userKnowledgeList} aria-label="本次使用的知识点">
-                        {round.user.selectedKnowledge
-                          .filter((knowledge) => knowledge.key)
-                          .map((knowledge) => (
-                            <span
-                              key={`${knowledge.type}-${knowledge.id}`}
-                              className={cx(
-                                styles.userKnowledgeItem,
-                                knowledge.type === 'KNOWLEDGE_TERM' && styles.userKnowledgeTerm,
-                                knowledge.type === 'BUSINESS_LOGIC' && styles.userBusinessLogic,
-                                knowledge.type === 'SQL_TEMPLATE' && styles.userSqlTemplate,
-                              )}
-                              title={knowledge.value || knowledge.key}
-                            >
-                              <span className={styles.userKnowledgeType}>{knowledgeTypeLabel[knowledge.type]}：</span>
-                              <span className={styles.userKnowledgeName}>{knowledge.key}</span>
-                            </span>
-                          ))}
                       </div>
                     ) : null}
                     <div className={styles.userBubble}>{round.user.content}</div>

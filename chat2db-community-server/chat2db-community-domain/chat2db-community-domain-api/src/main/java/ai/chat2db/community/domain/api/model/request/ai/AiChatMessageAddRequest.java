@@ -25,5 +25,4 @@ public class AiChatMessageAddRequest {
 
     private List<ChatAttachment> attachments;
 
-    private List<AiSelectedKnowledge> selectedKnowledge;
 }
