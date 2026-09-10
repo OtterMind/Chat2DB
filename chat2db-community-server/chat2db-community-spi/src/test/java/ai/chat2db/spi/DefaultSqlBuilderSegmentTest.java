@@ -51,7 +51,7 @@ class DefaultSqlBuilderSegmentTest {
                         .offset(-10)
                         .pageSize(0)
                         .build()));
-        assertEquals("SELECT 1\n LIMIT 5,1",
+        assertEquals("SELECT 1\n LIMIT 1 OFFSET 5",
                 builder.dql().buildPageLimit(PageLimitRequest.builder()
                         .sql("SELECT 1")
                         .offset(5)
