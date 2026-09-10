@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
+import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.metadata.extension.MetadataAccessContext;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
@@ -8,7 +9,7 @@ import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyMa
 import ai.chat2db.community.tools.util.AgentTrace;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
-import ai.chat2db.spi.model.request.TableMetadataRequest;
+import ai.chat2db.spi.model.request.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.ResultSetUtils;
 import com.google.common.cache.Cache;
@@ -88,45 +89,21 @@ public class AgentMetadataServiceImpl implements AgentMetadataService {
     }
 
     @Override
-    public Description describe(String database, String schema, String table, boolean refresh) {
-        String schemaPattern = schema == null ? null : AgentMetadataPattern.literal(schema);
-        String tablePattern = AgentMetadataPattern.literal(table);
-        if (!policies.isAllowed(resource(database, schema, table, null))) {
-            throw new AgentDatabaseException("PERMISSION_DENIED", "tables", "Table metadata is not accessible: " + table, null);
+    public Description describe(String database, String schema, String type, String name, boolean refresh) {
+        if (type == null || !AgentDatabaseRequest.OBJECT_TYPES.contains(type)) {
+            throw new AgentDatabaseException("INVALID_ARGUMENT", "objects", "Unsupported object type: " + type, null);
         }
-        Description raw = cached(descriptionCache, key("description", database, schema, table, null), refresh, () -> {
-            List<Table> matches = readTables(database, schemaPattern, tablePattern).stream().filter(item -> table.equals(item.getName())).toList();
-            if (matches.isEmpty()) return new Description(null, null, List.of());
-            Table metadata = matches.get(0);
-            metadata.setColumnList(readColumns(database, schemaPattern, tablePattern, null));
-            List<String> warnings = new ArrayList<>();
-            try (ResultSet keys = connection.get().getMetaData().getPrimaryKeys(database, schema, table)) {
-                Set<String> primaryColumns = new HashSet<>();
-                while (keys.next()) primaryColumns.add(keys.getString("COLUMN_NAME"));
-                metadata.getColumnList().forEach(column -> column.setPrimaryKey(primaryColumns.contains(column.getName())));
-            } catch (SQLException error) { // impl-contract: best-effort - primary keys supplement column metadata.
-                warnings.add("Primary keys unavailable for " + table);
-            }
-            TableMetadataRequest request = new TableMetadataRequest(database, schema, table);
-            try { metadata.setIndexList(dialect.get().indexes(connection.get(), request)); }
-            catch (RuntimeException error) { // impl-contract: best-effort - indexes supplement column metadata.
-                metadata.setIndexList(List.of()); warnings.add("Indexes unavailable for " + table);
-            }
-            try { metadata.setForeignKeyList(dialect.get().getImportedKeys(connection.get(), request)); }
-            catch (RuntimeException error) { // impl-contract: best-effort - foreign keys supplement column metadata.
-                metadata.setForeignKeyList(List.of()); warnings.add("Foreign keys unavailable for " + table);
-            }
-            String ddl = null;
-            try { ddl = dialect.get().tableDDL(connection.get(), request); }
-            catch (RuntimeException error) { // impl-contract: fallback - structured metadata remains available without DDL.
-                warnings.add("DDL unavailable for " + table + "; use structured columns and indexes.");
-            }
-            return new Description(metadata, ddl, List.copyOf(warnings));
-        });
+        boolean relation = type.equals("TABLE") || type.equals("VIEW");
+        // The existing metadata policy addresses tables/columns; other definitions use their database/schema scope.
+        if (!policies.isAllowed(resource(database, schema, relation ? name : null, null))) {
+            throw new AgentDatabaseException("PERMISSION_DENIED", "objects", "Object metadata is not accessible: " + type + " " + name, null);
+        }
+        Description raw = cached(descriptionCache, key("description:" + type, database, schema, name, null), refresh,
+                () -> readDescription(database, schema, type, name));
         if (raw.table() == null) return raw;
-        List<TableColumn> visible = policies.filter(raw.table().getColumnList(), item -> resource(database, schema, table, item.getName()));
+        List<TableColumn> visible = policies.filter(raw.table().getColumnList(), item -> resource(database, schema, name, item.getName()));
         Set<String> names = new HashSet<>(visible.stream().map(TableColumn::getName).toList());
-        Table filtered = Table.builder().name(table).databaseName(database).schemaName(schema).comment(raw.table().getComment())
+        Table filtered = Table.builder().name(name).databaseName(database).schemaName(schema).comment(raw.table().getComment())
                 .type(raw.table().getType()).columnList(visible)
                 .indexList(raw.table().getIndexList().stream().filter(index -> index.getColumnList() == null
                         || index.getColumnList().stream().allMatch(column -> names.contains(column.getColumnName()))).toList())
@@ -134,8 +111,91 @@ public class AgentMetadataServiceImpl implements AgentMetadataService {
                         && policies.isAllowed(resource(fk.getPkTableCat(), fk.getPkTableSchem(), fk.getPkTableName(), fk.getPkColumnName()))).toList()).build();
         boolean complete = visible.size() == raw.table().getColumnList().size();
         List<String> warnings = new ArrayList<>(raw.warnings());
-        if (!complete) warnings.add("Some columns are not accessible; full DDL is omitted.");
-        return new Description(filtered, complete ? raw.ddl() : null, List.copyOf(warnings));
+        if (!complete) warnings.add("Some columns are not accessible; the full object definition is omitted.");
+        return new Description(filtered, complete ? raw.definition() : null, List.copyOf(warnings));
+    }
+
+    private Description readDescription(String database, String schema, String type, String name) throws SQLException {
+        if (!type.equals("TABLE") && !type.equals("VIEW")) {
+            return new Description(null, readDefinition(database, schema, type, name),
+                    List.of("Definition is returned as provided by the database: it may be CREATE DDL, a source body or an implementation reference."));
+        }
+        String schemaPattern = schema == null ? null : AgentMetadataPattern.literal(schema);
+        String namePattern = AgentMetadataPattern.literal(name);
+        List<Table> matches = readTables(database, schemaPattern, namePattern);
+        if (matches.isEmpty()) {
+            throw new AgentDatabaseException("OBJECT_NOT_FOUND", "objects", type + " not found: " + name, null);
+        }
+        Table metadata = matches.get(0);
+        boolean view = metadata.getType() != null && metadata.getType().toUpperCase(Locale.ROOT).contains("VIEW");
+        if (view != type.equals("VIEW")) {
+            throw new AgentDatabaseException("OBJECT_TYPE_MISMATCH", "objects",
+                    name + " is a " + (view ? "VIEW" : "TABLE") + "; use that object type.", null);
+        }
+        metadata.setColumnList(readColumns(database, schemaPattern, namePattern, null));
+        metadata.setIndexList(List.of()); metadata.setForeignKeyList(List.of());
+        List<String> warnings = new ArrayList<>();
+        if (!view) readTableKeys(metadata, database, schema, name, warnings);
+        String definition = null;
+        try { definition = readDefinition(database, schema, type, name); }
+        catch (RuntimeException error) { // impl-contract: fallback - structured metadata remains available without a definition.
+            warnings.add("Definition unavailable for " + type + " " + name + "; use structured columns and indexes.");
+        }
+        if (view && definition != null) warnings.add("View definition may be CREATE VIEW DDL or only its query body, as provided by the database.");
+        return new Description(metadata, definition, List.copyOf(warnings));
+    }
+
+    private String readDefinition(String database, String schema, String type, String name) {
+        String definition;
+        try {
+            definition = switch (type) {
+                case "TABLE" -> dialect.get().tableDDL(connection.get(), new TableMetadataRequest(database, schema, name));
+                case "VIEW" -> {
+                    Table object = dialect.get().view(connection.get(), new ViewMetadataRequest(database, schema, name));
+                    yield object == null ? null : object.getDdl();
+                }
+                case "FUNCTION" -> {
+                    var object = dialect.get().function(connection.get(), new FunctionMetadataRequest(database, schema, name));
+                    yield object == null ? null : object.getFunctionBody();
+                }
+                case "PROCEDURE" -> {
+                    var object = dialect.get().procedure(connection.get(), new ProcedureMetadataRequest(database, schema, name));
+                    yield object == null ? null : object.getProcedureBody();
+                }
+                case "TRIGGER" -> {
+                    var object = dialect.get().trigger(connection.get(), new TriggerMetadataRequest(database, schema, name));
+                    yield object == null ? null : object.getTriggerBody();
+                }
+                default -> throw new AgentDatabaseException("INVALID_ARGUMENT", "objects", "Unsupported object type: " + type, null);
+            };
+        } catch (UnsupportedOperationException error) {
+            throw new AgentDatabaseException("UNSUPPORTED_OBJECT_DEFINITION", "objects",
+                    "This database driver does not support reading " + type + " definitions.", null, error);
+        }
+        if (definition == null || definition.isBlank()) {
+            throw new AgentDatabaseException("DEFINITION_UNAVAILABLE", "objects",
+                    "No definition was returned for " + type + " " + name + ". Verify the exact name, database/schema, permissions and driver support.", null);
+        }
+        return definition;
+    }
+
+    private void readTableKeys(Table metadata, String database, String schema, String name, List<String> warnings) {
+        try (ResultSet keys = connection.get().getMetaData().getPrimaryKeys(database, schema, name)) {
+            Set<String> primaryColumns = new HashSet<>();
+            while (keys.next()) primaryColumns.add(keys.getString("COLUMN_NAME"));
+            metadata.getColumnList().forEach(column -> column.setPrimaryKey(primaryColumns.contains(column.getName())));
+        } catch (SQLException error) { // impl-contract: best-effort - primary keys supplement column metadata.
+            warnings.add("Primary keys unavailable for " + name);
+        }
+        TableMetadataRequest request = new TableMetadataRequest(database, schema, name);
+        try { metadata.setIndexList(dialect.get().indexes(connection.get(), request)); }
+        catch (RuntimeException error) { // impl-contract: best-effort - indexes supplement column metadata.
+            warnings.add("Indexes unavailable for " + name);
+        }
+        try { metadata.setForeignKeyList(dialect.get().getImportedKeys(connection.get(), request)); }
+        catch (RuntimeException error) { // impl-contract: best-effort - foreign keys supplement column metadata.
+            warnings.add("Foreign keys unavailable for " + name);
+        }
     }
 
     private List<Table> readTables(String database, String schemaPattern, String tablePattern) throws SQLException {
@@ -185,8 +245,9 @@ public class AgentMetadataServiceImpl implements AgentMetadataService {
         var fields = new LinkedHashMap<String, Object>();
         fields.put("kind", key.kind); fields.put("cacheHit", hit); fields.put("refresh", refresh); fields.put("dataSourceId", key.dataSourceId);
         if (key.database != null) fields.put(key.kind.equals("databases") ? "databasePattern" : "database", key.database);
-        if (key.schemaPattern != null) fields.put("schemaPattern", key.schemaPattern);
-        if (key.tablePattern != null) fields.put("tablePattern", key.tablePattern);
+        if (key.schemaPattern != null) fields.put(key.kind.startsWith("description:") ? "schema" : "schemaPattern", key.schemaPattern);
+        if (key.tablePattern != null) fields.put(key.kind.startsWith("description:") ? "objectName" : "tablePattern", key.tablePattern);
+        if (key.kind.startsWith("description:")) fields.put("objectType", key.kind.substring("description:".length()));
         if (key.columnPattern != null) fields.put("columnPattern", key.columnPattern);
         if (result instanceof List<?> list) fields.put("matchedRows", list.size());
         AgentTrace.record("database.metadata.v2", null, null, fields);

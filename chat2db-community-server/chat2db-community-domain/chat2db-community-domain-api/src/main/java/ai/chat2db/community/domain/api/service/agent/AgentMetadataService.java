@@ -9,6 +9,6 @@ public interface AgentMetadataService {
     List<Schema> schemas(String database, String schemaPattern, boolean refresh);
     List<Table> tables(String database, String schemaPattern, String tablePattern, boolean refresh);
     List<TableColumn> columns(String database, String schemaPattern, String tablePattern, String columnPattern, boolean refresh);
-    Description describe(String database, String schema, String table, boolean refresh);
-    record Description(Table table, String ddl, List<String> warnings) { }
+    Description describe(String database, String schema, String type, String name, boolean refresh);
+    record Description(Table table, String definition, List<String> warnings) { }
 }

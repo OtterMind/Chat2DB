@@ -130,14 +130,14 @@ class AgentDatabaseServiceImplTest {
     @Test
     void schemaKeepsStructuredColumnsWhenDdlIsUnavailable() {
         Fixture f = new Fixture();
-        var result = f.service.describeTables(new Describe("7", "app", null, List.of("samples"), null));
+        var result = f.service.describeObjects(new Describe("7", "app", null, List.of(new ObjectRef("TABLE", "samples")), null));
         assertTrue(result.ok());
-        var detail = (AgentDatabaseResult.TableDetail) ((List<?>) result.data()).get(0);
+        var detail = (AgentDatabaseResult.ObjectDetail) ((List<?>) result.data()).get(0);
         assertEquals("id", detail.columns().get(0).name());
         assertEquals(false, detail.columns().get(0).nullable());
         assertEquals(true, detail.columns().get(0).primaryKey());
         assertEquals(1, result.warnings().size());
-        assertThrows(AgentDatabaseException.class, () -> f.service.describeTables(new Describe("7", "app", null, List.of("samples", "samples"), null)));
+        assertThrows(AgentDatabaseException.class, () -> f.service.describeObjects(new Describe("7", "app", null, List.of(new ObjectRef("TABLE", "samples"), new ObjectRef("TABLE", "samples")), null)));
     }
 
     @Test
@@ -170,6 +170,26 @@ class AgentDatabaseServiceImplTest {
         assertThrows(AgentDatabaseException.class, () -> f.service.listTables(new Tables("7", "app", "tenant_one", null, "%", "order%", 1, 50, null)));
     }
 
+    @Test
+    void objectDefinitionsRequireFullScopeAndAllowSameNameWithDifferentTypes() {
+        Fixture f = new Fixture(); f.schemas = true;
+        var objects = List.of(new ObjectRef("TABLE", "samples"), new ObjectRef("FUNCTION", "samples"));
+        assertEquals("dataSourceId", failure(() -> f.service.describeObjects(new Describe(null, "app", "public", objects, null))).field());
+        assertEquals("database", failure(() -> f.service.describeObjects(new Describe("7", null, "public", objects, null))).field());
+        assertEquals("schema", failure(() -> f.service.describeObjects(new Describe("7", "app", null, objects, null))).field());
+        assertNull(f.metadataArgs);
+        var result = f.service.describeObjects(new Describe("8", "other_db", "tenant_two", objects, true));
+        assertEquals(new AgentDatabaseResult.Scope("8", "SQLITE", "other_db", "tenant_two"), result.scope());
+        assertEquals(List.of("TABLE", "FUNCTION"), result.data().stream().map(AgentDatabaseResult.ObjectDetail::type).toList());
+        assertEquals("definition of FUNCTION", result.data().get(1).definition());
+        assertNull(result.data().get(1).columns());
+        assertEquals(List.of("other_db", "tenant_two", "FUNCTION", "samples", true), Arrays.asList(f.metadataArgs));
+        assertSame(f.previous, f.current);
+        for (var invalid : Arrays.asList(new ObjectRef(null, "x"), new ObjectRef("SEQUENCE", "x"), new ObjectRef("VIEW", " "), null)) {
+            assertEquals("objects", failure(() -> f.service.describeObjects(new Describe("7", "app", "public", Collections.singletonList(invalid), null))).field());
+        }
+    }
+
     private static AgentDatabaseException failure(java.util.function.Supplier<AgentDatabaseResult<?>> operation) {
         return assertThrows(AgentDatabaseException.class, operation::get);
     }
@@ -189,7 +209,11 @@ class AgentDatabaseServiceImplTest {
             response.setHeaderList(List.of(Header.builder().name("id").columnType("INTEGER").build()));
             IDbConnectionContextService connection = proxy(IDbConnectionContextService.class, (method, args) -> switch (method) {
                 case "currentProfileSnapshot" -> current;
-                case "buildProfile" -> { var p = new ConnectionProfile(); p.setDataSourceId(7L); p.setDbType("SQLITE"); p.setDatabaseName("app"); yield p; }
+                case "buildProfile" -> {
+                    var request = (ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest) args[0];
+                    var p = new ConnectionProfile(); p.setDataSourceId(request.getDataSourceId()); p.setDbType("SQLITE");
+                    p.setDatabaseName(request.getDatabaseName()); p.setSchemaName(request.getSchemaName()); yield p;
+                }
                 case "bindProfile" -> { current = (ConnectionProfile) args[0]; binds++; yield null; }
                 case "clear" -> { current = null; yield null; }
                 case "supportDatabase" -> true;
@@ -199,9 +223,14 @@ class AgentDatabaseServiceImplTest {
             });
             AgentMetadataService metadata = proxy(AgentMetadataService.class, (method, args) -> switch (method) {
                 case "tables" -> { metadataArgs = args; yield metadataTables; }
-                case "describe" -> new AgentMetadataService.Description(Table.builder().name("samples")
-                        .columnList(List.of(TableColumn.builder().name("id").columnType("INTEGER").nullable(0).primaryKey(true).build())).build(),
-                        null, List.of("DDL unsupported"));
+                case "describe" -> {
+                    metadataArgs = args;
+                    yield args[2].equals("TABLE") || args[2].equals("VIEW")
+                            ? new AgentMetadataService.Description(Table.builder().name("samples")
+                                .columnList(List.of(TableColumn.builder().name("id").columnType("INTEGER").nullable(0).primaryKey(true).build()))
+                                .indexList(List.of()).foreignKeyList(List.of()).build(), null, List.of("DDL unsupported"))
+                            : new AgentMetadataService.Description(null, "definition of " + args[2], List.of());
+                }
                 default -> List.of();
             });
             IDbDlTemplateService executor = proxy(IDbDlTemplateService.class, (method, args) -> { executed = (DbDlExecuteRequest) args[0]; return List.of(response); });

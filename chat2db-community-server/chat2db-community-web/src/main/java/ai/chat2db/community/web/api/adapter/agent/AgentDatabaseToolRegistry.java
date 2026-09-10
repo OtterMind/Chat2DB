@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest.*;
+import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
 import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
 import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
@@ -45,15 +46,23 @@ public class AgentDatabaseToolRegistry {
         var columnFields = metadataFields();
         columnFields.put("tablePattern", pattern("Limit matching tables, e.g. order% or an exact table name with wildcard characters escaped."));
         columnFields.put("columnPattern", pattern("Find columns by name, e.g. %email% or customer\\_id. Use this before fetching full schemas across many tables."));
-        add("db_search_columns", "Search column metadata with JDBC schemaPattern/tablePattern/columnPattern. Returns only matching columns with database, schema and table identity, types, nullability and comments. Use narrow patterns to locate relevant tables; then call db_describe_tables with exact names for full keys and DDL. database is an exact catalog name.",
+        add("db_search_columns", "Search column metadata with JDBC schemaPattern/tablePattern/columnPattern. Returns only matching columns with database, schema and table identity, types, nullability and comments. Use narrow patterns to locate relevant tables; then call db_describe_objects with the exact name and TABLE or VIEW type for full structure and definition. database is an exact catalog name.",
                 "Find relevant columns without loading full schemas.", List.of("Prefer db_search_columns with columnPattern when the task identifies a field but not a table. Copy the returned database/schema/table into follow-up calls."),
                 metadataPaged(columnFields), List.of("dataSourceId"), Columns.class, service::listColumns);
         var describeFields = scopeFields();
-        describeFields.put("refresh", refresh()); describeFields.put("tables", Map.of("type", "array", "items", text("Exact unqualified table name from db_search_tables.", 256), "minItems", 1, "maxItems", 10, "uniqueItems", true,
-                "description", "1 to 10 exact table names in the supplied scope, e.g. [\"orders\", \"customers\"]."));
-        add("db_describe_tables", "Inspect up to 10 tables. Always returns structured columns with types, nullability, keys and indexes when available; DDL and foreign keys are supplemental. warnings report unavailable metadata. Do not infer column names from the table name alone.",
-                "Read structured table schemas and relationships.", List.of("Use returned column names and databaseType to generate dialect-correct SQL."),
-                describeFields, List.of("dataSourceId", "tables"), Describe.class, service::describeTables);
+        describeFields.put("refresh", refresh());
+        var object = Map.of("type", "object", "properties", Map.of(
+                "type", Map.of("type", "string", "enum", AgentDatabaseRequest.OBJECT_TYPES, "description", "Exact object kind: TABLE, VIEW, FUNCTION, PROCEDURE or TRIGGER."),
+                "name", text("Exact unqualified object name within the supplied datasource/database/schema. The name is literal, including any % or _ characters.", 256)),
+                "required", List.of("type", "name"), "additionalProperties", false);
+        describeFields.put("objects", Map.of("type", "array", "items", object, "minItems", 1, "maxItems", 10, "uniqueItems", true,
+                "description", "1 to 10 exact type/name pairs sharing the top-level dataSourceId, database and schema, e.g. [{\"type\":\"VIEW\",\"name\":\"active_users\"}]. Use separate requests for different scopes."));
+        add("db_describe_objects", "Read definitions for TABLE, VIEW, FUNCTION, PROCEDURE or TRIGGER objects in an explicit datasource/database/schema scope. Object identity is the full scope plus type and name; never use UI selection. Tables and views also return structured columns; tables include available keys/indexes. definition contains database-provided CREATE DDL, source/query body or an implementation reference, depending on the driver; it is not guaranteed to be directly executable. warnings explain unavailable metadata. Function/procedure/trigger support depends on the database driver.",
+                "Read database object definitions and structured table/view schemas.", List.of(
+                        "Find tables/views through db_search_tables and preserve their exact datasource, database and schema; use TABLE or VIEW as appropriate.",
+                        "For functions, procedures and triggers use exact names supplied by the user or discovered with read-only catalog SQL through db_query. Do not invent object names.",
+                        "Use returned column names and databaseType to generate dialect-correct SQL; inspect definition and warnings before treating it as executable DDL."),
+                describeFields, List.of("dataSourceId", "objects"), Describe.class, service::describeObjects);
         var queryFields = scopeFields(); queryFields.put("sql", text("One SELECT, SHOW or DESCRIBE statement; no writes or multiple statements. Use ORDER BY for stable pagination.", 32768));
         add("db_query", "Execute one SELECT, SHOW or DESCRIBE statement in an explicit scope. Writes are not supported. page defaults to 1; pageSize defaults to 50, maximum 200. Rows are arrays aligned with columns; values use database text, SQL NULL is JSON null. No 50-row preview or cell shortening is applied. hasMore/nextAction indicate another page; each page reruns the SQL, so results may change if data changes. Inspect schema before querying unknown tables.",
                 "Query data with typed column metadata and explicit pagination.", List.of("Check ok before using data. On error follow error.field and nextAction; never treat an error as an empty result.",
@@ -89,7 +98,7 @@ public class AgentDatabaseToolRegistry {
                 retry.put("page", 1);
                 boolean pageable = name.equals("db_query") || name.startsWith("db_search_");
                 return AgentDatabaseResult.failure("RESULT_TOO_LARGE", null,
-                        "Result exceeds 512 KiB. Request fewer rows/columns or describe fewer tables; for a single large value use an explicit SQL substring. No partial result was returned. Changing pageSize restarts pagination at page 1.",
+                        "Result exceeds 512 KiB. Request fewer rows/columns or describe fewer objects; for a single large value use an explicit SQL substring. No partial result was returned. Changing pageSize restarts pagination at page 1.",
                         pageable && size > 1 ? new AgentDatabaseResult.NextAction(name, retry) : null);
             }
         } catch (Exception error) {

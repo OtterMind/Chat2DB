@@ -28,8 +28,8 @@ public record AgentDatabaseResult<T>(boolean ok, Scope scope, T data, Page page,
     public record Index(String name, Boolean unique, List<String> columns) { }
     public record ForeignKey(String name, String column, String referencedDatabase, String referencedSchema,
                              String referencedTable, String referencedColumn, int sequence) { }
-    public record TableDetail(String name, String comment, List<Column> columns, List<Index> indexes,
-                              List<ForeignKey> foreignKeys, String ddl) { }
+    public record ObjectDetail(String name, String type, String comment, List<Column> columns, List<Index> indexes,
+                               List<ForeignKey> foreignKeys, String definition) { }
     public record QueryColumn(String name, String type) { }
     public record CellWarning(int row, int column, String reason, Long originalCharacters, Long returnedCharacters) { }
     // Values retain their database text representation to preserve decimal precision, timestamps and SQL NULL.

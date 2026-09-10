@@ -132,38 +132,47 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<List<TableDetail>> describeTables(AgentDatabaseRequest.Describe request) {
-        if (request.tables() == null || request.tables().isEmpty() || request.tables().size() > 10) {
-            throw invalid("tables", "Provide 1 to 10 exact table names returned by db_search_tables.", null);
+    public AgentDatabaseResult<List<ObjectDetail>> describeObjects(AgentDatabaseRequest.Describe request) {
+        if (request.objects() == null || request.objects().isEmpty() || request.objects().size() > 10) {
+            throw invalid("objects", "Provide 1 to 10 objects with an exact name and type.", null);
         }
-        if (new HashSet<>(request.tables()).size() != request.tables().size()) {
-            throw invalid("tables", "Table names must be unique.", null);
+        if (new HashSet<>(request.objects()).size() != request.objects().size()) {
+            throw invalid("objects", "Each object type/name pair must be unique.", null);
         }
-        request.tables().forEach(name -> {
-            required(name, "tables", null);
-            if (name.length() > 256) throw invalid("tables", "Table names must not exceed 256 characters.", null);
-        });
+        for (var object : request.objects()) {
+            if (object == null || object.type() == null || !AgentDatabaseRequest.OBJECT_TYPES.contains(object.type())) {
+                throw invalid("objects", "Object type must be one of: " + String.join(", ", AgentDatabaseRequest.OBJECT_TYPES), null);
+            }
+            required(object.name(), "objects", null);
+            if (object.name().length() > 256) throw invalid("objects", "Object names must not exceed 256 characters.", null);
+        }
         return scoped(request.scope(), true, profile -> {
-            var details = new ArrayList<TableDetail>();
+            var details = new ArrayList<ObjectDetail>();
             var warnings = new ArrayList<String>();
-            for (String name : request.tables()) {
-                AgentMetadataService.Description description = metadata.describe(profile.getDatabaseName(), profile.getSchemaName(), name, Boolean.TRUE.equals(request.refresh()));
+            for (var object : request.objects()) {
+                AgentMetadataService.Description description;
+                try {
+                    description = metadata.describe(profile.getDatabaseName(), profile.getSchemaName(), object.type(), object.name(), Boolean.TRUE.equals(request.refresh()));
+                } catch (AgentDatabaseException error) {
+                    if (error.nextAction() == null && ("OBJECT_NOT_FOUND".equals(error.code()) || "OBJECT_TYPE_MISMATCH".equals(error.code()))) {
+                        var args = scopeArguments(profile); args.put("tablePattern", AgentMetadataPattern.literal(object.name()));
+                        throw new AgentDatabaseException(error.code(), error.field(), error.getMessage(), next("db_search_tables", args), error);
+                    }
+                    throw error;
+                }
                 Table table = description.table();
                 warnings.addAll(description.warnings());
-                if (table == null || table.getColumnList() == null || table.getColumnList().isEmpty()) {
-                    throw new AgentDatabaseException("TABLE_NOT_FOUND", "tables", "Table metadata not found: " + name,
-                            next("db_search_tables", scopeArguments(profile)));
-                }
-                var columns = table.getColumnList().stream().map(c -> new Column(c.getName(), c.getColumnType(),
+                var columns = table == null ? null : table.getColumnList().stream().map(c -> new Column(c.getName(), c.getColumnType(),
                         c.getDataType(), c.getNullable() == null || c.getNullable() == 2 ? null : c.getNullable() == 1,
                         c.getDefaultValue(), c.getComment(), c.getPrimaryKey(), c.getGeneratedColumn())).toList();
-                var indexes = table.getIndexList() == null ? List.<Index>of() : table.getIndexList().stream()
+                var indexes = table == null ? null : table.getIndexList().stream()
                         .map(index -> new Index(index.getName(), index.getUnique(), index.getColumnList() == null ? List.of()
                                 : index.getColumnList().stream().map(column -> column.getColumnName()).toList())).toList();
-                var foreignKeys = table.getForeignKeyList() == null ? List.<ForeignKey>of() : table.getForeignKeyList().stream()
+                var foreignKeys = table == null ? null : table.getForeignKeyList().stream()
                         .map(fk -> new ForeignKey(fk.getFkName(), fk.getFkColumnName(), fk.getPkTableCat(), fk.getPkTableSchem(),
                                 fk.getPkTableName(), fk.getPkColumnName(), fk.getKeySeq())).toList();
-                details.add(new TableDetail(name, table.getComment(), columns, indexes, foreignKeys, description.ddl()));
+                details.add(new ObjectDetail(object.name(), object.type(), table == null ? null : table.getComment(),
+                        columns, indexes, foreignKeys, description.definition()));
             }
             return AgentDatabaseResult.success(scope(profile), details, null, null, warnings);
         });

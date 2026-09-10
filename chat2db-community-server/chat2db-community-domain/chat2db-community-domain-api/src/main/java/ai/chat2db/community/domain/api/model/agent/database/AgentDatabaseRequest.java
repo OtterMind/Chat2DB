@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.api.model.agent.database;
 import java.util.List;
 
 public final class AgentDatabaseRequest {
+    public static final List<String> OBJECT_TYPES = List.of("TABLE", "VIEW", "FUNCTION", "PROCEDURE", "TRIGGER");
     private AgentDatabaseRequest() { }
     public record Sources(String search, Integer page, Integer pageSize) { }
     public record Scope(String dataSourceId, String database, String schema) { }
@@ -15,7 +16,8 @@ public final class AgentDatabaseRequest {
                           String tablePattern, String columnPattern, Integer page, Integer pageSize, Boolean refresh) {
         public Scope scope() { return new Scope(dataSourceId, database, schema); }
     }
-    public record Describe(String dataSourceId, String database, String schema, List<String> tables, Boolean refresh) {
+    public record ObjectRef(String type, String name) { }
+    public record Describe(String dataSourceId, String database, String schema, List<ObjectRef> objects, Boolean refresh) {
         public Scope scope() { return new Scope(dataSourceId, database, schema); }
     }
     public record Query(String dataSourceId, String database, String schema, String sql, Integer page, Integer pageSize) {
