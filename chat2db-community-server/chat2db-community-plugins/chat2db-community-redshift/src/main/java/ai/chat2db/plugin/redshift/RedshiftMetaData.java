@@ -1,8 +1,10 @@
 package ai.chat2db.plugin.redshift;
 
 import ai.chat2db.plugin.postgresql.PostgreSQLMetaData;
+import ai.chat2db.plugin.redshift.builder.RedshiftSqlBuilder;
 import ai.chat2db.plugin.redshift.identifier.RedshiftIdentifierProcessor;
 import ai.chat2db.spi.IDbMetaData;
+import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.community.domain.api.model.metadata.Function;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
@@ -24,6 +26,13 @@ public class RedshiftMetaData extends PostgreSQLMetaData implements IDbMetaData 
     @Override
     public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
         return RedshiftIdentifierProcessor.INSTANCE;
+    }
+
+    @Override
+    public ISqlBuilder getSqlBuilder() {
+        // Redshift rejects the PostgreSQL LC_CTYPE/LC_COLLATE clauses (and the
+        // dangling WITH the base prepends); use the Redshift builder.
+        return new RedshiftSqlBuilder();
     }
 
     @Override
