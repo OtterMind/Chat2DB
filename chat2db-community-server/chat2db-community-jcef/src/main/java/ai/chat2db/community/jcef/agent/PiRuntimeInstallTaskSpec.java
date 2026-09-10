@@ -1,9 +1,9 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 
 public class PiRuntimeInstallTaskSpec extends ImportTaskSpec {
 

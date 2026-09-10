@@ -1,13 +1,10 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
@@ -17,6 +14,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

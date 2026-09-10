@@ -1,25 +1,22 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeDescriptor;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
+import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
 import ai.chat2db.community.tools.util.AgentTrace;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +24,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AgentServiceImpl implements AgentService {
@@ -82,7 +81,7 @@ public class AgentServiceImpl implements AgentService {
                 需要审批时等待用户确认；工具不可用或执行失败时如实说明。
                 """,
                 command.runtimeType(), command.modelConfigId(), 1);
-        AgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
+        IAgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());
         AgentTrace.record("session.environment", null, null,
                 java.util.Map.of("runtime", command.runtimeType(), "status", environment.status()));
@@ -176,7 +175,7 @@ public class AgentServiceImpl implements AgentService {
         }
         handleRegistry.close(sessionId);
         runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
-                new ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionDeleteRequest(
+                new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest(
                         session.id(), session.runtimeBinding()));
         sessionStorage.delete(sessionId, userId);
     }

@@ -1,5 +1,7 @@
 package ai.chat2db.community.domain.api.model.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import java.time.LocalDateTime;
 import java.util.Objects;
 

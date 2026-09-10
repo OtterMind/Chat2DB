@@ -1,9 +1,9 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import org.springframework.stereotype.Component;
 
 @Component

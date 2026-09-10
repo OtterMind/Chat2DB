@@ -1,24 +1,23 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentQuestion;
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.domain.api.model.agent.interaction.AgentQuestion;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import ai.chat2db.community.tools.util.AgentTrace;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AiAgentQuestionServiceImpl implements IAiAgentQuestionService {
     private final Map<String, Pending> pending = new ConcurrentHashMap<>();
 
     @Override
-    public AgentQuestion.Answer awaitAnswer(AgentQuestion question, Long userId, AgentRuntimeEventSink sink, BooleanSupplier active) {
+    public AgentQuestion.Answer awaitAnswer(AgentQuestion question, Long userId, IAgentRuntimeEventSink sink, BooleanSupplier active) {
         validate(question.request());
         Pending item = new Pending(question, userId, sink, active);
         if (pending.putIfAbsent(question.sessionId(), item) != null) {
@@ -120,9 +119,9 @@ public class AiAgentQuestionServiceImpl implements IAiAgentQuestionService {
         item.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), question.sessionId(), question.runId(), type, payload, LocalDateTime.now()));
     }
 
-    private record Pending(AgentQuestion question, Long userId, AgentRuntimeEventSink sink, BooleanSupplier active,
+    private record Pending(AgentQuestion question, Long userId, IAgentRuntimeEventSink sink, BooleanSupplier active,
                            CompletableFuture<AgentQuestion.Answer> answer) {
-        Pending(AgentQuestion question, Long userId, AgentRuntimeEventSink sink, BooleanSupplier active) {
+        Pending(AgentQuestion question, Long userId, IAgentRuntimeEventSink sink, BooleanSupplier active) {
             this(question, userId, sink, active, new CompletableFuture<>());
         }
     }

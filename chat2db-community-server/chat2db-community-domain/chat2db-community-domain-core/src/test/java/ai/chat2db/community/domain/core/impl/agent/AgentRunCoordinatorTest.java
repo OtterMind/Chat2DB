@@ -1,21 +1,26 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

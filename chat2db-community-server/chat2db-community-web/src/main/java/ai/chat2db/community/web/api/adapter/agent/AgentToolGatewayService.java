@@ -1,18 +1,25 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolCategory;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
-import ai.chat2db.community.domain.api.model.agent.runtime.IAgentToolResult;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.service.agent.*;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.tool.IAgentToolResult;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import ai.chat2db.community.tools.model.Context;
-import ai.chat2db.community.tools.util.ContextUtils;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
 import ai.chat2db.community.tools.util.AgentTrace;
+import ai.chat2db.community.tools.util.ContextUtils;
+import ai.chat2db.community.tools.util.agent.AgentNativeTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -20,6 +27,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AgentToolGatewayService implements AgentToolAccessService {
@@ -47,7 +56,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     }
 
     @Override
-    public AgentToolAccess issue(String sessionId, AgentRuntimeEventSink eventSink) {
+    public AgentToolAccess issue(String sessionId, IAgentRuntimeEventSink eventSink) {
         Long userId = identity.currentUserId();
         if (sessions.get(sessionId, userId) == null) throw new IllegalArgumentException("Agent session does not exist");
         Context context = Objects.requireNonNull(ContextUtils.queryThreadContext(), "Agent request context is unavailable");
@@ -77,13 +86,13 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     public List<AgentToolState> listTools() {
         List<AgentToolState> catalog = new ArrayList<>();
         tools.definitions().forEach(tool -> catalog.add(new AgentToolState(tool.name(), tool.description(),
-                AgentToolState.Category.DATABASE, AgentToolState.Status.ENABLED)));
+                AgentToolCategory.DATABASE, AgentToolStatus.ENABLED)));
         catalog.add(new AgentToolState(AgentQuestionTool.NAME, questionTool.definition().description(),
-                AgentToolState.Category.INTERACTION, AgentToolState.Status.ENABLED));
+                AgentToolCategory.INTERACTION, AgentToolStatus.ENABLED));
         for (String name : AgentNativeTools.currentPlatform()) {
-            AgentToolState.Status status = workspaces.isEmpty() ? AgentToolState.Status.UNAVAILABLE
-                    : nativeToolEnabled(name) ? AgentToolState.Status.ENABLED : AgentToolState.Status.DISABLED;
-            catalog.add(new AgentToolState(name, name, AgentToolState.Category.BUILTIN, status));
+            AgentToolStatus status = workspaces.isEmpty() ? AgentToolStatus.UNAVAILABLE
+                    : nativeToolEnabled(name) ? AgentToolStatus.ENABLED : AgentToolStatus.DISABLED;
+            catalog.add(new AgentToolState(name, name, AgentToolCategory.BUILTIN, status));
         }
         return List.copyOf(catalog);
     }
@@ -237,11 +246,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         final String sessionId;
         final Long userId;
         final Context context;
-        final AgentRuntimeEventSink sink;
+        final IAgentRuntimeEventSink sink;
         final Instant expiresAt = Instant.now().plusSeconds(7200);
         final Map<String, Execution> executions = new ConcurrentHashMap<>();
         final Map<String, NativePreparation> nativePreparations = new ConcurrentHashMap<>();
-        Access(String sessionId, Long userId, Context context, AgentRuntimeEventSink sink) {
+        Access(String sessionId, Long userId, Context context, IAgentRuntimeEventSink sink) {
             this.sessionId = sessionId;
             this.userId = userId;
             this.context = context;

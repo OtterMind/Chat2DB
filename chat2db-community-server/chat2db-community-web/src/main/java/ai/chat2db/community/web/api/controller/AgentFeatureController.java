@@ -1,26 +1,25 @@
 package ai.chat2db.community.web.api.controller;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeFeatureState;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeEnableResult;
-import ai.chat2db.community.domain.api.model.agent.AgentFeature;
-import ai.chat2db.community.domain.api.model.agent.AgentFeatureState;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentFeatureState;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeEnableResult;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
 import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.tools.enums.agent.AgentFeature;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
 import ai.chat2db.community.web.api.model.request.agent.AgentRuntimeEnableRequest;
 import jakarta.validation.Valid;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v3/ai/features")

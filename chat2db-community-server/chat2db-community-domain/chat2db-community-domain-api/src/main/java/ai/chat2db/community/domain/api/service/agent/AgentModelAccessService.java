@@ -1,7 +1,7 @@
 package ai.chat2db.community.domain.api.service.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 
 public interface AgentModelAccessService {
 

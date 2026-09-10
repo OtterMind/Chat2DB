@@ -1,21 +1,19 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
-import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
+import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -23,6 +21,7 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;

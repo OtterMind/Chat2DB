@@ -1,26 +1,25 @@
 package ai.chat2db.community.web.api.controller;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.interaction.AgentQuestion;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalStorage;
-import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
-import ai.chat2db.community.tools.wrapper.result.ListResult;
-import ai.chat2db.community.domain.api.service.sys.IIdentityService;
-import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
-import ai.chat2db.community.domain.api.model.agent.runtime.IAgentToolResult;
-import ai.chat2db.community.domain.api.model.agent.AgentQuestion;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
+import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.tools.agent.tool.IAgentToolResult;
+import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
+import ai.chat2db.community.tools.wrapper.result.ListResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v3/ai")
@@ -54,7 +53,7 @@ public class AgentToolGatewayController {
     }
 
     @PostMapping("/agent-tools/prepare-native")
-    public ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings prepareNative(
+    public ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings prepareNative(
             @RequestHeader("Authorization") String authorization, @RequestBody @Valid ToolRequest body,
             HttpServletRequest request) throws Exception {
         return gateway.prepareNative(ticket(authorization), request.getRemoteAddr(),

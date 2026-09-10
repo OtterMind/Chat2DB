@@ -1,7 +1,6 @@
 package ai.chat2db.community.domain.api.model.request.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
-
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import java.util.Objects;
 
 public record AgentRunStartCommand(

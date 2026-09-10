@@ -1,6 +1,6 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

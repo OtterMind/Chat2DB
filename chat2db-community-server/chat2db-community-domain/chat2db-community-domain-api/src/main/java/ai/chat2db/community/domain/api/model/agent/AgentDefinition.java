@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.model.agent;
 
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import java.util.Objects;
 
 public record AgentDefinition(

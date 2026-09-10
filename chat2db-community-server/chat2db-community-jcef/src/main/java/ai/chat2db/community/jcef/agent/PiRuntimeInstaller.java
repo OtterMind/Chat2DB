@@ -1,13 +1,9 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,6 +27,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
 public class PiRuntimeInstaller implements PiRuntimeInstallation {
 

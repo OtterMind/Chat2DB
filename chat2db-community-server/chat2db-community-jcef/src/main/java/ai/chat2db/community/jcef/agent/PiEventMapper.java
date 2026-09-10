@@ -1,11 +1,10 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Map;

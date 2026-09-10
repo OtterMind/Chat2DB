@@ -1,5 +1,6 @@
 package ai.chat2db.community.jcef.agent;
 
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -8,7 +9,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
 
 public class PiProcessSupervisor implements AutoCloseable {
 

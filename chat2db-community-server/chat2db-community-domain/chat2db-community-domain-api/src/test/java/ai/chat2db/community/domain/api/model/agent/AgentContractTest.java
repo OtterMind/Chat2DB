@@ -1,17 +1,23 @@
 package ai.chat2db.community.domain.api.model.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapabilities;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapability;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeCapability;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCapabilities;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

@@ -1,6 +1,6 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
 import java.util.regex.Pattern;
 
 final class AgentMetadataPattern {

@@ -1,16 +1,15 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeHealth;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSnapshot;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeHealth;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSnapshot;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -67,7 +66,7 @@ class AgentRuntimeHandleRegistryTest {
         assertTrue(rejected.closed);
     }
 
-    private static final class RecordingHandle implements AgentRuntimeSessionHandle {
+    private static final class RecordingHandle implements IAgentRuntimeSessionHandle {
 
         private final AgentRuntimeSessionRef session;
         private boolean closed;

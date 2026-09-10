@@ -1,22 +1,21 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapabilities;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapability;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeDescriptor;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionOpenRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionResumeRequest;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeCapability;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCapabilities;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
-public class PiAgentRuntimeAdapter implements AgentRuntimeAdapter {
+public class PiAgentRuntimeAdapter implements IAgentRuntimeAdapter {
 
     private final AgentRuntimeDescriptor descriptor;
     private final PiRuntimeEnvironmentChecker environmentChecker;
@@ -58,24 +57,24 @@ public class PiAgentRuntimeAdapter implements AgentRuntimeAdapter {
         }
         return new AgentRuntimeEnvironmentReport(
                 AgentRuntimeType.PI,
-                ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus.BLOCKED,
+                ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus.BLOCKED,
                 report.runtimeVersion(), report.operatingSystem(), report.architecture(), report.checks(),
                 java.util.Map.of("reason", "Pi Beta is disabled"), report.checkedAt());
     }
 
     @Override
-    public AgentRuntimeSessionHandle openSession(
+    public IAgentRuntimeSessionHandle openSession(
             AgentRuntimeSessionOpenRequest request,
-            AgentRuntimeEventSink eventSink) {
+            IAgentRuntimeEventSink eventSink) {
         requireEnabled();
         return sessionLauncher.launch(
                 request.sessionId(), request.externalSessionId(), null, request.systemPrompt(), request.model(), eventSink);
     }
 
     @Override
-    public AgentRuntimeSessionHandle resumeSession(
+    public IAgentRuntimeSessionHandle resumeSession(
             AgentRuntimeSessionResumeRequest request,
-            AgentRuntimeEventSink eventSink) {
+            IAgentRuntimeEventSink eventSink) {
         requireEnabled();
         return sessionLauncher.launch(
                 request.sessionId(), request.binding().externalSessionId(),

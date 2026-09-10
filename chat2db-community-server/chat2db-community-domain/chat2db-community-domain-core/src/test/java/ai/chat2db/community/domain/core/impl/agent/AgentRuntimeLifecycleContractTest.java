@@ -1,25 +1,24 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeHealth;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionOpenRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionResumeRequest;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeHealth;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,7 +29,7 @@ class AgentRuntimeLifecycleContractTest {
     void opensRunsCancelsAndSnapshotsWithoutProductEventSequences() {
         FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
         List<AgentRuntimeEvent> events = new ArrayList<>();
-        AgentRuntimeSessionHandle handle = adapter.openSession(
+        IAgentRuntimeSessionHandle handle = adapter.openSession(
                 new AgentRuntimeSessionOpenRequest("session", "external-session", null, model()),
                 events::add);
 
@@ -65,7 +64,7 @@ class AgentRuntimeLifecycleContractTest {
         AgentRuntimeBinding binding = new AgentRuntimeBinding(
                 AgentRuntimeType.PI, "1.0.0", "fake-v1", "external-session", "resume-ref", 1);
 
-        AgentRuntimeSessionHandle handle = adapter.resumeSession(
+        IAgentRuntimeSessionHandle handle = adapter.resumeSession(
                 new AgentRuntimeSessionResumeRequest("session", binding, "existing prompt", model()),
                 event -> {
                 });

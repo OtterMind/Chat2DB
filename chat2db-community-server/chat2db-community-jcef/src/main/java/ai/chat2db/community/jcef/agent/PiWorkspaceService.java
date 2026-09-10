@@ -1,11 +1,10 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
 import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceStorage;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.AgentTrace;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -71,13 +70,13 @@ public class PiWorkspaceService implements AgentWorkspaceService {
 
     @Override
     public boolean isToolEnabled(String toolName) {
-        return ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform().contains(toolName)
+        return ai.chat2db.community.tools.util.agent.AgentNativeTools.currentPlatform().contains(toolName)
                 && storage.isToolEnabled(toolName);
     }
 
     @Override
     public void setToolEnabled(String toolName, boolean enabled) {
-        if (!ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform().contains(toolName)) {
+        if (!ai.chat2db.community.tools.util.agent.AgentNativeTools.currentPlatform().contains(toolName)) {
             throw new IllegalArgumentException("Tool is unavailable on this platform");
         }
         storage.setToolEnabled(toolName, enabled);

@@ -1,10 +1,9 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;

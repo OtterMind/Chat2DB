@@ -1,16 +1,25 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolCategory;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.service.agent.*;
-
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.model.Context;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.util.ContextUtils;
-import org.junit.jupiter.api.Test;
+import ai.chat2db.community.tools.util.agent.AgentNativeTools;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentNativeToolApprovalTest {
@@ -46,7 +55,7 @@ class AgentNativeToolApprovalTest {
         AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
         var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database), new AgentQuestionTool(null),
                 sessions, runs, () -> 1L, approvals, List.of(workspace), 11847);
-        var events = new ArrayList<ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent>();
+        var events = new ArrayList<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent>();
         try {
             ContextUtils.setContext(new Context());
             var access = gateway.issue("session", events::add);
@@ -55,8 +64,8 @@ class AgentNativeToolApprovalTest {
             assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "disabled", "read", Map.of("path", "a.csv")));
             enabledTools.addAll(AgentNativeTools.currentPlatform());
             assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").containsAll(AgentNativeTools.currentPlatform()));
-            assertEquals(7, gateway.listTools().stream().filter(t -> t.category() == AgentToolState.Category.BUILTIN
-                    && t.status() == AgentToolState.Status.ENABLED).count());
+            assertEquals(7, gateway.listTools().stream().filter(t -> t.category() == AgentToolCategory.BUILTIN
+                    && t.status() == AgentToolStatus.ENABLED).count());
             assertEquals("/first", gateway.prepareNative(access.ticket(), "127.0.0.1", "read", "read", Map.of("path", "a.csv")).workingDirectory());
             assertEquals(0, decisions.get());
             var prepared = gateway.prepareNative(access.ticket(), "127.0.0.1", "shell", shell, Map.of("command", "pwd"));

@@ -1,31 +1,28 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
 import ai.chat2db.community.domain.api.model.agent.AgentFailure;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.AgentUsage;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.domain.api.model.agent.AgentUsage;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
-import org.springframework.stereotype.Component;
-import ai.chat2db.community.tools.util.AgentTrace;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.util.AgentTrace;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -34,6 +31,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 @Component
 public class AgentRunCoordinator {
@@ -121,7 +120,7 @@ public class AgentRunCoordinator {
         AgentRuntimeRunRequest runtimeRequest = new AgentRuntimeRunRequest(
                 session.id(), runId, model, command.input(), command.idempotencyKey());
         try {
-            AgentRuntimeSessionHandle handle = handle(session, command, model);
+            IAgentRuntimeSessionHandle handle = handle(session, command, model);
             return handle.startRun(runtimeRequest).handle((reference, error) -> {
                 synchronized (this) {
                     if (error != null) {
@@ -143,7 +142,7 @@ public class AgentRunCoordinator {
                 && run.status() != AgentRunStatus.WAITING_APPROVAL) {
             return java.util.concurrent.CompletableFuture.completedFuture(run);
         }
-        AgentRuntimeSessionHandle handle = handleRegistry.get(command.sessionId());
+        IAgentRuntimeSessionHandle handle = handleRegistry.get(command.sessionId());
         if (handle == null) {
             throw new IllegalStateException("Agent runtime session is not active: " + command.sessionId());
         }
@@ -160,9 +159,9 @@ public class AgentRunCoordinator {
                 .thenApply(ignored -> requireRun(command.sessionId(), command.runId(), command.userId()));
     }
 
-    private AgentRuntimeSessionHandle handle(
+    private IAgentRuntimeSessionHandle handle(
             AgentSession session, AgentRunStartCommand command, AgentModelSnapshot model) {
-        AgentRuntimeSessionHandle existing = handleRegistry.get(session.id());
+        IAgentRuntimeSessionHandle existing = handleRegistry.get(session.id());
         if (existing != null) {
             return existing;
         }
@@ -171,8 +170,8 @@ public class AgentRunCoordinator {
             return other != null && (other.status() == AgentSessionStatus.READY
                     || other.status() == AgentSessionStatus.FAILED || other.status() == AgentSessionStatus.UNKNOWN);
         });
-        AgentRuntimeAdapter adapter = runtimeRegistry.require(session.runtimeBinding().runtimeType());
-        AgentRuntimeSessionHandle opened = adapter.openSession(
+        IAgentRuntimeAdapter adapter = runtimeRegistry.require(session.runtimeBinding().runtimeType());
+        IAgentRuntimeSessionHandle opened = adapter.openSession(
                 new AgentRuntimeSessionOpenRequest(
                         session.id(), session.runtimeBinding().externalSessionId(),
                         session.definition().systemPrompt(), model),

@@ -3,14 +3,15 @@ package ai.chat2db.community.web.api.controller;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.domain.api.model.ai.AiSessionSummary;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
-import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.domain.api.service.ai.AiSessionFacadeService;
+import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
+import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
@@ -20,6 +21,8 @@ import ai.chat2db.community.web.api.model.request.agent.AgentSessionCreateReques
 import ai.chat2db.community.web.api.model.request.agent.AgentSessionRenameRequest;
 import ai.chat2db.community.web.api.model.response.agent.AgentEventResponse;
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.concurrent.CompletionStage;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,10 +30,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ai.chat2db.community.tools.wrapper.result.ActionResult;
-
-import java.util.List;
-import java.util.concurrent.CompletionStage;
 
 @RestController
 @RequestMapping("/api/v3/ai")

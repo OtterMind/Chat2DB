@@ -1,17 +1,16 @@
 package ai.chat2db.community.web.api.controller;
 
-import ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings;
-import ai.chat2db.community.domain.api.model.agent.AgentToolState;
-import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
+import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v3/ai/features")

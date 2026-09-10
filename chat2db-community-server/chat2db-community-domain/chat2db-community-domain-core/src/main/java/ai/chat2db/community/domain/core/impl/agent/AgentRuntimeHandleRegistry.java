@@ -1,32 +1,31 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
-import org.springframework.stereotype.Component;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.stereotype.Component;
 
 @Component
 public class AgentRuntimeHandleRegistry {
 
-    private final Map<String, AgentRuntimeSessionHandle> handles = new ConcurrentHashMap<>();
+    private final Map<String, IAgentRuntimeSessionHandle> handles = new ConcurrentHashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
-    public AgentRuntimeSessionHandle get(String sessionId) {
+    public IAgentRuntimeSessionHandle get(String sessionId) {
         return handles.get(requireSessionId(sessionId));
     }
 
-    public void register(String sessionId, AgentRuntimeSessionHandle handle) {
+    public void register(String sessionId, IAgentRuntimeSessionHandle handle) {
         String id = requireSessionId(sessionId);
         Objects.requireNonNull(handle, "handle");
         if (closed.get()) {
             handle.close();
             throw new IllegalStateException("Agent runtime handle registry is closed");
         }
-        AgentRuntimeSessionHandle existing = handles.putIfAbsent(id, handle);
+        IAgentRuntimeSessionHandle existing = handles.putIfAbsent(id, handle);
         if (existing != null) {
             handle.close();
             throw new IllegalStateException("Agent runtime session is already active: " + id);
@@ -37,7 +36,7 @@ public class AgentRuntimeHandleRegistry {
         }
     }
 
-    public boolean remove(String sessionId, AgentRuntimeSessionHandle expected) {
+    public boolean remove(String sessionId, IAgentRuntimeSessionHandle expected) {
         String id = requireSessionId(sessionId);
         Objects.requireNonNull(expected, "expected");
         if (!handles.remove(id, expected)) {
@@ -49,7 +48,7 @@ public class AgentRuntimeHandleRegistry {
 
     public boolean close(String sessionId) {
         String id = requireSessionId(sessionId);
-        AgentRuntimeSessionHandle handle = handles.remove(id);
+        IAgentRuntimeSessionHandle handle = handles.remove(id);
         if (handle == null) {
             return false;
         }
@@ -59,7 +58,7 @@ public class AgentRuntimeHandleRegistry {
 
     public void closeAll() {
         closed.set(true);
-        for (Map.Entry<String, AgentRuntimeSessionHandle> entry : new ArrayList<>(handles.entrySet())) {
+        for (Map.Entry<String, IAgentRuntimeSessionHandle> entry : new ArrayList<>(handles.entrySet())) {
             remove(entry.getKey(), entry.getValue());
         }
     }

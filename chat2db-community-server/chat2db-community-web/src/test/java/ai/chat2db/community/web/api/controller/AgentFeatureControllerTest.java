@@ -1,21 +1,20 @@
 package ai.chat2db.community.web.api.controller;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeFeatureState;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentFeatureState;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.service.agent.AgentFeatureService;
-import ai.chat2db.community.domain.api.model.agent.AgentFeature;
-import ai.chat2db.community.domain.api.model.agent.AgentFeatureState;
+import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.tools.enums.agent.AgentFeature;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
 import ai.chat2db.community.web.api.model.request.agent.AgentRuntimeEnableRequest;
-import org.junit.jupiter.api.Test;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

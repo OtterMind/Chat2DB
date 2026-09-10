@@ -1,18 +1,17 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
 import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
 import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,13 +50,13 @@ public class PiRuntimeSessionLauncher implements PiSessionLauncher {
     }
 
     @Override
-    public AgentRuntimeSessionHandle launch(
+    public IAgentRuntimeSessionHandle launch(
             String sessionId,
             String externalSessionId,
             String resumeReference,
             String systemPrompt,
             AgentModelSnapshot model,
-            AgentRuntimeEventSink eventSink) {
+            IAgentRuntimeEventSink eventSink) {
         AgentModelAccess modelAccess = modelAccessService.issue(sessionId, model);
         AgentToolAccess toolAccess = null;
         try {

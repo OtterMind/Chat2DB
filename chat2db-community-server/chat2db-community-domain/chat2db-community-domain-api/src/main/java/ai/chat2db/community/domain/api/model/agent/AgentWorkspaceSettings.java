@@ -1,3 +1,0 @@
-package ai.chat2db.community.domain.api.model.agent;
-
-public record AgentWorkspaceSettings(String workingDirectory) { }

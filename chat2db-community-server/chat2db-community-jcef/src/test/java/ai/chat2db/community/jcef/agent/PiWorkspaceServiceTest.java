@@ -2,10 +2,10 @@ package ai.chat2db.community.jcef.agent;
 
 import ai.chat2db.community.domain.api.service.agent.AgentWorkspaceStorage;
 import ai.chat2db.community.tools.exception.BusinessException;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -58,7 +58,7 @@ class PiWorkspaceServiceTest {
     void toolsStartDisabledAndRememberOnlyExplicitChoices() {
         MemorySettings storage = new MemorySettings();
         PiWorkspaceService service = new PiWorkspaceService(storage, temporaryDirectory.resolve("sessions"));
-        var tools = ai.chat2db.community.domain.api.model.agent.AgentNativeTools.currentPlatform();
+        var tools = ai.chat2db.community.tools.util.agent.AgentNativeTools.currentPlatform();
         assertTrue(tools.stream().noneMatch(service::isToolEnabled));
         service.setToolEnabled("read", true);
         assertTrue(new PiWorkspaceService(storage, temporaryDirectory).isToolEnabled("read"));

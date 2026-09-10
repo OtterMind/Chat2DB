@@ -1,6 +1,6 @@
 package ai.chat2db.community.domain.api.service.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentWorkspaceSettings;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 
 public interface AgentWorkspaceService {
     AgentWorkspaceSettings get();

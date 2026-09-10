@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.api.service.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
-
 import java.util.List;
 
 public interface AgentApprovalStorage {

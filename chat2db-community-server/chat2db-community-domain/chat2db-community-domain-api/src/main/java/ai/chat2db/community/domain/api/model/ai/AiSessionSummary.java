@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.api.model.ai;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
-
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import java.time.LocalDateTime;
 
 public record AiSessionSummary(

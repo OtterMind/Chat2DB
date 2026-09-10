@@ -1,5 +1,7 @@
 package ai.chat2db.community.domain.api.model.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import java.util.Objects;
 
 public record AgentRun(

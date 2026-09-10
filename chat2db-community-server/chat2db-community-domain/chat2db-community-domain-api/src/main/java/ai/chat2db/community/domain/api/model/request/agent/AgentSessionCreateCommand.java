@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.api.model.request.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import java.util.Objects;
 
 public record AgentSessionCreateCommand(

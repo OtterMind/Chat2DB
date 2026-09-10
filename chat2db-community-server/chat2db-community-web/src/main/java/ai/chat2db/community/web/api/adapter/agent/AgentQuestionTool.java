@@ -1,15 +1,14 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentQuestion;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
+import ai.chat2db.community.domain.api.model.agent.interaction.AgentQuestion;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import org.springframework.stereotype.Component;
-
 import java.util.*;
 import java.util.function.BooleanSupplier;
+import org.springframework.stereotype.Component;
 
 @Component
 public class AgentQuestionTool {
@@ -37,7 +36,7 @@ public class AgentQuestionTool {
     }
 
     public AgentQuestion.Result execute(String sessionId, String runId, String toolCallId, Long userId,
-            Map<String, Object> arguments, AgentRuntimeEventSink sink, BooleanSupplier active) {
+            Map<String, Object> arguments, IAgentRuntimeEventSink sink, BooleanSupplier active) {
         AgentQuestion.Request request;
         try { request = json.convertValue(arguments, AgentQuestion.Request.class); }
         catch (IllegalArgumentException error) { throw new IllegalArgumentException("Invalid askUserQuestion arguments; provide question and options containing id, label and optional description.", error); }

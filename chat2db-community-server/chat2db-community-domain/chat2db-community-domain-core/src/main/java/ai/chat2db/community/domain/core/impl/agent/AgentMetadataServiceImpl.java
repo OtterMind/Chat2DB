@@ -1,11 +1,12 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
+import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.community.domain.api.model.metadata.extension.MetadataAccessContext;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
 import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
 import ai.chat2db.community.tools.util.AgentTrace;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
@@ -14,13 +15,12 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.ResultSetUtils;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /** Raw V2 metadata is cached separately; current authorization is applied after every cache lookup. */
 @Service
@@ -90,7 +90,7 @@ public class AgentMetadataServiceImpl implements AgentMetadataService {
 
     @Override
     public Description describe(String database, String schema, String type, String name, boolean refresh) {
-        if (type == null || !AgentDatabaseRequest.OBJECT_TYPES.contains(type)) {
+        if (type == null || !AgentDatabaseConstant.OBJECT_TYPES.contains(type)) {
             throw new AgentDatabaseException("INVALID_ARGUMENT", "objects", "Unsupported object type: " + type, null);
         }
         boolean relation = type.equals("TABLE") || type.equals("VIEW");

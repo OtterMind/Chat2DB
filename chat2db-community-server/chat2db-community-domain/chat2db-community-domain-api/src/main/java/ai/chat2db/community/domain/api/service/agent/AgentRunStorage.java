@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.api.service.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
-
 import java.util.List;
 
 public interface AgentRunStorage {

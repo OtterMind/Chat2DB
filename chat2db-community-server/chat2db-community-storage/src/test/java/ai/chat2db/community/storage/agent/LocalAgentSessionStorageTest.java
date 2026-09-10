@@ -1,22 +1,21 @@
 package ai.chat2db.community.storage.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
 import ai.chat2db.community.storage.StorageFileUtils;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.storage.StorageException;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

@@ -1,34 +1,33 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapabilities;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCapability;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeDescriptor;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeHealth;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionOpenRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionResumeRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSnapshot;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeCapability;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeHealth;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCapabilities;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSnapshot;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
+final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
 
     private final AgentRuntimeDescriptor descriptor;
     private final AgentRuntimeEnvironmentStatus environmentStatus;
@@ -75,9 +74,9 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     @Override
-    public AgentRuntimeSessionHandle openSession(
+    public IAgentRuntimeSessionHandle openSession(
             AgentRuntimeSessionOpenRequest request,
-            AgentRuntimeEventSink eventSink) {
+            IAgentRuntimeEventSink eventSink) {
         openSessionCount++;
         if (openFailure != null) {
             throw openFailure;
@@ -88,9 +87,9 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
     }
 
     @Override
-    public AgentRuntimeSessionHandle resumeSession(
+    public IAgentRuntimeSessionHandle resumeSession(
             AgentRuntimeSessionResumeRequest request,
-            AgentRuntimeEventSink eventSink) {
+            IAgentRuntimeEventSink eventSink) {
         return new FakeSessionHandle(
                 request.sessionId(),
                 request.binding().externalSessionId(),
@@ -125,11 +124,11 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
         terminalEventOnStart = type;
     }
 
-    private static final class FakeSessionHandle implements AgentRuntimeSessionHandle {
+    private static final class FakeSessionHandle implements IAgentRuntimeSessionHandle {
 
         private final String sessionId;
         private final AgentRuntimeSessionRef session;
-        private final AgentRuntimeEventSink eventSink;
+        private final IAgentRuntimeEventSink eventSink;
         private final RuntimeException startFailure;
         private final AgentEventType terminalEventOnStart;
         private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
@@ -139,7 +138,7 @@ final class FakeAgentRuntimeAdapter implements AgentRuntimeAdapter {
                 String sessionId,
                 String externalSessionId,
                 String resumeReference,
-                AgentRuntimeEventSink eventSink,
+                IAgentRuntimeEventSink eventSink,
                 RuntimeException startFailure,
                 AgentEventType terminalEventOnStart) {
             this.sessionId = sessionId;

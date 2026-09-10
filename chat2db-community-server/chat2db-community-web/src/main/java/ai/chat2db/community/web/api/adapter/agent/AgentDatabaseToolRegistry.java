@@ -1,19 +1,20 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest.*;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentToolAccess;
+import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest.*;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import ai.chat2db.community.domain.api.service.agent.AgentDatabaseService;
-import com.fasterxml.jackson.databind.MapperFeature;
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
+import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
+import ai.chat2db.community.tools.model.agent.tool.AgentToolNextAction;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import org.springframework.stereotype.Component;
-
 import java.util.*;
 import java.util.function.Function;
+import org.springframework.stereotype.Component;
 
 /** V2 owns its model-facing schemas and structured results independently of V1 tools. */
 @Component
@@ -52,7 +53,7 @@ public class AgentDatabaseToolRegistry {
         var describeFields = scopeFields();
         describeFields.put("refresh", refresh());
         var object = Map.of("type", "object", "properties", Map.of(
-                "type", Map.of("type", "string", "enum", AgentDatabaseRequest.OBJECT_TYPES, "description", "Exact object kind: TABLE, VIEW, FUNCTION, PROCEDURE or TRIGGER."),
+                "type", Map.of("type", "string", "enum", AgentDatabaseConstant.OBJECT_TYPES, "description", "Exact object kind: TABLE, VIEW, FUNCTION, PROCEDURE or TRIGGER."),
                 "name", text("Exact unqualified object name within the supplied datasource/database/schema. The name is literal, including any % or _ characters.", 256)),
                 "required", List.of("type", "name"), "additionalProperties", false);
         describeFields.put("objects", Map.of("type", "array", "items", object, "minItems", 1, "maxItems", 10, "uniqueItems", true,
@@ -73,21 +74,21 @@ public class AgentDatabaseToolRegistry {
     public List<AgentToolAccess.Tool> definitions() { return tools.values().stream().map(Entry::definition).toList(); }
     public Set<String> names() { return Collections.unmodifiableSet(tools.keySet()); }
 
-    public AgentDatabaseResult<?> execute(String name, Map<String, Object> arguments) {
+    public DbAgentDatabaseResponse<?> execute(String name, Map<String, Object> arguments) {
         Entry tool = tools.get(name);
-        if (tool == null) return AgentDatabaseResult.failure("UNKNOWN_TOOL", "toolName", "Unknown V2 database tool: " + name, null);
-        AgentDatabaseResult<?> result;
+        if (tool == null) return DbAgentDatabaseResponse.failure("UNKNOWN_TOOL", "toolName", "Unknown V2 database tool: " + name, null);
+        DbAgentDatabaseResponse<?> result;
         try { result = tool.execute.apply(arguments); }
         catch (AgentDatabaseException error) {
             var nextAction = error.nextAction();
             if (nextAction == null && ("schemaPattern".equals(error.field()) && arguments.get("schema") != null
                     || "search".equals(error.field()) && arguments.get("tablePattern") != null)) {
                 var corrected = new LinkedHashMap<>(arguments); corrected.remove(error.field());
-                nextAction = new AgentDatabaseResult.NextAction(name, corrected);
+                nextAction = new AgentToolNextAction(name, corrected);
             }
-            return AgentDatabaseResult.failure(error.code(), error.field(), error.getMessage(), nextAction);
+            return DbAgentDatabaseResponse.failure(error.code(), error.field(), error.getMessage(), nextAction);
         } catch (RuntimeException error) {
-            return AgentDatabaseResult.failure("DATABASE_ERROR", null,
+            return DbAgentDatabaseResponse.failure("DATABASE_ERROR", null,
                     "Database operation failed: " + Objects.toString(error.getMessage(), error.getClass().getSimpleName()), null);
         }
         try {
@@ -97,19 +98,19 @@ public class AgentDatabaseToolRegistry {
                 retry.put("pageSize", Math.max(1, size / 2));
                 retry.put("page", 1);
                 boolean pageable = name.equals("db_query") || name.startsWith("db_search_");
-                return AgentDatabaseResult.failure("RESULT_TOO_LARGE", null,
+                return DbAgentDatabaseResponse.failure("RESULT_TOO_LARGE", null,
                         "Result exceeds 512 KiB. Request fewer rows/columns or describe fewer objects; for a single large value use an explicit SQL substring. No partial result was returned. Changing pageSize restarts pagination at page 1.",
-                        pageable && size > 1 ? new AgentDatabaseResult.NextAction(name, retry) : null);
+                        pageable && size > 1 ? new AgentToolNextAction(name, retry) : null);
             }
         } catch (Exception error) {
-            return AgentDatabaseResult.failure("RESULT_ENCODING_ERROR", null, "Cannot encode the database result.", null);
+            return DbAgentDatabaseResponse.failure("RESULT_ENCODING_ERROR", null, "Cannot encode the database result.", null);
         }
         return result;
     }
 
     private <T> void add(String name, String description, String snippet, List<String> guidelines,
             Map<String, Object> properties, List<String> required, Class<T> type,
-            Function<T, AgentDatabaseResult<?>> action) {
+            Function<T, DbAgentDatabaseResponse<?>> action) {
         var modelProperties = new LinkedHashMap<String, Object>();
         properties.forEach((field, definition) -> modelProperties.put(field, required.contains(field) ? definition :
                 Map.of("anyOf", List.of(definition, Map.of("type", "null")),
@@ -124,10 +125,10 @@ public class AgentDatabaseToolRegistry {
                 Throwable cause = error.getCause();
                 String field = cause instanceof UnrecognizedPropertyException unknown ? unknown.getPropertyName()
                         : cause instanceof JsonMappingException mapping && !mapping.getPath().isEmpty() ? mapping.getPath().get(0).getFieldName() : null;
-                return AgentDatabaseResult.failure("INVALID_ARGUMENT", field,
+                return DbAgentDatabaseResponse.failure("INVALID_ARGUMENT", field,
                         "Invalid argument" + (field == null ? "" : " '" + field + "'") + ". Allowed fields: " + String.join(", ", properties.keySet())
                                 + ". Follow the tool schema exactly; dataSourceId is a string, page/pageSize are integers.",
-                        "dataSourceId".equals(field) ? new AgentDatabaseResult.NextAction("db_search_datasources", Map.of()) : null);
+                        "dataSourceId".equals(field) ? new AgentToolNextAction("db_search_datasources", Map.of()) : null);
             }
             return action.apply(request);
         }));
@@ -165,5 +166,5 @@ public class AgentDatabaseToolRegistry {
         properties.put("pageSize", Map.of("type", "integer", "minimum", 1, "maximum", 200, "default", 50, "description", "Maximum number of items returned per page."));
         return properties;
     }
-    private record Entry(AgentToolAccess.Tool definition, Function<Map<String, Object>, AgentDatabaseResult<?>> execute) { }
+    private record Entry(AgentToolAccess.Tool definition, Function<Map<String, Object>, DbAgentDatabaseResponse<?>> execute) { }
 }

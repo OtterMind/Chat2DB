@@ -1,16 +1,15 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeFeatureState;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeEnableResult;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
-import ai.chat2db.community.domain.api.service.task.TaskService;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeEnableResult;
+import ai.chat2db.community.domain.api.model.agent.feature.AgentRuntimeFeatureState;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
-
+import ai.chat2db.community.domain.api.service.agent.AgentRuntimeFeatureService;
+import ai.chat2db.community.domain.api.service.task.TaskService;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;

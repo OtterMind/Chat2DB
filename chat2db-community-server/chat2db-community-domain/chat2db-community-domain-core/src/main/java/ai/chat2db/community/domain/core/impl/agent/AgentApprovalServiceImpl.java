@@ -1,12 +1,10 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalStorage;
-import org.springframework.stereotype.Service;
 import ai.chat2db.community.tools.util.AgentTrace;
-
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -14,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AgentApprovalServiceImpl implements AgentApprovalService {

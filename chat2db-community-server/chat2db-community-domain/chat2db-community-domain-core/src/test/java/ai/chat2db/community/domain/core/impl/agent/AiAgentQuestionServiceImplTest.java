@@ -1,11 +1,14 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.agent.*;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import org.junit.jupiter.api.Test;
+import ai.chat2db.community.domain.api.model.agent.interaction.AgentQuestion;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AiAgentQuestionServiceImplTest {

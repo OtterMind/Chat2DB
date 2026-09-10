@@ -1,16 +1,16 @@
 package ai.chat2db.community.domain.api.service.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest.*;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult.*;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest.*;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse.*;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import java.util.List;
 
 public interface AgentDatabaseService {
-    AgentDatabaseResult<List<Source>> listSources(Sources request);
-    AgentDatabaseResult<Names> listDatabases(Databases request);
-    AgentDatabaseResult<Names> listSchemas(Schemas request);
-    AgentDatabaseResult<List<TableSummary>> listTables(Tables request);
-    AgentDatabaseResult<List<ColumnSummary>> listColumns(Columns request);
-    AgentDatabaseResult<List<ObjectDetail>> describeObjects(Describe request);
-    AgentDatabaseResult<QueryData> query(Query request);
+    DbAgentDatabaseResponse<List<Source>> listSources(Sources request);
+    DbAgentDatabaseResponse<Names> listDatabases(Databases request);
+    DbAgentDatabaseResponse<Names> listSchemas(Schemas request);
+    DbAgentDatabaseResponse<List<TableSummary>> listTables(Tables request);
+    DbAgentDatabaseResponse<List<ColumnSummary>> listColumns(Columns request);
+    DbAgentDatabaseResponse<List<ObjectDetail>> describeObjects(Describe request);
+    DbAgentDatabaseResponse<QueryData> query(Query request);
 }

@@ -1,10 +1,9 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
-import java.util.Locale;
 
 @Component
 public class AgentHostEnvironmentProvider {

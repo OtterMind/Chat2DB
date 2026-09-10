@@ -1,15 +1,14 @@
 package ai.chat2db.community.storage.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.storage.StorageFileUtils;
-import org.springframework.stereotype.Component;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
 @Component
 public class LocalAgentRunStorage implements AgentRunStorage {

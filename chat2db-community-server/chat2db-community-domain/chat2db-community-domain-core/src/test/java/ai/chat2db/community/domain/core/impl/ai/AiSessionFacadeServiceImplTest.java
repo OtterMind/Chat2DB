@@ -1,25 +1,24 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
-import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
-import ai.chat2db.community.domain.api.model.ai.AiChatSession;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
+import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
+import ai.chat2db.community.domain.api.model.ai.AiChatSession;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.ai.IAiChatHistoryService;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

@@ -1,8 +1,7 @@
 package ai.chat2db.community.web.api.model.response.agent;
 
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import java.time.LocalDateTime;
 import java.util.Map;
 

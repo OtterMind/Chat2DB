@@ -1,31 +1,30 @@
 package ai.chat2db.community.storage.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentArtifactType;
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalScope;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentArtifact;
-import ai.chat2db.community.domain.api.model.agent.AgentArtifactType;
-import ai.chat2db.community.domain.api.model.agent.AgentEvent;
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
 import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
+import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
-import ai.chat2db.community.domain.api.model.agent.AgentRunStatus;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
 import ai.chat2db.community.storage.StorageFileUtils;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.storage.StorageException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -58,6 +57,64 @@ class LocalAgentV2StorageTest {
         approvals = new LocalAgentApprovalStorage(paths, storageFileUtils, sessions);
         artifacts = new LocalAgentArtifactStorage(paths, storageFileUtils, sessions);
         sessions.create(session());
+    }
+
+    @Test
+    void readsExistingSessionJsonAfterRuntimeContractPackagesMove() throws Exception {
+        Files.writeString(paths.sessionFile(SESSION_ID), """
+                {
+                  "schemaVersion": 2,
+                  "id": "session-one",
+                  "userId": 1,
+                  "definition": {
+                    "id": "default", "name": "Default", "systemPrompt": "You are helpful.",
+                    "runtimeType": "PI", "modelConfigId": "model-config", "revision": 1
+                  },
+                  "runtimeBinding": {
+                    "runtimeType": "PI", "runtimeVersion": "0.85.1", "protocolVersion": "jsonl-rpc",
+                    "externalSessionId": "session-one", "resumeReference": "saved-session.jsonl", "revision": 1
+                  },
+                  "status": "READY", "title": "Existing session", "lastEventSequence": 0,
+                  "gmtCreate": "2026-09-08T21:00:00", "gmtModified": "2026-09-08T21:00:00"
+                }
+                """);
+        LocalAgentSessionStorage reloaded = new LocalAgentSessionStorage(paths, new StorageFileUtils());
+
+        AgentSession existing = reloaded.get(SESSION_ID, USER_ID);
+
+        assertEquals(AgentRuntimeType.PI, existing.definition().runtimeType());
+        assertEquals("saved-session.jsonl", existing.runtimeBinding().resumeReference());
+        assertEquals(AgentSessionStatus.READY, existing.status());
+        AgentSession renamed = reloaded.rename(SESSION_ID, USER_ID, "Renamed session");
+        assertEquals(existing.runtimeBinding(), renamed.runtimeBinding());
+        assertEquals(renamed, sessions.get(SESSION_ID, USER_ID));
+        assertFalse(Files.readString(paths.sessionFile(SESSION_ID)).contains("ai.chat2db"));
+    }
+
+    @Test
+    void readsExistingRunAndEventJsonAfterEnumPackagesMove() throws Exception {
+        Files.createDirectories(paths.resourceDirectory(SESSION_ID, "runs"));
+        Files.writeString(paths.resourceFile(SESSION_ID, "runs", "run-one"), """
+                {
+                  "id": "run-one", "sessionId": "session-one", "status": "COMPLETED",
+                  "model": {
+                    "modelConfigId": "model-config", "modelRevision": 1, "provider": "openai",
+                    "modelId": "gpt-test", "contextWindow": 128000, "maxOutputTokens": 4096
+                  },
+                  "requestMessageId": "message-one", "idempotencyKey": "idempotency-one",
+                  "externalRunId": "external-run", "firstEventSequence": 1, "lastEventSequence": 1
+                }
+                """);
+        Files.createDirectories(paths.resourceDirectory(SESSION_ID, "events"));
+        Files.writeString(paths.eventFile(SESSION_ID, 1), """
+                {
+                  "id": "event-1", "sessionId": "session-one", "runId": "run-one", "sequence": 1,
+                  "type": "RUN_COMPLETED", "payload": {}, "occurredAt": "2026-09-08T21:00:01"
+                }
+                """);
+
+        assertEquals(run(AgentRunStatus.COMPLETED, 1), runs.get(SESSION_ID, "run-one", USER_ID));
+        assertEquals(List.of(event(1, AgentEventType.RUN_COMPLETED)), events.list(SESSION_ID, USER_ID, 0, 10));
     }
 
     @Test

@@ -1,16 +1,23 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolCategory;
+import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import ai.chat2db.community.domain.api.service.agent.*;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.model.Context;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.util.ContextUtils;
-import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,7 +31,7 @@ class AgentToolGatewayServiceTest {
                 new Class<?>[]{AgentDatabaseService.class}, (proxy, method, args) -> {
                     assertSame(owner, ContextUtils.queryThreadContext());
                     executions.incrementAndGet();
-                    return AgentDatabaseResult.success(null, List.of("database-list"), null, null, List.of());
+                    return DbAgentDatabaseResponse.success(null, List.of("database-list"), null, null, List.of());
                 });
         LocalDateTime now = LocalDateTime.now();
         AgentSession session = new AgentSession(2, "session", 1L,
@@ -46,11 +53,11 @@ class AgentToolGatewayServiceTest {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
             var catalog = gateway.listTools();
-            assertEquals(7, catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN).count());
+            assertEquals(7, catalog.stream().filter(tool -> tool.category() == AgentToolCategory.BUILTIN).count());
             assertTrue(catalog.stream().anyMatch(tool -> tool.name().equals("db_search_datasources")
-                    && tool.status() == AgentToolState.Status.ENABLED));
-            assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolState.Category.BUILTIN)
-                    .allMatch(tool -> tool.status() == AgentToolState.Status.UNAVAILABLE));
+                    && tool.status() == AgentToolStatus.ENABLED));
+            assertTrue(catalog.stream().filter(tool -> tool.category() == AgentToolCategory.BUILTIN)
+                    .allMatch(tool -> tool.status() == AgentToolStatus.UNAVAILABLE));
             ContextUtils.setContext(caller);
             assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").contains("db_search_datasources"));
             assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("bash"));

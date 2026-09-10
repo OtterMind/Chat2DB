@@ -1,8 +1,7 @@
 package ai.chat2db.community.domain.api.service.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
-import ai.chat2db.community.domain.api.model.agent.AgentSessionStatus;
-
 import java.util.List;
 
 public interface AgentSessionStorage {

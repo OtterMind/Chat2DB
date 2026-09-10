@@ -1,18 +1,14 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentModelAccess;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
 import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.util.AgentTrace;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import ai.chat2db.community.tools.util.AgentTrace;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -27,6 +23,9 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AgentModelGatewayService implements AgentModelAccessService {

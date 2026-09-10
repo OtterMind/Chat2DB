@@ -1,22 +1,21 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeHealth;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeInput;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionRef;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeHealth;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

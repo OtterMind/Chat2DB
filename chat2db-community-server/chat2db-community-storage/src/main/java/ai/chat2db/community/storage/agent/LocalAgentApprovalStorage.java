@@ -1,15 +1,14 @@
 package ai.chat2db.community.storage.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
-import ai.chat2db.community.domain.api.model.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.storage.StorageFileUtils;
-import org.springframework.stereotype.Component;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
 @Component
 public class LocalAgentApprovalStorage implements AgentApprovalStorage {

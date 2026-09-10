@@ -1,24 +1,24 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest.*;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
 import ai.chat2db.community.domain.api.model.metadata.*;
-import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest.*;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
-import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
-import ai.chat2db.community.domain.api.service.db.*;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
+import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
-import org.junit.jupiter.api.Test;
-
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
 import java.lang.reflect.Proxy;
 import java.util.*;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentDatabaseServiceImplTest {
@@ -31,7 +31,7 @@ class AgentDatabaseServiceImplTest {
             f.sources.add(source);
         }
         var first = f.service.listSources(new Sources("sales_", 1, 1));
-        assertEquals(List.of("SALES_main"), first.data().stream().map(AgentDatabaseResult.Source::name).toList());
+        assertEquals(List.of("SALES_main"), first.data().stream().map(DbAgentDatabaseResponse.Source::name).toList());
         assertEquals(2L, first.page().total());
         assertEquals(Map.of("search", "sales_", "page", 2, "pageSize", 1), first.nextAction().arguments());
         assertEquals(2, f.sourceCalls);
@@ -78,7 +78,7 @@ class AgentDatabaseServiceImplTest {
         f.response.setDataList(rows);
         var result = f.service.query(new Query("7", "app", null, "SELECT id, body, nullable FROM samples ORDER BY id", 2, 75));
         assertTrue(result.ok(), String.valueOf(result.error()));
-        var data = (AgentDatabaseResult.QueryData) result.data();
+        var data = (DbAgentDatabaseResponse.QueryData) result.data();
         assertEquals(75, data.rows().size());
         assertEquals(3, data.columns().size());
         assertEquals("0", data.rows().get(0).get(0));
@@ -117,12 +117,12 @@ class AgentDatabaseServiceImplTest {
     void emptyQueryKeepsColumnsAndLargeCellTruncationIsExplicit() {
         Fixture f = new Fixture(); f.response.setHasNextPage(false);
         var empty = f.service.query(new Query("7", "app", null, "SELECT id FROM samples WHERE 1=0", null, null));
-        assertEquals(1, ((AgentDatabaseResult.QueryData) empty.data()).columns().size());
-        assertEquals(List.of(), ((AgentDatabaseResult.QueryData) empty.data()).rows());
+        assertEquals(1, ((DbAgentDatabaseResponse.QueryData) empty.data()).columns().size());
+        assertEquals(List.of(), ((DbAgentDatabaseResponse.QueryData) empty.data()).rows());
         assertNull(empty.nextAction());
         f.response.setDataList(List.of(List.of(ResultCell.builder().value("preview").truncated(true).sizeChars(1000L).loadedChars(7L).build())));
         var truncated = f.service.query(new Query("7", "app", null, "SELECT body FROM samples", null, null));
-        var data = (AgentDatabaseResult.QueryData) truncated.data();
+        var data = (DbAgentDatabaseResponse.QueryData) truncated.data();
         assertEquals(1000L, data.cellWarnings().get(0).originalCharacters());
         assertFalse(truncated.warnings().isEmpty());
     }
@@ -132,7 +132,7 @@ class AgentDatabaseServiceImplTest {
         Fixture f = new Fixture();
         var result = f.service.describeObjects(new Describe("7", "app", null, List.of(new ObjectRef("TABLE", "samples")), null));
         assertTrue(result.ok());
-        var detail = (AgentDatabaseResult.ObjectDetail) ((List<?>) result.data()).get(0);
+        var detail = (DbAgentDatabaseResponse.ObjectDetail) ((List<?>) result.data()).get(0);
         assertEquals("id", detail.columns().get(0).name());
         assertEquals(false, detail.columns().get(0).nullable());
         assertEquals(true, detail.columns().get(0).primaryKey());
@@ -179,8 +179,8 @@ class AgentDatabaseServiceImplTest {
         assertEquals("schema", failure(() -> f.service.describeObjects(new Describe("7", "app", null, objects, null))).field());
         assertNull(f.metadataArgs);
         var result = f.service.describeObjects(new Describe("8", "other_db", "tenant_two", objects, true));
-        assertEquals(new AgentDatabaseResult.Scope("8", "SQLITE", "other_db", "tenant_two"), result.scope());
-        assertEquals(List.of("TABLE", "FUNCTION"), result.data().stream().map(AgentDatabaseResult.ObjectDetail::type).toList());
+        assertEquals(new DbAgentDatabaseResponse.Scope("8", "SQLITE", "other_db", "tenant_two"), result.scope());
+        assertEquals(List.of("TABLE", "FUNCTION"), result.data().stream().map(DbAgentDatabaseResponse.ObjectDetail::type).toList());
         assertEquals("definition of FUNCTION", result.data().get(1).definition());
         assertNull(result.data().get(1).columns());
         assertEquals(List.of("other_db", "tenant_two", "FUNCTION", "samples", true), Arrays.asList(f.metadataArgs));
@@ -190,7 +190,7 @@ class AgentDatabaseServiceImplTest {
         }
     }
 
-    private static AgentDatabaseException failure(java.util.function.Supplier<AgentDatabaseResult<?>> operation) {
+    private static AgentDatabaseException failure(java.util.function.Supplier<DbAgentDatabaseResponse<?>> operation) {
         return assertThrows(AgentDatabaseException.class, operation::get);
     }
 

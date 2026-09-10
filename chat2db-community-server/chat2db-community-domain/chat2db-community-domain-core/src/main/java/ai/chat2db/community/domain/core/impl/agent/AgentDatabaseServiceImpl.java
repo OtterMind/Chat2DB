@@ -1,14 +1,15 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseRequest;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseResult.*;
+import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
+import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
 import ai.chat2db.community.domain.api.model.metadata.Table;
+import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.db.*;
 import ai.chat2db.community.domain.api.model.request.operation.OpsSqlOperationLogListResultRequest;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse.*;
+import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
@@ -17,11 +18,11 @@ import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
 import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
-import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
-import org.springframework.stereotype.Service;
-
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
+import ai.chat2db.community.tools.model.agent.tool.AgentToolNextAction;
 import java.util.*;
 import java.util.function.Function;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AgentDatabaseServiceImpl implements AgentDatabaseService {
@@ -44,7 +45,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<List<Source>> listSources(AgentDatabaseRequest.Sources request) {
+    public DbAgentDatabaseResponse<List<Source>> listSources(DbAgentDatabaseRequest.Sources request) {
         int page = page(request.page()), size = size(request.pageSize());
         String search = search(request.search());
         if (!blank(search)) {
@@ -57,13 +58,13 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         var response = Objects.requireNonNull(storage.listDataSources(query), "Datasource lookup returned no response");
         var items = response.getData().stream().map(AgentDatabaseServiceImpl::source).toList();
         Page pagination = pageInfo(page, size, items.size(), response.getTotal(), response.getHasNextPage());
-        return AgentDatabaseResult.success(null, items, pagination, Boolean.TRUE.equals(pagination.hasMore())
+        return DbAgentDatabaseResponse.success(null, items, pagination, Boolean.TRUE.equals(pagination.hasMore())
                 ? next("db_search_datasources", nextPageArguments(request.search(), page + 1, size)) : null, List.of());
     }
 
     @Override
-    public AgentDatabaseResult<Names> listDatabases(AgentDatabaseRequest.Databases request) {
-        return scoped(new AgentDatabaseRequest.Scope(request.dataSourceId(), null, null), false, profile -> {
+    public DbAgentDatabaseResponse<Names> listDatabases(DbAgentDatabaseRequest.Databases request) {
+        return scoped(new DbAgentDatabaseRequest.Scope(request.dataSourceId(), null, null), false, profile -> {
             int page = page(request.page()), size = size(request.pageSize());
             String pattern = AgentMetadataPattern.validate(request.databasePattern(), "databasePattern");
             var items = metadata.databases(pattern, Boolean.TRUE.equals(request.refresh())).stream()
@@ -75,8 +76,8 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<Names> listSchemas(AgentDatabaseRequest.Schemas request) {
-        return scoped(new AgentDatabaseRequest.Scope(request.dataSourceId(), request.database(), null), false, profile -> {
+    public DbAgentDatabaseResponse<Names> listSchemas(DbAgentDatabaseRequest.Schemas request) {
+        return scoped(new DbAgentDatabaseRequest.Scope(request.dataSourceId(), request.database(), null), false, profile -> {
             int page = page(request.page()), size = size(request.pageSize());
             requireDatabase(profile, request.database());
             String pattern = AgentMetadataPattern.validate(request.schemaPattern(), "schemaPattern");
@@ -91,7 +92,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<List<TableSummary>> listTables(AgentDatabaseRequest.Tables request) {
+    public DbAgentDatabaseResponse<List<TableSummary>> listTables(DbAgentDatabaseRequest.Tables request) {
         int page = page(request.page()), size = size(request.pageSize());
         return scoped(request.scope(), false, profile -> {
             requireDatabase(profile, request.database());
@@ -111,7 +112,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<List<ColumnSummary>> listColumns(AgentDatabaseRequest.Columns request) {
+    public DbAgentDatabaseResponse<List<ColumnSummary>> listColumns(DbAgentDatabaseRequest.Columns request) {
         int page = page(request.page()), size = size(request.pageSize());
         return scoped(request.scope(), false, profile -> {
             requireDatabase(profile, request.database());
@@ -132,7 +133,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public AgentDatabaseResult<List<ObjectDetail>> describeObjects(AgentDatabaseRequest.Describe request) {
+    public DbAgentDatabaseResponse<List<ObjectDetail>> describeObjects(DbAgentDatabaseRequest.Describe request) {
         if (request.objects() == null || request.objects().isEmpty() || request.objects().size() > 10) {
             throw invalid("objects", "Provide 1 to 10 objects with an exact name and type.", null);
         }
@@ -140,8 +141,8 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             throw invalid("objects", "Each object type/name pair must be unique.", null);
         }
         for (var object : request.objects()) {
-            if (object == null || object.type() == null || !AgentDatabaseRequest.OBJECT_TYPES.contains(object.type())) {
-                throw invalid("objects", "Object type must be one of: " + String.join(", ", AgentDatabaseRequest.OBJECT_TYPES), null);
+            if (object == null || object.type() == null || !AgentDatabaseConstant.OBJECT_TYPES.contains(object.type())) {
+                throw invalid("objects", "Object type must be one of: " + String.join(", ", AgentDatabaseConstant.OBJECT_TYPES), null);
             }
             required(object.name(), "objects", null);
             if (object.name().length() > 256) throw invalid("objects", "Object names must not exceed 256 characters.", null);
@@ -174,12 +175,12 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 details.add(new ObjectDetail(object.name(), object.type(), table == null ? null : table.getComment(),
                         columns, indexes, foreignKeys, description.definition()));
             }
-            return AgentDatabaseResult.success(scope(profile), details, null, null, warnings);
+            return DbAgentDatabaseResponse.success(scope(profile), details, null, null, warnings);
         });
     }
 
     @Override
-    public AgentDatabaseResult<QueryData> query(AgentDatabaseRequest.Query request) {
+    public DbAgentDatabaseResponse<QueryData> query(DbAgentDatabaseRequest.Query request) {
         required(request.sql(), "sql", null);
         if (request.sql().length() > 32768) throw invalid("sql", "SQL must not exceed 32768 characters.", null);
         int page = page(request.page()), size = size(request.pageSize());
@@ -245,7 +246,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             var pagination = pageInfo(page, size, rows.size(), null, response.getHasNextPage());
             Map<String, Object> args = scopeArguments(profile);
             args.put("sql", request.sql()); args.put("page", page + 1); args.put("pageSize", size);
-            return AgentDatabaseResult.success(scope(profile), new QueryData(columns, rows, "database-text",
+            return DbAgentDatabaseResponse.success(scope(profile), new QueryData(columns, rows, "database-text",
                     response.getExecutionMetrics() == null ? null : response.getExecutionMetrics().getTotalDurationMs(), cellWarnings),
                     pagination, Boolean.TRUE.equals(pagination.hasMore()) ? next("db_query", args) : null,
                     cellWarnings.isEmpty() ? List.of() : List.of("Some cells are incomplete; see data.cellWarnings (zero-based row and column)."));
@@ -274,8 +275,8 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         return new Source(String.valueOf(item.getId()), item.getAlias(), item.getType(), item.getEnvType());
     }
 
-    private <T> AgentDatabaseResult<T> scoped(AgentDatabaseRequest.Scope request, boolean requireScope,
-            Function<ConnectionProfile, AgentDatabaseResult<T>> action) {
+    private <T> DbAgentDatabaseResponse<T> scoped(DbAgentDatabaseRequest.Scope request, boolean requireScope,
+            Function<ConnectionProfile, DbAgentDatabaseResponse<T>> action) {
         required(request.dataSourceId(), "dataSourceId", next("db_search_datasources", Map.of()));
         long id;
         try { id = Long.parseLong(request.dataSourceId()); }
@@ -314,11 +315,11 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         }
     }
 
-    private AgentDatabaseResult<Names> names(ConnectionProfile profile, List<Name> items, int page, int size, String tool, Map<String, Object> args) {
+    private DbAgentDatabaseResponse<Names> names(ConnectionProfile profile, List<Name> items, int page, int size, String tool, Map<String, Object> args) {
         int start = Math.min((page - 1) * size, items.size()), end = Math.min(start + size, items.size());
         var pagination = pageInfo(page, size, end - start, (long) items.size(), end < items.size());
         var nextArgs = new LinkedHashMap<>(args); nextArgs.put("page", page + 1); nextArgs.put("pageSize", size);
-        return AgentDatabaseResult.success(scope(profile), new Names(items.subList(start, end), connections.supportDatabase(), connections.supportSchema()),
+        return DbAgentDatabaseResponse.success(scope(profile), new Names(items.subList(start, end), connections.supportDatabase(), connections.supportSchema()),
                 pagination, end < items.size() ? next(tool, nextArgs) : null, List.of());
     }
 
@@ -335,12 +336,12 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         return args;
     }
     private static void put(Map<String, Object> args, String key, String value) { if (value != null) args.put(key, value); }
-    private static <T> AgentDatabaseResult<List<T>> metadataPage(Scope scope, List<T> items, Integer requestedPage,
+    private static <T> DbAgentDatabaseResponse<List<T>> metadataPage(Scope scope, List<T> items, Integer requestedPage,
             Integer requestedSize, String tool, Map<String, Object> args) {
         int page = page(requestedPage), size = size(requestedSize);
         int start = Math.min((page - 1) * size, items.size()), end = Math.min(start + size, items.size());
         args.put("page", page + 1); args.put("pageSize", size);
-        return AgentDatabaseResult.success(scope, items.subList(start, end), pageInfo(page, size, end - start, (long) items.size(), end < items.size()),
+        return DbAgentDatabaseResponse.success(scope, items.subList(start, end), pageInfo(page, size, end - start, (long) items.size(), end < items.size()),
                 end < items.size() ? next(tool, args) : null, List.of());
     }
 
@@ -348,7 +349,7 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         return type != null && (type.equals("SELECT") || type.startsWith("SHOW_") || type.equals("DESCRIBE") || type.equals("DESCRIBE_FULL"));
     }
     private static boolean blank(String value) { return value == null || value.isBlank(); }
-    private static void required(String value, String field, NextAction next) {
+    private static void required(String value, String field, AgentToolNextAction next) {
         if (blank(value)) throw new AgentDatabaseException(field.equals("dataSourceId") ? "MISSING_DATASOURCE" : "MISSING_ARGUMENT", field, field + " is required.", next);
     }
     private static int page(Integer value) {
@@ -380,6 +381,6 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
         if (!blank(search)) args.put("search", search);
         return args;
     }
-    private static NextAction next(String tool, Map<String, Object> arguments) { return new NextAction(tool, arguments); }
-    private static AgentDatabaseException invalid(String field, String message, NextAction next) { return new AgentDatabaseException("INVALID_ARGUMENT", field, message, next); }
+    private static AgentToolNextAction next(String tool, Map<String, Object> arguments) { return new AgentToolNextAction(tool, arguments); }
+    private static AgentDatabaseException invalid(String field, String message, AgentToolNextAction next) { return new AgentDatabaseException("INVALID_ARGUMENT", field, message, next); }
 }

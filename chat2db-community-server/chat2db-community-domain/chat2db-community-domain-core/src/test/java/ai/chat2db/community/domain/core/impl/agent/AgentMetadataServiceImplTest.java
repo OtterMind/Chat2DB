@@ -1,20 +1,20 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
-import ai.chat2db.community.domain.api.model.agent.database.AgentDatabaseException;
 import ai.chat2db.community.domain.api.model.metadata.*;
-import ai.chat2db.spi.model.request.*;
 import ai.chat2db.community.domain.core.impl.db.extension.MetadataAccessPolicyManager;
+import ai.chat2db.community.tools.exception.agent.AgentDatabaseException;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
-import org.junit.jupiter.api.Test;
-
-import javax.sql.rowset.CachedRowSet;
-import javax.sql.rowset.RowSetMetaDataImpl;
-import javax.sql.rowset.RowSetProvider;
+import ai.chat2db.spi.model.request.*;
 import java.lang.reflect.Proxy;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sql.rowset.CachedRowSet;
+import javax.sql.rowset.RowSetMetaDataImpl;
+import javax.sql.rowset.RowSetProvider;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentMetadataServiceImplTest {

@@ -1,17 +1,16 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentModelSnapshot;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeBinding;
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionOpenRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionResumeRequest;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -68,13 +67,13 @@ class PiAgentRuntimeAdapterTest {
         private String resumeReference;
         private String systemPrompt;
         @Override
-        public AgentRuntimeSessionHandle launch(
+        public IAgentRuntimeSessionHandle launch(
                 String sessionId,
                 String externalSessionId,
                 String resumeReference,
                 String systemPrompt,
                 AgentModelSnapshot model,
-                ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink eventSink) {
+                ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink eventSink) {
             this.sessionId = sessionId;
             this.resumeReference = resumeReference;
             this.systemPrompt = systemPrompt;

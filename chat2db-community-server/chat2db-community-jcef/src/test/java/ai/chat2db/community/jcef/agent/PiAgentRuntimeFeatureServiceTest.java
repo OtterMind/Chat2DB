@@ -1,12 +1,9 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentRuntimeType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentReport;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentStatus;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -14,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,11 +79,11 @@ class PiAgentRuntimeFeatureServiceTest {
         @Override public void setEnabled(AgentRuntimeType runtimeType, boolean enabled) {
             values.put(runtimeType, enabled);
         }
-        @Override public boolean isEnabled(ai.chat2db.community.domain.api.model.agent.AgentFeature feature) {
+        @Override public boolean isEnabled(ai.chat2db.community.tools.enums.agent.AgentFeature feature) {
             return false;
         }
         @Override public void setEnabled(
-                ai.chat2db.community.domain.api.model.agent.AgentFeature feature, boolean enabled) {
+                ai.chat2db.community.tools.enums.agent.AgentFeature feature, boolean enabled) {
         }
     }
 }

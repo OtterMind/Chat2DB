@@ -1,30 +1,29 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.model.agent.AgentEventType;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeCancelRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEvent;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeHealth;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeRunRequest;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSessionRef;
-import ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeSnapshot;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeEventSink;
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeHealth;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSnapshot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
+public class PiAgentRuntimeSessionHandle implements IAgentRuntimeSessionHandle {
 
     private final String sessionId;
     private final AgentRuntimeSessionRef session;
     private final PiProcessHandle process;
     private final PiRpcTransport rpc;
     private final PiEventMapper eventMapper;
-    private final AgentRuntimeEventSink eventSink;
+    private final IAgentRuntimeEventSink eventSink;
     private final ObjectMapper objectMapper;
     private final Runnable closeHook;
     private final String runtimeProvider;
@@ -41,7 +40,7 @@ public class PiAgentRuntimeSessionHandle implements AgentRuntimeSessionHandle {
             PiProcessHandle process,
             PiRpcTransport rpc,
             PiEventMapper eventMapper,
-            AgentRuntimeEventSink eventSink,
+            IAgentRuntimeEventSink eventSink,
             ObjectMapper objectMapper,
             Runnable closeHook,
             String runtimeProvider,

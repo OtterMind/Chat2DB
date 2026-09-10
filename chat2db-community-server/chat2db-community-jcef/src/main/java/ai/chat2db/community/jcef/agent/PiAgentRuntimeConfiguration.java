@@ -1,19 +1,18 @@
 package ai.chat2db.community.jcef.agent;
 
-import ai.chat2db.community.domain.api.service.agent.AgentRuntimeAdapter;
 import ai.chat2db.community.domain.api.service.agent.AgentModelAccessService;
-import ai.chat2db.community.tools.util.ConfigUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import ai.chat2db.community.domain.api.service.task.TaskService;
-import org.springframework.context.annotation.Conditional;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
-
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
+import ai.chat2db.community.tools.util.ConfigUtils;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration
 @Conditional(LocalAgentRuntimeCondition.class)
@@ -79,7 +78,7 @@ public class PiAgentRuntimeConfiguration {
                 .resolve("storage/ai-chat-history-v2/runtime/pi");
         return new PiProcessSupervisor(layout, sessionDataRoot, maximumProcesses, () -> {
             var report = environmentChecker.inspect(
-                    new ai.chat2db.community.domain.api.model.agent.runtime.AgentRuntimeEnvironmentRequest(
+                    new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest(
                             applicationVersion,
                             System.getProperty("os.name", "unknown"),
                             System.getProperty("os.arch", "unknown")));
@@ -105,7 +104,7 @@ public class PiAgentRuntimeConfiguration {
     }
 
     @Bean
-    public AgentRuntimeAdapter piAgentRuntimeAdapter(
+    public IAgentRuntimeAdapter piAgentRuntimeAdapter(
             PiRuntimeLayout layout,
             PiRuntimeEnvironmentChecker environmentChecker,
             PiRuntimeSessionLauncher sessionLauncher,
