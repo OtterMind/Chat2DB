@@ -7,6 +7,7 @@ import ai.chat2db.community.storage.StorageFileUtils;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.storage.StorageException;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
+import com.alibaba.fastjson2.JSON;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -60,6 +61,27 @@ class LocalAgentSessionStorageTest {
         assertEquals(updated, storage.get("session-one", 1L));
         assertEquals(List.of(updated), storage.listByUserId(1L));
         assertEquals(2, sessionSchemaVersion(paths));
+    }
+
+    @Test
+    void persistsModelSelectionWithoutChangingSessionIdentity() {
+        AgentV2StoragePaths paths = paths();
+        LocalAgentSessionStorage storage = new LocalAgentSessionStorage(paths, new StorageFileUtils());
+        AgentSession original = session("switch-model", 1L, "Conversation", AgentSessionStatus.READY, 0);
+        storage.create(original);
+        AgentDefinition definition = original.definition();
+        AgentDefinition selected = new AgentDefinition(definition.id(), definition.name(), definition.description(),
+                definition.systemPrompt(), definition.runtimeType(), "other-model", 2);
+        AgentSession updated = withDefinition(original, selected);
+        assertTrue(storage.compareAndSet(updated, AgentSessionStatus.READY));
+
+        LocalAgentSessionStorage reloaded = new LocalAgentSessionStorage(paths, new StorageFileUtils());
+        assertEquals(updated, reloaded.get(original.id(), original.userId()));
+        AgentDefinition changedPrompt = new AgentDefinition(selected.id(), selected.name(), selected.description(),
+                "Changed prompt", selected.runtimeType(), "third-model", 3);
+        assertThrows(IllegalArgumentException.class,
+                () -> storage.compareAndSet(withDefinition(updated, changedPrompt), AgentSessionStatus.READY));
+        assertEquals(updated, storage.get(original.id(), original.userId()));
     }
 
     @Test
@@ -183,8 +205,14 @@ class LocalAgentSessionStorageTest {
                 temporaryDirectory.resolve(".chat2db/release/storage/ai-chat-history-v2"));
     }
 
+    private AgentSession withDefinition(AgentSession session, AgentDefinition definition) {
+        return new AgentSession(session.schemaVersion(), session.id(), session.userId(), definition,
+                session.runtimeBinding(), session.status(), session.title(), session.lastEventSequence(),
+                session.gmtCreate(), session.gmtModified());
+    }
+
     private int sessionSchemaVersion(AgentV2StoragePaths paths) {
-        return com.alibaba.fastjson2.JSON.parseObject(read(paths.schemaFile())).getIntValue("schemaVersion");
+        return JSON.parseObject(read(paths.schemaFile())).getIntValue("schemaVersion");
     }
 
     private String read(Path path) {

@@ -1,6 +1,7 @@
 package ai.chat2db.community.storage.agent;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.storage.StorageFileUtils;
@@ -12,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -103,7 +105,12 @@ public class LocalAgentSessionStorage implements AgentSessionStorage {
         if (!Objects.equals(existing.userId(), session.userId())) {
             throw new StorageException("Agent session owner cannot be changed: " + session.id());
         }
-        if (!Objects.equals(existing.definition(), session.definition())
+        AgentDefinition definition = existing.definition();
+        String modelConfigId = session.definition().modelConfigId();
+        AgentDefinition selectedDefinition = new AgentDefinition(definition.id(), definition.name(),
+                definition.description(), definition.systemPrompt(), definition.runtimeType(), modelConfigId,
+                definition.revision() + (definition.modelConfigId().equals(modelConfigId) ? 0 : 1));
+        if (!Objects.equals(selectedDefinition, session.definition())
                 || !Objects.equals(existing.runtimeBinding(), session.runtimeBinding())
                 || !Objects.equals(existing.gmtCreate(), session.gmtCreate())) {
             throw new IllegalArgumentException("Agent session identity cannot be changed");
@@ -127,7 +134,7 @@ public class LocalAgentSessionStorage implements AgentSessionStorage {
         AgentSession renamed = new AgentSession(
                 session.schemaVersion(), session.id(), session.userId(), session.definition(),
                 session.runtimeBinding(), session.status(), title.trim(), session.lastEventSequence(),
-                session.gmtCreate(), java.time.LocalDateTime.now());
+                session.gmtCreate(), LocalDateTime.now());
         writeSession(paths.sessionFile(sessionId), renamed);
         return renamed;
     }

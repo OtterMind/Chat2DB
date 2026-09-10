@@ -22,6 +22,7 @@ import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSnapshot;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -68,7 +69,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
                 descriptor.version(),
                 request.operatingSystem(),
                 request.architecture(),
-                java.util.List.of("runtime"),
+                List.of("runtime"),
                 Map.of(),
                 LocalDateTime.of(2026, 9, 8, 22, 0));
     }
@@ -129,7 +130,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         private final String sessionId;
         private final AgentRuntimeSessionRef session;
         private final IAgentRuntimeEventSink eventSink;
-        private final RuntimeException startFailure;
+        private RuntimeException startFailure;
         private final AgentEventType terminalEventOnStart;
         private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
         private String activeRunId;
@@ -166,7 +167,9 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
                 emit(request.runId(), terminalEventOnStart);
             }
             if (startFailure != null) {
-                return CompletableFuture.failedFuture(startFailure);
+                RuntimeException failure = startFailure;
+                startFailure = null;
+                return CompletableFuture.failedFuture(failure);
             }
             return CompletableFuture.completedFuture(new AgentRuntimeRunRef(request.runId(), activeRunId));
         }

@@ -5,6 +5,12 @@ import { join } from "node:path";
 import { request as httpRequest } from "node:http";
 
 export default function (pi) {
+  pi.registerCommand("chat2db-refresh-model", {
+    description: "Reload the model configuration selected by Chat2DB for the next message.",
+    async handler(_args, ctx) {
+      await ctx.modelRegistry.refresh(AbortSignal.timeout(10000));
+    },
+  });
   const access = JSON.parse(readFileSync(join(process.env.PI_CODING_AGENT_DIR, "tools.json"), "utf8"));
   const headers = { Authorization: `Bearer ${access.ticket}`, "Content-Type": "application/json" };
 

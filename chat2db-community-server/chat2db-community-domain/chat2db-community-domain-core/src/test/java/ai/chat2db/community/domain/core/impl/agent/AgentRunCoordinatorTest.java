@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -40,7 +41,8 @@ class AgentRunCoordinatorTest {
         AtomicInteger ids = new AtomicInteger();
         AgentModelResolver resolver = new AgentModelResolver(null) {
             @Override public AgentModelSnapshot resolve(String modelConfigId) {
-                return model();
+                if ("missing-model".equals(modelConfigId)) throw new IllegalArgumentException("Model unavailable");
+                return new AgentModelSnapshot(modelConfigId, 1, "openai", modelConfigId, 128000, 4096);
             }
         };
         coordinator = new AgentRunCoordinator(
@@ -165,12 +167,42 @@ class AgentRunCoordinatorTest {
     }
 
     @Test
-    void rejectsChangingTheFrozenSessionModel() {
-        assertThrows(IllegalArgumentException.class, () -> coordinator.start(new AgentRunStartCommand(
-                USER_ID, SESSION_ID, "other-model", new AgentRuntimeInput("hello", List.of()), "other")));
+    void switchesModelForTheNextRunWhileKeepingHistoryAndTheRuntimeHandle() {
+        adapter.emitTerminalEventOnStart(AgentEventType.RUN_COMPLETED);
+        AgentRun first = coordinator.start(startCommand("first")).toCompletableFuture().join();
+        AgentRun second = coordinator.start(new AgentRunStartCommand(USER_ID, SESSION_ID, "other-model",
+                new AgentRuntimeInput("continue", List.of()), "second")).toCompletableFuture().join();
 
+        assertEquals("model", first.model().modelConfigId());
+        assertEquals("other-model", second.model().modelConfigId());
+        assertEquals("other-model", storage.get(SESSION_ID, USER_ID).definition().modelConfigId());
+        assertEquals(2, storage.get(SESSION_ID, USER_ID).definition().revision());
+        assertEquals(1, adapter.openSessionCount());
+        assertEquals(2, storage.list(SESSION_ID, USER_ID).size());
+        assertEquals(6, storage.events.size());
+        assertEquals("model", storage.events.get(0).payload().get("modelConfigId"));
+        assertEquals("other-model", storage.events.get(3).payload().get("modelConfigId"));
+    }
+
+    @Test
+    void unavailableModelDoesNotChangeTheSessionOrCreateARun() {
+        assertThrows(IllegalArgumentException.class, () -> coordinator.start(new AgentRunStartCommand(
+                USER_ID, SESSION_ID, "missing-model", new AgentRuntimeInput("hello", List.of()), "missing")));
+        assertEquals("model", storage.get(SESSION_ID, USER_ID).definition().modelConfigId());
         assertEquals(List.of(), storage.events);
         assertEquals(List.of(), storage.list(SESSION_ID, USER_ID));
+    }
+
+    @Test
+    void canChooseAnotherModelAfterAFailedRun() {
+        adapter.failStartWith(new IllegalStateException("model unavailable"));
+        coordinator.start(startCommand("failure")).toCompletableFuture().join();
+        adapter.failStartWith(null);
+        AgentRun second = coordinator.start(new AgentRunStartCommand(USER_ID, SESSION_ID, "other-model",
+                new AgentRuntimeInput("try another model", List.of()), "retry")).toCompletableFuture().join();
+        assertEquals(AgentRunStatus.RUNNING, second.status());
+        assertEquals("other-model", second.model().modelConfigId());
+        assertEquals(1, adapter.openSessionCount());
     }
 
     private AgentRunStartCommand startCommand(String idempotencyKey) {

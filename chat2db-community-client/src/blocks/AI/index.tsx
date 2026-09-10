@@ -565,7 +565,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
-  const agentSessionRef = useRef<{ id: string; modelConfigId: string; sequence: number }>();
+  const agentSessionRef = useRef<{ id: string; sequence: number }>();
   const agentOperationRef = useRef<AgentOperation>();
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
@@ -1668,7 +1668,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setRuntimeChoice('PI');
         localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'PI');
         sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, sessionId);
-        agentSessionRef.current = { id: sessionId, modelConfigId: session.modelConfigId || '',
+        agentSessionRef.current = { id: sessionId,
           sequence: events.length ? events[events.length - 1].sequence : 0 };
         traceAgentStage('session.restored', { sessionId, events: events.length, activeRunId });
         const selected = availableModels.find((option) => option.modelConfigId === session.modelConfigId);
@@ -1842,13 +1842,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           if (operation.controller.signal.aborted || operation.cancelRequested) return;
           const modelConfigId = model.modelConfigId || model.value;
           let session = agentSessionRef.current;
-          if (session && session.modelConfigId !== modelConfigId) {
-            throw new Error(i18n('stream.agent.modelBound'));
-          }
           if (!session) {
             const created = await agentService.createSession({ message: content, runtimeType: 'PI', modelConfigId });
             if (operation.controller.signal.aborted || operation.cancelRequested) return;
-            session = { id: created.id, modelConfigId, sequence: 0 };
+            session = { id: created.id, sequence: 0 };
             traceAgentStage('session.created', { sessionId: created.id, modelConfigId });
             agentSessionRef.current = session;
             sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, created.id);

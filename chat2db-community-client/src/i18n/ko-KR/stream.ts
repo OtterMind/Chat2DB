@@ -20,7 +20,6 @@ export default {
   "stream.approval.hint": "이 명령에만 적용됩니다",
   "stream.approval.approve": "한 번 실행",
   "stream.approval.deny": "거부",
-  'stream.agent.modelBound': '이 대화의 모델은 고정되어 있습니다. 다른 모델을 선택하려면 새 대화를 시작하세요.',
   'stream.session.title': '새 채팅',
   'stream.codeBlock.pin': '콘솔에 고정',
   'stream.codeBlock.copy': '복사',

@@ -25,7 +25,7 @@ await module.link(specifier => {
   }, { context });
 });
 await module.evaluate();
-module.namespace.default({ registerTool: tool => registered.set(tool.name, tool), on: () => {} });
+module.namespace.default({ registerCommand: () => {}, registerTool: tool => registered.set(tool.name, tool), on: () => {} });
 const controller = new AbortController();
 const execution = registered.get("askUserQuestion").execute("call", { question: "Choose", options: [] }, controller.signal);
 controller.abort(new Error("cancelled by user"));

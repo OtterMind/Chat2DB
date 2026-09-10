@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.enums.agent.AgentSessionStatus;
+import ai.chat2db.community.domain.api.model.agent.AgentDefinition;
 import ai.chat2db.community.domain.api.model.agent.AgentEvent;
 import ai.chat2db.community.domain.api.model.agent.AgentFailure;
 import ai.chat2db.community.domain.api.model.agent.AgentRun;
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
@@ -89,13 +91,10 @@ public class AgentRunCoordinator {
                 .orElse(null);
         if (duplicate != null) {
             AgentTrace.record("run.replayed", session.id(), duplicate.id(), Map.of("status", duplicate.status()));
-            return java.util.concurrent.CompletableFuture.completedFuture(duplicate);
+            return CompletableFuture.completedFuture(duplicate);
         }
-        if (session.status() != AgentSessionStatus.READY) {
+        if (session.status() != AgentSessionStatus.READY && session.status() != AgentSessionStatus.FAILED) {
             throw new IllegalStateException("Agent session is not ready: " + session.id());
-        }
-        if (!session.definition().modelConfigId().equals(command.modelConfigId())) {
-            throw new IllegalArgumentException("Agent session model cannot be changed");
         }
         AgentModelSnapshot model = modelResolver.resolve(command.modelConfigId());
         AgentTrace.record("run.model.resolved", session.id(), null,
@@ -111,9 +110,10 @@ public class AgentRunCoordinator {
                         Map.of(
                                 "text", Objects.toString(command.input().text(), ""),
                                 "artifactIds", command.input().artifactIds(),
+                                "modelConfigId", model.modelConfigId(),
                                 "requestMessageId", run.requestMessageId())),
                 command.userId());
-        updateSession(session, AgentSessionStatus.READY, AgentSessionStatus.RUNNING, sequence);
+        updateSession(session, session.status(), AgentSessionStatus.RUNNING, sequence, command.modelConfigId());
         AgentTrace.record("run.accepted", session.id(), run.id(),
                 Map.of("sequence", sequence, "idempotencyKey", command.idempotencyKey()));
 
@@ -130,7 +130,7 @@ public class AgentRunCoordinator {
                 }
             });
         } catch (RuntimeException error) {
-            return java.util.concurrent.CompletableFuture.completedFuture(
+            return CompletableFuture.completedFuture(
                     failStart(session.id(), runId, command.userId(), error));
         }
     }
@@ -140,7 +140,7 @@ public class AgentRunCoordinator {
         AgentTrace.record("run.cancel.requested", run.sessionId(), run.id(), Map.of("status", run.status()));
         if (run.status() != AgentRunStatus.RUNNING && run.status() != AgentRunStatus.ACCEPTED
                 && run.status() != AgentRunStatus.WAITING_APPROVAL) {
-            return java.util.concurrent.CompletableFuture.completedFuture(run);
+            return CompletableFuture.completedFuture(run);
         }
         IAgentRuntimeSessionHandle handle = handleRegistry.get(command.sessionId());
         if (handle == null) {
@@ -261,8 +261,18 @@ public class AgentRunCoordinator {
             AgentSessionStatus expected,
             AgentSessionStatus target,
             long sequence) {
+        updateSession(session, expected, target, sequence, session.definition().modelConfigId());
+    }
+
+    private void updateSession(AgentSession session, AgentSessionStatus expected,
+            AgentSessionStatus target, long sequence, String modelConfigId) {
+        AgentDefinition definition = session.definition();
+        if (!definition.modelConfigId().equals(modelConfigId)) {
+            definition = new AgentDefinition(definition.id(), definition.name(), definition.description(),
+                    definition.systemPrompt(), definition.runtimeType(), modelConfigId, definition.revision() + 1);
+        }
         AgentSession updated = new AgentSession(
-                session.schemaVersion(), session.id(), session.userId(), session.definition(),
+                session.schemaVersion(), session.id(), session.userId(), definition,
                 session.runtimeBinding(), target, session.title(), sequence,
                 session.gmtCreate(), LocalDateTime.now(clock));
         if (!sessionStorage.compareAndSet(updated, expected)) {

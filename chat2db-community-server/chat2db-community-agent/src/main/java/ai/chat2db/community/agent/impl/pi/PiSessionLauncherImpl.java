@@ -2,6 +2,7 @@ package ai.chat2db.community.agent.impl.pi;
 
 import ai.chat2db.community.agent.converter.pi.PiEventConverter;
 import ai.chat2db.community.agent.exception.pi.PiRpcException;
+import ai.chat2db.community.agent.pi.IPiModelConfiguration;
 import ai.chat2db.community.agent.pi.IPiSessionLauncher;
 import ai.chat2db.community.tools.agent.runtime.IAgentModelAccessProvider;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
@@ -61,12 +62,13 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             String systemPrompt,
             AgentModelSnapshot model,
             IAgentRuntimeEventSink eventSink) {
-        AgentModelAccess modelAccess = modelAccessService.issue(sessionId, model);
+        IPiModelConfiguration modelConfiguration = null;
         AgentToolAccess toolAccess = null;
         try {
             toolAccess = toolAccessService.issue(sessionId, eventSink);
             Path configuration = supervisor.prepareConfigurationDirectory(sessionId);
-            writeModelConfiguration(configuration, modelAccess, model);
+            modelConfiguration = new PiModelConfigurationImpl(sessionId, configuration, modelAccessService, objectMapper);
+            AgentModelAccess modelAccess = modelConfiguration.prepare(model);
             objectMapper.writeValue(configuration.resolve("tools.json").toFile(), toolAccess);
             Path extension = configuration.resolve("chat2db-tools.mjs");
             try (var resource = new ClassPathResource("agent/chat2db-tools.mjs").getInputStream()) {
@@ -93,47 +95,19 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
                     eventConverter,
                     eventSink,
                     objectMapper,
-                    () -> {
-                        modelAccessService.revoke(modelAccess.ticket());
-                        toolAccessService.revoke(toolTicket);
-                    },
-                    modelAccess.provider(),
-                    modelAccess.modelId());
+                    () -> toolAccessService.revoke(toolTicket),
+                    modelConfiguration);
             handleReference.set(handle);
             return handle;
         } catch (IOException error) {
-            modelAccessService.revoke(modelAccess.ticket());
+            if (modelConfiguration != null) modelConfiguration.close();
             if (toolAccess != null) toolAccessService.revoke(toolAccess.ticket());
             throw new PiRpcException("Cannot start Pi runtime process", error);
         } catch (RuntimeException error) {
-            modelAccessService.revoke(modelAccess.ticket());
+            if (modelConfiguration != null) modelConfiguration.close();
             if (toolAccess != null) toolAccessService.revoke(toolAccess.ticket());
             throw error;
         }
     }
 
-    private void writeModelConfiguration(
-            Path configurationDirectory,
-            AgentModelAccess access,
-            AgentModelSnapshot model) throws IOException {
-        var modelNode = objectMapper.createObjectNode();
-        modelNode.put("id", access.modelId());
-        modelNode.put("name", access.modelId());
-        modelNode.put("reasoning", "openai-responses".equals(access.api()));
-        if (model.contextWindow() != null) {
-            modelNode.put("contextWindow", model.contextWindow());
-        }
-        if (model.maxOutputTokens() != null) {
-            modelNode.put("maxTokens", model.maxOutputTokens());
-        }
-        var provider = objectMapper.createObjectNode();
-        provider.put("baseUrl", access.baseUrl());
-        provider.put("api", access.api());
-        provider.put("apiKey", "$CHAT2DB_MODEL_TICKET");
-        provider.putObject("headers").put("X-Chat2DB-Model-Ticket", "$CHAT2DB_MODEL_TICKET");
-        provider.putArray("models").add(modelNode);
-        var root = objectMapper.createObjectNode();
-        root.putObject("providers").set(access.provider(), provider);
-        objectMapper.writeValue(configurationDirectory.resolve("models.json").toFile(), root);
-    }
 }

@@ -20,7 +20,6 @@ export default {
   "stream.approval.hint": "仅授权本次命令",
   "stream.approval.approve": "执行一次",
   "stream.approval.deny": "拒绝",
-  'stream.agent.modelBound': '当前会话已绑定模型，请新建对话后选择其他模型。',
   'stream.session.title': '新对话',
   'stream.codeBlock.pin': '钉到控制台',
   'stream.codeBlock.copy': '复制',
