@@ -34,6 +34,19 @@ const requested = event(4, 'APPROVAL_REQUESTED', {
   approvalId: 'approval-1', toolName: 'bash', command: "printf 'line 1\\nline 2'", workingDirectory: '/folder with spaces',
 });
 const requestedAgain = event(5, 'APPROVAL_REQUESTED', requested.payload);
+const sqlApproval = event(5, 'APPROVAL_REQUESTED', {
+  approvalId: 'sql-approval', toolName: 'db_query', command: 'SELECT 1; UPDATE sales SET amount=2;',
+  dataSourceId: '7', dataSourceName: 'Local MySQL', database: 'app', schema: 'tenant',
+});
+const sqlPending = updateAgentApprovals([], [sqlApproval]);
+assert.equal(sqlPending[0].toolName, 'SQL');
+assert.equal(sqlPending[0].command, sqlApproval.payload.command);
+assert.deepEqual(sqlPending[0].databaseTarget, {
+  dataSourceId: '7', dataSourceName: 'Local MySQL', database: 'app', schema: 'tenant',
+});
+assert.equal(updateAgentApprovals(sqlPending, [event(6, 'APPROVAL_DECIDED', {
+  approvalId: 'sql-approval', approved: false,
+})])[0].status, 'denied');
 const pendingApprovals = updateAgentApprovals([], [requested, requestedAgain]);
 assert.equal(pendingApprovals.length, 1);
 assert.equal(pendingApprovals[0].command, requested.payload.command);
@@ -56,5 +69,6 @@ for (const locale of [zhApprovals, enApprovals, esApprovals, jaApprovals, koAppr
   }
   assert.ok(locale['stream.approval.approve']);
   assert.ok(locale['stream.approval.deny']);
+  for (const key of ['datasource', 'database', 'schema']) assert.ok(locale[`stream.approval.${key}`]);
 }
 assert.notEqual(zhApprovals['stream.approval.pending'], enApprovals['stream.approval.pending']);

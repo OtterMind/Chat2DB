@@ -48,7 +48,7 @@ class AgentToolGatewayServiceTest {
                         method.getName().equals("list") ? List.of(run) : run);
         AgentToolGatewayService gateway = new AgentToolGatewayService(
                 new AgentDatabaseToolRegistry(domainTools), new AgentQuestionTool(null), sessions, runs, () -> 1L,
-                null, List.of(), 11837);
+                null, List.of(), address());
         try {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
@@ -75,5 +75,10 @@ class AgentToolGatewayServiceTest {
         } finally {
             ContextUtils.removeContext();
         }
+    }
+    private static AgentGatewayAddress address() {
+        AgentGatewayAddress address = new AgentGatewayAddress();
+        address.publish(11837);
+        return address;
     }
 }

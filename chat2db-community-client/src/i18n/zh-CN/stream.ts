@@ -8,6 +8,9 @@ export default {
   "stream.question.submit": "提交答案",
   "stream.question.failed": "提交失败，请重试。",
 
+  "stream.approval.datasource": "数据源",
+  "stream.approval.database": "数据库",
+  "stream.approval.schema": "模式",
   "stream.approval.title": "命令审批",
   "stream.approval.pending": "等待确认",
   "stream.approval.approved": "已允许",

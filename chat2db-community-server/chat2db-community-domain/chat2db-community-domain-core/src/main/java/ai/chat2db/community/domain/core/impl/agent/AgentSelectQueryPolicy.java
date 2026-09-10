@@ -15,10 +15,12 @@ final class AgentSelectQueryPolicy {
 
     static boolean accepts(String sql, String databaseType) {
         try {
-            SQLStatement statement = SQLUtils.parseSingleStatement(sql, JdbcUtils.parse2DruidDbType(databaseType));
-            if (!(statement instanceof SQLSelectStatement)) return false;
+            var statements = SQLUtils.parseStatements(sql, JdbcUtils.parse2DruidDbType(databaseType));
+            if (statements.isEmpty()) return false;
             boolean[] allowed = { true };
-            statement.accept(new SQLASTVisitorAdapter() {
+            for (SQLStatement statement : statements) {
+                if (!(statement instanceof SQLSelectStatement)) return false;
+                statement.accept(new SQLASTVisitorAdapter() {
                 @Override
                 public void preVisit(SQLObject node) {
                     if (node instanceof SQLStatement && !(node instanceof SQLSelectStatement)) allowed[0] = false;
@@ -27,7 +29,8 @@ final class AgentSelectQueryPolicy {
                     if (node instanceof PGSelectQueryBlock query && query.getForClause() != null) allowed[0] = false;
                     if (node instanceof MySqlSelectQueryBlock query && (query.isLockInShareMode() || query.getProcedureName() != null)) allowed[0] = false;
                 }
-            });
+                });
+            }
             return allowed[0];
         } catch (RuntimeException error) {
             return false;

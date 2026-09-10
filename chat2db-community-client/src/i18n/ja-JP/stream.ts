@@ -8,6 +8,9 @@ export default {
   "stream.question.submit": "回答を送信",
   "stream.question.failed": "送信に失敗しました。もう一度お試しください。",
 
+  "stream.approval.datasource": "データソース",
+  "stream.approval.database": "データベース",
+  "stream.approval.schema": "スキーマ",
   "stream.approval.title": "コマンドの承認",
   "stream.approval.pending": "確認待ち",
   "stream.approval.approved": "許可済み",

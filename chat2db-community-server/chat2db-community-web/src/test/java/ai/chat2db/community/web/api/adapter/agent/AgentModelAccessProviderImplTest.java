@@ -87,9 +87,11 @@ class AgentModelAccessProviderImplTest {
                     }
                     throw new UnsupportedOperationException(method.getName());
                 });
+        AgentGatewayAddress address = new AgentGatewayAddress();
+        address.publish(11837);
         return new AgentModelAccessProviderImpl(
                 modelService,
-                11837,
+                address,
                 HttpClient.newHttpClient(),
                 new ObjectMapper(),
                 Clock.fixed(Instant.parse("2026-09-09T00:00:00Z"), ZoneOffset.UTC),

@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.service.agent.*;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
@@ -28,7 +29,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -42,10 +42,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final IIdentityService identity;
     private final AgentApprovalService approvals;
     private final List<IAiAgentWorkspaceService> workspaces;
-    private final int port;
+    private final AgentGatewayAddress address;
 
     public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentSessionStorage sessions, AgentRunStorage runs,
-            IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, @Value("${server.port:10825}") int port) {
+            IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address) {
         this.tools = tools;
         this.questionTool = questionTool;
         this.sessions = sessions;
@@ -53,7 +53,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         this.identity = identity;
         this.approvals = approvals;
         this.workspaces = workspaces;
-        this.port = port;
+        this.address = address;
     }
 
     @Override
@@ -66,7 +66,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         tickets.put(ticket, new Access(sessionId, userId, context, eventSink));
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
         var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
-        return new AgentToolAccess("http://127.0.0.1:" + port + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions));
+        return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions));
     }
 
     @Override
@@ -137,7 +137,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 ContextUtils.setContext(access.context);
                 result = AgentQuestionTool.NAME.equals(toolName)
                         ? questionTool.execute(access.sessionId, run.id(), toolCallId, access.userId, arguments, access.sink, () -> isActive(access, run.id()))
-                        : tools.execute(toolName, arguments);
+                        : tools.execute(toolName, arguments, new AgentToolExecutionContext(access.sessionId, run.id(),
+                                toolCallId, access.userId, access.sink, () -> isActive(access, run.id())));
             } finally {
                 if (previous == null) ContextUtils.removeContext(); else ContextUtils.setContext(previous);
             }

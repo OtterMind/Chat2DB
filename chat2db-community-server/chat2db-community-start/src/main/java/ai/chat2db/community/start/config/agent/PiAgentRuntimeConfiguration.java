@@ -1,6 +1,12 @@
 package ai.chat2db.community.start.config.agent;
 
 import ai.chat2db.community.agent.impl.pi.AgentRuntimeAdapterImpl;
+import ai.chat2db.community.web.api.adapter.agent.AgentGatewayAddress;
+import ai.chat2db.community.web.api.adapter.agent.AgentGatewayServer;
+import ai.chat2db.community.web.api.adapter.agent.IAgentModelGateway;
+import ai.chat2db.community.domain.api.service.agent.AgentToolAccessService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.Lazy;
 import ai.chat2db.community.agent.impl.pi.AgentRuntimeEnvironmentCheckerImpl;
 import ai.chat2db.community.agent.impl.pi.AgentRuntimeInstallationImpl;
 import ai.chat2db.community.agent.impl.pi.PiProcessSupervisor;
@@ -41,6 +47,13 @@ import org.springframework.core.env.Environment;
 @Configuration
 @Conditional(LocalAgentRuntimeCondition.class)
 public class PiAgentRuntimeConfiguration {
+
+    @Bean(initMethod = "start", destroyMethod = "close")
+    @Lazy(false)
+    public AgentGatewayServer agentGatewayServer(AgentGatewayAddress address,
+            ObjectProvider<AgentToolAccessService> tools, ObjectProvider<IAgentModelGateway> models) {
+        return new AgentGatewayServer(address, tools::getObject, models::getObject);
+    }
 
     @Bean
     public PiRuntimePaths piRuntimePaths() {

@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.web.api.model.request.agent.AgentToolRequest;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
 import ai.chat2db.community.domain.api.model.agent.interaction.AgentQuestion;
 import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
@@ -47,14 +48,14 @@ public class AgentToolGatewayController {
 
     @PostMapping("/agent-tools/execute")
     public DataResult<IAgentToolResult<?>> execute(@RequestHeader("Authorization") String authorization,
-            @RequestBody @Valid ToolRequest body, HttpServletRequest request) throws Exception {
+            @RequestBody @Valid AgentToolRequest body, HttpServletRequest request) throws Exception {
         return DataResult.of(gateway.execute(ticket(authorization), request.getRemoteAddr(),
                 body.toolCallId(), body.toolName(), body.arguments()));
     }
 
     @PostMapping("/agent-tools/prepare-native")
     public ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings prepareNative(
-            @RequestHeader("Authorization") String authorization, @RequestBody @Valid ToolRequest body,
+            @RequestHeader("Authorization") String authorization, @RequestBody @Valid AgentToolRequest body,
             HttpServletRequest request) throws Exception {
         return gateway.prepareNative(ticket(authorization), request.getRemoteAddr(),
                 body.toolCallId(), body.toolName(), body.arguments());
@@ -93,7 +94,5 @@ public class AgentToolGatewayController {
         return authorization.substring(7);
     }
 
-    public record ToolRequest(@NotBlank @Size(max = 200) String toolCallId,
-            @NotBlank @Size(max = 100) String toolName, @NotNull Map<String, Object> arguments) { }
     public record DecisionRequest(@NotBlank String approvalId, @NotNull Boolean approved) { }
 }

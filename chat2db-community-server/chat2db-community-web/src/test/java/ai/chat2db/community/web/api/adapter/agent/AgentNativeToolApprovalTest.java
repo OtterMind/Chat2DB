@@ -55,7 +55,7 @@ class AgentNativeToolApprovalTest {
         });
         AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
         var gateway = new AgentToolGatewayService(new AgentDatabaseToolRegistry(database), new AgentQuestionTool(null),
-                sessions, runs, () -> 1L, approvals, List.of(workspace), 11847);
+                sessions, runs, () -> 1L, approvals, List.of(workspace), address());
         var events = new ArrayList<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent>();
         try {
             ContextUtils.setContext(new Context());
@@ -101,5 +101,10 @@ class AgentNativeToolApprovalTest {
     private static <T> T proxy(Class<T> type, Invocation call) {
         return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type},
                 (proxy, method, args) -> call.call(method.getName(), args)));
+    }
+    private static AgentGatewayAddress address() {
+        AgentGatewayAddress address = new AgentGatewayAddress();
+        address.publish(11847);
+        return address;
     }
 }

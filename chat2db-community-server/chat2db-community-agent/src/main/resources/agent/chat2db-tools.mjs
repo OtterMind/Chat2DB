@@ -61,7 +61,7 @@ export default function (pi) {
       promptSnippet: tool.promptSnippet,
       promptGuidelines: tool.promptGuidelines,
       async execute(toolCallId, args, signal) {
-        const execute = tool.name === "askUserQuestion" ? waitForUser : request;
+        const execute = waitForUser;
         const response = await execute("/execute", {
           method: "POST",
           body: JSON.stringify({ toolCallId, toolName: tool.name, arguments: args }),
@@ -97,7 +97,7 @@ export default function (pi) {
           return previous.result;
         }
         const result = (async () => {
-          const { workingDirectory } = await request("/prepare-native", {
+          const { workingDirectory } = await waitForUser("/prepare-native", {
             method: "POST", body: JSON.stringify({ toolCallId, toolName: name, arguments: args }), signal,
           });
           signal?.throwIfAborted();

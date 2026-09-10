@@ -23,6 +23,8 @@ class AgentDatabaseToolRegistryTest {
         assertFalse(query.promptGuidelines().isEmpty());
         assertFalse(query.promptSnippet().isBlank());
         var fields = (Map<?, ?>) query.parameters().get("properties");
+        assertTrue(((Map<?, ?>) fields.get("sql")).get("description").toString().contains("complete SQL batch"));
+        assertFalse(((Map<?, ?>) fields.get("sql")).get("description").toString().contains("no writes"));
         assertTrue(((Map<?, ?>) fields.get("database")).containsKey("anyOf"));
         assertFalse(((Map<?, ?>) fields.get("dataSourceId")).containsKey("anyOf"));
         assertFalse(registry.execute("execute_sql", Map.of("sql", "SELECT 1")).ok());
@@ -44,8 +46,7 @@ class AgentDatabaseToolRegistryTest {
         var result = registry.execute("db_query", Map.of("dataSourceId", "7", "sql", "SELECT body FROM samples", "pageSize", 100));
         assertFalse(result.ok());
         assertEquals("RESULT_TOO_LARGE", result.error().code());
-        assertEquals(50, result.nextAction().arguments().get("pageSize"));
-        assertEquals(1, result.nextAction().arguments().get("page"));
+        assertNull(result.nextAction(), "Unknown SQL outcomes must not suggest automatically replaying writes");
         String json = new ObjectMapper().writeValueAsString(result);
         assertFalse(new ObjectMapper().readTree(json).get("ok").asBoolean());
         assertFalse(json.contains("Output truncated"));

@@ -8,6 +8,9 @@ export default {
   "stream.question.submit": "답변 제출",
   "stream.question.failed": "제출하지 못했습니다. 다시 시도해 주세요.",
 
+  "stream.approval.datasource": "데이터 소스",
+  "stream.approval.database": "데이터베이스",
+  "stream.approval.schema": "스키마",
   "stream.approval.title": "명령 승인",
   "stream.approval.pending": "승인 대기",
   "stream.approval.approved": "허용됨",

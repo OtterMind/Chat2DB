@@ -8,6 +8,9 @@ export default {
   "stream.question.submit": "Submit answer",
   "stream.question.failed": "Submission failed. Please try again.",
 
+  "stream.approval.datasource": "Datasource",
+  "stream.approval.database": "Database",
+  "stream.approval.schema": "Schema",
   "stream.approval.title": "Command approval",
   "stream.approval.pending": "Awaiting approval",
   "stream.approval.approved": "Allowed",

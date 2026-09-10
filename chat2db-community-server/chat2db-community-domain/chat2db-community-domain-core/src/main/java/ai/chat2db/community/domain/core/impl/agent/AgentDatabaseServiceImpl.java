@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
+import ai.chat2db.community.domain.core.converter.agent.AgentSqlResultConverter;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
 import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseRequest;
@@ -15,6 +16,17 @@ import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.agent.AgentDatabaseService;
 import ai.chat2db.community.domain.api.service.agent.AgentMetadataService;
+import ai.chat2db.community.domain.api.service.agent.AgentApprovalService;
+import ai.chat2db.community.domain.api.model.agent.AgentApproval;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import ai.chat2db.community.domain.api.service.db.*;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
@@ -32,16 +44,18 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     private final IDbDlTemplateService executor;
     private final IDbSqlService sqlService;
     private final IOpsSqlOperationLogService audit;
+    private final AgentApprovalService approvals;
 
     public AgentDatabaseServiceImpl(IWorkspaceStorageFacade storage, IDbConnectionContextService connections,
             AgentMetadataService metadata, IDbDlTemplateService executor,
-            IDbSqlService sqlService, IOpsSqlOperationLogService audit) {
+            IDbSqlService sqlService, IOpsSqlOperationLogService audit, AgentApprovalService approvals) {
         this.storage = storage;
         this.connections = connections;
         this.metadata = metadata;
         this.executor = executor;
         this.sqlService = sqlService;
         this.audit = audit;
+        this.approvals = approvals;
     }
 
     @Override
@@ -180,22 +194,27 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
     }
 
     @Override
-    public DbAgentDatabaseResponse<QueryData> query(DbAgentDatabaseRequest.Query request) {
+    public DbAgentDatabaseResponse<SqlExecutionData> query(DbAgentDatabaseRequest.Query request, AgentToolExecutionContext context) {
         required(request.sql(), "sql", null);
         if (request.sql().length() > 32768) throw invalid("sql", "SQL must not exceed 32768 characters.", null);
         int page = page(request.page()), size = size(request.pageSize());
         return scoped(request.scope(), true, profile -> {
             var statements = sqlService.parseStatements(request.sql(), profile.getDbType());
-            if (statements.size() != 1 || !isQuery(statements.get(0).getSqlType())
-                    || ("SELECT".equals(statements.get(0).getSqlType()) && !AgentSelectQueryPolicy.accepts(request.sql(), profile.getDbType()))) {
-                throw new AgentDatabaseException("QUERY_REQUIRED", "sql", "db_query accepts one SELECT, SHOW or DESCRIBE statement. Writes, SELECT INTO, locking reads, unsupported SELECT syntax and multiple statements are not supported.", null);
+            if (statements.isEmpty()) {
+                throw new AgentDatabaseException("SQL_REQUIRED", "sql", "Provide at least one executable SQL statement.", null);
+            }
+            boolean automatic = statements.stream().allMatch(statement -> "SELECT".equals(statement.getSqlType()))
+                    && AgentSelectQueryPolicy.accepts(request.sql(), profile.getDbType());
+            if (!automatic) approveSql(request, profile, context);
+            if (context != null && !context.active().getAsBoolean()) {
+                throw new AgentDatabaseException("RUN_CANCELLED", "sql", "Agent run has stopped; SQL was not executed.", null);
             }
             var execute = new DbDlExecuteRequest();
             execute.setSql(request.sql());
             execute.setDataSourceId(profile.getDataSourceId());
             execute.setDatabaseName(profile.getDatabaseName());
             execute.setSchemaName(profile.getSchemaName());
-            execute.setSingle(true);
+            execute.setSingle(statements.size() == 1);
             execute.setPageNo(page);
             execute.setPageSize(size);
             execute.setPageSizeAll(false);
@@ -209,48 +228,43 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
             var failed = responses.stream().filter(item -> !Boolean.TRUE.equals(item.getSuccess())).findFirst();
             audit.recordListResultAsync(OpsSqlOperationLogListResultRequest.of(request.sql(), failed.isEmpty(),
                     failed.map(ExecuteResponse::getMessage).orElse(null), responses, SqlOperationLogSourceEnum.AI_TOOL.name()));
-            if (failed.isPresent()) {
-                throw new AgentDatabaseException("SQL_ERROR", "sql", failed.get().getMessage(),
-                        next("db_search_tables", scopeArguments(profile)));
-            }
-            if (responses.size() != 1) throw new AgentDatabaseException("UNEXPECTED_RESULT", "sql", "Expected one query result set.", null);
-            ExecuteResponse response = responses.get(0);
-            var headers = response.getHeaderList() == null ? List.<ai.chat2db.community.domain.api.model.result.Header>of() : response.getHeaderList();
-            var columnIndexes = java.util.stream.IntStream.range(0, headers.size())
-                    .filter(i -> !ai.chat2db.community.domain.api.enums.plugin.DataTypeEnum.CHAT2DB_ROW_NUMBER.getCode().equals(headers.get(i).getDataType()))
-                    .boxed().toList();
-            var columns = columnIndexes.stream().map(i -> {
-                var column = headers.get(i);
-                return new QueryColumn(column.getName() == null ? column.getColumnName() : column.getName(),
-                        column.getColumnType() == null ? column.getDataType() : column.getColumnType());
-            }).toList();
-            var rows = new ArrayList<List<String>>();
-            var cellWarnings = new ArrayList<CellWarning>();
-            if (response.getDataList() != null) {
-                for (var sourceRow : response.getDataList()) {
-                    if (sourceRow == null || sourceRow.size() != headers.size()) {
-                        throw new AgentDatabaseException("UNEXPECTED_RESULT", null, "Result row does not match column metadata.", null);
-                    }
-                    var row = new ArrayList<String>();
-                    for (int index : columnIndexes) {
-                        var cell = sourceRow.get(index);
-                        if (cell != null && (cell.isTruncated() || cell.getUnsupportedReason() != null)) {
-                            cellWarnings.add(new CellWarning(rows.size(), row.size(), cell.getUnsupportedReason() == null
-                                    ? "Value was truncated by the database result reader" : cell.getUnsupportedReason(), cell.getSizeChars(), cell.getLoadedChars()));
-                        }
-                        row.add(cell == null ? null : cell.getRawValue() instanceof String raw ? raw : cell.getValue());
-                    }
-                    rows.add(row);
-                }
-            }
-            var pagination = pageInfo(page, size, rows.size(), null, response.getHasNextPage());
-            Map<String, Object> args = scopeArguments(profile);
-            args.put("sql", request.sql()); args.put("page", page + 1); args.put("pageSize", size);
-            return DbAgentDatabaseResponse.success(scope(profile), new QueryData(columns, rows, "database-text",
-                    response.getExecutionMetrics() == null ? null : response.getExecutionMetrics().getTotalDurationMs(), cellWarnings),
-                    pagination, Boolean.TRUE.equals(pagination.hasMore()) ? next("db_query", args) : null,
-                    cellWarnings.isEmpty() ? List.of() : List.of("Some cells are incomplete; see data.cellWarnings (zero-based row and column)."));
+            return AgentSqlResultConverter.toResponse(request, profile, responses, statements.size(), automatic);
+
         });
+    }
+
+    private void approveSql(DbAgentDatabaseRequest.Query request, ConnectionProfile profile, AgentToolExecutionContext context) {
+        if (context == null || !context.active().getAsBoolean()) {
+            throw new AgentDatabaseException("APPROVAL_REQUIRED", "sql", "This SQL requires approval in an active Agent run.", null);
+        }
+        Map<String, Object> payload = new TreeMap<>(scopeArguments(profile));
+        payload.put("command", request.sql());
+        payload.put("toolName", "db_query");
+        payload.put("dataSourceName", Objects.toString(profile.getAlias(), String.valueOf(profile.getDataSourceId())));
+        payload.put("databaseType", profile.getDbType());
+        payload.put("page", page(request.page()));
+        payload.put("pageSize", size(request.pageSize()));
+        String digest;
+        try {
+            digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(
+                    com.alibaba.fastjson2.JSON.toJSONString(payload).getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("Cannot identify SQL approval", error);
+        }
+        AgentApproval approval = new AgentApproval(UUID.randomUUID().toString(), context.sessionId(), context.runId(),
+                context.toolCallId(), AgentApprovalStatus.PENDING, AgentApprovalScope.ONCE, digest,
+                LocalDateTime.now().plusMinutes(2));
+        payload.put("approvalId", approval.id());
+        boolean approved = approvals.awaitDecision(approval, context.userId(), () -> context.eventSink().emit(
+                new AgentRuntimeEvent(UUID.randomUUID().toString(), context.sessionId(), context.runId(),
+                        AgentEventType.APPROVAL_REQUESTED, payload, LocalDateTime.now())), context.active());
+        if (context.active().getAsBoolean()) {
+            context.eventSink().emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), context.sessionId(), context.runId(),
+                    AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(), "approved", approved), LocalDateTime.now()));
+        }
+        if (!approved || !context.active().getAsBoolean()) {
+            throw new AgentDatabaseException("APPROVAL_DENIED", "sql", "SQL execution was not approved or was cancelled. Do not retry without a new user request.", null);
+        }
     }
 
     private List<Source> matchingSources(String search) {
@@ -345,9 +359,6 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 end < items.size() ? next(tool, args) : null, List.of());
     }
 
-    private static boolean isQuery(String type) {
-        return type != null && (type.equals("SELECT") || type.startsWith("SHOW_") || type.equals("DESCRIBE") || type.equals("DESCRIBE_FULL"));
-    }
     private static boolean blank(String value) { return value == null || value.isBlank(); }
     private static void required(String value, String field, AgentToolNextAction next) {
         if (blank(value)) throw new AgentDatabaseException(field.equals("dataSourceId") ? "MISSING_DATASOURCE" : "MISSING_ARGUMENT", field, field + " is required.", next);

@@ -24,17 +24,17 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import ai.chat2db.community.web.api.model.response.agent.AgentModelGatewayResponse;
 import org.springframework.stereotype.Service;
 
 @Service
-public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
+public class AgentModelAccessProviderImpl implements IAgentModelGateway {
 
     static final int MAX_REQUEST_BYTES = 8 * 1024 * 1024;
     private static final Duration TICKET_TTL = Duration.ofHours(2);
 
     private final IAiModelConfigService modelConfigService;
-    private final int localPort;
+    private final AgentGatewayAddress address;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -44,21 +44,21 @@ public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
     @Autowired
     public AgentModelAccessProviderImpl(
             IAiModelConfigService modelConfigService,
-            @Value("${server.port:10825}") int localPort) {
-        this(modelConfigService, localPort,
+            AgentGatewayAddress address) {
+        this(modelConfigService, address,
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build(),
                 new ObjectMapper(), Clock.systemUTC(), new SecureRandom());
     }
 
     AgentModelAccessProviderImpl(
             IAiModelConfigService modelConfigService,
-            int localPort,
+            AgentGatewayAddress address,
             HttpClient httpClient,
             ObjectMapper objectMapper,
             Clock clock,
             SecureRandom secureRandom) {
         this.modelConfigService = modelConfigService;
-        this.localPort = localPort;
+        this.address = address;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.clock = clock;
@@ -89,7 +89,7 @@ public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
                 now.plus(TICKET_TTL)));
         return new AgentModelAccess(
                 "chat2db", model.modelId(), "openai-responses",
-                "http://127.0.0.1:" + localPort + "/api/v3/ai/agent-model/v1",
+                address.baseUrl() + "/api/v3/ai/agent-model/v1",
                 ticket);
     }
 
@@ -100,7 +100,8 @@ public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
         }
     }
 
-    public GatewayResponse forward(String ticketValue, String remoteAddress, byte[] body) throws IOException {
+    @Override
+    public AgentModelGatewayResponse forward(String ticketValue, String remoteAddress, byte[] body) throws IOException {
         if (body.length > MAX_REQUEST_BYTES) {
             throw new IllegalArgumentException("Agent model request is too large");
         }
@@ -157,7 +158,7 @@ public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
                     }
                 }
             };
-            return new GatewayResponse(
+            return new AgentModelGatewayResponse(
                     response.statusCode(),
                     contentType,
                     monitored);
@@ -211,10 +212,4 @@ public class AgentModelAccessProviderImpl implements IAgentModelAccessProvider {
             Instant expiresAt) {
     }
 
-    public record GatewayResponse(int statusCode, String contentType, InputStream body) implements AutoCloseable {
-        @Override
-        public void close() throws IOException {
-            body.close();
-        }
-    }
 }

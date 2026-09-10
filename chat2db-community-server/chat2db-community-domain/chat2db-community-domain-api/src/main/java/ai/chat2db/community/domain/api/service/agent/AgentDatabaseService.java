@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.request.agent.DbAgentDatabaseReques
 import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse.*;
 import ai.chat2db.community.domain.api.model.response.agent.DbAgentDatabaseResponse;
 import java.util.List;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 
 public interface AgentDatabaseService {
     DbAgentDatabaseResponse<List<Source>> listSources(Sources request);
@@ -12,5 +13,5 @@ public interface AgentDatabaseService {
     DbAgentDatabaseResponse<List<TableSummary>> listTables(Tables request);
     DbAgentDatabaseResponse<List<ColumnSummary>> listColumns(Columns request);
     DbAgentDatabaseResponse<List<ObjectDetail>> describeObjects(Describe request);
-    DbAgentDatabaseResponse<QueryData> query(Query request);
+    DbAgentDatabaseResponse<SqlExecutionData> query(Query request, AgentToolExecutionContext context);
 }

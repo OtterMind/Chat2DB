@@ -7,19 +7,31 @@ export interface AgentApprovalItem {
   toolName: string;
   command: string;
   workingDirectory: string;
+  databaseTarget?: { dataSourceId: string; dataSourceName: string; database?: string; schema?: string };
   status: 'pending' | 'approved' | 'denied' | 'closed';
 }
 
-export const updateAgentApprovals = (current: AgentApprovalItem[], events: AgentEvent[]): AgentApprovalItem[] => {
+export const updateAgentApprovals = (
+  current: AgentApprovalItem[], events: AgentEvent[],
+): AgentApprovalItem[] => {
   const approvals = new Map(current.map((item) => [item.id, item]));
   for (const event of events) {
-    const { approvalId, command, workingDirectory, toolName, approved } = event.payload;
+    const {
+      approvalId, command, workingDirectory, toolName, approved, dataSourceId, dataSourceName, database, schema,
+    } = event.payload;
     if (event.type === 'APPROVAL_REQUESTED' && typeof approvalId === 'string'
         && typeof command === 'string' && event.runId && !approvals.has(approvalId)) {
       approvals.set(approvalId, {
         id: approvalId, sessionId: event.sessionId, runId: event.runId, command,
         workingDirectory: typeof workingDirectory === 'string' ? workingDirectory : '',
-        toolName: toolName === 'powershell' ? 'PowerShell' : 'Bash', status: 'pending',
+        toolName: toolName === 'db_query' ? 'SQL' : toolName === 'powershell' ? 'PowerShell' : 'Bash',
+        ...(toolName === 'db_query' && typeof dataSourceId === 'string' ? { databaseTarget: {
+          dataSourceId,
+          dataSourceName: typeof dataSourceName === 'string' ? dataSourceName : dataSourceId,
+          database: typeof database === 'string' ? database : undefined,
+          schema: typeof schema === 'string' ? schema : undefined,
+        } } : {}),
+        status: 'pending',
       });
     }
     if (event.type === 'APPROVAL_DECIDED' && typeof approvalId === 'string') {

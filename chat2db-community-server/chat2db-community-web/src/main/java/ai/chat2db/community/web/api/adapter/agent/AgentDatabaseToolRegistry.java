@@ -14,6 +14,8 @@ import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.BiFunction;
+import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import org.springframework.stereotype.Component;
 
 /** V2 owns its model-facing schemas and structured results independently of V1 tools. */
@@ -64,10 +66,10 @@ public class AgentDatabaseToolRegistry {
                         "For functions, procedures and triggers use exact names supplied by the user or discovered with read-only catalog SQL through db_query. Do not invent object names.",
                         "Use returned column names and databaseType to generate dialect-correct SQL; inspect definition and warnings before treating it as executable DDL."),
                 describeFields, List.of("dataSourceId", "objects"), Describe.class, service::describeObjects);
-        var queryFields = scopeFields(); queryFields.put("sql", text("One SELECT, SHOW or DESCRIBE statement; no writes or multiple statements. Use ORDER BY for stable pagination.", 32768));
-        add("db_query", "Execute one SELECT, SHOW or DESCRIBE statement in an explicit scope. Writes are not supported. page defaults to 1; pageSize defaults to 50, maximum 200. Rows are arrays aligned with columns; values use database text, SQL NULL is JSON null. No 50-row preview or cell shortening is applied. hasMore/nextAction indicate another page; each page reruns the SQL, so results may change if data changes. Inspect schema before querying unknown tables.",
+        var queryFields = scopeFields(); queryFields.put("sql", text("One SQL statement or a complete SQL batch. All-SELECT batches run automatically; any other statement requires approval of the whole batch before execution. Use ORDER BY for stable query pagination.", 32768));
+        add("db_query", "Execute SQL statements in an explicit scope. A batch containing only SELECT queries runs automatically; if any statement needs approval, the entire batch waits for approval before any statement executes. Statements execute in order and stop at the first failure. Rejection or cancellation means no execution; never retry it without a new user request. Each outcome is in data.results with statementIndex, sql, success, data, page and error. DML/DDL outcomes include data.affectedRows when reported by the driver. page defaults to 1; pageSize defaults to 50, maximum 200. Each result has rows aligned with columns; values use database text, SQL NULL is JSON null. No 50-row preview or cell shortening is applied. hasMore/nextAction indicate another page; each page reruns the SQL, so results may change if data changes. Inspect schema before querying unknown tables.",
                 "Query data with typed column metadata and explicit pagination.", List.of("Check ok before using data. On error follow error.field and nextAction; never treat an error as an empty result.",
-                        "Use explicit column lists and a stable ORDER BY. Check page.hasMore and data.cellWarnings before claiming results are complete."),
+                        "Use explicit column lists and a stable ORDER BY. Check each result page.hasMore and data.cellWarnings before claiming results are complete."),
                 paged(queryFields), List.of("dataSourceId", "sql"), Query.class, service::query);
     }
 
@@ -75,10 +77,14 @@ public class AgentDatabaseToolRegistry {
     public Set<String> names() { return Collections.unmodifiableSet(tools.keySet()); }
 
     public DbAgentDatabaseResponse<?> execute(String name, Map<String, Object> arguments) {
+        return execute(name, arguments, null);
+    }
+
+    public DbAgentDatabaseResponse<?> execute(String name, Map<String, Object> arguments, AgentToolExecutionContext context) {
         Entry tool = tools.get(name);
         if (tool == null) return DbAgentDatabaseResponse.failure("UNKNOWN_TOOL", "toolName", "Unknown V2 database tool: " + name, null);
         DbAgentDatabaseResponse<?> result;
-        try { result = tool.execute.apply(arguments); }
+        try { result = tool.execute.apply(arguments, context); }
         catch (AgentDatabaseException error) {
             var nextAction = error.nextAction();
             if (nextAction == null && ("schemaPattern".equals(error.field()) && arguments.get("schema") != null
@@ -97,9 +103,9 @@ public class AgentDatabaseToolRegistry {
                 int size = retry.get("pageSize") instanceof Number number ? number.intValue() : 50;
                 retry.put("pageSize", Math.max(1, size / 2));
                 retry.put("page", 1);
-                boolean pageable = name.equals("db_query") || name.startsWith("db_search_");
+                boolean pageable = name.startsWith("db_search_") || result.data() instanceof DbAgentDatabaseResponse.SqlExecutionData execution && execution.readOnly();
                 return DbAgentDatabaseResponse.failure("RESULT_TOO_LARGE", null,
-                        "Result exceeds 512 KiB. Request fewer rows/columns or describe fewer objects; for a single large value use an explicit SQL substring. No partial result was returned. Changing pageSize restarts pagination at page 1.",
+                        "Result exceeds 512 KiB. Request fewer rows/columns or describe fewer objects; for a single large value use an explicit SQL substring. No partial result was returned. SQL may already have executed; never automatically retry a batch that can write. Changing pageSize restarts pagination at page 1.",
                         pageable && size > 1 ? new AgentToolNextAction(name, retry) : null);
             }
         } catch (Exception error) {
@@ -111,6 +117,12 @@ public class AgentDatabaseToolRegistry {
     private <T> void add(String name, String description, String snippet, List<String> guidelines,
             Map<String, Object> properties, List<String> required, Class<T> type,
             Function<T, DbAgentDatabaseResponse<?>> action) {
+        add(name, description, snippet, guidelines, properties, required, type, (request, context) -> action.apply(request));
+    }
+
+    private <T> void add(String name, String description, String snippet, List<String> guidelines,
+            Map<String, Object> properties, List<String> required, Class<T> type,
+            BiFunction<T, AgentToolExecutionContext, DbAgentDatabaseResponse<?>> action) {
         var modelProperties = new LinkedHashMap<String, Object>();
         properties.forEach((field, definition) -> modelProperties.put(field, required.contains(field) ? definition :
                 Map.of("anyOf", List.of(definition, Map.of("type", "null")),
@@ -118,7 +130,7 @@ public class AgentDatabaseToolRegistry {
                                 + " Optional: omit or pass null when unused. Never use a placeholder value.")));
         Map<String, Object> schema = Map.of("type", "object", "properties", modelProperties, "required", required, "additionalProperties", false);
         var definition = new AgentToolAccess.Tool(name, description, schema, snippet, guidelines);
-        tools.put(name, new Entry(definition, arguments -> {
+        tools.put(name, new Entry(definition, (arguments, context) -> {
             T request;
             try { request = json.convertValue(arguments, type); }
             catch (IllegalArgumentException error) {
@@ -130,7 +142,7 @@ public class AgentDatabaseToolRegistry {
                                 + ". Follow the tool schema exactly; dataSourceId is a string, page/pageSize are integers.",
                         "dataSourceId".equals(field) ? new AgentToolNextAction("db_search_datasources", Map.of()) : null);
             }
-            return action.apply(request);
+            return action.apply(request, context);
         }));
     }
     private static Map<String, Object> text(String description, int maxLength) {
@@ -166,5 +178,5 @@ public class AgentDatabaseToolRegistry {
         properties.put("pageSize", Map.of("type", "integer", "minimum", 1, "maximum", 200, "default", 50, "description", "Maximum number of items returned per page."));
         return properties;
     }
-    private record Entry(AgentToolAccess.Tool definition, Function<Map<String, Object>, DbAgentDatabaseResponse<?>> execute) { }
+    private record Entry(AgentToolAccess.Tool definition, BiFunction<Map<String, Object>, AgentToolExecutionContext, DbAgentDatabaseResponse<?>> execute) { }
 }

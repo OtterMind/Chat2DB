@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from 'antd';
-import { Terminal } from 'lucide-react';
+import { Database, Terminal } from 'lucide-react';
 import i18n from '@/i18n';
 import { AgentApprovalItem, agentErrorText } from '../../agentEvents';
 import { useStyles } from './style';
@@ -13,6 +13,7 @@ export default function AgentApprovalCard({ approval, onDecide }: {
   const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null);
   const [error, setError] = useState('');
   const pending = approval.status === 'pending';
+  const target = approval.databaseTarget;
   const decide = async (approved: boolean) => {
     if (submitting || !pending) return;
     setSubmitting(approved ? 'approve' : 'deny');
@@ -28,15 +29,21 @@ export default function AgentApprovalCard({ approval, onDecide }: {
 
   return <section className={styles.card} aria-label={i18n('stream.approval.title')}>
     <div className={styles.header}>
-      <Terminal size={16} aria-hidden="true" />
+      {target ? <Database size={16} aria-hidden="true" /> : <Terminal size={16} aria-hidden="true" />}
       <strong>{approval.toolName}</strong>
       <span className={styles.status} role="status">{i18n(`stream.approval.${approval.status}`)}</span>
     </div>
+    {target && <div className={styles.directory}>
+      <span>{i18n('stream.approval.datasource')}</span>
+      <code>{target.dataSourceName} ({target.dataSourceId})</code>
+      {target.database && <><span>{i18n('stream.approval.database')}</span><code>{target.database}</code></>}
+      {target.schema && <><span>{i18n('stream.approval.schema')}</span><code>{target.schema}</code></>}
+    </div>}
     {approval.workingDirectory && <div className={styles.directory}>
       <span>{i18n('setting.agent.workingDirectory')}</span>
       <code>{approval.workingDirectory}</code>
     </div>}
-    <pre className={styles.command} tabIndex={0} aria-label={i18n('stream.approval.command')}>
+    <pre className={styles.command} tabIndex={0} aria-label={target ? 'SQL' : i18n('stream.approval.command')}>
       <code>{approval.command}</code>
     </pre>
     {pending && <>

@@ -35,5 +35,7 @@ public record DbAgentDatabaseResponse<T>(boolean ok, Scope scope, T data, Page p
     public record CellWarning(int row, int column, String reason, Long originalCharacters, Long returnedCharacters) { }
     // Values retain their database text representation to preserve decimal precision, timestamps and SQL NULL.
     public record QueryData(List<QueryColumn> columns, List<List<String>> rows, String valueEncoding,
-                            Long durationMs, List<CellWarning> cellWarnings) { }
+                            Long durationMs, List<CellWarning> cellWarnings, Integer affectedRows) { }
+    public record SqlExecutionData(List<SqlResult> results, int statementCount, boolean readOnly) { }
+    public record SqlResult(int statementIndex, String sql, boolean success, QueryData data, Page page, Error error) { }
 }
