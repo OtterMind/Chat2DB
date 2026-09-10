@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -174,6 +175,132 @@ class CsvManifestImporterTest {
         assertEquals("app", opened.get().getDatabaseName());
         assertEquals("tenant", opened.get().getSchemaName());
         assertEquals(1, jdbc.commits.get());
+    }
+
+    @Test
+    void schemaV2CaseDistinctShardsUseTheirOwnMappingsAndOptions(@TempDir Path directory) throws Exception {
+        Path upperSource = Files.writeString(directory.resolve("quoted-parent.csv"), "upper_id\n1\n");
+        Path lowerSource = Files.writeString(directory.resolve("quoted-child.csv"), "lower_id\n2\n");
+        ImportTaskSpec taskSpec = caseDistinctSpec(upperSource, lowerSource);
+        ImportManifest upperManifest = tableManifest(upperSource, "Users", "app.tenant.Users", 2);
+        ImportManifest lowerManifest = tableManifest(lowerSource, "users", "app.tenant.users", 2);
+        JdbcProbe jdbc = new JdbcProbe();
+        AtomicInteger releases = new AtomicInteger();
+        Map<String, ImportTaskSpec> observed = new LinkedHashMap<>();
+        CsvManifestImporter importer = importer((shardSpec, ignored) ->
+                observed.put(shardSpec.getTarget().getTableName(), shardSpec), jdbc, releases);
+
+        importer.executeShard(taskSpec, context(new AtomicInteger(), new AtomicReference<>()),
+                connectInfo(), upperManifest, upperManifest.getShards().get(0));
+        importer.executeShard(taskSpec, context(new AtomicInteger(), new AtomicReference<>()),
+                connectInfo(), lowerManifest, lowerManifest.getShards().get(0));
+
+        assertEquals("upper_id", observed.get("Users").getColumnMappings().get(0).getSourceColumn());
+        assertEquals("UPPER_ID", observed.get("Users").getColumnMappings().get(0).getTargetColumn());
+        assertEquals("ABORT", observed.get("Users").getOptions().getOnError());
+        assertEquals(3, observed.get("Users").getOptions().getMaxErrors());
+        assertEquals("lower_id", observed.get("users").getColumnMappings().get(0).getSourceColumn());
+        assertEquals("lower_id", observed.get("users").getColumnMappings().get(0).getTargetColumn());
+        assertEquals("SKIP", observed.get("users").getOptions().getOnError());
+        assertEquals(7, observed.get("users").getOptions().getMaxErrors());
+        assertEquals(2, jdbc.commits.get());
+        assertEquals(2, releases.get());
+    }
+
+    @Test
+    void schemaV2RejectsMissingAndMismatchedTableKeysBeforeOpeningJdbc(@TempDir Path directory)
+            throws Exception {
+        Path source = Files.writeString(directory.resolve("quoted-invalid.csv"), "upper_id\n1\n");
+        ImportTaskSpec taskSpec = caseDistinctSpec(source, source);
+        ImportManifest missing = tableManifest(source, "Users", null, 2);
+        ImportManifest mismatched = tableManifest(source, "users", "app.tenant.Users", 2);
+        AtomicInteger opens = new AtomicInteger();
+        TaskStorage unusedStorage = (TaskStorage) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> defaultValue(method.getReturnType()));
+        CsvManifestImporter importer = new CsvManifestImporter(new ImportManifestScheduler(unusedStorage),
+                (ignored, context) -> { }, ignored -> {
+                    opens.incrementAndGet();
+                    return new JdbcProbe().connection;
+                }, ignored -> { });
+
+        for (ImportManifest manifest : List.of(missing, mismatched)) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                    () -> importer.executeShard(taskSpec,
+                            context(new AtomicInteger(), new AtomicReference<>()), connectInfo(), manifest,
+                            manifest.getShards().get(0)));
+            assertTrue(failure.getMessage().startsWith("Schema v2 manifest shard"));
+        }
+
+        assertEquals(0, opens.get());
+    }
+
+    @Test
+    void legacyShardPrefersAnExactCaseMatch(@TempDir Path directory) throws Exception {
+        Path upperSource = Files.writeString(directory.resolve("legacy-Users.csv"), "upper_id\n1\n");
+        Path lowerSource = Files.writeString(directory.resolve("legacy-users.csv"), "lower_id\n2\n");
+        ImportTaskSpec taskSpec = caseDistinctSpec(upperSource, lowerSource);
+        ImportManifest manifest = tableManifest(lowerSource, "users", null, 1);
+        AtomicReference<ImportTaskSpec> observed = new AtomicReference<>();
+
+        importer((shardSpec, ignored) -> observed.set(shardSpec), new JdbcProbe(), new AtomicInteger())
+                .executeShard(taskSpec, context(new AtomicInteger(), new AtomicReference<>()),
+                        connectInfo(), manifest, manifest.getShards().get(0));
+
+        assertEquals("lower_id", observed.get().getColumnMappings().get(0).getSourceColumn());
+        assertEquals("SKIP", observed.get().getOptions().getOnError());
+        assertEquals(7, observed.get().getOptions().getMaxErrors());
+    }
+
+    @Test
+    void legacyShardRejectsAnAmbiguousCaseInsensitiveFallback(@TempDir Path directory) throws Exception {
+        Path upperSource = Files.writeString(directory.resolve("legacy-ambiguous.csv"), "id\n1\n");
+        ImportTaskSpec taskSpec = caseDistinctSpec(upperSource, upperSource);
+        ImportManifest manifest = tableManifest(upperSource, "USERS", null, 1);
+        AtomicInteger opens = new AtomicInteger();
+        JdbcProbe jdbc = new JdbcProbe();
+        TaskStorage unusedStorage = (TaskStorage) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> defaultValue(method.getReturnType()));
+        CsvManifestImporter importer = new CsvManifestImporter(new ImportManifestScheduler(unusedStorage),
+                (ignored, context) -> { }, ignored -> {
+                    opens.incrementAndGet();
+                    return jdbc.connection;
+                }, ignored -> { });
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> importer.executeShard(taskSpec,
+                        context(new AtomicInteger(), new AtomicReference<>()), connectInfo(), manifest,
+                        manifest.getShards().get(0)));
+
+        assertTrue(failure.getMessage().contains("ambiguous"));
+        assertEquals(0, opens.get());
+    }
+
+    @Test
+    void legacyShardAllowsAUniqueCaseInsensitiveFallback(@TempDir Path directory) throws Exception {
+        Path ordersSource = Files.writeString(directory.resolve("legacy-orders.csv"), "order_id\n1\n");
+        ImportTaskSpec taskSpec = ImportTaskSpec.builder().scope(ImportScope.SCHEMA).format("CSV")
+                .mode(TaskExecutionMode.ULTRA_FAST).sourceKind("TRUSTED").cycleStrategy("REJECT")
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("tenant").build())
+                .tableSources(List.of(
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("Orders").sourceFile(ordersSource.toString()).format("CSV")
+                                .columnMappings(List.of(ImportColumnMapping.builder()
+                                        .sourceColumn("order_id").targetColumn("ORDER_ID").build()))
+                                .options(ImportOptions.builder().onError("ABORT").maxErrors(5).build()).build(),
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("Audit").sourceFile("audit.csv").format("CSV").build()))
+                .build();
+        ImportManifest manifest = tableManifest(ordersSource, "orders", null, 1);
+        AtomicReference<ImportTaskSpec> observed = new AtomicReference<>();
+
+        importer((shardSpec, ignored) -> observed.set(shardSpec), new JdbcProbe(), new AtomicInteger())
+                .executeShard(taskSpec, context(new AtomicInteger(), new AtomicReference<>()),
+                        connectInfo(), manifest, manifest.getShards().get(0));
+
+        assertEquals("order_id", observed.get().getColumnMappings().get(0).getSourceColumn());
+        assertEquals("ORDER_ID", observed.get().getColumnMappings().get(0).getTargetColumn());
+        assertEquals("ABORT", observed.get().getOptions().getOnError());
+        assertEquals(5, observed.get().getOptions().getMaxErrors());
     }
 
     @Test
@@ -385,6 +512,37 @@ class CsvManifestImporterTest {
                 new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> defaultValue(method.getReturnType()));
         return new CsvManifestImporter(new ImportManifestScheduler(unusedStorage), strategy,
                 ignored -> jdbc.connection, ignored -> releases.incrementAndGet());
+    }
+
+    private ImportTaskSpec caseDistinctSpec(Path upperSource, Path lowerSource) {
+        return ImportTaskSpec.builder().scope(ImportScope.SCHEMA).format("CSV")
+                .mode(TaskExecutionMode.ULTRA_FAST).sourceKind("TRUSTED").cycleStrategy("REJECT")
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("tenant").build())
+                .tableSources(List.of(
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("Users").sourceFile(upperSource.toString()).format("CSV")
+                                .columnMappings(List.of(ImportColumnMapping.builder()
+                                        .sourceColumn("upper_id").targetColumn("UPPER_ID").build()))
+                                .options(ImportOptions.builder().onError("ABORT").maxErrors(3).build()).build(),
+                        ImportTableSource.builder().databaseName("app").schemaName("tenant")
+                                .tableName("users").sourceFile(lowerSource.toString()).format("CSV")
+                                .columnMappings(List.of(ImportColumnMapping.builder()
+                                        .sourceColumn("lower_id").targetColumn("lower_id").build()))
+                                .options(ImportOptions.builder().onError("SKIP").maxErrors(7).build()).build()))
+                .build();
+    }
+
+    private ImportManifest tableManifest(Path source, String tableName, String tableKey, int schemaVersion) {
+        ImportManifest manifest = manifest(source);
+        ImportManifestShard shard = manifest.getShards().get(0);
+        shard.setShardId(tableName + "-0");
+        shard.setDatabaseName("app");
+        shard.setSchemaName("tenant");
+        shard.setTableName(tableName);
+        shard.setTableKey(tableKey);
+        manifest.setSchemaVersion(schemaVersion);
+        manifest.setManifestFingerprint(ImportManifestIntegrity.calculate(manifest));
+        return manifest;
     }
 
     private ImportTaskSpec spec() {

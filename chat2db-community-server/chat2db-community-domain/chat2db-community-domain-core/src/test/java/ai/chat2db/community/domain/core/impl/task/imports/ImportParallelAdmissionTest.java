@@ -78,6 +78,27 @@ class ImportParallelAdmissionTest {
     }
 
     @Test
+    void acceptsCaseDistinctQuotedColumnHeaders() throws Exception {
+        useOneUnitThresholds();
+        Path source = Files.writeString(tempDirectory.resolve("quoted-columns.csv"),
+                "ID,id\n1,2\n", StandardCharsets.UTF_8);
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(source.toString()).importFileId("staged")
+                .format("CSV").mode("ULTRA_FAST").confirmedNoStrongRelations(true)
+                .options(ImportOptions.builder().charset("UTF-8").delimiter(",")
+                        .columnMappings(List.of(new ImportColumnMapping("ID", "ID"),
+                                new ImportColumnMapping("id", "id")))
+                        .build())
+                .build();
+
+        ImportAdmissionReport report = ImportParallelAdmission.assess(spec, List.of(
+                TableColumn.builder().name("ID").nullable(0).build(),
+                TableColumn.builder().name("id").nullable(0).build()));
+
+        assertFalse(hasFinding(report, "D2", "BLOCKER"));
+        assertEquals("PARALLEL_SAFE", report.getVerdict());
+    }
+
+    @Test
     void smallCsvIsDowngradedBeforeWorkersStart() throws Exception {
         ImportAdmissionReport report = ImportParallelAdmission.assess(
                 csvSpec("ID,NAME\n1,Alice\n", true, true), columns());

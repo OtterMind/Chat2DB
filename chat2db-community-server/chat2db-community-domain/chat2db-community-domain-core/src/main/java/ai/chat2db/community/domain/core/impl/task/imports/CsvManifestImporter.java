@@ -62,6 +62,7 @@ public final class CsvManifestImporter {
 
     public void execute(ImportTaskSpec original, TaskExecutionContext context, ImportManifest manifest) {
         ImportManifestIntegrity.requireValid(manifest);
+        ImportManifestBuilder.requireVersionedShardIdentities(manifest);
         if (context.taskId() == null || !context.taskId().equals(manifest.getTaskId())) {
             throw new IllegalArgumentException("Manifest task identity does not match the running task");
         }
@@ -126,6 +127,7 @@ public final class CsvManifestImporter {
             TaskExecutionContext context, ConnectInfo parent, ImportManifest manifest,
             ImportManifestShard shard, Map<String, ShardImportSummary> summaries,
             AtomicLong rejectedRows, long maxErrors, Runnable cancellationCheck) throws Exception {
+        ImportManifestBuilder.requireVersionedShardIdentity(manifest.getSchemaVersion(), shard);
         Path source = Path.of(shard.getSourcePath()).toAbsolutePath().normalize();
         if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
             throw new IllegalArgumentException("Manifest shard is not readable: " + shard.getShardId());
@@ -253,11 +255,7 @@ public final class CsvManifestImporter {
     private ImportTaskSpec shardSpec(ImportTaskSpec original, ImportManifestShard shard, Path source) {
         ImportTaskSpec sourceSpec = original;
         if (ImportTaskSourceSupport.isMultiTable(original)) {
-            ImportTableSource tableSource = ImportTaskSourceSupport.effectiveSources(original).stream()
-                    .filter(candidate -> matches(candidate, shard))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Manifest shard target is not present in the import task: " + shard.getTableName()));
+            ImportTableSource tableSource = tableSourceForShard(original, shard);
             sourceSpec = ImportTaskSourceSupport.specForSource(original, tableSource);
         }
         ImportTaskSpec copy = JSON.parseObject(JSON.toJSONString(sourceSpec), ImportTaskSpec.class);
@@ -282,15 +280,55 @@ public final class CsvManifestImporter {
         return copy;
     }
 
-    private static boolean matches(ImportTableSource source, ImportManifestShard shard) {
+    private static ImportTableSource tableSourceForShard(ImportTaskSpec original, ImportManifestShard shard) {
+        List<ImportTableSource> sources = ImportTaskSourceSupport.effectiveSources(original);
         if (StringUtils.isNotBlank(shard.getTableKey())) {
-            return shard.getTableKey().equalsIgnoreCase(ImportTaskSourceSupport.tableKey(source));
+            return requireUniqueSource(sources.stream()
+                    .filter(source -> shard.getTableKey().equals(ImportTaskSourceSupport.tableKey(source)))
+                    .toList(), shard);
         }
-        return shard.getTableName().equalsIgnoreCase(source.getTableName())
+
+        List<ImportTableSource> exact = sources.stream()
+                .filter(source -> matchesLegacySource(source, shard, false))
+                .toList();
+        if (!exact.isEmpty()) {
+            return requireUniqueSource(exact, shard);
+        }
+        return requireUniqueSource(sources.stream()
+                .filter(source -> matchesLegacySource(source, shard, true))
+                .toList(), shard);
+    }
+
+    private static boolean matchesLegacySource(ImportTableSource source, ImportManifestShard shard,
+            boolean ignoreCase) {
+        return sameIdentifier(shard.getTableName(), source.getTableName(), ignoreCase)
                 && (StringUtils.isBlank(shard.getDatabaseName())
-                        || StringUtils.equalsIgnoreCase(shard.getDatabaseName(), source.getDatabaseName()))
+                        || sameIdentifier(shard.getDatabaseName(), source.getDatabaseName(), ignoreCase))
                 && (StringUtils.isBlank(shard.getSchemaName())
-                        || StringUtils.equalsIgnoreCase(shard.getSchemaName(), source.getSchemaName()));
+                        || sameIdentifier(shard.getSchemaName(), source.getSchemaName(), ignoreCase));
+    }
+
+    private static boolean sameIdentifier(String expected, String actual, boolean ignoreCase) {
+        String normalizedExpected = StringUtils.trimToNull(expected);
+        String normalizedActual = StringUtils.trimToNull(actual);
+        return ignoreCase ? StringUtils.equalsIgnoreCase(normalizedExpected, normalizedActual)
+                : StringUtils.equals(normalizedExpected, normalizedActual);
+    }
+
+    private static ImportTableSource requireUniqueSource(List<ImportTableSource> matches,
+            ImportManifestShard shard) {
+        String target = StringUtils.defaultIfBlank(shard.getTableKey(),
+                ImportTaskSourceSupport.tableKey(shard.getDatabaseName(), shard.getSchemaName(),
+                        shard.getTableName()));
+        if (matches.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Manifest shard target is not present in the import task: " + target);
+        }
+        if (matches.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Manifest shard target is ambiguous in the import task: " + target);
+        }
+        return matches.get(0);
     }
 
     private static boolean isSkipMode(ImportTaskSpec spec) {

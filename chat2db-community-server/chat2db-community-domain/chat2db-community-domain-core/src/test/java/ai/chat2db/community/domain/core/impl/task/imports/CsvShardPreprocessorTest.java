@@ -79,10 +79,66 @@ class CsvShardPreprocessorTest {
     void refusesToOverwriteAnExistingShard() throws Exception {
         Path source = Files.writeString(tempDirectory.resolve("source.csv"), "ID\n1\n", StandardCharsets.UTF_8);
         Path staging = Files.createDirectories(tempDirectory.resolve("staging"));
-        Files.writeString(staging.resolve("customer-00000.csv"), "owned", StandardCharsets.UTF_8);
+        String fileName = CsvShardPreprocessor.shardId("CUSTOMER", 0) + ".csv";
+        Files.writeString(staging.resolve(fileName), "owned", StandardCharsets.UTF_8);
 
         assertThrows(IllegalStateException.class, () -> CsvShardPreprocessor.preprocess(source.toFile(),
                 StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "CUSTOMER", 0, 1024L));
-        assertEquals("owned", Files.readString(staging.resolve("customer-00000.csv")));
+        assertEquals("owned", Files.readString(staging.resolve(fileName)));
+    }
+
+    @Test
+    void exactTableKeyHashKeepsCaseDistinctShardsSeparateOnCaseInsensitiveFileSystems()
+            throws Exception {
+        Path parent = Files.writeString(tempDirectory.resolve("parent.csv"),
+                "ID\n1\n", StandardCharsets.UTF_8);
+        Path child = Files.writeString(tempDirectory.resolve("child.csv"),
+                "ID\n2\n", StandardCharsets.UTF_8);
+        Path staging = tempDirectory.resolve("case-staging");
+
+        List<ImportManifestShard> upper = CsvShardPreprocessor.preprocess(parent.toFile(),
+                StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "app", "public",
+                "Users", "app.public.Users", 0, 1024L);
+        List<ImportManifestShard> lower = CsvShardPreprocessor.preprocess(child.toFile(),
+                StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "app", "public",
+                "users", "app.public.users", 0, 1024L);
+
+        assertEquals(1, upper.size());
+        assertEquals(1, lower.size());
+        assertFalse(upper.get(0).getShardId().equals(lower.get(0).getShardId()));
+        assertTrue(Files.isRegularFile(Path.of(upper.get(0).getSourcePath())));
+        assertTrue(Files.isRegularFile(Path.of(lower.get(0).getSourcePath())));
+    }
+
+    @Test
+    void boundsLongQualifiedKeysWhileKeepingStableCaseSensitiveIdentity() throws Exception {
+        String sharedPrefix = "catalog." + "SchemaSegment.".repeat(40);
+        String upperKey = sharedPrefix + "Users";
+        String lowerKey = sharedPrefix + "users";
+
+        String upperId = CsvShardPreprocessor.shardId(upperKey, 0);
+        String lowerId = CsvShardPreprocessor.shardId(lowerKey, 0);
+
+        assertEquals(upperId, CsvShardPreprocessor.shardId(upperKey, 0));
+        assertFalse(upperId.equals(lowerId));
+        assertEquals(upperId.substring(0, upperId.length() - 19),
+                lowerId.substring(0, lowerId.length() - 19));
+        assertTrue(upperId.length() <= 139);
+        assertTrue((upperId + ".csv.part").length() <= 255);
+
+        Path source = Files.writeString(tempDirectory.resolve("long-key.csv"),
+                "ID\n1\n", StandardCharsets.UTF_8);
+        Path staging = tempDirectory.resolve("long-key-staging");
+        ImportManifestShard upper = CsvShardPreprocessor.preprocess(source.toFile(),
+                StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "catalog", "public",
+                "Users", upperKey, 0, 1024L).get(0);
+        ImportManifestShard lower = CsvShardPreprocessor.preprocess(source.toFile(),
+                StandardCharsets.UTF_8, CSVFormat.DEFAULT, staging, "catalog", "public",
+                "users", lowerKey, 0, 1024L).get(0);
+
+        assertEquals(upperId, upper.getShardId());
+        assertEquals(lowerId, lower.getShardId());
+        assertTrue(Files.isRegularFile(Path.of(upper.getSourcePath())));
+        assertTrue(Files.isRegularFile(Path.of(lower.getSourcePath())));
     }
 }

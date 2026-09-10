@@ -82,6 +82,18 @@ class ImportDependencyPlannerTest {
         assertFalse(plan.isCycleResolutionRequired());
     }
 
+    @Test
+    void keepsCaseDistinctQuotedTableDependencyAsAnEdgeRatherThanASelfReference() {
+        ImportDependencyPlan plan = plan(List.of("app.public.Users", "app.public.users"),
+                List.of(edge("app.public.Users", "app.public.users")), Map.of(),
+                "PARALLEL_SAFE", ImportAdmissionPolicy.STRICT, true);
+
+        assertEquals(List.of(List.of("app.public.Users"), List.of("app.public.users")),
+                plan.getLayers());
+        assertTrue(plan.getSelfReferencingTables().isEmpty());
+        assertTrue(plan.getCyclicComponents().isEmpty());
+    }
+
     private ImportDependencyPlan plan(List<String> tables, List<ImportTableDependency> dependencies,
             Map<String, String> shardKeys, String verdict, ImportAdmissionPolicy policy, boolean trusted) {
         return ImportDependencyPlanner.plan(tables, dependencies, shardKeys, verdict, policy, trusted);

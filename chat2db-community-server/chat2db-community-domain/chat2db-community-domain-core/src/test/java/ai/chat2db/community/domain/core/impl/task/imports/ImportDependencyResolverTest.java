@@ -111,6 +111,21 @@ class ImportDependencyResolverTest {
         assertEquals(null, dependencies.get(0).getConstraintName());
     }
 
+    @Test
+    void resolvesPhysicalDependencyBetweenQuotedTablesThatDifferOnlyByCase() {
+        ForeignKeyInfo quoted = importedKey("Users", "id", "users", "parent_id",
+                "fk_users_Users");
+        ImportDependencyResolver resolver = new ImportDependencyResolver(source ->
+                "users".equals(source.getTableName()) ? List.of(quoted) : List.of());
+
+        List<ImportTableDependency> dependencies = resolver.resolve(ImportTaskSpec.builder().build(),
+                List.of(source("Users"), source("users")));
+
+        assertEquals(1, dependencies.size());
+        assertEquals("app.public.Users", dependencies.get(0).getParentTableKey());
+        assertEquals("app.public.users", dependencies.get(0).getChildTableKey());
+    }
+
     private static ImportTableSource source(String table) {
         return ImportTableSource.builder().databaseName("app").schemaName("public").tableName(table).build();
     }

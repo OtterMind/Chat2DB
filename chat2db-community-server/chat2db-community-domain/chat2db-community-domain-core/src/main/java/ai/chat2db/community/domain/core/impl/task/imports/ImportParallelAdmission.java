@@ -278,7 +278,7 @@ public final class ImportParallelAdmission {
     private static void validateHeaders(List<String> headers, List<ImportAdmissionFinding> findings) {
         Set<String> normalized = new HashSet<>();
         for (String header : headers) {
-            String value = StringUtils.trimToEmpty(header).toLowerCase(Locale.ROOT);
+            String value = ImportColumnResolver.sourceName(header);
             if (value.isEmpty() || !normalized.add(value)) {
                 blocker(findings, "D2", "CSV header cannot identify every source column",
                         value.isEmpty() ? "A blank column name was found" : "Duplicate column: " + header,

@@ -19,10 +19,13 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.zip.CRC32;
 
 /** Physically slices an admitted CSV at logical-record boundaries and emits UTF-8 shards. */
 public final class CsvShardPreprocessor {
+
+    private static final int MAX_READABLE_TABLE_PREFIX_LENGTH = 120;
 
     private CsvShardPreprocessor() {
     }
@@ -109,8 +112,7 @@ public final class CsvShardPreprocessor {
             String tableName, String tableKey, int layer, int shardNumber,
             List<String> header, List<Path> created) throws IOException {
         String effectiveTableKey = StringUtils.defaultIfBlank(tableKey, tableName).trim();
-        String safeTable = effectiveTableKey.replaceAll("[^A-Za-z0-9._-]", "_");
-        String shardId = safeTable.toLowerCase(Locale.ROOT) + "-" + String.format(Locale.ROOT, "%05d", shardNumber);
+        String shardId = shardId(effectiveTableKey, shardNumber);
         Path target = outputDirectory.resolve(shardId + ".csv").toAbsolutePath().normalize();
         if (!target.startsWith(outputDirectory.toAbsolutePath().normalize())) {
             throw new IllegalArgumentException("CSV shard target escapes the staging directory");
@@ -121,6 +123,16 @@ public final class CsvShardPreprocessor {
         created.add(target);
         return new ShardWriter(shardId, databaseName, schemaName, tableName.trim(), effectiveTableKey,
                 layer, target, header);
+    }
+
+    static String shardId(String tableKey, int shardNumber) {
+        String exactKey = StringUtils.trimToEmpty(tableKey);
+        String safeTable = exactKey.replaceAll("[^A-Za-z0-9._-]", "_");
+        String readableTable = StringUtils.left(safeTable, MAX_READABLE_TABLE_PREFIX_LENGTH);
+        String identity = UUID.nameUUIDFromBytes(exactKey.getBytes(StandardCharsets.UTF_8))
+                .toString().replace("-", "").substring(0, 12);
+        return readableTable.toLowerCase(Locale.ROOT) + "-" + identity + "-"
+                + String.format(Locale.ROOT, "%05d", shardNumber);
     }
 
     private static Path partPath(Path target) {

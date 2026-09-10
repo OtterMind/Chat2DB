@@ -1,7 +1,10 @@
 package ai.chat2db.community.domain.core.impl.task.executor;
 
+import ai.chat2db.community.domain.api.model.task.ImportFinalizationOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
+import ai.chat2db.community.domain.api.model.task.ImportValidationOptions;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
@@ -17,8 +20,17 @@ import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFactory;
 import ai.chat2db.community.domain.core.impl.task.imports.CsvManifestImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.CsvManifestPreparer;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportTaskSourceSupport;
+import ai.chat2db.community.domain.core.impl.task.imports.StagingManifestImporter;
+import ai.chat2db.spi.sql.Chat2DBContext;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Component
 public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> {
@@ -45,26 +57,54 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
         ImportManifest manifest = null;
         CsvManifestPreparer manifestPreparer = null;
         try {
-            TaskExecutorSupport.requireReadableSource(spec.getSourceFile());
-            String format = TaskExecutorSupport.requireFormat(spec.getFormat());
+            boolean scopedManifest = ImportTaskSourceSupport.isMultiTable(spec);
+            List<ImportTableSource> sources = ImportTaskSourceSupport.effectiveSources(spec);
+            String format;
+            if (scopedManifest) {
+                Set<String> formats = new LinkedHashSet<>();
+                for (ImportTableSource source : sources) {
+                    TaskExecutorSupport.requireReadableSource(source.getSourceFile());
+                    formats.add(TaskExecutorSupport.requireFormat(source.getFormat()));
+                }
+                if (formats.size() != 1 || !formats.contains(TaskFileFormat.CSV.name())) {
+                    throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                            "Schema/database data import currently requires CSV for every table source");
+                }
+                format = TaskFileFormat.CSV.name();
+            } else {
+                TaskExecutorSupport.requireReadableSource(spec.getSourceFile());
+                format = TaskExecutorSupport.requireFormat(spec.getFormat());
+            }
             if (TaskFileFormat.SQL.name().equals(format) || TaskFileFormat.ZIP.name().equals(format)) {
                 throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
                         "Unsupported data import format");
             }
             context.reportProgress(5, TaskStage.READING.name(), "Preparing data import");
+            boolean stagingRequested = stagingFeaturesRequested(spec);
+            if (stagingRequested) {
+                requireSupportedStagingRequest(spec, currentDatabaseType());
+            }
             manifest = context.taskId() == null || taskStorage == null ? null
                     : taskStorage.loadImportManifest(context.taskId()).orElse(null);
             if (manifest == null && TaskFileFormat.CSV.name().equals(format)
-                    && TaskExecutionMode.isUltraFast(spec.getMode())) {
+                    && (TaskExecutionMode.isUltraFast(spec.getMode()) || scopedManifest || stagingRequested)) {
                 manifestPreparer = new CsvManifestPreparer(taskStorage);
                 manifest = manifestPreparer.prepare(spec, context);
             }
             if (manifest != null) {
-                if (!TaskFileFormat.CSV.name().equals(format) || !TaskExecutionMode.isUltraFast(spec.getMode())) {
+                if (!TaskFileFormat.CSV.name().equals(format)
+                        || (!TaskExecutionMode.isUltraFast(spec.getMode()) && !scopedManifest
+                            && !stagingRequested)) {
                     throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                            "A persisted import manifest requires an ultra-fast CSV task");
+                            "A persisted import manifest requires an ultra-fast or scoped CSV task");
                 }
-                new CsvManifestImporter(taskStorage).execute(spec, context, manifest);
+                boolean stagingRequired = stagingRequested || StagingManifestImporter.required(spec, manifest);
+                if (stagingRequired) {
+                    requireSupportedStagingRequest(spec, currentDatabaseType());
+                    new StagingManifestImporter().execute(spec, context, manifest);
+                } else {
+                    new CsvManifestImporter(taskStorage).execute(spec, context, manifest);
+                }
                 context.reportProgress(95, TaskStage.IMPORTING.name(), "Manifest import completed");
                 completed = true;
                 return;
@@ -80,13 +120,78 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                     "Could not import data file", e);
         } finally {
             // Interrupted imports still need the exact staged source to resume from checkpoints.
-            if (completed && spec.getImportFileId() != null) {
-                importFileStagingService.release(spec.getImportFileId());
+            if (completed) {
+                Set<String> stagedFileIds = new LinkedHashSet<>();
+                if (StringUtils.isNotBlank(spec.getImportFileId())) {
+                    stagedFileIds.add(spec.getImportFileId());
+                }
+                if (spec.getTableSources() != null) {
+                    spec.getTableSources().stream().filter(java.util.Objects::nonNull)
+                            .map(ImportTableSource::getImportFileId).filter(StringUtils::isNotBlank)
+                            .forEach(stagedFileIds::add);
+                }
+                stagedFileIds.forEach(importFileStagingService::release);
             }
             if (completed && manifest != null) {
                 (manifestPreparer == null ? new CsvManifestPreparer(taskStorage) : manifestPreparer)
                         .cleanup(manifest);
             }
         }
+    }
+
+    static boolean stagingFeaturesRequested(ImportTaskSpec spec) {
+        if (spec == null) {
+            return false;
+        }
+        ImportValidationOptions validation = spec.getValidationOptions();
+        ImportFinalizationOptions finalization = spec.getFinalizationOptions();
+        String cycleStrategy = StringUtils.trimToEmpty(spec.getCycleStrategy());
+        return StagingManifestImporter.requested(spec)
+                || enabled(validation == null ? null : validation.getSourceProfiling())
+                || enabled(validation == null ? null : validation.getRowCount())
+                || enabled(validation == null ? null : validation.getChecksum())
+                || enabled(validation == null ? null : validation.getOrphanCheck())
+                || enabled(finalization == null ? null : finalization.getResetSequences())
+                || enabled(finalization == null ? null : finalization.getRebuildIndexes())
+                || enabled(finalization == null ? null : finalization.getRefreshStatistics())
+                || StringUtils.isNotBlank(cycleStrategy) && !"REJECT".equalsIgnoreCase(cycleStrategy);
+    }
+
+    static boolean supportsStagingDatabase(String databaseType) {
+        String normalized = StringUtils.defaultString(databaseType).toUpperCase(Locale.ROOT);
+        return normalized.contains("MYSQL") || normalized.contains("MARIADB")
+                || normalized.contains("POSTGRE") || normalized.contains("KINGBASE")
+                || normalized.contains("H2");
+    }
+
+    static boolean supportsDeferredConstraints(String databaseType) {
+        String normalized = StringUtils.defaultString(databaseType).toUpperCase(Locale.ROOT);
+        return normalized.contains("POSTGRE") || normalized.contains("KINGBASE");
+    }
+
+    static void requireSupportedStagingRequest(ImportTaskSpec spec, String databaseType) {
+        String normalized = StringUtils.defaultIfBlank(databaseType, "UNKNOWN").toUpperCase(Locale.ROOT);
+        String cycleStrategy = StringUtils.defaultIfBlank(spec == null ? null : spec.getCycleStrategy(), "REJECT")
+                .trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("REJECT", "DEFER_CONSTRAINTS", "STAGING_TWO_PHASE").contains(cycleStrategy)) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Unsupported import cycle strategy: " + cycleStrategy);
+        }
+        if (!supportsStagingDatabase(normalized)) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Advanced multi-table import is not supported for database type " + normalized);
+        }
+        if ("DEFER_CONSTRAINTS".equals(cycleStrategy) && !supportsDeferredConstraints(normalized)) {
+            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                    "Deferred constraint import is not supported for database type " + normalized);
+        }
+    }
+
+    private static boolean enabled(Boolean value) {
+        return Boolean.TRUE.equals(value);
+    }
+
+    private static String currentDatabaseType() {
+        return Chat2DBContext.getConnectInfo() == null ? null : Chat2DBContext.getConnectInfo().getDbType();
     }
 }

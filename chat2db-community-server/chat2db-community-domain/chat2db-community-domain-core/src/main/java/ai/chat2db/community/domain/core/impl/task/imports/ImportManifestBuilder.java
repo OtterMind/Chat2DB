@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -77,7 +76,7 @@ public final class ImportManifestBuilder {
         for (int layer = 0; layer < layers.size(); layer++) {
             for (String table : layers.get(layer)) {
                 if (StringUtils.isBlank(table)
-                        || result.putIfAbsent(table.toLowerCase(Locale.ROOT), layer) != null) {
+                        || result.putIfAbsent(table, layer) != null) {
                     throw new IllegalArgumentException("Dependency plan contains a duplicate or blank table");
                 }
             }
@@ -89,6 +88,7 @@ public final class ImportManifestBuilder {
         Set<String> ids = new HashSet<>();
         Map<String, ImportManifestShard> byId = new HashMap<>();
         for (ImportManifestShard shard : shards) {
+            requireExactShardIdentity(shard);
             if (StringUtils.isAnyBlank(shard.getShardId(), shard.getTableName(), shard.getSourcePath(),
                     shard.getExpectedChecksum())) {
                 throw new IllegalArgumentException("Every manifest shard requires id, table, source path and checksum");
@@ -96,7 +96,7 @@ public final class ImportManifestBuilder {
             if (!ids.add(shard.getShardId())) {
                 throw new IllegalArgumentException("Duplicate manifest shard id: " + shard.getShardId());
             }
-            Integer plannedLayer = plannedLayers.get(tableNode(shard).toLowerCase(Locale.ROOT));
+            Integer plannedLayer = plannedLayers.get(tableNode(shard));
             if (plannedLayer == null || plannedLayer != shard.getLayer()) {
                 throw new IllegalArgumentException("Shard layer does not match dependency plan: " + shard.getShardId());
             }
@@ -129,6 +129,42 @@ public final class ImportManifestBuilder {
                             + shard.getShardId() + " -> " + dependencyId);
                 }
             }
+        }
+    }
+
+    static void requireVersionedShardIdentities(ImportManifest manifest) {
+        if (manifest == null || manifest.getSchemaVersion() == 1) {
+            return;
+        }
+        if (manifest.getSchemaVersion() < 1) {
+            throw new IllegalArgumentException("Unsupported import manifest schema version: "
+                    + manifest.getSchemaVersion());
+        }
+        List<ImportManifestShard> shards = manifest.getShards() == null
+                ? List.of() : manifest.getShards();
+        shards.forEach(ImportManifestBuilder::requireExactShardIdentity);
+    }
+
+    static void requireVersionedShardIdentity(int schemaVersion, ImportManifestShard shard) {
+        if (schemaVersion == 1) {
+            return;
+        }
+        if (schemaVersion < 1) {
+            throw new IllegalArgumentException("Unsupported import manifest schema version: "
+                    + schemaVersion);
+        }
+        requireExactShardIdentity(shard);
+    }
+
+    private static void requireExactShardIdentity(ImportManifestShard shard) {
+        if (shard == null || StringUtils.isBlank(shard.getTableKey())) {
+            throw new IllegalArgumentException("Schema v2 manifest shard requires an exact tableKey");
+        }
+        String expected = ImportTaskSourceSupport.tableKey(shard.getDatabaseName(),
+                shard.getSchemaName(), shard.getTableName());
+        if (!shard.getTableKey().equals(expected)) {
+            throw new IllegalArgumentException("Schema v2 manifest shard tableKey does not match its exact target: "
+                    + shard.getTableKey() + " != " + expected);
         }
     }
 

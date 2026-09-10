@@ -1,9 +1,12 @@
 package ai.chat2db.community.domain.core.impl.task.imports;
 
+import ai.chat2db.community.domain.api.model.metadata.ForeignKeyInfo;
 import ai.chat2db.community.domain.api.model.task.ImportAdmissionReport;
+import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportPlanMode;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.ImportScope;
 import ai.chat2db.community.domain.api.model.task.ImportTableDependency;
 import ai.chat2db.community.domain.api.model.task.ImportTableSource;
@@ -14,14 +17,22 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -126,6 +137,88 @@ class CsvManifestPreparerTest {
     }
 
     @Test
+    void preservesCaseDistinctQuotedTablesAcrossPlanningShardsAndDependencies() throws Exception {
+        Path parentFile = Files.writeString(tempDirectory.resolve("Users.csv"), "id,name\n1,Alice\n");
+        Path childFile = Files.writeString(tempDirectory.resolve("users.csv"), "id,parent_id\n10,1\n");
+        ImportTableSource parent = tableSource("Users", parentFile);
+        ImportTableSource child = tableSource("users", childFile);
+        parent.setColumnMappings(List.of(ImportColumnMapping.builder()
+                .sourceColumn("id").targetColumn("UPPER_ID").build()));
+        parent.getOptions().setOnError("ABORT");
+        parent.getOptions().setMaxErrors(3);
+        parent.getOptions().setNullString("\\N");
+        child.setColumnMappings(List.of(ImportColumnMapping.builder()
+                .sourceColumn("parent_id").targetColumn("lower_parent_id").build()));
+        child.getOptions().setOnError("ABORT");
+        child.getOptions().setMaxErrors(7);
+        child.getOptions().setNullString("NULL");
+        ForeignKeyInfo dependency = new ForeignKeyInfo();
+        dependency.setPkTableCat("app");
+        dependency.setPkTableSchem("public");
+        dependency.setPkTableName("Users");
+        dependency.setPkColumnName("id");
+        dependency.setFkTableCat("app");
+        dependency.setFkTableSchem("public");
+        dependency.setFkTableName("users");
+        dependency.setFkColumnName("parent_id");
+        dependency.setFkName("fk_users_Users");
+        dependency.setKeySeq((short) 1);
+        dependency.setDeferrability((short) 5);
+        ImportTaskSpec taskSpec = ImportTaskSpec.builder().scope(ImportScope.SCHEMA)
+                .mode(TaskExecutionMode.STANDARD).format("CSV")
+                .target(TaskTargetSnapshot.builder().databaseName("app").schemaName("public").build())
+                .tableSources(List.of(parent, child)).build();
+        ImportDependencyResolver resolver = new ImportDependencyResolver(source ->
+                "users".equals(source.getTableName()) ? List.of(dependency) : List.of());
+        AtomicReference<ImportManifest> saved = new AtomicReference<>();
+        TaskStorage storage = storage(saved, null);
+        CsvManifestPreparer preparer = new CsvManifestPreparer(
+                storage, this::safeAdmission,
+                resolver::resolve, tempDirectory.resolve("quoted-case-shards"));
+
+        ImportManifest manifest = preparer.prepare(taskSpec, context(86L));
+
+        assertEquals(List.of(List.of("app.public.Users"), List.of("app.public.users")),
+                manifest.getDependencyPlan().getLayers());
+        assertEquals(2, manifest.getShards().size());
+        String parentShard = manifest.getShards().stream()
+                .filter(shard -> "Users".equals(shard.getTableName()))
+                .findFirst().orElseThrow().getShardId();
+        var childShard = manifest.getShards().stream()
+                .filter(shard -> "users".equals(shard.getTableName()))
+                .findFirst().orElseThrow();
+        assertFalse(parentShard.equals(childShard.getShardId()));
+        assertEquals(List.of(parentShard), childShard.getDependencyShardIds());
+
+        Map<String, ImportTaskSpec> executed = new ConcurrentHashMap<>();
+        AtomicInteger commits = new AtomicInteger();
+        CsvManifestImporter importer = new CsvManifestImporter(new ImportManifestScheduler(storage),
+                (shardSpec, ignored) -> executed.put(shardSpec.getTarget().getTableName(), shardSpec),
+                ignored -> transactionalConnection(commits), ignored -> { });
+        ConnectInfo parentContext = new ConnectInfo();
+        parentContext.setDbType("H2");
+        parentContext.setDatabaseName("app");
+        parentContext.setSchemaName("public");
+        Chat2DBContext.putContext(parentContext);
+        try {
+            importer.execute(taskSpec, context(86L),
+                    storage.loadImportManifest(86L).orElseThrow());
+        } finally {
+            Chat2DBContext.removeContext();
+        }
+
+        assertEquals(2, commits.get());
+        assertEquals(List.of("Users", "users"), executed.keySet().stream().sorted().toList());
+        assertEquals("UPPER_ID", executed.get("Users").getColumnMappings().get(0).getTargetColumn());
+        assertEquals("\\N", executed.get("Users").getOptions().getNullString());
+        assertEquals(3, executed.get("Users").getOptions().getMaxErrors());
+        assertEquals("lower_parent_id",
+                executed.get("users").getColumnMappings().get(0).getTargetColumn());
+        assertEquals("NULL", executed.get("users").getOptions().getNullString());
+        assertEquals(7, executed.get("users").getOptions().getMaxErrors());
+    }
+
+    @Test
     void appliesEachSourceSkipRowsBeforeBuildingTheManifest() throws Exception {
         Path orders = Files.writeString(tempDirectory.resolve("orders-with-prefix.csv"),
                 "id\nignore\n1\n2\n");
@@ -196,6 +289,7 @@ class CsvManifestPreparerTest {
     }
 
     private static TaskStorage storage(AtomicReference<ImportManifest> saved, RuntimeException failure) {
+        Map<Integer, ResumeState> resumeStates = new ConcurrentHashMap<>();
         return (TaskStorage) Proxy.newProxyInstance(CsvManifestPreparerTest.class.getClassLoader(),
                 new Class<?>[]{TaskStorage.class}, (proxy, method, args) -> {
                     if ("saveImportManifest".equals(method.getName())) {
@@ -205,7 +299,50 @@ class CsvManifestPreparerTest {
                         saved.set((ImportManifest) args[1]);
                         return null;
                     }
+                    if ("loadImportManifest".equals(method.getName())) {
+                        return Optional.ofNullable(saved.get());
+                    }
+                    if ("listResumeStates".equals(method.getName())) {
+                        return new ArrayList<>(resumeStates.values());
+                    }
+                    if ("saveResumeState".equals(method.getName())) {
+                        ResumeState state = (ResumeState) args[1];
+                        resumeStates.put(state.getShardNo(), state);
+                        return null;
+                    }
+                    if ("compareAndSetResumeState".equals(method.getName())) {
+                        Integer shardNo = (Integer) args[1];
+                        synchronized (resumeStates) {
+                            ResumeState current = resumeStates.get(shardNo);
+                            if (current == null || !Objects.equals(args[2], current.getKind())) {
+                                return false;
+                            }
+                            resumeStates.put(shardNo, (ResumeState) args[3]);
+                            return true;
+                        }
+                    }
                     return defaultValue(method.getReturnType());
+                });
+    }
+
+    private static Connection transactionalConnection(AtomicInteger commits) {
+        AtomicBoolean autoCommit = new AtomicBoolean(true);
+        return (Connection) Proxy.newProxyInstance(CsvManifestPreparerTest.class.getClassLoader(),
+                new Class<?>[]{Connection.class}, (proxy, method, args) -> switch (method.getName()) {
+                    case "getAutoCommit" -> autoCommit.get();
+                    case "setAutoCommit" -> {
+                        autoCommit.set((Boolean) args[0]);
+                        yield null;
+                    }
+                    case "commit" -> {
+                        commits.incrementAndGet();
+                        yield null;
+                    }
+                    case "rollback", "close" -> null;
+                    case "isClosed" -> false;
+                    case "unwrap" -> proxy;
+                    case "isWrapperFor" -> false;
+                    default -> defaultValue(method.getReturnType());
                 });
     }
 

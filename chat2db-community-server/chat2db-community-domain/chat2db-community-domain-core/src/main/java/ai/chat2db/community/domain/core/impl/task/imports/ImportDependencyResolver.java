@@ -12,11 +12,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /** Merges JDBC foreign-key metadata with explicitly configured logical relationships. */
 public final class ImportDependencyResolver {
+
+    private static final Comparator<String> IDENTIFIER_ORDER = Comparator.nullsFirst(
+            String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder()));
 
     private final ForeignKeyReader foreignKeyReader;
 
@@ -30,7 +32,7 @@ public final class ImportDependencyResolver {
 
     public List<ImportTableDependency> resolve(ImportTaskSpec spec, List<ImportTableSource> sources) {
         SourceIndex index = new SourceIndex(sources);
-        Map<String, ImportTableDependency> merged = new LinkedHashMap<>();
+        Map<EdgeIdentity, ImportTableDependency> merged = new LinkedHashMap<>();
         for (ImportTableSource child : sources) {
             List<ForeignKeyInfo> importedKeys = foreignKeyReader.read(child);
             if (importedKeys == null) {
@@ -51,20 +53,18 @@ public final class ImportDependencyResolver {
             }
         }
         return merged.values().stream().sorted(Comparator
-                .comparing(ImportTableDependency::getParentTableKey, String.CASE_INSENSITIVE_ORDER)
-                .thenComparing(ImportTableDependency::getChildTableKey, String.CASE_INSENSITIVE_ORDER)
+                .comparing(ImportTableDependency::getParentTableKey, IDENTIFIER_ORDER)
+                .thenComparing(ImportTableDependency::getChildTableKey, IDENTIFIER_ORDER)
                 .thenComparing(ImportTableDependency::getKeySequence,
                         Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(ImportTableDependency::getParentColumn,
-                        Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER))
-                .thenComparing(ImportTableDependency::getChildColumn,
-                        Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)))
+                .thenComparing(ImportTableDependency::getParentColumn, IDENTIFIER_ORDER)
+                .thenComparing(ImportTableDependency::getChildColumn, IDENTIFIER_ORDER))
                 .toList();
     }
 
     private static void validateUnnamedPhysicalKeys(ImportTableSource currentChild,
             List<ForeignKeyInfo> importedKeys) {
-        Map<String, List<ForeignKeyInfo>> unnamedByEndpoints = new LinkedHashMap<>();
+        Map<DependencyEndpoints, List<ForeignKeyInfo>> unnamedByEndpoints = new LinkedHashMap<>();
         for (ForeignKeyInfo foreignKey : importedKeys) {
             if (foreignKey == null || StringUtils.isNotBlank(foreignKey.getFkName())
                     || StringUtils.isAnyBlank(foreignKey.getPkTableName(), foreignKey.getFkTableName())) {
@@ -74,15 +74,15 @@ public final class ImportDependencyResolver {
                     StringUtils.defaultIfBlank(foreignKey.getFkTableCat(), currentChild.getDatabaseName()),
                     StringUtils.defaultIfBlank(foreignKey.getFkTableSchem(), currentChild.getSchemaName()),
                     foreignKey.getFkTableName());
-            if (!childKey.equalsIgnoreCase(ImportTaskSourceSupport.tableKey(currentChild))) {
+            if (!childKey.equals(ImportTaskSourceSupport.tableKey(currentChild))) {
                 continue;
             }
             String parentKey = ImportTaskSourceSupport.tableKey(
                     StringUtils.defaultIfBlank(foreignKey.getPkTableCat(), currentChild.getDatabaseName()),
                     StringUtils.defaultIfBlank(foreignKey.getPkTableSchem(), currentChild.getSchemaName()),
                     foreignKey.getPkTableName());
-            unnamedByEndpoints.computeIfAbsent(
-                    (parentKey + '|' + childKey).toLowerCase(Locale.ROOT), ignored -> new ArrayList<>())
+            unnamedByEndpoints.computeIfAbsent(new DependencyEndpoints(parentKey, childKey),
+                    ignored -> new ArrayList<>())
                     .add(foreignKey);
         }
         for (List<ForeignKeyInfo> candidates : unnamedByEndpoints.values()) {
@@ -106,7 +106,7 @@ public final class ImportDependencyResolver {
         ImportTableSource child = index.findPhysical(foreignKey.getFkTableCat(), foreignKey.getFkTableSchem(),
                 foreignKey.getFkTableName(), currentChild.getDatabaseName(), currentChild.getSchemaName());
         if (child == null || !ImportTaskSourceSupport.tableKey(child)
-                .equalsIgnoreCase(ImportTaskSourceSupport.tableKey(currentChild))) {
+                .equals(ImportTaskSourceSupport.tableKey(currentChild))) {
             return null;
         }
         ImportTableSource parent = index.findPhysical(foreignKey.getPkTableCat(), foreignKey.getPkTableSchem(),
@@ -159,10 +159,9 @@ public final class ImportDependencyResolver {
                 .build();
     }
 
-    private static String edgeKey(ImportTableDependency dependency) {
-        return String.join("|", dependency.getParentTableKey(),
-                StringUtils.defaultString(dependency.getParentColumn()), dependency.getChildTableKey(),
-                StringUtils.defaultString(dependency.getChildColumn())).toLowerCase(Locale.ROOT);
+    private static EdgeIdentity edgeKey(ImportTableDependency dependency) {
+        return new EdgeIdentity(dependency.getParentTableKey(), dependency.getParentColumn(),
+                dependency.getChildTableKey(), dependency.getChildColumn());
     }
 
     private static List<ForeignKeyInfo> readImportedKeys(ImportTableSource source) {
@@ -209,15 +208,15 @@ public final class ImportDependencyResolver {
             String schema = StringUtils.defaultIfBlank(schemaName, fallbackSchema);
             List<ImportTableSource> matches = new ArrayList<>();
             for (ImportTableSource source : sources) {
-                if (!StringUtils.equalsIgnoreCase(tableName.trim(), source.getTableName())) {
+                if (!sameIdentifier(tableName, source.getTableName())) {
                     continue;
                 }
                 if (StringUtils.isNotBlank(database)
-                        && !StringUtils.equalsIgnoreCase(database.trim(), source.getDatabaseName())) {
+                        && !sameIdentifier(database, source.getDatabaseName())) {
                     continue;
                 }
                 if (StringUtils.isNotBlank(schema)
-                        && !StringUtils.equalsIgnoreCase(schema.trim(), source.getSchemaName())) {
+                        && !sameIdentifier(schema, source.getSchemaName())) {
                     continue;
                 }
                 matches.add(source);
@@ -230,5 +229,16 @@ public final class ImportDependencyResolver {
             }
             return matches.isEmpty() ? null : matches.get(0);
         }
+    }
+
+    private static boolean sameIdentifier(String expected, String actual) {
+        return StringUtils.equals(StringUtils.trimToNull(expected), StringUtils.trimToNull(actual));
+    }
+
+    private record DependencyEndpoints(String parentTableKey, String childTableKey) {
+    }
+
+    private record EdgeIdentity(String parentTableKey, String parentColumn,
+                                String childTableKey, String childColumn) {
     }
 }

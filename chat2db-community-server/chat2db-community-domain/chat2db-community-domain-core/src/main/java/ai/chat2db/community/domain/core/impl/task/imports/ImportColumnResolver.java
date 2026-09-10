@@ -10,14 +10,16 @@ import ai.chat2db.community.tools.exception.ParamBusinessException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Resolves which file column feeds which table column. Explicit mappings win; otherwise matching is
- * case-insensitive on trimmed names. Unmatched file columns are reported instead of silently
- * dropping data as the old upper-case-equality rule did.
+ * Resolves which file column feeds which table column. Explicit mappings win; otherwise exact
+ * trimmed names are preferred and a case-insensitive fallback is accepted only when unique.
+ * Unmatched file columns are reported instead of silently dropping data.
  */
 public final class ImportColumnResolver {
 
@@ -63,30 +65,32 @@ public final class ImportColumnResolver {
 
     private static Resolution resolve(List<TableColumn> tableColumns, List<String> fileHeaders,
             List<ImportColumnMapping> mappings, UnmappedTargetStrategy unmappedTarget) {
-        Map<String, Integer> byNormalizedName = new LinkedHashMap<>();
+        List<String> sourceNames = fileHeaders.stream()
+                .map(ImportColumnResolver::sourceName).toList();
+        Map<String, Integer> exactSources = new LinkedHashMap<>();
         for (int index = 0; index < fileHeaders.size(); index++) {
-            if (byNormalizedName.putIfAbsent(normalize(fileHeaders.get(index)), index) != null) {
+            if (exactSources.putIfAbsent(sourceNames.get(index), index) != null) {
                 throw new ParamBusinessException("Duplicate import source column: " + fileHeaders.get(index));
             }
         }
-        Map<String, Integer> explicitTargets = new LinkedHashMap<>();
-        java.util.Set<Integer> explicitSources = new java.util.HashSet<>();
-        java.util.Set<String> knownTargets = tableColumns.stream().map(column -> normalize(column.getName()))
-                .collect(java.util.stream.Collectors.toSet());
+        List<String> targetNames = tableColumns.stream().map(TableColumn::getName)
+                .map(ImportColumnResolver::targetName).toList();
+        Map<Integer, Integer> explicitTargets = new LinkedHashMap<>();
+        Set<Integer> explicitSources = new HashSet<>();
         if (mappings != null) {
             for (ImportColumnMapping mapping : mappings) {
                 if (mapping == null || StringUtils.isBlank(mapping.getSourceColumn())
                         || StringUtils.isBlank(mapping.getTargetColumn())) {
                     throw new ParamBusinessException("columnMappings");
                 }
-                Integer sourceIndex = indexOfSource(mapping.getSourceColumn().trim(), fileHeaders,
-                        byNormalizedName);
+                Integer sourceIndex = indexOfSource(mapping.getSourceColumn(), fileHeaders, sourceNames);
                 if (sourceIndex == null) {
                     throw new ParamBusinessException("columnMappings source: " + mapping.getSourceColumn());
                 }
-                String target = normalize(mapping.getTargetColumn());
-                if (!knownTargets.contains(target) || !explicitSources.add(sourceIndex)
-                        || explicitTargets.putIfAbsent(target, sourceIndex) != null) {
+                int targetIndex = uniqueNameIndex(targetName(mapping.getTargetColumn()), targetNames,
+                        "import target column");
+                if (targetIndex < 0 || !explicitSources.add(sourceIndex)
+                        || explicitTargets.putIfAbsent(targetIndex, sourceIndex) != null) {
                     throw new ParamBusinessException("Duplicate or invalid import column mapping");
                 }
             }
@@ -95,10 +99,18 @@ public final class ImportColumnResolver {
         List<TableColumn> resolvedColumns = new ArrayList<>();
         List<Integer> fileIndexes = new ArrayList<>();
         List<String> missingTableColumns = new ArrayList<>();
-        for (TableColumn column : tableColumns) {
-            Integer sourceIndex = explicitTargets.get(normalize(column.getName()));
+        Set<Integer> implicitSources = new HashSet<>();
+        for (int tableIndex = 0; tableIndex < tableColumns.size(); tableIndex++) {
+            TableColumn column = tableColumns.get(tableIndex);
+            Integer sourceIndex = explicitTargets.get(tableIndex);
             if (sourceIndex == null && mappings == null) {
-                sourceIndex = byNormalizedName.get(normalize(column.getName()));
+                int matched = uniqueNameIndex(targetNames.get(tableIndex), sourceNames,
+                        "import source column");
+                sourceIndex = matched < 0 ? null : matched;
+                if (sourceIndex != null && !implicitSources.add(sourceIndex)) {
+                    throw new ParamBusinessException("Import source column matches multiple target columns: "
+                            + fileHeaders.get(sourceIndex));
+                }
             }
             if (sourceIndex != null) {
                 resolvedColumns.add(column);
@@ -113,7 +125,7 @@ public final class ImportColumnResolver {
             }
         }
 
-        java.util.Set<Integer> usedFileIndexes = new java.util.HashSet<>(fileIndexes);
+        Set<Integer> usedFileIndexes = new HashSet<>(fileIndexes);
         List<ImportColumnMatch> matches = new ArrayList<>(fileHeaders.size());
         for (int index = 0; index < fileHeaders.size(); index++) {
             String tableColumn = null;
@@ -133,32 +145,58 @@ public final class ImportColumnResolver {
     }
 
     private static Integer indexOfSource(String source, List<String> fileHeaders,
-            Map<String, Integer> byNormalizedName) {
-        Integer namedIndex = byNormalizedName.get(normalize(source));
-        if (namedIndex != null) {
+            List<String> sourceNames) {
+        int namedIndex = uniqueNameIndex(sourceName(source), sourceNames, "import source column");
+        if (namedIndex >= 0) {
             return namedIndex;
         }
         try {
-            int index = Integer.parseInt(source);
+            int index = Integer.parseInt(source.trim());
             return index >= 0 && index < fileHeaders.size() ? index : null;
         } catch (NumberFormatException ignored) {
-            return byNormalizedName.get(normalize(source));
+            return null;
         }
     }
 
-    /**
-     * Case-insensitive match on trimmed names, ignoring a leading UTF-8 BOM: commons-csv does not
-     * strip it, and without this the first column of every BOM-prefixed file (including files
-     * written by our own CsvSink) would never match.
-     */
-    private static String normalize(String name) {
-        if (name == null) {
-            return "";
+    static int uniqueNameIndex(String requested, List<String> candidates, String description) {
+        String expected = targetName(requested);
+        int exact = -1;
+        for (int index = 0; index < candidates.size(); index++) {
+            if (expected.equals(targetName(candidates.get(index)))) {
+                if (exact >= 0) {
+                    throw ambiguous(description, requested);
+                }
+                exact = index;
+            }
         }
-        String trimmed = name;
+        if (exact >= 0) {
+            return exact;
+        }
+        int folded = -1;
+        for (int index = 0; index < candidates.size(); index++) {
+            if (expected.equalsIgnoreCase(targetName(candidates.get(index)))) {
+                if (folded >= 0) {
+                    throw ambiguous(description, requested);
+                }
+                folded = index;
+            }
+        }
+        return folded;
+    }
+
+    private static ParamBusinessException ambiguous(String description, String requested) {
+        return new ParamBusinessException("Ambiguous " + description + ": " + requested);
+    }
+
+    static String sourceName(String name) {
+        String trimmed = targetName(name);
         if (!trimmed.isEmpty() && trimmed.charAt(0) == '\ufeff') {
-            trimmed = trimmed.substring(1);
+            return trimmed.substring(1).trim();
         }
-        return trimmed.trim().toLowerCase(java.util.Locale.ROOT);
+        return trimmed;
+    }
+
+    private static String targetName(String name) {
+        return StringUtils.trimToEmpty(name);
     }
 }

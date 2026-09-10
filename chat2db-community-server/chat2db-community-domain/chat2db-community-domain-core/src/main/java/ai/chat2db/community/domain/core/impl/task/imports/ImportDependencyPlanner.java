@@ -38,8 +38,8 @@ public final class ImportDependencyPlanner {
         }
         List<ImportTableDependency> edges = dependencies == null ? List.of() : dependencies.stream()
                 .filter(ImportDependencyPlanner::valid)
-                .filter(edge -> containsIgnoreCase(tables, parentNode(edge))
-                        && containsIgnoreCase(tables, childNode(edge)))
+                .filter(edge -> containsExact(tables, parentNode(edge))
+                        && containsExact(tables, childNode(edge)))
                 .toList();
 
         Map<String, Set<String>> graph = new LinkedHashMap<>();
@@ -48,7 +48,7 @@ public final class ImportDependencyPlanner {
         for (ImportTableDependency edge : edges) {
             String parent = canonical(tables, parentNode(edge));
             String child = canonical(tables, childNode(edge));
-            if (parent.equalsIgnoreCase(child)) {
+            if (parent.equals(child)) {
                 selfReferences.add(parent);
             } else {
                 graph.get(parent).add(child);
@@ -98,12 +98,12 @@ public final class ImportDependencyPlanner {
         return StringUtils.defaultIfBlank(edge.getChildTableKey(), edge.getChildTable()).trim();
     }
 
-    private static boolean containsIgnoreCase(Set<String> values, String candidate) {
-        return values.stream().anyMatch(value -> value.equalsIgnoreCase(candidate));
+    private static boolean containsExact(Set<String> values, String candidate) {
+        return values.stream().anyMatch(value -> value.equals(candidate.trim()));
     }
 
     private static String canonical(Set<String> tables, String candidate) {
-        return tables.stream().filter(table -> table.equalsIgnoreCase(candidate.trim())).findFirst()
+        return tables.stream().filter(table -> table.equals(candidate.trim())).findFirst()
                 .orElse(candidate.trim());
     }
 
@@ -114,7 +114,7 @@ public final class ImportDependencyPlanner {
         }
         for (String table : tables) {
             requested.entrySet().stream()
-                    .filter(entry -> table.equalsIgnoreCase(entry.getKey()) && StringUtils.isNotBlank(entry.getValue()))
+                    .filter(entry -> table.equals(entry.getKey()) && StringUtils.isNotBlank(entry.getValue()))
                     .findFirst().ifPresent(entry -> result.put(table, entry.getValue().trim()));
         }
         return Collections.unmodifiableMap(result);

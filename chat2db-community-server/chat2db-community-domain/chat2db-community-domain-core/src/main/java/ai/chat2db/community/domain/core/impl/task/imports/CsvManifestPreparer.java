@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -230,7 +229,8 @@ public final class CsvManifestPreparer {
     private static Map<String, String> fingerprints(List<SourcePreparation> preparations) {
         Map<String, String> result = new LinkedHashMap<>();
         preparations.stream().sorted(Comparator.comparing(SourcePreparation::tableKey,
-                        String.CASE_INSENSITIVE_ORDER))
+                        String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(SourcePreparation::tableKey))
                 .forEach(preparation -> {
                     try {
                         result.put(preparation.tableKey(), sourceFingerprint(preparation.file().toPath()));
@@ -248,7 +248,8 @@ public final class CsvManifestPreparer {
         }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            fingerprints.entrySet().stream().sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+            fingerprints.entrySet().stream().sorted(Map.Entry.comparingByKey(
+                            String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder())))
                     .forEach(entry -> digest.update((entry.getKey() + "\u0000" + entry.getValue() + "\n")
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             return "SHA-256:" + HexFormat.of().formatHex(digest.digest());
@@ -259,7 +260,7 @@ public final class CsvManifestPreparer {
 
     private static int layer(ImportDependencyPlan plan, String tableKey) {
         for (int index = 0; index < plan.getLayers().size(); index++) {
-            if (plan.getLayers().get(index).stream().anyMatch(tableKey::equalsIgnoreCase)) {
+            if (plan.getLayers().get(index).stream().anyMatch(tableKey::equals)) {
                 return index;
             }
         }
@@ -270,15 +271,14 @@ public final class CsvManifestPreparer {
             List<ImportTableDependency> dependencies) {
         Map<String, List<String>> shardIdsByTable = new LinkedHashMap<>();
         for (ImportManifestShard shard : shards) {
-            shardIdsByTable.computeIfAbsent(shard.getTableKey().toLowerCase(Locale.ROOT), ignored -> new ArrayList<>())
+            shardIdsByTable.computeIfAbsent(shard.getTableKey(), ignored -> new ArrayList<>())
                     .add(shard.getShardId());
         }
         for (ImportManifestShard shard : shards) {
             List<String> required = dependencies.stream()
-                    .filter(edge -> shard.getTableKey().equalsIgnoreCase(edge.getChildTableKey()))
-                    .filter(edge -> !edge.getParentTableKey().equalsIgnoreCase(edge.getChildTableKey()))
-                    .flatMap(edge -> shardIdsByTable.getOrDefault(
-                            edge.getParentTableKey().toLowerCase(Locale.ROOT), List.of()).stream())
+                    .filter(edge -> shard.getTableKey().equals(edge.getChildTableKey()))
+                    .filter(edge -> !edge.getParentTableKey().equals(edge.getChildTableKey()))
+                    .flatMap(edge -> shardIdsByTable.getOrDefault(edge.getParentTableKey(), List.of()).stream())
                     .filter(parentShardId -> shards.stream().anyMatch(parentShard ->
                             parentShard.getShardId().equals(parentShardId)
                                     && parentShard.getLayer() < shard.getLayer()))

@@ -42,6 +42,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -666,9 +667,7 @@ public final class ImportRowBatcher implements AutoCloseable {
         try (ResultSet keys = Chat2DBContext.getConnection().getMetaData()
                 .getImportedKeys(null, null, spec.getTarget().getTableName())) {
             while (keys.next()) {
-                String referencing = keys.getString("FKTABLE_NAME");
-                String referenced = keys.getString("PKTABLE_NAME");
-                if (referencing != null && referencing.equalsIgnoreCase(referenced)) {
+                if (shouldWarnForSelfReference(keys)) {
                     log.warn("Target table {} references itself; parallel batch import carries no "
                             + "parent-before-child order — if the foreign key is enforced, use the "
                             + "serial path (chat2db.task.import.parallelism=1) or defer the constraint",
@@ -679,6 +678,14 @@ public final class ImportRowBatcher implements AutoCloseable {
         } catch (Throwable probeFailure) {
             log.debug("Self-reference probe skipped", probeFailure);
         }
+    }
+
+    static boolean shouldWarnForSelfReference(ResultSet key) throws SQLException {
+        String foreignTable = key.getString("FKTABLE_NAME");
+        return foreignTable != null
+                && Objects.equals(key.getString("FKTABLE_CAT"), key.getString("PKTABLE_CAT"))
+                && Objects.equals(key.getString("FKTABLE_SCHEM"), key.getString("PKTABLE_SCHEM"))
+                && Objects.equals(foreignTable, key.getString("PKTABLE_NAME"));
     }
 
     private void runWorker(int workerIndex) {
