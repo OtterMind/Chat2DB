@@ -7,12 +7,15 @@ export type ViewTableStreamEventType = 'resultStarted' | 'rows' | 'resultFinishe
 export interface ViewTablePagingState {
   requestSequence: number;
   params: IExecuteSqlParams;
+  confirmedResult?: IManageResultData;
   result?: IManageResultData;
+  errorMessage?: string;
 }
 
 export interface ViewTablePagingTransition {
   state: ViewTablePagingState;
   completedResult?: IManageResultData;
+  errorMessage?: string;
 }
 
 function isResultEvent(eventType: SqlExecutionEvent['eventType']): eventType is ViewTableStreamEventType {
@@ -44,8 +47,12 @@ function mergeResultEvent(
   };
 }
 
-export function createViewTablePagingState(requestSequence: number, params: IExecuteSqlParams) {
-  return { requestSequence, params } satisfies ViewTablePagingState;
+export function createViewTablePagingState(
+  requestSequence: number,
+  params: IExecuteSqlParams,
+  confirmedResult?: IManageResultData,
+) {
+  return { requestSequence, params, confirmedResult } satisfies ViewTablePagingState;
 }
 
 export function normalizeViewTablePageResults(
@@ -55,18 +62,42 @@ export function normalizeViewTablePageResults(
   return processResultDataList(results, params);
 }
 
+export function getViewTablePagingErrorMessage(result: IManageResultData) {
+  if (result.success !== false) {
+    return undefined;
+  }
+  return result.message?.trim() || result.description?.trim() || 'SQL execution failed';
+}
+
 export function reduceViewTablePagingEvent(
   state: ViewTablePagingState,
   event: SqlExecutionEvent,
   requestSequence: number,
 ): ViewTablePagingTransition {
-  if (state.requestSequence !== requestSequence || !isResultEvent(event.eventType)) {
+  if (state.requestSequence !== requestSequence) {
+    return { state };
+  }
+  if (event.eventType === 'cancelled') {
+    const completedResult = state.confirmedResult ? { ...state.confirmedResult } : undefined;
+    return {
+      state: { ...state, result: undefined, errorMessage: undefined },
+      completedResult,
+    };
+  }
+  if (!isResultEvent(event.eventType)) {
     return { state };
   }
 
   const eventResult = normalizeViewTablePageResults([event.message], state.params)[0];
   if (!eventResult) {
     return { state };
+  }
+  const errorMessage = getViewTablePagingErrorMessage(eventResult);
+  if (errorMessage) {
+    return {
+      state: { ...state, result: undefined, errorMessage },
+      errorMessage,
+    };
   }
 
   const result = mergeResultEvent(state.result, eventResult, event.eventType);
