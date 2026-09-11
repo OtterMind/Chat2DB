@@ -2,6 +2,8 @@ package ai.chat2db.community.agent.impl.pi;
 
 import ai.chat2db.community.agent.pi.IPiRuntimePreflight;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill;
+import ai.chat2db.community.tools.util.AgentTrace;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -74,6 +76,12 @@ public class PiProcessSupervisor implements AutoCloseable {
             List<Path> extensions,
             AgentModelAccess modelAccess,
             String systemPrompt) throws IOException {
+        return start(sessionId, externalSessionId, extensions, modelAccess, systemPrompt, List.of());
+    }
+
+    public synchronized PiProcessHandle start(String sessionId, String externalSessionId,
+            List<Path> extensions, AgentModelAccess modelAccess, String systemPrompt,
+            List<AgentRuntimeSkill> skills) throws IOException {
         requireText(sessionId, "sessionId");
         requireText(externalSessionId, "externalSessionId");
         if (closed) {
@@ -102,7 +110,7 @@ public class PiProcessSupervisor implements AutoCloseable {
         Files.createDirectories(sessionDirectory);
         Files.createDirectories(configDirectory);
         ProcessBuilder builder = new ProcessBuilder(command(
-                executable, externalSessionId, sessionDirectory, extensions, modelAccess, systemPrompt));
+                executable, externalSessionId, sessionDirectory, extensions, modelAccess, systemPrompt, skills));
         builder.directory(sessionDirectory.toFile());
         builder.environment().clear();
         // Native tools need executable lookup and the platform shell environment, but no model/provider secrets.
@@ -115,13 +123,14 @@ public class PiProcessSupervisor implements AutoCloseable {
             builder.environment().put("CHAT2DB_MODEL_TICKET", modelAccess.ticket());
         }
         Process process = processStarter.start(builder);
-        ai.chat2db.community.tools.util.AgentTrace.record("pi.process.started", sessionId, null,
-                java.util.Map.of("version", layout.version(), "extensions", extensions.size()));
+        AgentTrace.record("pi.process.started", sessionId, null,
+                Map.of("version", layout.version(), "extensions", extensions.size(),
+                        "skills", skills.stream().map(skill -> skill.name() + "@" + skill.digest()).toList()));
         PiProcessHandle handle = new PiProcessHandle(sessionId, process);
         processes.put(sessionId, handle);
         process.onExit().thenRun(() -> {
-            ai.chat2db.community.tools.util.AgentTrace.record("pi.process.exited", sessionId, null,
-                    java.util.Map.of("exitCode", process.exitValue()));
+            AgentTrace.record("pi.process.exited", sessionId, null,
+                    Map.of("exitCode", process.exitValue()));
             remove(sessionId, handle);
         });
         return handle;
@@ -133,7 +142,7 @@ public class PiProcessSupervisor implements AutoCloseable {
             Path sessionDirectory,
             List<Path> extensions,
             AgentModelAccess modelAccess,
-            String systemPrompt) throws IOException {
+            String systemPrompt, List<AgentRuntimeSkill> skills) throws IOException {
         List<String> command = new ArrayList<>(List.of(
                 executable.toString(), "--mode", "rpc",
                 "--session-id", externalSessionId,
@@ -156,6 +165,15 @@ public class PiProcessSupervisor implements AutoCloseable {
             }
             command.add("--extension");
             command.add(file.toString());
+        }
+        for (AgentRuntimeSkill skill : skills) {
+            Path entry = Path.of(skill.entryPath());
+            if (!entry.isAbsolute() || !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
+                    || !entry.toRealPath().equals(entry)) {
+                throw new IOException("Pi skill resource is unavailable: " + skill.name());
+            }
+            command.add("--skill");
+            command.add(entry.toString());
         }
         command.addAll(List.of(
                 "--no-skills", "--no-prompt-templates", "--no-themes",

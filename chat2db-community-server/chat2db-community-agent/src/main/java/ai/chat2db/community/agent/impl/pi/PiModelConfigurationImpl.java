@@ -60,6 +60,10 @@ public final class PiModelConfigurationImpl implements IPiModelConfiguration {
         var provider = json.createObjectNode();
         provider.put("baseUrl", access.baseUrl());
         provider.put("api", access.api());
+        if ("openai-responses".equals(access.api())) {
+            // Pi must emit strict:false so Responses preserves optional tool parameters.
+            provider.putObject("compat").put("supportsStrictMode", true);
+        }
         provider.put("apiKey", access.ticket());
         provider.putObject("headers").put("X-Chat2DB-Model-Ticket", access.ticket());
         provider.putArray("models").add(modelNode);

@@ -64,6 +64,18 @@ class AgentRuntimeSessionHandleImplTest {
     }
 
     @Test
+    void putsSkillCommandBeforeTheCompleteRenderedPrompt() {
+        String prompt = "<chat2db_context>context</chat2db_context>\n<user_request>画图</user_request>";
+        var started = handle.startRun(new AgentRuntimeRunRequest("session", "run", runRequest().model(),
+                new AgentRuntimeInput(prompt, List.of(), "chart"), "request"));
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        assertEquals("/skill:chart " + prompt, transport.payload.path("message").asText());
+        transport.complete(objectMapper.createObjectNode());
+        started.toCompletableFuture().join();
+    }
+
+    @Test
     void preservesTerminalEventBeforePromptAcknowledgement() throws Exception {
         var start = handle.startRun(runRequest());
         transport.complete(objectMapper.createObjectNode());

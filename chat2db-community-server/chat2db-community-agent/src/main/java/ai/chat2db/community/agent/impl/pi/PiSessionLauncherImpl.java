@@ -10,6 +10,7 @@ import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
 import ai.chat2db.community.tools.agent.runtime.IAgentToolAccessProvider;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionRef;
 import ai.chat2db.community.tools.model.agent.runtime.AgentToolAccess;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,6 +62,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             String resumeReference,
             String systemPrompt,
             AgentModelSnapshot model,
+            List<AgentRuntimeSkill> skills,
             IAgentRuntimeEventSink eventSink) {
         IPiModelConfiguration modelConfiguration = null;
         AgentToolAccess toolAccess = null;
@@ -77,7 +79,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             List<Path> loadedExtensions = new ArrayList<>(extensions);
             loadedExtensions.add(extension);
             PiProcessHandle process = supervisor.start(
-                    sessionId, externalSessionId, loadedExtensions, modelAccess, systemPrompt);
+                    sessionId, externalSessionId, loadedExtensions, modelAccess, systemPrompt, skills);
             AtomicReference<AgentRuntimeSessionHandleImpl> handleReference = new AtomicReference<>();
             PiRpcTransportImpl rpc = new PiRpcTransportImpl(process.stdout(), process.stdin(), event -> {
                 AgentRuntimeSessionHandleImpl handle = handleReference.get();

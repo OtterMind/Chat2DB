@@ -86,7 +86,9 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
         activeExternalRunId = request.runId();
         health = AgentRuntimeHealth.BUSY;
         ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("message", request.input().text());
+        String skillName = request.input().skillName();
+        payload.put("message", skillName == null ? request.input().text()
+                : "/skill:" + skillName + " " + request.input().text());
         AgentTrace.record("pi.prompt.sending", sessionId, request.runId(),
                 Map.of("inputCharacters", request.input().text().length()));
         CompletableFuture<JsonNode> response = rpc.request("prompt", objectMapper.createObjectNode()

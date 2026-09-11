@@ -14,6 +14,9 @@ import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import java.time.Clock;
+import java.nio.file.Path;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.core.io.ClassPathResource;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -33,6 +36,7 @@ class AgentRunCoordinatorTest {
     private final FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
     private final AgentRuntimeHandleRegistry handles = new AgentRuntimeHandleRegistry();
     private AgentRunCoordinator coordinator;
+    @TempDir Path temporaryDirectory;
 
     @BeforeEach
     void setUp() {
@@ -46,6 +50,7 @@ class AgentRunCoordinatorTest {
         };
         coordinator = new AgentRunCoordinator(
                 new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver, new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(), new AiAgentContextServiceImpl(null),
+                new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"), temporaryDirectory),
                 () -> "generated-" + ids.incrementAndGet(),
                 Clock.fixed(Instant.parse("2026-09-08T16:00:00Z"), ZoneOffset.UTC));
     }
@@ -79,6 +84,29 @@ class AgentRunCoordinatorTest {
         assertEquals(AgentSessionStatus.READY, storage.get(SESSION_ID, USER_ID).status());
         assertEquals(3, storage.get(SESSION_ID, USER_ID).lastEventSequence());
         assertEquals(1, handles.size());
+    }
+
+    @Test
+    void keepsOriginalInputAndPassesSkillSeparatelyFromRenderedContext() {
+        String text = "/skill:chart 画一下收入";
+        coordinator.start(new AgentRunStartCommand(USER_ID, SESSION_ID, "model",
+                new AgentRuntimeInput(text, List.of()), "skill-request")).toCompletableFuture().join();
+        assertEquals(text, storage.events.get(0).payload().get("text"));
+        assertEquals("chart", storage.events.get(0).payload().get("requestedSkill"));
+        assertEquals("chart", adapter.lastRequest().input().skillName());
+        String rendered = adapter.lastRequest().input().text();
+        assertEquals(true, rendered.contains("<chat2db_context>"));
+        assertEquals(true, rendered.contains("画一下收入"));
+        assertEquals(false, rendered.contains("/skill:chart"));
+    }
+
+    @Test
+    void rejectsUnknownSkillBeforeWritingRunOrEvents() {
+        assertThrows(IllegalArgumentException.class, () -> coordinator.start(new AgentRunStartCommand(
+                USER_ID, SESSION_ID, "model", new AgentRuntimeInput("/skill:missing hello", List.of()), "unknown")));
+        assertEquals(0, storage.events.size());
+        assertEquals(0, storage.list(SESSION_ID, USER_ID).size());
+        assertEquals(0, adapter.openSessionCount());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package ai.chat2db.community.agent.impl.pi;
 
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelAccess;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -95,6 +96,25 @@ class PiProcessSupervisorTest {
         assertTrue(promptIndex > 0);
         assertEquals("existing V1 prompt\nwith formatting", captured[0].command().get(promptIndex + 1));
         assertTrue(captured[0].command().containsAll(List.of("--provider", "chat2db", "--model", "gpt-test")));
+    }
+
+    @Test
+    void loadsOnlyExplicitSkillPathsIncludingSpaces() throws Exception {
+        Path folder = Files.createDirectories(temporaryDirectory.resolve("技能 resources")).toRealPath();
+        Path entry = Files.writeString(folder.resolve("SKILL.md"), "skill");
+        ProcessBuilder[] captured = new ProcessBuilder[1];
+        try (PiProcessSupervisor supervisor = new PiProcessSupervisor(
+                runtimeLayout(), temporaryDirectory.resolve("session-data"), 1, builder -> {
+                    captured[0] = builder;
+                    return new FakeProcess();
+                })) {
+            supervisor.start("session", "external", List.of(), null, "prompt",
+                    List.of(new AgentRuntimeSkill("chart", entry.toString(), "digest")));
+            int flag = captured[0].command().indexOf("--skill");
+            assertTrue(flag > 0);
+            assertEquals(entry.toString(), captured[0].command().get(flag + 1));
+            assertTrue(captured[0].command().contains("--no-skills"));
+        }
     }
 
     private PiRuntimeLayout runtimeLayout() throws Exception {

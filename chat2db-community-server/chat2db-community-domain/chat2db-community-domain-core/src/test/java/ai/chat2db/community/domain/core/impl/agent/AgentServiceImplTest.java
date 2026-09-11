@@ -165,6 +165,7 @@ class AgentServiceImplTest {
                 new UnusedAgentEventStorage(),
                 new AgentModelResolver(null),
                 new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(), new AiAgentContextServiceImpl(null, CLOCK),
+                new AiAgentSkillServiceImpl(null, null),
                 () -> "unused",
                 CLOCK);
     }

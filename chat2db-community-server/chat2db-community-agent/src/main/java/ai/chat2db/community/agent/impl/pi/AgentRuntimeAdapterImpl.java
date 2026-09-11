@@ -7,6 +7,8 @@ import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeCapability;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import java.util.Map;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCapabilities;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
@@ -59,9 +61,9 @@ public class AgentRuntimeAdapterImpl implements IAgentRuntimeAdapter {
         }
         return new AgentRuntimeEnvironmentReport(
                 AgentRuntimeType.PI,
-                ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus.BLOCKED,
+                AgentRuntimeEnvironmentStatus.BLOCKED,
                 report.runtimeVersion(), report.operatingSystem(), report.architecture(), report.checks(),
-                java.util.Map.of("reason", "Pi Beta is disabled"), report.checkedAt());
+                Map.of("reason", "Pi Beta is disabled"), report.checkedAt());
     }
 
     @Override
@@ -70,7 +72,7 @@ public class AgentRuntimeAdapterImpl implements IAgentRuntimeAdapter {
             IAgentRuntimeEventSink eventSink) {
         requireEnabled();
         return sessionLauncher.launch(
-                request.sessionId(), request.externalSessionId(), null, request.systemPrompt(), request.model(), eventSink);
+                request.sessionId(), request.externalSessionId(), null, request.systemPrompt(), request.model(), request.skills(), eventSink);
     }
 
     @Override
@@ -80,7 +82,7 @@ public class AgentRuntimeAdapterImpl implements IAgentRuntimeAdapter {
         requireEnabled();
         return sessionLauncher.launch(
                 request.sessionId(), request.binding().externalSessionId(),
-                request.binding().resumeReference(), request.systemPrompt(), request.model(), eventSink);
+                request.binding().resumeReference(), request.systemPrompt(), request.model(), request.skills(), eventSink);
     }
 
     @Override

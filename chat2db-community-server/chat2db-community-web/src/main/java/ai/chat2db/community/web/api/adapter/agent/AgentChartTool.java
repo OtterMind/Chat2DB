@@ -38,14 +38,11 @@ public class AgentChartTool {
                 "xField", Map.of("type", "string", "maxLength", 256, "description", "Exact category or X column. Required except for Statistics. For pie charts this is the category."),
                 "yField", Map.of("type", "string", "maxLength", 256, "description", "Exact numeric metric column. Required except for Combo. Statistics requires a one-row query result."),
                 "title", Map.of("type", "string", "maxLength", 200),
-                "series", Map.of("type", "array", "minItems", 1, "maxItems", 8, "items", series, "description", "Required only for Combo; use distinct numeric metric columns.")),
+                "series", Map.of("type", "array", "minItems", 1, "maxItems", 8, "items", series, "description", "Only supported for Combo. Omit for every other chart type. Use distinct numeric metric columns.")),
                 "required", List.of("resultId", "chartType"), "additionalProperties", false);
         return new AgentToolAccess.Tool(NAME,
                 "Render a chart from a saved db_query result. This tool uses the actual query values and never executes SQL. Choose fields and chart type; do not supply or rewrite data. The chart is displayed and saved in the conversation. Partial query pages are labelled as partial. Errors describe how to correct the request.",
-                schema, "Display and save a chart using a db_query resultId.", List.of(
-                        "When a chart is requested, first obtain real data with db_query, then call render_chart with that statement's resultId.",
-                        "Perform grouping, totals, date filling and rounding in SQL. Use stable ordering and enough pageSize or SQL aggregation for the intended scope.",
-                        "After success the chart is already visible. Explain findings without copying its rows or emitting another chart code block. Never invent resultIds or data."));
+                schema, "Display and save a chart using a db_query resultId.", List.of());
     }
 
     public AiAgentChartRenderResponse execute(Map<String, Object> arguments, AgentToolExecutionContext context) {

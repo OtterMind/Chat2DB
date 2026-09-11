@@ -14,6 +14,9 @@ import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentContextService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentSkillService;
+import ai.chat2db.community.domain.api.model.request.agent.AiAgentSkillResolveRequest;
+import ai.chat2db.community.domain.core.converter.agent.AgentSkillConverter;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentPromptService;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
@@ -51,6 +54,7 @@ public class AgentRunCoordinator {
     private final IAiAgentQuestionService questions;
     private final IAiAgentPromptService prompts;
     private final IAiAgentContextService contexts;
+    private final IAiAgentSkillService skills;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -62,8 +66,9 @@ public class AgentRunCoordinator {
             AgentRunStorage runStorage,
             AgentEventStorage eventStorage,
             AgentModelResolver modelResolver,
-            IAiAgentQuestionService questions, IAiAgentPromptService prompts, IAiAgentContextService contexts) {
-        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver, questions, prompts, contexts,
+            IAiAgentQuestionService questions, IAiAgentPromptService prompts, IAiAgentContextService contexts,
+            IAiAgentSkillService skills) {
+        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver, questions, prompts, contexts, skills,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -75,7 +80,7 @@ public class AgentRunCoordinator {
             AgentEventStorage eventStorage,
             AgentModelResolver modelResolver,
             IAiAgentQuestionService questions,
-            IAiAgentPromptService prompts, IAiAgentContextService contexts,
+            IAiAgentPromptService prompts, IAiAgentContextService contexts, IAiAgentSkillService skills,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -87,6 +92,7 @@ public class AgentRunCoordinator {
         this.questions = Objects.requireNonNull(questions, "questions");
         this.prompts = Objects.requireNonNull(prompts, "prompts");
         this.contexts = Objects.requireNonNull(contexts, "contexts");
+        this.skills = Objects.requireNonNull(skills, "skills");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -104,11 +110,12 @@ public class AgentRunCoordinator {
         if (session.status() != AgentSessionStatus.READY && session.status() != AgentSessionStatus.FAILED) {
             throw new IllegalStateException("Agent session is not ready: " + session.id());
         }
+        var skillInput = skills.resolve(new AiAgentSkillResolveRequest(command.input().text()));
         AgentModelSnapshot model = modelResolver.resolve(command.modelConfigId());
         AgentTrace.record("run.model.resolved", session.id(), null,
                 Map.of("modelConfigId", model.modelConfigId(), "provider", model.provider(), "model", model.modelId()));
         var context = contexts.resolve(command.context());
-        String renderedPrompt = prompts.userPrompt(command.input().text(), context);
+        String renderedPrompt = prompts.userPrompt(skillInput.message(), context);
         long sequence = session.lastEventSequence() + 1;
         String runId = nextId();
         AgentRun run = new AgentRun(
@@ -122,14 +129,15 @@ public class AgentRunCoordinator {
                                 "artifactIds", command.input().artifactIds(),
                                 "modelConfigId", model.modelConfigId(),
                                 "requestMessageId", run.requestMessageId(),
-                                "context", context, "renderedPrompt", renderedPrompt, "promptTemplate", "agent-v1")),
+                                "context", context, "renderedPrompt", renderedPrompt, "promptTemplate", "agent-v1",
+                                "requestedSkill", Objects.toString(skillInput.skillName(), ""))),
                 command.userId());
         updateSession(session, session.status(), AgentSessionStatus.RUNNING, sequence, command.modelConfigId());
         AgentTrace.record("run.accepted", session.id(), run.id(),
                 Map.of("sequence", sequence, "idempotencyKey", command.idempotencyKey()));
 
         AgentRuntimeRunRequest runtimeRequest = new AgentRuntimeRunRequest(
-                session.id(), runId, model, new AgentRuntimeInput(renderedPrompt, command.input().artifactIds()), command.idempotencyKey());
+                session.id(), runId, model, new AgentRuntimeInput(renderedPrompt, command.input().artifactIds(), skillInput.skillName()), command.idempotencyKey());
         try {
             IAgentRuntimeSessionHandle handle = handle(session, command, model);
             return handle.startRun(runtimeRequest).handle((reference, error) -> {
@@ -185,7 +193,8 @@ public class AgentRunCoordinator {
         IAgentRuntimeSessionHandle opened = adapter.openSession(
                 new AgentRuntimeSessionOpenRequest(
                         session.id(), session.runtimeBinding().externalSessionId(),
-                        session.definition().systemPrompt(), model),
+                        session.definition().systemPrompt(), model,
+                        skills.prepare().stream().map(AgentSkillConverter::skill2runtime).toList()),
                 event -> recordRuntimeEvent(command.userId(), event));
         handleRegistry.register(session.id(), opened);
         AgentTrace.record("runtime.opened", session.id(), null, Map.of("runtime", session.runtimeBinding().runtimeType()));

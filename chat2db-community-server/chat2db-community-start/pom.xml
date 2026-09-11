@@ -267,6 +267,17 @@
         </dependency>
     </dependencies>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/../../skills</directory>
+                <targetPath>skills</targetPath>
+                <filtering>false</filtering>
+                <excludes><exclude>README.md</exclude></excludes>
+            </resource>
+        </resources>
         <finalName>${chat2db.finalName}</finalName>
         <plugins>
             <plugin>

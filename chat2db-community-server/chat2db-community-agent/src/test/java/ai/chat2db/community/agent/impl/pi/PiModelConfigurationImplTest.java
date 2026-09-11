@@ -46,6 +46,17 @@ class PiModelConfigurationImplTest {
     }
 
     @Test
+    void responsesPreservesOptionalToolFieldsWithoutChangingOtherProtocols() throws Exception {
+        try (var configuration = new PiModelConfigurationImpl("session", directory, access, json)) {
+            for (String api : List.of("openai-responses", "openai-completions", "anthropic-messages", "google-generative-ai")) {
+                configuration.prepare(model(api, api));
+                var provider = json.readTree(directory.resolve("models.json").toFile()).path("providers").path("chat2db");
+                assertEquals(api.equals("openai-responses"), provider.path("compat").path("supportsStrictMode").asBoolean());
+            }
+        }
+    }
+
+    @Test
     void failedReplacementRevokesOnlyTheNewTicket() throws Exception {
         var configuration = new PiModelConfigurationImpl("session", directory, access, json);
         configuration.prepare(model("first", "openai-responses"));
