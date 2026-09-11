@@ -35,7 +35,9 @@ public class SqlGenerateUtil {
                 }
 
                 SelectCountVisitor visitor = new SelectCountVisitor();
-                selectBody.accept(visitor);
+                if (selectBody instanceof PlainSelect plainSelect) {
+                    visitor.visit(plainSelect);
+                }
                 return select.toString();
             }
         } catch (Exception e) {
