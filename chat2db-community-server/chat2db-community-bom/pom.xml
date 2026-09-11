@@ -43,7 +43,7 @@
         <flyway.version>9.19.4</flyway.version>
         <chatgpt-java.version>1.0.8</chatgpt-java.version>
         <openai-gpt3-java.version>0.12.0</openai-gpt3-java.version>
-        <logbook.version>3.3.0</logbook.version>
+        <logbook.version>4.1.0</logbook.version>
         <spring-context-indexer.version>6.0.10</spring-context-indexer.version>
         <commons-beanutils.version>1.9.4</commons-beanutils.version>
         <ehcache.version>3.10.8</ehcache.version>
