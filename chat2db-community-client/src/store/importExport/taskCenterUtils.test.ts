@@ -100,6 +100,25 @@ function testTaskMerge() {
   assert.equal(tasks[1].progress, 50);
 }
 
+function testTaskMergePreservesLatestRevision() {
+  const oldTask = { ...task(1, ImportExportTaskStatus.RUNNING, '2026-08-06T10:00:00Z', 20), updatedAt: 1000 };
+  const latestTask = { ...oldTask, progress: 80, updatedAt: '1970-01-01T00:00:02.000Z' };
+  assert.deepEqual(mergeTasks([latestTask], [oldTask]), [latestTask]);
+  assert.deepEqual(mergeTasks([oldTask], [latestTask]), [latestTask]);
+
+  const terminalStatuses = [
+    ImportExportTaskStatus.SUCCESS, ImportExportTaskStatus.FAILED, ImportExportTaskStatus.CANCELLED,
+  ];
+  for (const status of terminalStatuses) {
+    const terminal = { ...oldTask, status, progress: 100 };
+    assert.deepEqual(mergeTasks([terminal], [latestTask]), [terminal]);
+    assert.deepEqual(mergeTasks([latestTask], [terminal]), [terminal]);
+  }
+
+  const withoutRevision = task(1, ImportExportTaskStatus.SUCCESS, '2026-08-06T10:00:00Z', 100);
+  assert.deepEqual(mergeTasks([withoutRevision], [oldTask]), [withoutRevision]);
+}
+
 function testEventMerge() {
   const events = mergeTaskEvents([event(1, 'created'), event(2, 'old')], [event(3, 'finished'), event(2, 'running')]);
 
@@ -207,6 +226,7 @@ function testImportTargetRefreshWaitsForTerminalImportResult() {
 void testActiveTaskPagination().then(async () => {
   await testCompletedTrackedTaskOutsideRecentPage();
   testTaskMerge();
+  testTaskMergePreservesLatestRevision();
   testEventMerge();
   testPollingDelay();
   testPollingRetryPolicy();

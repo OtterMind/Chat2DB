@@ -17,6 +17,33 @@ export interface TaskNotificationCursor {
   taskId: number;
 }
 
+export interface TaskListLoadMoreRequest {
+  stateGeneration: number;
+  requestGeneration: number;
+}
+
+export const createTaskListRequestCoordinator = () => {
+  let stateGeneration = 0;
+  let loadMoreRequestGeneration = 0;
+
+  return {
+    invalidateState: () => {
+      stateGeneration += 1;
+    },
+    beginLoadMoreRequest: (): TaskListLoadMoreRequest => {
+      loadMoreRequestGeneration += 1;
+      return {
+        stateGeneration,
+        requestGeneration: loadMoreRequestGeneration,
+      };
+    },
+    canApplyLoadMoreResponse: (request: TaskListLoadMoreRequest) =>
+      request.stateGeneration === stateGeneration && request.requestGeneration === loadMoreRequestGeneration,
+    isLatestLoadMoreRequest: (request: TaskListLoadMoreRequest) =>
+      request.requestGeneration === loadMoreRequestGeneration,
+  };
+};
+
 const TERMINAL_TASK_STATUSES = new Set([
   ImportExportTaskStatus.SUCCESS,
   ImportExportTaskStatus.FAILED,
@@ -67,13 +94,25 @@ export const listAllTasksByStatus = async (
 
 export const mergeTasks = (...taskGroups: ImportExportTaskDetails[][]) => {
   const tasksById = new Map<number, ImportExportTaskDetails>();
-  taskGroups.flat().forEach((task) => tasksById.set(task.id, task));
+  taskGroups.flat().forEach((task) => {
+    const previous = tasksById.get(task.id);
+    if (previous) {
+      const previousTerminal = TERMINAL_TASK_STATUSES.has(previous.status);
+      const incomingTerminal = TERMINAL_TASK_STATUSES.has(task.status);
+      if (previousTerminal && !incomingTerminal) return;
+      if (previousTerminal === incomingTerminal && taskUpdateTime(task) < taskUpdateTime(previous)) return;
+    }
+    tasksById.set(task.id, task);
+  });
   return [...tasksById.values()].sort((left, right) => {
     const leftCreatedAt = new Date(left.createdAt).getTime() || 0;
     const rightCreatedAt = new Date(right.createdAt).getTime() || 0;
     return rightCreatedAt - leftCreatedAt;
   });
 };
+
+const taskUpdateTime = (task: ImportExportTaskDetails) =>
+  new Date(task.updatedAt ?? task.finishedAt ?? task.startedAt ?? task.createdAt).getTime() || 0;
 
 export const loadMissingTrackedTasks = async (
   trackedTaskIds: number[],

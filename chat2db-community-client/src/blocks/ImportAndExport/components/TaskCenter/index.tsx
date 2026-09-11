@@ -1,6 +1,6 @@
 import { memo, type ReactNode, useEffect, useState } from 'react';
 import { useStyles } from './style';
-import { IconButton, Empty, EmptyImage } from '@chat2db/ui';
+import { IconButton, Empty, EmptyImage, staticMessage } from '@chat2db/ui';
 import { Progress, Spin, Tooltip } from 'antd';
 import i18n from '@/i18n';
 import RunSqlModal from '@/blocks/ImportAndExport/components/RunSqlModal';
@@ -144,7 +144,9 @@ export default memo<TaskCenterProps>(({ headerLeading }) => {
           const list = event.currentTarget;
           const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
           if (distanceToBottom <= 40 && taskListHasNextPage && !taskListLoadingMore) {
-            void loadMoreTasks();
+            void loadMoreTasks().catch((error: { errorMessage?: string; message?: string }) => {
+              staticMessage.error(error.errorMessage || error.message || i18n('common.text.failure'));
+            });
           }
         }}
       >
