@@ -17,6 +17,8 @@ async function runShortcutTests() {
     ShortcutAction,
     DEFAULT_SHORTCUT_CONFIG,
     getEffectiveShortcutConfig,
+    getEffectiveShortcutConfigMap,
+    ShortcutScope,
     getEventShortcutBinding,
     isShortcutCaptureAllowed,
     shortcutBindingToMonacoKeybinding,
@@ -104,6 +106,88 @@ async function runShortcutTests() {
   const remappedKeybinding = shortcutBindingToMonacoKeybinding(remappedConfig.binding, mockMonaco);
   const expectedRemapped = mockMonaco.KeyMod.CtrlCmd | mockMonaco.KeyMod.Shift | mockMonaco.KeyCode.KeyC;
   assert.equal(remappedKeybinding, expectedRemapped);
+
+  // 5. Scoped DDL search shortcut (Issue #2748, plan B1)
+  const { resolveShortcutDispatch } = await import('@/utils/shortcutDispatch');
+  const ddlSearchDefault = DEFAULT_SHORTCUT_CONFIG[ShortcutAction.DdlSearch];
+  assert.equal(ddlSearchDefault.scope, 'viewDdl');
+  assert.equal(ddlSearchDefault.allowInEditable, true, 'must toggle while the search input is focused');
+  assert.equal(ddlSearchDefault.canModify, true);
+  assert.match(ddlSearchDefault.defaultBinding, / \+ F$/, 'defaults to modifier + F');
+
+  const findEvent = {
+    key: 'f',
+    code: 'KeyF',
+    metaKey: true,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+  } as KeyboardEvent;
+
+  // Default binding: inside the viewDdl scope the global dispatcher defers to
+  // the scoped (local) handler instead of firing a global action.
+  const defaultConfigMap = getEffectiveShortcutConfigMap();
+  assert.equal(
+    resolveShortcutDispatch(findEvent, defaultConfigMap, {
+      activeScope: ShortcutScope.ViewDdl,
+      editableTarget: false,
+      workspaceSaveAllowed: false,
+    }),
+    undefined,
+    'viewDdl scope consumes its own search shortcut',
+  );
+  // Outside any scope, modifier+F is not a global action either.
+  assert.equal(
+    resolveShortcutDispatch(findEvent, defaultConfigMap, {
+      editableTarget: false,
+      workspaceSaveAllowed: false,
+    }),
+    undefined,
+    'no global action owns modifier + F',
+  );
+
+  // Rebinding is honoured: the new binding is what the scoped listener sees.
+  const reboundMap = getEffectiveShortcutConfigMap({
+    [ShortcutAction.DdlSearch]: { binding: 'Ctrl + G' },
+  });
+  assert.equal(reboundMap[ShortcutAction.DdlSearch].binding, 'Ctrl + G');
+  assert.equal(reboundMap[ShortcutAction.DdlSearch].disabled, false);
+  assert.equal(reboundMap[ShortcutAction.DdlSearch].isDefault, false);
+
+  // Disabling: binding null marks the config disabled so the local listener
+  // must not take over, and the dispatcher does not treat it as scoped either.
+  const disabledMap = getEffectiveShortcutConfigMap({
+    [ShortcutAction.DdlSearch]: { binding: null },
+  });
+  assert.equal(disabledMap[ShortcutAction.DdlSearch].disabled, true);
+  assert.equal(
+    resolveShortcutDispatch(findEvent, disabledMap, {
+      activeScope: ShortcutScope.ViewDdl,
+      editableTarget: false,
+      workspaceSaveAllowed: false,
+    }),
+    undefined,
+    'a disabled scoped shortcut falls through to the browser default',
+  );
+
+  // Restoring defaults re-enables the takeover.
+  const restoredMap = getEffectiveShortcutConfigMap({});
+  assert.equal(restoredMap[ShortcutAction.DdlSearch].disabled, false);
+  assert.equal(restoredMap[ShortcutAction.DdlSearch].isDefault, true);
+
+  // Same key in a different scope (ResultSet) must not leak into viewDdl:
+  // only configs of the active scope count as scoped matches.
+  const sameKeyMap = getEffectiveShortcutConfigMap();
+  assert.equal(sameKeyMap[ShortcutAction.ResultSearch].binding, sameKeyMap[ShortcutAction.DdlSearch].binding);
+  assert.equal(
+    resolveShortcutDispatch(findEvent, sameKeyMap, {
+      activeScope: ShortcutScope.ResultSet,
+      editableTarget: false,
+      workspaceSaveAllowed: false,
+    }),
+    undefined,
+    'ResultSet keeps handling its own search shortcut',
+  );
 
   console.log('All shortcut tests passed successfully!');
 }
