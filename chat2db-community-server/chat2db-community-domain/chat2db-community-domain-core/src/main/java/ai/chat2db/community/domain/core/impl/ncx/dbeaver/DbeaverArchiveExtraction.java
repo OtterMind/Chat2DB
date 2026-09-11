@@ -81,6 +81,7 @@ public class DbeaverArchiveExtraction {
      * @return extraction bound to a directory that did not exist before this call.
      */
     public static DbeaverArchiveExtraction create(Path basePath, ZipFile zipFile) throws IOException {
+        Files.createDirectories(basePath);
         return new DbeaverArchiveExtraction(
                 Files.createTempDirectory(basePath, EXTRACTION_DIRECTORY_PREFIX), zipFile, MAX_ENTRIES, MAX_BYTES);
     }

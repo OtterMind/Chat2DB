@@ -4,6 +4,7 @@ import { ServiceStatus } from '@/constants/common';
 import { ErrorCodesWithoutToast } from '@/constants/request';
 import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
+import { redactSensitiveParams } from '@/utils/sensitiveParams';
 import { staticMessage } from '@chat2db/ui';
 
 export interface ICommandLineRequest {
@@ -74,7 +75,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       }),
     );
     if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(res));
+      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(redactSensitiveParams(res)));
     }
     // Prepare for a cancellation request
     options?.restParams?.signal?.({ id, reject });
@@ -170,7 +171,7 @@ export const pushMessageFlow = (_data) => {
             errorDetail,
             solutionLink,
             requestUrl: eventualUrl,
-            requestParams: JSON.stringify(requestData),
+            requestParams: JSON.stringify(redactSensitiveParams(requestData)),
           });
           break;
         default:
@@ -187,5 +188,11 @@ export const responseInterceptor = (response, requestData, options) => {
   const { errorCode, errorMessage } = response || {};
   const { message } = requestData || {};
   const { errorLevel, permissionError } = options;
-  interceptorsResponse({ errorCode, errorMessage, requestParams: message, errorLevel, permissionError });
+  interceptorsResponse({
+    errorCode,
+    errorMessage,
+    requestParams: redactSensitiveParams(message),
+    errorLevel,
+    permissionError,
+  });
 };

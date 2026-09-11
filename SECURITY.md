@@ -68,9 +68,19 @@ Chat2DB treats that password as request-scoped input:
 
 - It is accepted only as an optional parameter of the import request, is used
   only to decrypt the credential files of that archive, and is never written to
-  Chat2DB storage, logs, or error messages.
-- The extracted copy of the archive holds decrypted credentials, so it is
-  removed when the import finishes, including when the import fails.
+  Chat2DB storage or returned to a client.
+- Both clients remove password-like fields from the request parameters they
+  attach to an error notification, so the password is not among the request
+  details a user can copy out of the error dialog.
+- The password travels in the request body, which the existing `/api/**` access
+  log records under the same positional masking every other request body
+  receives. It is written to no other log.
+- The archive is extracted into a directory created for that import alone, which
+  is removed when the import finishes, including when the import fails. The
+  credentials recovered from it are stored as ordinary datasource passwords,
+  exactly like the other import formats.
+- A name taken from the archive cannot address anything outside that directory,
+  and extraction is bounded in entry count and total size.
 - Supplying it is always optional. Without it, connections whose credentials
   cannot be decrypted are imported without a user or password, which is what the
   import dialog already announces.

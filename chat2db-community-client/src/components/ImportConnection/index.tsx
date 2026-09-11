@@ -5,7 +5,7 @@ import ConnectionServer from '@/service/connection';
 import { isDesktop } from '@/utils/env';
 import { Modal, staticMessage } from '@chat2db/ui';
 import { Input } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 interface IImportConnectionProps {
@@ -71,6 +71,14 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     return importConfigMap[type];
   }, [type]);
 
+  // The dialog is only toggled open and closed, so the password has to be dropped explicitly:
+  // otherwise a value typed for an earlier import would still be sent with the next one.
+  useEffect(() => {
+    if (!open) {
+      setMasterPassword('');
+    }
+  }, [open]);
+
   const handleConfirmUpload = () => {
     if (!type) {
       return;
@@ -101,6 +109,7 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
       .then((res) => {
         onConfirm && onConfirm();
         setDesktopLoading(false);
+        setMasterPassword('');
         if (res.result) {
           staticMessage.success(res.result);
           return;
@@ -151,6 +160,8 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
                 allowClear
                 className={styles.masterPasswordInput}
                 placeholder={i18n('connection.import.dbeaver.masterPassword.placeholder')}
+                // Controlled, so the field always shows exactly the value that would be sent.
+                value={masterPassword}
                 onChange={(event) => {
                   setMasterPassword(event.target.value);
                 }}
