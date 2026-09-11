@@ -180,6 +180,98 @@ class MysqlSqlCompletionStatementLocatorTest {
     }
 
     @Test
+    void keepsNestedSelectInsideSingleStatementOnTheFastPath() {
+        String sql = "select * from orders where id in (select id from users where users.id = 1) and na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, sql, 0, sql.length());
+    }
+
+    @Test
+    void keepsUnionQueryTogetherWhenTopLevelSelectsRepeat() {
+        String sql = "select id from orders where na union select id from archived_orders where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, sql, 0, sql.length());
+    }
+
+    @Test
+    void keepsInsertSelectTogetherWhenTopLevelStatementKeywordsRepeat() {
+        String sql = "insert into orders(id) select id from users where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, sql, 0, sql.length());
+    }
+
+    @Test
+    void preservesCurrentWindowWhenLargeHistoryCursorIsBeforeSeparator() {
+        StringBuilder sqlBuilder = new StringBuilder();
+        for (int index = 0; index < 200; index++) {
+            sqlBuilder.append("select * from archive_").append(index).append(";\n");
+        }
+        int currentStart = sqlBuilder.length();
+        sqlBuilder.append("select * from orders where na; select * from next_table");
+        String sql = sqlBuilder.toString();
+        int cursor = currentStart + "select * from orders where na".length();
+
+        SqlCompletionStatementWindow window = locate(sql, cursor);
+
+        assertCurrentWindow(window, "select * from orders where na", currentStart, cursor);
+    }
+
+    @Test
+    void fallsBackToParserForUnclosedParentheses() {
+        String sql = "select coalesce(o.sta from app.orders o";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, sql, 0, sql.length());
+    }
+
+    @Test
+    void fallsBackToParserForUnclosedStringLiteral() {
+        String sql = "select * from orders where name = 'unterminated; select * from users where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, "select * from users where na", sql.lastIndexOf("select * from users"),
+                sql.length());
+    }
+
+    @Test
+    void fallsBackToParserForUnclosedBlockComment() {
+        String sql = "select * from orders /* unterminated; select * from users where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, "select * from users where na", sql.lastIndexOf("select * from users"),
+                sql.length());
+    }
+
+    @Test
+    void keepsQuestionMarkParametersEligibleForTheFastPath() {
+        String sql = "select * from orders where id = ?; select * from users where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, "select * from users where na", sql.lastIndexOf("select * from users"),
+                sql.length());
+    }
+
+    @Test
+    void doesNotUseFastPathForUnmatchedClosingParenthesis() {
+        String sql = "select * from orders where id = 1); select * from users where na";
+
+        SqlCompletionStatementWindow window = locate(sql);
+
+        assertCurrentWindow(window, "select * from users where na", sql.lastIndexOf("select * from users"),
+                sql.length());
+    }
+
+    @Test
     void keepsLargeScriptCurrentWindowBoundedByStatementSeparator() {
         StringBuilder sqlBuilder = new StringBuilder();
         for (int index = 0; index < 200; index++) {

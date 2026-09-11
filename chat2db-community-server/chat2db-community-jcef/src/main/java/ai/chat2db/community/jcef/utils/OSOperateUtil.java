@@ -24,11 +24,15 @@ import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.Timer;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.prefs.Preferences;
@@ -36,6 +40,8 @@ import java.util.prefs.Preferences;
 
 @Slf4j
 public class OSOperateUtil {
+
+    private static final ConcurrentMap<Path, FileOperationLock> FILE_OPERATION_LOCKS = new ConcurrentHashMap<>();
 
 
     public static void openFileManager(String filePath) {
@@ -299,23 +305,59 @@ public class OSOperateUtil {
             throw new IllegalArgumentException("File path and content must not be empty");
         }
 
-        Path path = Paths.get(filePath);
-        if (!Files.exists(path)) {
-            throw new FileNotFoundException("File not found: " + filePath);
-        }
+        return withLocalFileOperationLock(Paths.get(filePath), path -> {
+            if (!Files.exists(path)) {
+                throw new FileNotFoundException("File not found: " + filePath);
+            }
 
-        LocalTextFileCodec.DecodedText existingFile = null;
-        if (charset == null || bom == null) {
-            existingFile = LocalTextFileCodec.read(path, charset);
-        }
-        Charset targetCharset = charset != null ? charset : Charset.forName(existingFile.charset());
-        boolean includeBom = bom != null ? bom : existingFile.bom();
-        LocalTextFileCodec.write(path, fileContent, targetCharset, includeBom);
+            LocalTextFileCodec.DecodedText existingFile = null;
+            if (charset == null || bom == null) {
+                existingFile = LocalTextFileCodec.read(path, charset);
+            }
+            Charset targetCharset = charset != null ? charset : Charset.forName(existingFile.charset());
+            boolean includeBom = bom != null ? bom : existingFile.bom();
+            LocalTextFileCodec.write(path, fileContent, targetCharset, includeBom);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("path", path.toAbsolutePath().toString());
-        result.put("size", Files.size(path));
-        return result;
+            Map<String, Object> result = new HashMap<>();
+            result.put("path", path.toString());
+            result.put("size", Files.size(path));
+            return result;
+        });
+    }
+
+    public static <T> T withLocalFileOperationLock(Path requestedPath, LocalFileOperation<T> operation)
+            throws IOException {
+        Objects.requireNonNull(requestedPath, "File operation path is required");
+        Objects.requireNonNull(operation, "File operation is required");
+        Path path = requestedPath.toAbsolutePath().normalize();
+        Path lockKey = Files.exists(path, LinkOption.NOFOLLOW_LINKS) ? path.toRealPath() : path;
+        FileOperationLock operationLock = FILE_OPERATION_LOCKS.compute(lockKey, (ignored, current) -> {
+            FileOperationLock next = current == null ? new FileOperationLock() : current;
+            next.references.incrementAndGet();
+            return next;
+        });
+        try {
+            synchronized (operationLock.monitor) {
+                return operation.execute(path);
+            }
+        } finally {
+            FILE_OPERATION_LOCKS.computeIfPresent(lockKey, (ignored, current) -> {
+                if (current != operationLock || current.references.decrementAndGet() > 0) {
+                    return current;
+                }
+                return null;
+            });
+        }
+    }
+
+    @FunctionalInterface
+    public interface LocalFileOperation<T> {
+        T execute(Path path) throws IOException;
+    }
+
+    private static final class FileOperationLock {
+        private final Object monitor = new Object();
+        private final AtomicInteger references = new AtomicInteger();
     }
 
 
@@ -486,20 +528,11 @@ public class OSOperateUtil {
         }
         if (actualLogFilePath == null) {
             String userHome = System.getProperty("user.home");
-            ArrayList<Path> potentialPaths;
-            if (ConfigUtils.isCommunity()) {
-                potentialPaths = Lists.newArrayList(
-                        Paths.get(userHome, ".chat2db-community", "chat2db-community", "logs", "application.log"),
-                        Paths.get(System.getProperty("user.dir"), "logs", "application.log")
-                );
-            } else {
-                potentialPaths = Lists.newArrayList(
-                        Paths.get(userHome, ".chat2db", "chat2db-community", "logs", "application.log"),
-                        Paths.get(userHome, ".chat2db_local_edition", "chat2db-community", "logs", "application.log"),
-                        Paths.get(userHome, "chat2db-community", "logs", "application.log"),
-                        Paths.get(System.getProperty("user.dir"), "logs", "application.log")
-                );
-            }
+            ArrayList<Path> potentialPaths = Lists.newArrayList(
+                    Paths.get(ConfigUtils.getBasePath(), "chat2db-community", "logs", "application.log"),
+                    Paths.get(userHome, "chat2db-community", "logs", "application.log"),
+                    Paths.get(System.getProperty("user.dir"), "logs", "application.log")
+            );
 
             for (Path p : potentialPaths) {
                 if (Files.exists(p) && Files.isRegularFile(p)) {

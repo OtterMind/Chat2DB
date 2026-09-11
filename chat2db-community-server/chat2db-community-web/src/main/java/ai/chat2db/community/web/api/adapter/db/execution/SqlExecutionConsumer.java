@@ -85,10 +85,9 @@ public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
 
     @Override
     public void resultFinished(ExecuteResponse result) {
-        attachLargeValueTokens(result);
         synchronized (eventContext) {
             SqlExecutionEventIdentity identity = eventContext.resultActive(result);
-            sink.send("resultFinished", dbWebConverter.dto2response(result), identity);
+            sink.send("resultFinished", dbWebConverter.dto2completionResponse(result), identity);
         }
     }
 
@@ -137,4 +136,5 @@ public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
         attachLargeValueTokensRequest.setCanEdit(result.isCanEdit());
         largeValueTokenService.attachTokens(attachLargeValueTokensRequest);
     }
+
 }

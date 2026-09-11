@@ -1,6 +1,7 @@
 export default {
   'login.text.logout': 'Logout',
   'login.text.password': 'Password',
+  'login.text.rememberMe': 'Remember me',
   'login.text.welcome': 'Welcome to Chat2DB',
   'login.text.tips': 'The Chat2DB account is only for team collaboration management.',
   'login.text.tips.title': 'Why need login?',

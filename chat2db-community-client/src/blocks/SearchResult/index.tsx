@@ -14,7 +14,7 @@ import classnames from 'classnames';
 import { Dropdown, type MenuProps } from 'antd';
 import { ArrowDownUp, Check, SlidersHorizontal } from 'lucide-react';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
-import { IManageResultData } from '@/typings';
+import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
 import i18n from '@/i18n';
@@ -72,6 +72,7 @@ interface IProps {
     historyResultDataList: IManageResultData[];
     closedResultIdentities: SqlExecutionResultIdentity[];
   }) => void;
+  onResultPagingChange?: (resultData: IManageResultData, params: IExecuteSqlParams) => Promise<unknown> | void;
 }
 
 const RESULT_TAB_ORDER_STORAGE_KEY = createResultTabOrderStorageKey('community', __RUNTIME_ENV__);
@@ -306,6 +307,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
               active={activeTabId === queryResultData.uuid}
               viewTable={viewTable || queryResultData.canEdit}
               resultData={queryResultData}
+              onResultPagingChange={props.onResultPagingChange}
             />
           ),
         };
@@ -321,6 +323,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     orderedConsoleResultDataList,
     dataSourceList,
     props.showExecutionResultCoordinates,
+    props.onResultPagingChange,
     styles.resultTabIcon,
     viewTable,
     pinnedResultTabKeys,

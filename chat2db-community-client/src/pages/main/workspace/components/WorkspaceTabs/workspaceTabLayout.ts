@@ -7,6 +7,26 @@ import type {
 
 let splitNodeSequence = 0;
 
+export function appendWorkspaceTabToPane(
+  layout: IWorkspaceTabSplitLayout,
+  tabId: string | number,
+  paneId: WorkspaceTabPaneId = layout.activePane,
+): IWorkspaceTabSplitLayout {
+  const paneTabIds = layout.paneTabIds[paneId] || [];
+  return {
+    ...layout,
+    activePane: paneId,
+    paneTabIds: {
+      ...layout.paneTabIds,
+      [paneId]: paneTabIds.includes(tabId) ? paneTabIds : [...paneTabIds, tabId],
+    },
+    activeTabIds: {
+      ...layout.activeTabIds,
+      [paneId]: tabId,
+    },
+  };
+}
+
 function createSplitNodeId() {
   splitNodeSequence += 1;
   return `split_${Date.now()}_${splitNodeSequence}`;

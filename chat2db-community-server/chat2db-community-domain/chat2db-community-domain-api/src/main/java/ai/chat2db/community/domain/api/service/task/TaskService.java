@@ -24,8 +24,6 @@ public interface TaskService {
 
     List<TaskEvent> listEventsBefore(Long taskId, Long beforeSequence, int limit);
 
-    Task cancel(Long taskId);
-
     void delete(Long taskId);
 
     int activeTaskCount();

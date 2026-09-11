@@ -3,6 +3,7 @@ import i18n from '@/i18n';
 import { useStyles } from './style';
 import { Form, Input, InputNumber, Radio, Select, Switch } from 'antd';
 import { useGlobalStore } from '@/store/global';
+import { settingSelectors } from '@/store/global/selectors';
 
 import { DEFAULT_EDITOR_SETTINGS, MonacoEditor, editorFontFamily, editorThemes } from '@/components/SQLEditor';
 import exampleSQL from '@/components/SQLEditor/data/example.sql';
@@ -10,6 +11,7 @@ import InteractiveSelect from './InteractiveSelect';
 import { osNow } from '@/utils';
 import { v4 as uuid } from 'uuid';
 import { databaseMap } from '@/constants';
+import { MAX_RESULT_PAGE_SIZE } from '@/constants/pagination';
 import { useUpdateEffect } from 'ahooks';
 import { Braces, ChevronDown, Monitor, Palette, Play, ShieldCheck } from 'lucide-react';
 import SearchTargetLabel from '../SearchTargetLabel';
@@ -25,11 +27,14 @@ function EditorSettings() {
   const { styles, theme } = useStyles();
   const { appearance } = theme;
   const [form] = Form.useForm();
-  const { updateEditorSettings, _editorSettings, getEditorTheme } = useGlobalStore((s) => ({
-    _editorSettings: s.editorSettings,
-    updateEditorSettings: s.updateEditorSettings,
-    getEditorTheme: s.getEditorTheme,
-  }));
+  const { updateEditorSettings, _editorSettings, getEditorTheme, defaultPageSize, setBaseSetting } =
+    useGlobalStore((s) => ({
+      _editorSettings: s.editorSettings,
+      updateEditorSettings: s.updateEditorSettings,
+      getEditorTheme: s.getEditorTheme,
+      defaultPageSize: settingSelectors.currentBaseSetting(s).defaultPageSize,
+      setBaseSetting: s.setBaseSetting,
+    }));
 
   const editorSettings = {
     ..._editorSettings,
@@ -53,12 +58,19 @@ function EditorSettings() {
   );
 
   const handleValuesChange = (value) => {
-    if (value.theme) {
-      value[appearance] = value.theme;
+    const { defaultPageSize: nextDefaultPageSize, ...editorSettingChanges } = value;
+    if (nextDefaultPageSize !== undefined) {
+      setBaseSetting({ defaultPageSize: nextDefaultPageSize });
+    }
+    if (!Object.keys(editorSettingChanges).length) {
+      return;
+    }
+    if (editorSettingChanges.theme) {
+      editorSettingChanges[appearance] = editorSettingChanges.theme;
     }
     updateEditorSettings({
       ...editorSettings,
-      ...value,
+      ...editorSettingChanges,
     });
   };
 
@@ -76,7 +88,7 @@ function EditorSettings() {
         form={form}
         layout="vertical"
         name="login"
-        initialValues={{ ...DEFAULT_EDITOR_SETTINGS, ...editorSettings }}
+        initialValues={{ ...DEFAULT_EDITOR_SETTINGS, ...editorSettings, defaultPageSize }}
         onValuesChange={handleValuesChange}
         className={styles.formWrapper}
       >
@@ -314,6 +326,17 @@ function EditorSettings() {
             <span>{i18n('monaco.group.execution')}</span>
           </h2>
           <div className={styles.fieldGrid}>
+            <Form.Item
+              name="defaultPageSize"
+              label={
+                <SearchTargetLabel targetId="editor.defaultPageSize">
+                  {i18n('monaco.defaultPageSize')}
+                </SearchTargetLabel>
+              }
+              tooltip={i18n('monaco.defaultPageSize.tooltip')}
+            >
+              <InputNumber min={1} max={MAX_RESULT_PAGE_SIZE} precision={0} />
+            </Form.Item>
             <Form.Item
               name="errorContinue"
               label={

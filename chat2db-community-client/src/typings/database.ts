@@ -34,7 +34,6 @@ export interface IDatabase {
   iconExistDark?: boolean;
   supportDatabase: boolean;
   supportSchema: boolean;
-  needAiDataCollections?: boolean;
 }
 
 export interface ITableHeaderItem {

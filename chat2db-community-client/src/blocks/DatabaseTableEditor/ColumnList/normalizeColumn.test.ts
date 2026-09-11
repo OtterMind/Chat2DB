@@ -72,4 +72,10 @@ assertEqual(
   'do not default non-DECIMAL precision',
 );
 
+assertEqual(
+  normalizeColumnForSubmit(column({ visible: false })).visible,
+  false,
+  'preserve invisible column state for submission',
+);
+
 console.log('normalizeColumn tests passed');

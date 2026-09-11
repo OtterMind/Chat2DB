@@ -2,19 +2,18 @@ import { useEffect } from 'react';
 import { Button } from 'antd';
 import styles from './index.less';
 import { openWebPage } from '@/utils/url';
-
-const protocolScheme = 'chat2db-pro';
+import { APP_CONFIG } from '@/constants/appConfig';
 
 export default function DesktopRedirect() {
   useEffect(() => {
-    openWebPage(`${protocolScheme}://connections`);
+    openWebPage(`${APP_CONFIG.protocolScheme}://connections`);
   }, []);
 
   return (
     <div className={styles.styles}>
       <Button
         onClick={() => {
-          openWebPage(`${protocolScheme}://connections`);
+          openWebPage(`${APP_CONFIG.protocolScheme}://connections`);
         }}
       >
         Open Chat2DB

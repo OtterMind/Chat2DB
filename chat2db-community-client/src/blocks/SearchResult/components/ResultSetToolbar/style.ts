@@ -41,6 +41,13 @@ export const useStyles = createStyles(({ css, token }) => {
         color: ${token.colorText};
       }
     `,
+    pendingAction: css`
+      &&,
+      && i,
+      && svg {
+        color: ${token.colorPrimary};
+      }
+    `,
     toolBarRight: css`
       flex: 1;
       flex-shrink: 0;

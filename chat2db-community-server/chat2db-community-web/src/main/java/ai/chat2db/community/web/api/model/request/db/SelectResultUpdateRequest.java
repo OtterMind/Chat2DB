@@ -5,7 +5,6 @@ import ai.chat2db.community.web.api.model.request.data.source.DataSourceBaseRequ
 import ai.chat2db.community.web.api.model.request.data.source.IDataSourceConsoleRequestInfo;
 import ai.chat2db.community.domain.api.model.result.Header;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.util.List;
@@ -25,7 +24,6 @@ public class SelectResultUpdateRequest extends DataSourceBaseRequest implements 
     private String tableName;
 
 
-    @NotNull
     private Long consoleId;
 
 

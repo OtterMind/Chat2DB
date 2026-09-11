@@ -73,6 +73,9 @@ export default {
   'monaco.completion.all': 'All Qualified Completion',
   'monaco.completion.all.tooltip':
     'Select database types whose completion suggestions should use fully qualified names. Unselected types use shorter names.',
+  'monaco.defaultPageSize': 'Default query rows',
+  'monaco.defaultPageSize.tooltip':
+    'Maximum rows returned when a SQL query does not specify a page size. Applies to subsequent queries.',
   'monaco.errorContinue': 'Error Continue',
   'monaco.errorContinue.tooltip':
     'When running multiple SQL statements, continue with the remaining statements after one fails.',

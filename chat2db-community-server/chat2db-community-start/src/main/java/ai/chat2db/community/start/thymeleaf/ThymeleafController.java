@@ -40,8 +40,7 @@ public class ThymeleafController {
             "/price",
             "/settings/**",
             "/chat/share/**",
-            "/dashboard/share/**",
-            "/knowledge-management"
+            "/dashboard/share/**"
     })
     public String index() {
         return "index";

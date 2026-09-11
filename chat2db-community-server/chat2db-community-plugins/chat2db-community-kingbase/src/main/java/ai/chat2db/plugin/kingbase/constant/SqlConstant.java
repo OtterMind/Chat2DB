@@ -235,30 +235,41 @@ public class SqlConstant {
                                                             AND n.nspname = ?
                                                             AND c.relname = ?
                                                           ORDER BY 2 desc;""";
+    // MySQL enums (typtype 'l') owned by a column need their name preserved for default casts.
     public static final String COLUMN_SQL = """
-                                            SELECT quote_ident(c.column_name) as column_name ,
-                                                   c.data_type,
-                                                   c.udt_name,
-                                                   quote_ident(c.udt_schema) as udt_schema,
-                                                   c.character_maximum_length,
-                                                   c.is_nullable,
-                                                   c.column_default,
-                                                   c.numeric_precision,
-                                                   c.numeric_scale,
-                                                   c.datetime_precision,
-                                                   c.is_identity,
-                                                   c.identity_start,
-                                                   c.identity_increment,
-                                                   c.identity_maximum,
-                                                   c.identity_minimum,
-                                                   c.identity_cycle,
-                                                   c.identity_generation,
-                                                   c.is_generated,
-                                                   c.generation_expression,
-                                                   c.identity_increment
-                                            FROM information_schema.columns c
-                                            WHERE (table_schema, table_name) = (?, ?)
-                                            ORDER BY ordinal_position;""";
+                                            SELECT a.*,
+                                                   CASE WHEN t.typtype = 'l' AND EXISTS (
+                                                       SELECT 1 FROM pg_catalog.pg_depend dep
+                                                       WHERE dep.classid = 'pg_catalog.pg_type'::pg_catalog.regclass
+                                                         AND dep.objid = t.oid
+                                                         AND dep.refclassid = 'pg_catalog.pg_class'::pg_catalog.regclass
+                                                         AND dep.refobjid = a.attrelid AND dep.refobjsubid = a.attnum
+                                                         AND dep.deptype = 'a'
+                                                   ) THEN pg_catalog.format('ENUM(%s) NAMES %I.%I',
+                                                       (SELECT pg_catalog.string_agg(pg_catalog.quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder)
+                                                        FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid), tn.nspname, t.typname)
+                                                   ELSE pg_catalog.format_type(a.atttypid, a.atttypmod) END AS data_type,
+                                                   pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS column_default
+                                            FROM pg_catalog.pg_attribute a
+                                            JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                                            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                                            JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
+                                            JOIN pg_catalog.pg_namespace tn ON tn.oid = t.typnamespace
+                                            LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                                            WHERE n.nspname = ? AND c.relname = ?
+                                              AND a.attnum > 0 AND NOT a.attisdropped
+                                              AND (pg_catalog.pg_has_role(c.relowner, 'USAGE')
+                                                   OR pg_catalog.has_column_privilege(c.oid, a.attnum, 'SELECT, INSERT, UPDATE, REFERENCES'))
+                                            ORDER BY a.attnum;""";
+    public static final String IDENTITY_SEQUENCE_SQL = """
+                                                       SELECT seqstart, seqincrement, seqmin, seqmax, seqcache, seqcycle,
+                                                              n.nspname AS sequence_schema, c.relname AS sequence_name
+                                                       FROM pg_catalog.pg_sequence s
+                                                       JOIN pg_catalog.pg_class c ON c.oid = s.seqrelid
+                                                       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                                                       WHERE seqrelid = pg_catalog.pg_get_serial_sequence(?, ?)::pg_catalog.regclass;
+                                                       """;
+    public static final String SEQUENCE_STATE_SQL = "SELECT last_value, next_value, is_called FROM %s";
     public static final String TABLE_INDEX_COMMENT_SQL = """
                                                          SELECT quote_ident(n.nspname)                           as schema_name,
                                                                 quote_ident(t.relname)                           AS table_name,

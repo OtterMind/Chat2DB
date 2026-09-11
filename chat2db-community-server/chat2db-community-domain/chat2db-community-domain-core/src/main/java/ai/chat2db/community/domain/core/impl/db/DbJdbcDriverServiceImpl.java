@@ -21,7 +21,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -159,22 +162,38 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
             return;
         }
         driverConfig.setCustom(true);
-        List<DriverConfig> driverConfigs = driverConfigMap.get(driverConfig.getDbType());
-        if (driverConfigs == null) {
-            driverConfigs = new ArrayList<>();
-        }
+        Map<String, List<DriverConfig>> nextDriverConfigMap = new ConcurrentSkipListMap<>(driverConfigMap);
+        List<DriverConfig> driverConfigs = new ArrayList<>(
+                nextDriverConfigMap.getOrDefault(driverConfig.getDbType(), List.of()));
         driverConfigs.add(driverConfig);
-        driverConfigMap.put(driverConfig.getDbType(), driverConfigs);
-        FileUtil.writeUtf8String(JSON.toJSONString(driverConfigMap), CUSTOM_DRIVER_CONFIG_PATH);
+        nextDriverConfigMap.put(driverConfig.getDbType(), driverConfigs);
+        persistDriverConfigMap(nextDriverConfigMap);
+        driverConfigMap = nextDriverConfigMap;
     }
 
     @Override
     public void saveCustomDriver(DriverConfig driverConfig, List<String> sourceDriverPaths) {
         requireDriverManagementSupported();
-        String jdbcDriver = copyDrivers(sourceDriverPaths);
+        if (driverConfig == null || StringUtils.isBlank(driverConfig.getDbType())
+                || StringUtils.isBlank(driverConfig.getJdbcDriverClass())) {
+            throw new BusinessException("jdbc.driver.uploadFailed", new Object[]{"invalid driver configuration"});
+        }
+        JdbcDriverManagementPolicy.PromotedDrivers promotedDrivers = ConfigUtils.isDesktop()
+                ? null
+                : JdbcDriverManagementPolicy.promoteUploadedDrivers(sourceDriverPaths,
+                        Path.of(JdbcDriverConstants.DRIVER_UPLOAD_PATH),
+                        Path.of(JdbcDriverConstants.DRIVER_LIB_PATH));
+        String jdbcDriver = promotedDrivers == null ? copyDrivers(sourceDriverPaths) : promotedDrivers.jdbcDriver();
         driverConfig.setJdbcDriver(jdbcDriver);
-        saveCustomDriver(driverConfig);
-        unloadDriver(jdbcDriver);
+        try {
+            saveCustomDriver(driverConfig);
+            unloadDriver(jdbcDriver);
+        } catch (RuntimeException | Error exception) {
+            if (promotedDrivers != null) {
+                promotedDrivers.rollback();
+            }
+            throw exception;
+        }
     }
 
     @Override
@@ -202,7 +221,9 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         if (StringUtils.isBlank(dbType) || StringUtils.isBlank(jdbcDriver)) {
             return null;
         }
-        List<DriverConfig> driverConfigs = driverConfigMap.get(dbType);
+        List<DriverConfig> existingDriverConfigs = driverConfigMap.get(dbType);
+        List<DriverConfig> driverConfigs = existingDriverConfigs == null
+                ? null : new ArrayList<>(existingDriverConfigs);
         if (driverConfigs == null || driverConfigs.isEmpty()) {
             return null;
         }
@@ -217,10 +238,14 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
         if (removed == null) {
             return null;
         }
+        Map<String, List<DriverConfig>> nextDriverConfigMap = new ConcurrentSkipListMap<>(driverConfigMap);
         if (driverConfigs.isEmpty()) {
-            driverConfigMap.remove(dbType);
+            nextDriverConfigMap.remove(dbType);
+        } else {
+            nextDriverConfigMap.put(dbType, driverConfigs);
         }
-        FileUtil.writeUtf8String(JSON.toJSONString(driverConfigMap), CUSTOM_DRIVER_CONFIG_PATH);
+        persistDriverConfigMap(nextDriverConfigMap);
+        driverConfigMap = nextDriverConfigMap;
         return removed;
     }
 
@@ -290,8 +315,34 @@ public class DbJdbcDriverServiceImpl implements IDbJdbcDriverService {
 
     @Override
     public void requireDriverManagementSupported() {
-        if (!ConfigUtils.isDesktop()) {
+        if (!JdbcDriverManagementPolicy.isSupported(ConfigUtils.isDesktop(), ConfigUtils.isCommunity())) {
             throw new BusinessException("web.not.support.db.type");
+        }
+    }
+
+    private void persistDriverConfigMap(Map<String, List<DriverConfig>> nextDriverConfigMap) {
+        Path configPath = Path.of(CUSTOM_DRIVER_CONFIG_PATH).toAbsolutePath().normalize();
+        Path temporary = null;
+        try {
+            Files.createDirectories(configPath.getParent());
+            temporary = Files.createTempFile(configPath.getParent(), ".custom-driver-", ".tmp");
+            Files.writeString(temporary, JSON.toJSONString(nextDriverConfigMap));
+            try {
+                Files.move(temporary, configPath,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, configPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException exception) {
+            throw new BusinessException("common.businessError", null, exception);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ignored) {
+                    // The original persistence result remains authoritative.
+                }
+            }
         }
     }
 

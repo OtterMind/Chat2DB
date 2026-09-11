@@ -16,9 +16,13 @@ import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
+import ai.chat2db.community.domain.api.model.task.extension.TaskSubmissionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
+import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -34,13 +38,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -73,9 +76,58 @@ class LocalTaskManagerTest {
 
         assertTrue(storage.awaitTerminal());
         assertEquals(TaskStatus.SUCCESS.name(), storage.get(task.getId()).orElseThrow().getStatus());
-        Task afterCancel = taskManager.cancel(task.getId());
-        assertEquals(TaskStatus.SUCCESS.name(), afterCancel.getStatus());
         assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void submissionAndExecutionExtensionsWrapTheNewTaskEngine() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        List<String> events = new ArrayList<>();
+        AtomicReference<TaskSubmissionContext> captured = new AtomicReference<>();
+        TaskExtensionManager extensionManager = new TaskExtensionManager(
+                List.of(context -> {
+                    events.add("capture");
+                    captured.set(context);
+                }),
+                List.of(context -> events.add("guard")));
+        taskManager = manager(storage, (spec, context) -> events.add("execute"), extensionManager);
+        Task task = newTask();
+        ExportTaskSpec spec = spec();
+        spec.getTarget().setDatabaseName("shop");
+        spec.getTarget().setSchemaName("public");
+        spec.setTableNames(List.of("orders"));
+
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec, null, null);
+
+        assertTrue(storage.awaitTerminal());
+        assertEquals(List.of("capture", "guard", "execute"), events);
+        assertEquals(task.getId(), captured.get().getTaskId());
+        assertEquals(TaskType.QUERY_RESULT_EXPORT, captured.get().getTaskType());
+        assertEquals(TaskOperation.EXPORT, captured.get().getOperation());
+        assertEquals("shop", captured.get().getDatabaseName());
+        assertEquals("public", captured.get().getSchemaName());
+        assertEquals(List.of("orders"), captured.get().getTableNames());
+    }
+
+    @Test
+    void rejectedSubmissionSnapshotDoesNotLeavePendingTask() {
+        TestTaskStorage storage = new TestTaskStorage();
+        TaskExtensionManager extensionManager = new TaskExtensionManager(
+                List.of(context -> {
+                    throw new IllegalStateException("Snapshot rejected");
+                }), List.of());
+        taskManager = manager(storage, (spec, context) -> {}, extensionManager);
+        Task task = newTask();
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null));
+
+        assertEquals("Snapshot rejected", error.getMessage());
+        Task rejected = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.FAILED.name(), rejected.getStatus());
+        assertEquals(TaskErrorCode.TASK_SUBMISSION_REJECTED.name(), rejected.getErrorCode());
+        assertEquals("Task submission rejected", rejected.getErrorMessage());
+        assertTrue(storage.listNonTerminalTasks().isEmpty());
     }
 
     @Test
@@ -135,76 +187,6 @@ class LocalTaskManagerTest {
         assertFalse(reason.contains("\n"));
         assertTrue(reason.startsWith("Export failed "));
         assertTrue(reason.endsWith("..."));
-    }
-
-    @Test
-    void cancellationWinsBeforeExecutorCompletes() throws Exception {
-        TestTaskStorage storage = new TestTaskStorage();
-        CountDownLatch started = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        taskManager = manager(storage, (spec, context) -> {
-            started.countDown();
-            try {
-                release.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            context.checkCancelled();
-        });
-        Task task = newTask();
-        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
-        assertTrue(started.await(5, TimeUnit.SECONDS));
-
-        Task cancelling = taskManager.cancel(task.getId());
-        release.countDown();
-
-        assertNotNull(cancelling);
-        assertTrue(storage.awaitTerminal());
-        assertEquals(TaskStatus.CANCELLED.name(), storage.get(task.getId()).orElseThrow().getStatus());
-        assertEquals(1, storage.terminalTransitionCount());
-    }
-
-    @Test
-    void cancellationWaitsUntilPersistedTaskIsRegistered() throws Exception {
-        TestTaskStorage storage = new TestTaskStorage();
-        CountDownLatch firstStarted = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
-        AtomicLong executions = new AtomicLong();
-        taskManager = manager(storage, (spec, context) -> {
-            executions.incrementAndGet();
-            firstStarted.countDown();
-            try {
-                releaseFirst.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            context.checkCancelled();
-        });
-        Task first = newTask();
-        taskManager.submit(first, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
-        assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
-
-        CountDownLatch persisted = new CountDownLatch(1);
-        CountDownLatch allowRegistration = new CountDownLatch(1);
-        storage.pauseNextCreate(persisted, allowRegistration);
-        Task second = newTask();
-        ExecutorService requests = Executors.newFixedThreadPool(2);
-        try {
-            Future<?> submission = requests.submit(
-                    () -> taskManager.submit(second, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null));
-            assertTrue(persisted.await(5, TimeUnit.SECONDS));
-            Future<Task> cancellation = requests.submit(() -> taskManager.cancel(second.getId()));
-
-            allowRegistration.countDown();
-            submission.get();
-            assertEquals(TaskStatus.CANCELLED.name(), cancellation.get().getStatus());
-        } finally {
-            releaseFirst.countDown();
-            requests.shutdownNow();
-        }
-
-        assertEquals(TaskStatus.CANCELLED.name(), storage.get(second.getId()).orElseThrow().getStatus());
-        assertEquals(1L, executions.get());
     }
 
     @Test
@@ -297,8 +279,10 @@ class LocalTaskManagerTest {
             }
         };
         TaskRunner<ExportTaskSpec> runner = new TaskRunner<>(
-                new TaskSubmission<>(task.getId(), spec(), null, invalidConnectInfo),
-                runningTask, registry, storage, executor, new ArtifactService());
+                new TaskSubmission<>(task.getId(), spec(), null, invalidConnectInfo,
+                        new TaskSubmissionContext(task.getId(), TaskType.QUERY_RESULT_EXPORT, null,
+                                null, null, List.of(), TaskOperation.EXPORT).toExecutionContext()),
+                runningTask, registry, storage, executor, new ArtifactServiceImpl(), emptyExtensionManager());
 
         runner.run();
 
@@ -470,6 +454,11 @@ class LocalTaskManagerTest {
     }
 
     private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution) {
+        return manager(storage, execution, emptyExtensionManager());
+    }
+
+    private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution,
+            TaskExtensionManager extensionManager) {
         TaskExecutor<ExportTaskSpec> executor = new TaskExecutor<>() {
             @Override
             public String taskType() {
@@ -486,8 +475,12 @@ class LocalTaskManagerTest {
                 execution.execute(spec, context);
             }
         };
-        return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactService(), 1,
-                4);
+        return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactServiceImpl(),
+                new ConnectionContextConverter(), extensionManager, 1, 4);
+    }
+
+    private TaskExtensionManager emptyExtensionManager() {
+        return new TaskExtensionManager(List.of(), List.of());
     }
 
     private Task newTask() {

@@ -55,6 +55,8 @@ public class FileTaskStorage implements TaskStorage {
 
     static final String DELETING_FILE_SUFFIX = ".deleting";
 
+    private static final String LEGACY_CANCELLING_STATUS = "CANCELLING";
+
     static final int NO_FILE_LIMIT = 0;
 
     private final TaskSnapshotStorage snapshots;
@@ -660,12 +662,13 @@ public class FileTaskStorage implements TaskStorage {
 
     private boolean isLegalTransition(String source, String target) {
         if (TaskStatus.PENDING.name().equals(source)) {
-            return TaskStatus.RUNNING.name().equals(target) || TaskStatus.CANCELLED.name().equals(target)
-                    || TaskStatus.FAILED.name().equals(target);
+            return TaskStatus.RUNNING.name().equals(target) || TaskStatus.FAILED.name().equals(target);
         }
         if (TaskStatus.RUNNING.name().equals(source)) {
-            return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target)
-                    || TaskStatus.CANCELLED.name().equals(target);
+            return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target);
+        }
+        if (LEGACY_CANCELLING_STATUS.equals(source)) {
+            return TaskStatus.FAILED.name().equals(target);
         }
         return false;
     }

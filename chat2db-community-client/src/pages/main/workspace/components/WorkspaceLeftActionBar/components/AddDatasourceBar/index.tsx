@@ -208,7 +208,7 @@ export default memo<IProps>(() => {
         .then(async (res: any) => {
           setIsModalVisible(false);
           if (res?.id) {
-            await refreshDataSourceAfterMutation(res.id);
+            await refreshDataSourceAfterMutation(res.id, { expandParent: true });
           }
         });
     }

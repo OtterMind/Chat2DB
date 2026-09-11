@@ -11,7 +11,7 @@ import {
 import { useSize } from 'ahooks';
 import VirtualList, { type ListRef } from 'rc-virtual-list';
 import { useStyles } from './style';
-import { Spin } from 'antd';
+import { Progress, Spin } from 'antd';
 import importExportServices from '@/service/importExport';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus } from '@/constants/importExport';
@@ -23,16 +23,13 @@ import {
   TASK_EVENT_PAGE_SIZE,
 } from '@/store/importExport/taskCenterUtils';
 import { ConsoleOutputEmpty, ConsoleOutputMessageLine } from '@/components/ConsoleOutput';
+import { formatTaskEventMessage } from './eventMessage';
 
 interface IProps {
   className?: string;
   taskId: number;
   onTaskChange?: (taskDetails: ImportExportTaskDetails) => void;
 }
-
-const LEGACY_EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}:?\s*/;
-
-const formatEventMessage = (message?: string) => message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
 
 interface ScrollRestore {
   anchorSequence: number;
@@ -274,7 +271,18 @@ const Log = (props: IProps) => {
         ]
       : [];
   const visibleEvents = events.length ? events : fallbackErrorEvent;
-
+  const progress =
+    taskDetails.status === ImportExportTaskStatus.SUCCESS
+      ? 100
+      : Math.min(100, Math.max(0, Number(taskDetails.progress) || 0));
+  const progressStatus =
+    taskDetails.status === ImportExportTaskStatus.SUCCESS
+      ? 'success'
+      : taskDetails.status === ImportExportTaskStatus.FAILED
+      ? 'exception'
+      : taskDetails.status === ImportExportTaskStatus.RUNNING
+      ? 'active'
+      : 'normal';
   return (
     <div className={styles.log}>
       {loadingOlder && (
@@ -301,7 +309,7 @@ const Log = (props: IProps) => {
                   className={styles.virtualListItem}
                   timestamp={event.createdAt}
                   level={event.level}
-                  message={formatEventMessage(event.message)}
+                  message={formatTaskEventMessage(event, i18n)}
                 />
               )}
             </VirtualList>
@@ -316,6 +324,20 @@ const Log = (props: IProps) => {
         {!!visibleEvents.length && eventsLoadFailed && (
           <div className={styles.loadFailed}>{i18n('workspace.task.events.loadFailed')}</div>
         )}
+      </div>
+      <div className={styles.progressPanel}>
+        <div className={styles.progressHeader}>
+          <Progress
+            className={styles.progressBar}
+            percent={progress}
+            showInfo={false}
+            size="small"
+            status={progressStatus}
+          />
+          <span className={styles.progressValue} data-status={taskDetails.status}>
+            {progress}%
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -4,7 +4,6 @@ import { Modal } from 'antd';
 import i18n from '@/i18n';
 import ExecuteSQL, { IExecuteSQLRef } from '@/components/ExecuteSQL';
 import executeSql from '@/service/executeSql';
-import useSqlExecutor from '@/hooks/useSqlExecutor';
 import { getRequestErrorMessage, resolveUpdateExecuteParams } from './updateSql';
 
 interface IProps {
@@ -26,15 +25,8 @@ const SQLPreviewExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLPrevie
   const [executeSqlParams, setExecuteSqlParams] = useState<any>(null);
   const executeSQLRef = useRef<IExecuteSQLRef>();
   const executePendingRef = useRef(false);
-  const { executeSQL, canExecuteSQL } = useSqlExecutor();
 
   const getUpdateDataSql = ({ operations, resultData }) => {
-    if (!operations.length) {
-      return Promise.resolve({
-        ...(resultData.executeSqlParams || {}),
-        sql: '',
-      });
-    }
     return resolveUpdateExecuteParams({
       operations,
       resultData,
@@ -52,21 +44,21 @@ const SQLPreviewExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLPrevie
   };
 
   const handleExecuteSql = ({ operations, resultData, callback }) => {
-    if (executePendingRef.current || !canExecuteSQL()) {
+    if (executePendingRef.current) {
       return;
     }
     executePendingRef.current = true;
     callback?.(true);
     Promise.resolve()
       .then(() => getUpdateDataSql({ operations, resultData }))
-      .then((res) => executeSQL(res))
+      .then((res) => executeSql.executeUpdateDataSql(res))
       .then((_res) => {
-        if (_res?.[0]?.success === true) {
+        if (_res?.success === true) {
           onExecuteSuccess?.();
           setViewUpdateDataSqlModal(false);
           setUpdateDataSql('');
         } else {
-          onExecuteError?.(_res?.[0]?.message || '');
+          onExecuteError?.(_res?.message || '');
         }
       })
       .catch((error) => {

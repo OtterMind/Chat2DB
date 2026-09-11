@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useGlobalStore } from '@/store/global';
 import { ServiceStatus } from '@/constants/common';
 import { ErrorCodesWithoutToast } from '@/constants/request';
-import interceptorsResponse from '../interceptorsResponse';
+import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
 

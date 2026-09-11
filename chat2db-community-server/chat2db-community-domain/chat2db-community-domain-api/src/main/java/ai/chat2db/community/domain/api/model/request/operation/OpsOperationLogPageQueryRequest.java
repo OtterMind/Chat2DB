@@ -24,4 +24,7 @@ public class OpsOperationLogPageQueryRequest extends PageQueryParam {
 
 
     private String schemaName;
+
+
+    private String operationType;
 }

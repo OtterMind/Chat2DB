@@ -8,19 +8,23 @@ export interface DataSourceWatermarkContent {
 }
 
 export interface DataSourceWatermarkLayout {
-  itemCount: 1 | 2 | 4;
-  columns: 1 | 2;
-  rows: 1 | 2;
+  itemCount: 1 | 2 | 4 | 9;
+  columns: 1 | 2 | 3;
+  rows: 1 | 2 | 3;
 }
 
 export const LARGE_WATERMARK_MIN_WIDTH = 720;
 export const LARGE_WATERMARK_MIN_HEIGHT = 360;
+export const DENSE_WATERMARK_MIN_HEIGHT = 480;
 
 export function getDataSourceWatermarkLayout(width?: number, height?: number): DataSourceWatermarkLayout {
   const measuredWidth = width ?? 0;
   const measuredHeight = height ?? 0;
   if (!measuredWidth || !measuredHeight) {
     return { itemCount: 1, columns: 1, rows: 1 };
+  }
+  if (measuredWidth >= LARGE_WATERMARK_MIN_WIDTH && measuredHeight >= DENSE_WATERMARK_MIN_HEIGHT) {
+    return { itemCount: 9, columns: 3, rows: 3 };
   }
   if (measuredWidth >= LARGE_WATERMARK_MIN_WIDTH && measuredHeight >= LARGE_WATERMARK_MIN_HEIGHT) {
     return { itemCount: 4, columns: 2, rows: 2 };

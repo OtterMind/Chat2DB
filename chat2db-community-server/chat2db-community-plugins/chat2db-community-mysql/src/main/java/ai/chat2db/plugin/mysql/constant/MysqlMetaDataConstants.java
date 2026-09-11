@@ -71,6 +71,8 @@ public final class MysqlMetaDataConstants {
     public static final String FIELD_INDEX_COMMENT = "Index_comment";
     public static final String FIELD_INDEX_COMMENT_FALLBACK = "Comment";
     public static final String FIELD_INDEX_TYPE = "Index_type";
+    public static final String FIELD_IS_VISIBLE = "Visible";
+    public static final String INDEX_VISIBLE_VALUE = "YES";
     public static final String FIELD_IS_NULLABLE = "IS_NULLABLE";
     public static final String FIELD_KEY_NAME = "Key_name";
     public static final String FIELD_NAME = "Name";
@@ -111,6 +113,7 @@ public final class MysqlMetaDataConstants {
     public static final String SQL_DOT = ".";
     public static final String SQL_ENUM_TYPE = "ENUM";
     public static final String SQL_FULLTEXT_INDEX_TYPE = "FULLTEXT";
+    public static final String SQL_INVISIBLE = "INVISIBLE";
     public static final String SQL_METADATA_QUOTE = "`";
     public static final String SQL_NAME_SIZE_CLOSE = ")";
     public static final String SQL_NAME_SIZE_OPEN = "(";

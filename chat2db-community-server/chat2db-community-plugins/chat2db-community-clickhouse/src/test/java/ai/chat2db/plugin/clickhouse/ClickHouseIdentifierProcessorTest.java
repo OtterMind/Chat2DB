@@ -450,19 +450,17 @@ class ClickHouseIdentifierProcessorTest {
     @Test
     void shouldBuildSchemaQualifiedManagerStatementsOnce() throws Exception {
         ClickHouseDBManager manager = new ClickHouseDBManager();
-        String source = ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways("ord`ers");
-        String target = ClickHouseIdentifierProcessor.INSTANCE.quoteIdentifierAlways("ord`ers_copy");
 
         assertEquals("DROP TABLE IF EXISTS `analytics`.`ord``ers`",
                 manager.dropTable(null, null, "analytics", "ord`ers"));
         assertEquals("DROP TABLE IF EXISTS ```analytics```.```orders```",
                 manager.dropTable(null, null, "`analytics`", "`orders`"));
         assertEquals("TRUNCATE TABLE `analytics`.`ord``ers`",
-                manager.truncateTable(null, null, "analytics", source));
+                manager.truncateTable(null, null, "analytics", "ord`ers"));
         assertEquals(List.of(
                         "CREATE TABLE `analytics`.`ord``ers_copy` AS `analytics`.`ord``ers`",
                         "INSERT INTO `analytics`.`ord``ers_copy` SELECT * FROM `analytics`.`ord``ers`"),
-                ClickHouseDBManager.buildCopyTableStatements(null, "analytics", source, target, true));
+                ClickHouseDBManager.buildCopyTableStatements(null, "analytics", "ord`ers", "ord`ers_copy", true));
     }
 
     @Test

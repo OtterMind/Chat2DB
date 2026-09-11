@@ -6,7 +6,7 @@ import AppTheme, { AppThemeProps } from '@/components/AppTheme';
 import LoadingGracile from '@/components/Loading/LoadingGracile';
 import ConfigProvider from '@/components/ConfigProvider';
 import GlobalStyle from '@/styles/global';
-import CommercialGlobalComponentExtras from '@/layouts/init/CommercialGlobalComponentExtras';
+import clientExtension from '@client-extension';
 import GlobalComponent from '@/layouts/init/GlobalComponent';
 import useInit from '../init/init';
 import { useGlobalStore } from '@/store/global';
@@ -84,7 +84,7 @@ const GlobalLayout: FC<GlobalLayoutProps> = () => {
     <ConfigProvider>
       <AppTheme>
         <GlobalStyle />
-        <CommercialGlobalComponentExtras />
+        {clientExtension.globalComponents}
         <GlobalComponent />
         <div className={styles.app}>
           <AppTitleBar />

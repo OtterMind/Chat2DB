@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Tree, Checkbox } from 'antd';
 import SearchBar from '@/components/SearchBar';
 import { useStyles } from './style';
@@ -30,10 +30,31 @@ export interface NodeFilteringRef {
 const NodeFiltering = (props: IProps) => {
   const { data, filterTitle, selectedKeys, onChangeSelect } = props;
   const { styles } = useStyles();
+  const treeBoxRef = useRef<HTMLDivElement>(null);
+  // rc-virtual-list enables horizontal wheel handling from the initial scrollWidth.
+  const [scrollWidth, setScrollWidth] = useState(1);
   const [treeData, setTreeData] = useState<IData[]>(data);
   const [checkedKeys, setCheckedKeys] = useState<string[]>(
     selectedKeys?.map((item) => createChat2dbSpecificSymbolIdentifier(item)) || [],
   );
+
+  const measureScrollWidth = () => {
+    const nodes = treeBoxRef.current?.querySelectorAll<HTMLElement>('.ant-tree-treenode');
+    return Array.from(nodes || []).reduce(
+      (width, node) => Math.max(width, node.scrollWidth),
+      treeBoxRef.current?.clientWidth || 1,
+    );
+  };
+
+  useLayoutEffect(() => {
+    const treeBox = treeBoxRef.current;
+    if (!treeBox) {
+      return;
+    }
+    const observer = new ResizeObserver(() => setScrollWidth(measureScrollWidth()));
+    observer.observe(treeBox);
+    return () => observer.disconnect();
+  }, [treeData]);
 
   const onCheck = (_checkedKeys, halfChecked) => {
     const { key, checked } = halfChecked.node;
@@ -129,10 +150,12 @@ const NodeFiltering = (props: IProps) => {
             {i18n('workspace.text.clearFilter')}
           </div>
         </div>
-        <div className={styles.treeBox}>
+        <div ref={treeBoxRef} className={styles.treeBox}>
           {!!treeData?.length && (
             <Tree
               height={279}
+              scrollWidth={scrollWidth}
+              onScroll={() => setScrollWidth((width) => Math.max(width, measureScrollWidth()))}
               className={styles.treeSelect}
               checkable
               switcherIcon={null}

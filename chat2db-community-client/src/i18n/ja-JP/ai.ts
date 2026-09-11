@@ -37,7 +37,7 @@ export default {
   'ai.syncDBTable.title': 'データベーステーブル構造の同期',
   'ai.syncDBTable.desc':
     '同期はバックグラウンドで実行され、通常数分かかります。同期後、AIはデータベーステーブル構造情報を自動的に識別できます',
-  'ai.select.databaseOrDataCollection': 'データベースまたはデータセットを選択してください',
+  'ai.select.database': 'データベースを選択してください',
   'ai.select.globalDatabaseScope': 'グローバル検索（データソース未選択）',
   'ai.select.model': 'モデルを選択してください',
   'ai.sqlDebug.prefill':

@@ -11,6 +11,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
+import { WorkspaceTabType } from '@/constants/workspace';
 import {
   getDataSourceRuntimeAvailabilityGeneration,
   getSqlExecutionBlockReason,
@@ -52,6 +53,8 @@ import {
   ISQLEditorWithOperationRef,
   type SQLExecutionInvocation,
 } from '@/components/SQLEditor/editor/SQLEditorWithOperation';
+import { createLiveSqlEditorHandle } from './liveEditorHandle';
+import { mergeLatestLocalFileBoundInfo } from './liveEditorBoundInfo';
 import SplitPaneUnpack from '@/components/SplitPaneUnpack';
 import useSqlExecutor from '@/hooks/useSqlExecutor';
 import i18n from '@/i18n';
@@ -60,12 +63,14 @@ import {
   ClosedSqlExecutionResults,
   SqlExecutionEvent,
   SqlExecutionResultIdentity,
-  appendCompletedQueryResult,
+  appendRowsToPendingResult,
   attachExecutionIdentity,
   clearClosedSqlExecutionResults,
+  discardPendingRowsForExecution as discardPendingRowsForExecutionFromBuffer,
   isSqlExecutionResultClosed,
   markSqlExecutionResultsClosed,
   mergeRows,
+  type PendingSqlExecutionRows,
   sortExecutionResults,
   upsertResultFinished,
   upsertResultStarted,
@@ -102,9 +107,12 @@ import {
 } from '@/service/sqlExecutionLog';
 import { isDesktop } from '@/utils/env';
 import { v4 as uuidv4 } from 'uuid';
+import { buildStreamResultExecuteSqlParams } from './streamResultExecutionParams';
 
 const SplitPaneAny = SplitPane as any;
 const HISTORY_BATCH_LIMIT = 30;
+const STREAM_RESULT_FLUSH_INTERVAL_MS = 50;
+const STREAM_RESULT_FLUSH_ROW_COUNT = 2000;
 const KEEP_EXECUTION_LOG_HISTORY_STORAGE_KEY = createExecutionConsoleKeepHistoryStorageKey(
   'community',
   __RUNTIME_ENV__,
@@ -209,6 +217,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   } = props;
   const { styles, cx } = useStyles();
   const sqlEditorRef = useRef<ISQLEditorWithOperationRef>(null);
+  const liveSqlEditorHandle = useMemo(() => createLiveSqlEditorHandle(sqlEditorRef), []);
   const [boundInfo, setBoundInfo] = useState<IBoundInfo>(_boundInfo);
   const boundInfoRef = useRef<IBoundInfo>(_boundInfo);
   const editorId = boundInfo.workspaceTabId ?? boundInfo.consoleId;
@@ -224,6 +233,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const availabilityGenerationByExecutionSequenceRef = useRef(new Map<number, number>());
   const keepExistingOutputByExecutionSequenceRef = useRef<Record<number, boolean>>({});
   const desktopExecutionCallbackBySequenceRef = useRef<Record<number, DesktopExecutionCallbackState>>({});
+  const executionParamsBySequenceRef = useRef<Record<number, IExecuteSqlParams>>({});
   const currentStatementSequenceByExecutionIdRef = useRef<Record<string, number>>({});
   const [resultBatchKey, setResultBatchKey] = useState(0);
   const [forceOutputTab, setForceOutputTab] = useState(false);
@@ -238,6 +248,8 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     }),
   );
   const [resultDataList, setResultDataList] = useState<IManageResultData[]>([]);
+  const pendingRowsRef = useRef<PendingSqlExecutionRows>(new Map());
+  const pendingRowsFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedSqlExecutionResultsRef = useRef<ClosedSqlExecutionResults>(new Map());
   const [sqlExecutionLogState, setSqlExecutionLogState] = useState(createSqlExecutionLogState);
   const [keepExecutionLogHistory, setKeepExecutionLogHistory] = useState(() =>
@@ -256,6 +268,71 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   const handleClearExecutionLog = useCallback(() => {
     setSqlExecutionLogState(clearSqlExecutionLog);
   }, []);
+
+  const clearPendingRowsTimer = useCallback(() => {
+    if (pendingRowsFlushTimerRef.current !== null) {
+      clearTimeout(pendingRowsFlushTimerRef.current);
+      pendingRowsFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const flushPendingRows = useCallback(() => {
+    clearPendingRowsTimer();
+    const pendingRows = pendingRowsRef.current;
+    if (!pendingRows.size) {
+      return;
+    }
+    pendingRowsRef.current = new Map();
+    setResultDataList((prev) => {
+      let next = prev;
+      pendingRows.forEach((chunk) => {
+        next = mergeRows(next, chunk);
+      });
+      return retainLatestResultBatches(next, HISTORY_BATCH_LIMIT);
+    });
+  }, [clearPendingRowsTimer]);
+
+  const enqueueRows = useCallback(
+    (resultKey: string, chunk: IManageResultData) => {
+      const pendingRowCount = appendRowsToPendingResult(pendingRowsRef.current, resultKey, chunk);
+      if (pendingRowCount >= STREAM_RESULT_FLUSH_ROW_COUNT) {
+        flushPendingRows();
+        return;
+      }
+      if (pendingRowsFlushTimerRef.current === null) {
+        pendingRowsFlushTimerRef.current = setTimeout(flushPendingRows, STREAM_RESULT_FLUSH_INTERVAL_MS);
+      }
+    },
+    [flushPendingRows],
+  );
+
+  const discardPendingRows = useCallback(
+    (executionId: string) => {
+      discardPendingRowsForExecutionFromBuffer(pendingRowsRef.current, executionId);
+      if (!pendingRowsRef.current.size) {
+        clearPendingRowsTimer();
+      }
+    },
+    [clearPendingRowsTimer],
+  );
+
+  const discardPendingResult = useCallback(
+    (resultKey: string) => {
+      pendingRowsRef.current.delete(resultKey);
+      if (!pendingRowsRef.current.size) {
+        clearPendingRowsTimer();
+      }
+    },
+    [clearPendingRowsTimer],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearPendingRowsTimer();
+      pendingRowsRef.current.clear();
+    };
+  }, [clearPendingRowsTimer]);
+
   const handleKeepExecutionLogHistoryChange = useCallback((keepHistory: boolean) => {
     setKeepExecutionLogHistory(keepHistory);
     persistExecutionConsoleKeepHistory(
@@ -306,6 +383,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     return displayBatchSequence;
   }, []);
   const beginExecutionBatch = useCallback((retentionPreferences: SqlExecutionRetentionPreferences) => {
+    flushPendingRows();
     const { keepResultHistory: keepResultHistoryForExecution, resetResultSession } = retentionPreferences;
     const { keepExistingOutput, keepExistingResults } = planSqlExecutionRetention(retentionPreferences);
     const executionSequence = executionSequenceRef.current + 1;
@@ -332,10 +410,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       displayBatchSequence,
       keepExistingOutput,
     };
-  }, []);
+  }, [flushPendingRows]);
   const cleanupDesktopExecutionRequest = useCallback((requestSequence: number, executionId?: string) => {
     const executionSequence = executionSequenceByRequestRef.current[requestSequence];
     if (executionId) {
+      discardPendingRows(executionId);
       delete currentStatementSequenceByExecutionIdRef.current[executionId];
       delete executionSequenceByIdRef.current[executionId];
       clearClosedSqlExecutionResults(closedSqlExecutionResultsRef.current, executionId);
@@ -350,8 +429,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       delete keepExistingOutputByExecutionSequenceRef.current[executionSequence];
       delete resultDisplayBatchSequenceByExecutionRef.current[executionSequence];
       delete desktopExecutionCallbackBySequenceRef.current[executionSequence];
+      delete executionParamsBySequenceRef.current[executionSequence];
     }
-  }, []);
+  }, [discardPendingRows]);
   const handleSqlExecutionRequestStart = useCallback(
     (requestSequence: number) => {
       const executionSequence = pendingDesktopExecutionSequenceRef.current ?? executionSequenceRef.current;
@@ -433,6 +513,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         restoreDataSourceRuntimeAvailability(executionSnapshot.dataSourceId, availabilityGeneration);
       }
       if (!shouldAcceptExecutionResult(executionSequence, latestResultReplacementExecutionSequenceRef.current)) {
+        discardPendingRows(event.executionId);
         cleanupTerminalExecution();
         return;
       }
@@ -467,6 +548,11 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         setResultDataList((prev) => {
           const nextResult = {
             ...resultWithIdentity,
+            executeSqlParams: buildStreamResultExecuteSqlParams(
+              executionParamsBySequenceRef.current[executionSequence],
+              resultWithIdentity,
+              resultSequence,
+            ),
             extra: {
               ...(resultWithIdentity.extra || {}),
               executionSequence,
@@ -508,35 +594,31 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         if (isSqlExecutionResultClosed(closedSqlExecutionResultsRef.current, event.executionId, resultKey)) {
           return;
         }
-        setResultDataList((prev) => {
-          const nextResultDataList = mergeRows(prev, {
-            ...chunkWithIdentity,
-            displayName: getResultDisplayName({
-              executionSequence: displayBatchSequence,
-              statementSequence,
-              resultSequence: chunkWithIdentity.resultSetId || resultSequence,
-              sql: chunkWithIdentity.originalSql,
-            }),
-            extra: {
-              ...(chunkWithIdentity.extra || {}),
-              executionSequence,
-              executionTarget: executionSnapshot,
-              resultKey,
-              resultSequence,
-            },
-          });
-          const retainedResultDataList = retainLatestResultBatches(nextResultDataList, HISTORY_BATCH_LIMIT);
-          return retainedResultDataList;
-        });
+        const nextChunk = {
+          ...chunkWithIdentity,
+          displayName: getResultDisplayName({
+            executionSequence: displayBatchSequence,
+            statementSequence,
+            resultSequence: chunkWithIdentity.resultSetId || resultSequence,
+            sql: chunkWithIdentity.originalSql,
+          }),
+          extra: {
+            ...(chunkWithIdentity.extra || {}),
+            executionSequence,
+            executionTarget: executionSnapshot,
+            resultKey,
+            resultSequence,
+          },
+        };
+        const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
+        if (callbackState) {
+          callbackState.data = mergeRows(callbackState.data, nextChunk);
+        }
+        enqueueRows(resultKey, nextChunk);
         return;
       }
       if (event.eventType === 'updateCount' || event.eventType === 'resultFinished') {
-        if (event.eventType === 'resultFinished') {
-          const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
-          if (callbackState) {
-            callbackState.data = appendCompletedQueryResult(callbackState.data, event);
-          }
-        }
+        flushPendingRows();
         const statementSequence =
           getEventStatementSequence(event, currentStatementSequenceByExecutionIdRef.current[event.executionId]) || 1;
         const result = processResultDataList([event.message], {
@@ -551,24 +633,35 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         const resultSequence =
           getEventResultSequence(event, resultWithIdentity, getResultSequence(resultWithIdentity)) || 1;
         const resultKey = event.resultKey || buildResultKey(event.executionId, statementSequence, resultSequence);
+        const nextResult = {
+          ...resultWithIdentity,
+          executeSqlParams: buildStreamResultExecuteSqlParams(
+            executionParamsBySequenceRef.current[executionSequence],
+            resultWithIdentity,
+            resultSequence,
+          ),
+          displayName: getResultDisplayName({
+            executionSequence: displayBatchSequence,
+            statementSequence,
+            resultSequence: resultWithIdentity.resultSetId || resultSequence,
+            sql: resultWithIdentity.originalSql,
+          }),
+          extra: {
+            ...(resultWithIdentity.extra || {}),
+            executionSequence,
+            executionTarget: executionSnapshot,
+            resultKey,
+            resultSequence,
+          },
+        };
+        if (event.eventType === 'resultFinished') {
+          const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
+          if (callbackState) {
+            callbackState.data = upsertResultFinished(callbackState.data, nextResult);
+          }
+        }
         if (!isSqlExecutionResultClosed(closedSqlExecutionResultsRef.current, event.executionId, resultKey)) {
           setResultDataList((prev) => {
-            const nextResult = {
-              ...resultWithIdentity,
-              displayName: getResultDisplayName({
-                executionSequence: displayBatchSequence,
-                statementSequence,
-                resultSequence: resultWithIdentity.resultSetId || resultSequence,
-                sql: resultWithIdentity.originalSql,
-              }),
-              extra: {
-                ...(resultWithIdentity.extra || {}),
-                executionSequence,
-                executionTarget: executionSnapshot,
-                resultKey,
-                resultSequence,
-              },
-            };
             const nextResultDataList = upsertResultFinished(prev, nextResult);
             const sortedResultDataList = retainLatestResultBatches(
               sortExecutionResults(nextResultDataList),
@@ -586,6 +679,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         return;
       }
       if (event.eventType === 'finished' || event.eventType === 'failed' || event.eventType === 'cancelled') {
+        flushPendingRows();
         try {
           const callbackState = desktopExecutionCallbackBySequenceRef.current[executionSequence];
           if (event.eventType === 'finished' && callbackState?.data.length) {
@@ -598,6 +692,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     },
     [
       cleanupDesktopExecutionRequest,
+      discardPendingRows,
+      enqueueRows,
+      flushPendingRows,
       getDisplayBatchSequence,
       getExecutionSequence,
       handleRefreshTreeByExecuteSQL,
@@ -630,14 +727,14 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
   useEffect(() => {
     if (editorId) {
-      setEditorToList(editorId, sqlEditorRef.current);
+      setEditorToList(editorId, liveSqlEditorHandle);
     }
     return () => {
       if (editorId) {
         deleteEditor(editorId);
       }
     };
-  }, [editorId]);
+  }, [editorId, liveSqlEditorHandle]);
 
   useUpdateEffect(() => {
     boundInfoRef.current = boundInfo;
@@ -655,6 +752,29 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     _boundInfo.watermarkEnabled,
     _boundInfo.watermarkContent,
     _boundInfo.connectable,
+  ]);
+
+  useUpdateEffect(() => {
+    if (type !== WorkspaceTabType.LocalSQLFile) {
+      return;
+    }
+    setBoundInfo((currentBoundInfo) => ({
+      ...currentBoundInfo,
+      filePath: _boundInfo.filePath,
+      fileExtension: _boundInfo.fileExtension,
+      fileCharset: _boundInfo.fileCharset,
+      fileBom: _boundInfo.fileBom,
+      fileRootToken: _boundInfo.fileRootToken,
+      fileRelativePath: _boundInfo.fileRelativePath,
+    }));
+  }, [
+    type,
+    _boundInfo.filePath,
+    _boundInfo.fileExtension,
+    _boundInfo.fileCharset,
+    _boundInfo.fileBom,
+    _boundInfo.fileRootToken,
+    _boundInfo.fileRelativePath,
   ]);
 
   useEffect(() => {
@@ -694,19 +814,33 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           ({ executionId }) => executionSequenceByIdRef.current[executionId] !== undefined,
         ),
       );
+      params.closedResultIdentities.forEach(({ resultKey }) => discardPendingResult(resultKey));
       const nextResultDataList = sortExecutionResults([...params.resultDataList, ...params.historyResultDataList]);
       setResultDataList(nextResultDataList);
     },
-    [],
+    [discardPendingResult],
   );
 
-  const handleChangeDBInfo = (newBoundInfo: IBoundInfo) => {
-    const { databaseType } = newBoundInfo;
-    setBoundInfo((currentBoundInfo) => ({
-      ...currentBoundInfo,
-      ...newBoundInfo,
-      ...getDatabaseSupport(databaseType),
-    }));
+  const handleChangeDBInfo = (newBoundInfo: Partial<IBoundInfo>) => {
+    setBoundInfo((currentBoundInfo) => {
+      const latestWorkspaceBoundInfo =
+        type === WorkspaceTabType.LocalSQLFile
+          ? useWorkspaceStore
+              .getState()
+              .workspaceTabList?.find((tab) => tab.id === currentBoundInfo.workspaceTabId)?.uniqueData
+          : undefined;
+      const nextBoundInfo = mergeLatestLocalFileBoundInfo(
+        currentBoundInfo,
+        newBoundInfo,
+        latestWorkspaceBoundInfo,
+      );
+      return newBoundInfo.databaseType === undefined
+        ? nextBoundInfo
+        : {
+            ...nextBoundInfo,
+            ...getDatabaseSupport(nextBoundInfo.databaseType),
+          };
+    });
   };
 
   const handleExecuteSQL = (params: IConsoleReturnExecuteSql | SQLExecutionInvocation): Promise<any> => {
@@ -768,6 +902,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       databaseName: executionSnapshot.databaseName,
       schemaName: executionSnapshot.schemaName,
     };
+    executionParamsBySequenceRef.current[executionSequence] = executeSqlParams;
 
     const webExecutionId = isDesktop ? undefined : uuidv4();
     const executionLogContext = getExecutionLogContext(executionSnapshot);
@@ -916,6 +1051,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
         delete keepExistingOutputByExecutionSequenceRef.current[executionSequence];
         delete resultDisplayBatchSequenceByExecutionRef.current[executionSequence];
         delete desktopExecutionCallbackBySequenceRef.current[executionSequence];
+        delete executionParamsBySequenceRef.current[executionSequence];
       });
   };
 

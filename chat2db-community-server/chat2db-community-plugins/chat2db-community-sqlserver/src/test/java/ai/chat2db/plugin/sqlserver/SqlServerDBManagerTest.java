@@ -203,12 +203,18 @@ class SqlServerDBManagerTest {
     void shouldEscapeEveryQualifiedIdentifierPart() {
         assertEquals("[catalog]]archive].[sales].[orders]]2026]",
                 SqlServerDBManager.buildFullTableName("catalog]archive", "sales", "orders]2026"));
-        assertEquals("[catalog].[sales].[orders]",
+        assertEquals("[[catalog]]].[[sales]]].[[orders]]]",
                 SqlServerDBManager.buildFullTableName("[catalog]", "[sales]", "[orders]"));
     }
 
     @Test
-    void shouldNormalizeMetadataFormattedNamesAtCopyBoundary() throws Exception {
+    void truncatePreservesLiteralBracketsInTheRawName() {
+        assertEquals("TRUNCATE TABLE [catalog].[sales].[[orders]]]",
+                new SqlServerDBManager().truncateTable(null, "catalog", "sales", "[orders]"));
+    }
+
+    @Test
+    void shouldUseRawNamesAtCopyBoundary() throws Exception {
         AtomicReference<TableMetadataRequest> ddlRequest = new AtomicReference<>();
         AtomicReference<List<String>> queryParameters = new AtomicReference<>();
         List<String> preparedSql = new ArrayList<>();
@@ -239,7 +245,7 @@ class SqlServerDBManagerTest {
         try {
             new SqlServerDBManager().copyTable(
                     recordingConnection(preparedSql, queryParameters),
-                    "catalog", "sales", "[orders]", "[orders_copy]", true);
+                    "catalog", "sales", "orders", "orders_copy", true);
 
             assertEquals("orders", ddlRequest.get().getTableName());
             assertEquals("CREATE TABLE [sales].[orders_copy]\n([id] int)", preparedSql.get(0));

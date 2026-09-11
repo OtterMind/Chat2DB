@@ -7,7 +7,7 @@ import ContextMenu, { IMenuItem } from './components/ContextMenu';
 import MonacoEditorErrorTips from '@/components/MonacoEditor/components/MonacoEditorErrorTips';
 import { useStyles } from './style';
 import { useGlobalStore } from '@/store/global';
-import { setupMonacoEnvironment } from '@/utils/monaco';
+import { runMonacoDisposalSafely, setupMonacoEnvironment } from '@/utils/monaco';
 
 export type IEditorIns = monaco.editor.IStandaloneCodeEditor;
 export type IEditorOptions = monaco.editor.IStandaloneEditorConstructionOptions;
@@ -180,15 +180,17 @@ function MonacoEditor(props: IMonacoEditorProps, ref: ForwardedRef<IExportRefFun
     });
 
     return () => {
-      didChangeModelContentDisposer.dispose();
-      contextMenuDisposer.dispose();
+      const editorInstance = editorRef.current;
+      editorRef.current = undefined;
+
+      runMonacoDisposalSafely(() => didChangeModelContentDisposer.dispose());
+      runMonacoDisposalSafely(() => contextMenuDisposer.dispose());
 
       if (addActionDisplay) {
-        addActionDisplay.dispose();
+        runMonacoDisposalSafely(() => addActionDisplay.dispose());
       }
 
-      editorRef.current?.dispose();
-      editorRef.current = undefined;
+      runMonacoDisposalSafely(() => editorInstance?.dispose());
     };
   }, []);
 

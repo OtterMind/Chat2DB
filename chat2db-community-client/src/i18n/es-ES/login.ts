@@ -1,6 +1,7 @@
 export default {
   'login.text.logout': 'Cerrar sesión',
   'login.text.password': 'Contraseña',
+  'login.text.rememberMe': 'Recordar usuario y contraseña',
   'login.text.welcome': 'Bienvenido a Chat2DB',
   'login.text.tips': 'La cuenta de Chat2DB solo se utiliza para gestionar la colaboración en equipo.',
   'login.text.tips.title': '¿Por qué es necesario iniciar sesión?',

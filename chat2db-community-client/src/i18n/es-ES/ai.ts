@@ -37,7 +37,7 @@ export default {
   'ai.syncDBTable.title': 'Sincronizar la estructura de tablas de la base de datos',
   'ai.syncDBTable.desc':
     'La sincronización se ejecutará en segundo plano y suele tardar unos minutos. Después, la IA podrá identificar automáticamente la estructura de las tablas de la base de datos',
-  'ai.select.databaseOrDataCollection': 'Seleccione una base de datos o una colección de datos',
+  'ai.select.database': 'Seleccione una base de datos',
   'ai.select.globalDatabaseScope': 'Consulta global (sin fuente de datos seleccionada)',
   'ai.select.model': 'Seleccione un modelo',
   'ai.sqlDebug.prefill':

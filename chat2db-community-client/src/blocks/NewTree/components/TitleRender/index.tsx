@@ -7,11 +7,12 @@ import { setFocusedContent, getFocusedContent } from '@/store/common/copyFocused
 import { switchIcon, treeConfig } from '../../treeConfig';
 import LoadingGracile from '@/components/Loading/LoadingGracile';
 import { type ThemeAppearance } from 'antd-style';
-import { ChevronRight, User, Users } from 'lucide-react';
+import { Activity, ChevronRight, SquareActivity, User, Users } from 'lucide-react';
 import { ContextMenuRef } from '@/components/ContextMenu';
 import Filtration from '../Filtration';
 import { splitSearchHighlight } from './highlightSearchText';
 import { resolveTreeSwitcherAction } from './switcherAction';
+import { resolveTreeNodeSelection } from '../../utils/treeNodePath';
 
 interface IProps {
   className?: string;
@@ -41,6 +42,7 @@ const TitleRender = (props: IProps) => {
     regularSearchBarValue,
     toggleExpandedKeys,
     currentLoadingTreeNode,
+    treeData,
     userConfigTree,
   } = useTreeStore((state) => ({
     editingTreeNode: state.editingTreeNode,
@@ -56,23 +58,34 @@ const TitleRender = (props: IProps) => {
     regularSearchBarValue: state.regularSearchBarValue,
     toggleExpandedKeys: state.toggleExpandedKeys,
     currentLoadingTreeNode: state.currentLoadingTreeNode,
+    treeData: state.treeData,
     userConfigTree: state.userConfigTree,
   }));
 
   const isExpanded = useMemo(() => expandedKeys.includes(nodeData.key), [expandedKeys, nodeData.key]);
 
   const handleClickTreeNode = () => {
-    if (nodeData.originalTitle !== getFocusedContent()) {
-      setFocusedContent(nodeData.originalTitle || '');
+    const selection = resolveTreeNodeSelection(treeData, nodeData, Boolean(searchBarValue));
+    const selectedNode = selection.node;
+
+    if (selectedNode.originalTitle !== getFocusedContent()) {
+      setFocusedContent(selectedNode.originalTitle || '');
     }
-    if (nodeData.key !== selectedKeys[0]) {
-      setCurrentTreeNode(nodeData);
-      setSelectedKeys([nodeData.key]);
+
+    if (searchBarValue && selection.ancestors.length) {
+      // Search renders a filtered copy. Keep the search session active while
+      // rebinding selection to the source node and its stable ancestor path.
+      setExpandedKeys(Array.from(new Set([...expandedKeys, ...selection.ancestors])));
+    }
+
+    setCurrentTreeNode(selectedNode);
+    if (selectedNode.key !== selectedKeys[0]) {
+      setSelectedKeys([selectedNode.key]);
     }
   };
 
-  const handleDoubleTreeNode = () => {
-    const flag = treeDropdownRef.current?.handleDoubleClick(nodeData as any);
+  const handleDoubleTreeNode = async () => {
+    const flag = await treeDropdownRef.current?.handleDoubleClick(nodeData as any);
     // The dropdown returns true after handling the double-click, so no further action is needed.
     // nodeData.isLeaf represents leaf nodes and does not need to handle double-click events.
     if (flag || nodeData.isLeaf) {
@@ -145,6 +158,14 @@ const TitleRender = (props: IProps) => {
 
     if (nodeData.treeNodeType === TreeNodeType.DATABASE_ACCOUNT) {
       return <User className={cx(styles.customizeIconIsLeaf, styles.customizeIcon)} size={19} />;
+    }
+
+    if (nodeData.treeNodeType === TreeNodeType.MONITOR) {
+      return <SquareActivity className={styles.customizeIcon} size={19} />;
+    }
+
+    if (nodeData.treeNodeType === TreeNodeType.ACTIVE_TRANSACTIONS) {
+      return <Activity className={cx(styles.customizeIconIsLeaf, styles.customizeIcon)} size={19} />;
     }
 
     if (isExpanded && switchIcon[nodeData.treeNodeType]!.unfoldIcon) {
@@ -224,8 +245,7 @@ const TitleRender = (props: IProps) => {
 
     if (
       nodeData.treeNodeType === TreeNodeType.GROUP ||
-      nodeData.treeNodeType === TreeNodeType.SAVE_CONSOLE ||
-      nodeData.treeNodeType === TreeNodeType.AI_DATA_COLLECTION
+      nodeData.treeNodeType === TreeNodeType.SAVE_CONSOLE
     ) {
       return (
         <EditText

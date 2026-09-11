@@ -3,9 +3,9 @@ import React from 'react';
 export interface SuggestionItem {
   label: string;
   value: string;
-  tableType: string;
-
-  icon?: React.ReactNode;
+  kind: 'table';
+  tableType?: string;
+  tableName?: string;
   children?: SuggestionItem[];
   extra?: React.ReactNode;
 }

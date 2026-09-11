@@ -9,9 +9,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import cn.hutool.core.io.FileUtil;
@@ -28,8 +34,25 @@ import okhttp3.Response;
 @Slf4j
 public class JdbcJarUtils {
 
+    private static final String ASYNC_DOWNLOAD_THREAD_NAME_PREFIX = "chat2db-jdbc-download-";
+
+    private static final String PARTIAL_FILE_PREFIX = "jdbc-";
+
+    private static final String PARTIAL_FILE_SUFFIX = ".part";
+
+    private static final long STALE_PARTIAL_FILE_AGE_MILLIS = TimeUnit.DAYS.toMillis(1);
+
+    private static final AtomicInteger ASYNC_DOWNLOAD_THREAD_INDEX = new AtomicInteger();
+
+    static final ThreadFactory ASYNC_DOWNLOAD_THREAD_FACTORY = runnable -> {
+        Thread thread = new Thread(runnable,
+                ASYNC_DOWNLOAD_THREAD_NAME_PREFIX + ASYNC_DOWNLOAD_THREAD_INDEX.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    };
+
     private static final OkHttpClient async_client = new OkHttpClient.Builder()
-            .dispatcher(new Dispatcher(Executors.newFixedThreadPool(20)))
+            .dispatcher(new Dispatcher(Executors.newFixedThreadPool(20, ASYNC_DOWNLOAD_THREAD_FACTORY)))
             .build();
 
     private static final OkHttpClient client = new OkHttpClient();
@@ -39,6 +62,7 @@ public class JdbcJarUtils {
         if (!file.exists()) {
             file.mkdirs();
         }
+        cleanupStalePartialFiles(file);
     }
 
     public static void asyncDownload(List<String> urls) throws Exception {
@@ -57,7 +81,6 @@ public class JdbcJarUtils {
 
     static void asyncDownload(String url, Consumer<IOException> completion) throws IOException {
         File file = outputFile(url);
-        deleteIfExists(file);
         String safeUrl = sanitizeUrl(url);
         Request request;
         try {
@@ -68,7 +91,6 @@ public class JdbcJarUtils {
         async_client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                deleteIfExists(file);
                 IOException failure = downloadFailure(safeUrl, e.getClass().getSimpleName());
                 log.warn("Async JDBC driver download failed for {} ({})", safeUrl,
                     e.getClass().getSimpleName());
@@ -79,7 +101,6 @@ public class JdbcJarUtils {
             public void onResponse(Call call, Response response) {
                 try (Response closeableResponse = response) {
                     if (!closeableResponse.isSuccessful()) {
-                        deleteIfExists(file);
                         IOException failure = downloadFailure(safeUrl,
                             "HTTP " + closeableResponse.code());
                         log.warn("Async JDBC driver download failed for {} (HTTP {})", safeUrl,
@@ -90,7 +111,6 @@ public class JdbcJarUtils {
                     writeResponseBody(closeableResponse, file);
                     completion.accept(null);
                 } catch (IOException e) {
-                    deleteIfExists(file);
                     IOException failure = downloadFailure(safeUrl, e.getClass().getSimpleName());
                     log.warn("Async JDBC driver download failed for {} ({})", safeUrl,
                         e.getClass().getSimpleName());
@@ -106,7 +126,6 @@ public class JdbcJarUtils {
             pathfile.mkdirs();
         }
         File file = outputFile(url);
-        deleteIfExists(file);
         String safeUrl = sanitizeUrl(url);
         Request request;
         try {
@@ -125,14 +144,12 @@ public class JdbcJarUtils {
         }
         try (response) {
             if (!response.isSuccessful()) {
-                deleteIfExists(file);
                 log.warn("JDBC driver download failed for {} (HTTP {})", safeUrl, response.code());
                 throw downloadFailure(safeUrl, "HTTP " + response.code());
             }
             try {
                 writeResponseBody(response, file);
             } catch (IOException e) {
-                deleteIfExists(file);
                 throw downloadFailure(safeUrl, e.getClass().getSimpleName());
             }
         }
@@ -173,14 +190,46 @@ public class JdbcJarUtils {
         if (response.body() == null) {
             throw new IOException("Empty response body");
         }
-        try (InputStream is = response.body().byteStream();
-             FileOutputStream fos = new FileOutputStream(file)) {
-            byte[] buffer = new byte[2048];
-            int length;
-            while ((length = is.read(buffer)) != -1) {
-                fos.write(buffer, 0, length);
+        Path outputPath = file.toPath().toAbsolutePath();
+        Path temporaryFile = Files.createTempFile(outputPath.getParent(),
+            PARTIAL_FILE_PREFIX + file.getName() + "-", PARTIAL_FILE_SUFFIX);
+        try {
+            try (InputStream is = response.body().byteStream();
+                 FileOutputStream fos = new FileOutputStream(temporaryFile.toFile())) {
+                byte[] buffer = new byte[2048];
+                int length;
+                while ((length = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, length);
+                }
+                fos.flush();
             }
-            fos.flush();
+            moveIntoPlace(temporaryFile, outputPath);
+        } finally {
+            deleteIfExists(temporaryFile.toFile());
+        }
+    }
+
+    private static void moveIntoPlace(Path temporaryFile, Path outputPath) throws IOException {
+        try {
+            Files.move(temporaryFile, outputPath, StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(temporaryFile, outputPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    static void cleanupStalePartialFiles(File directory) {
+        File[] partialFiles = directory.listFiles((ignored, name) ->
+            name.startsWith(PARTIAL_FILE_PREFIX) && name.endsWith(PARTIAL_FILE_SUFFIX));
+        if (partialFiles == null) {
+            return;
+        }
+        long cutoff = System.currentTimeMillis() - STALE_PARTIAL_FILE_AGE_MILLIS;
+        for (File partialFile : partialFiles) {
+            long lastModified = partialFile.lastModified();
+            if (partialFile.isFile() && lastModified > 0 && lastModified < cutoff) {
+                deleteIfExists(partialFile);
+            }
         }
     }
 

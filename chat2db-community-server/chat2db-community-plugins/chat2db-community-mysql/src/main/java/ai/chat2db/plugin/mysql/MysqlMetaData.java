@@ -240,8 +240,10 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 column.setName(resultSet.getString(FIELD_COLUMN_NAME_UPPER));
                 column.setColumnType(resultSet.getString(FIELD_DATA_TYPE).toUpperCase());
                 column.setDefaultValue(resultSet.getString(FIELD_COLUMN_DEFAULT));
-                column.setAutoIncrement(resultSet.getString(FIELD_EXTRA).contains(SQL_AUTO_INCREMENT));
-                column.setOnUpdateCurrentTimestamp(resultSet.getString(FIELD_EXTRA).contains(SQL_ON_UPDATE_CURRENT_TIMESTAMP));
+                String columnExtra = StringUtils.defaultString(resultSet.getString(FIELD_EXTRA));
+                column.setAutoIncrement(columnExtra.contains(SQL_AUTO_INCREMENT));
+                column.setOnUpdateCurrentTimestamp(columnExtra.contains(SQL_ON_UPDATE_CURRENT_TIMESTAMP));
+                column.setVisible(!columnExtra.contains(SQL_INVISIBLE));
                 column.setComment(resultSet.getString(FIELD_COLUMN_COMMENT));
                 column.setPrimaryKey(SQL_PRIMARY_KEY_FLAG.equalsIgnoreCase(resultSet.getString(FIELD_COLUMN_KEY)));
                 column.setNullable(SQL_YES.equalsIgnoreCase(resultSet.getString(FIELD_IS_NULLABLE)) ? 1 : 0);
@@ -343,6 +345,11 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                     } catch (SQLException e) {
                         log.error(LOG_INDEX_COMMENT_FAILED, keyName, e);
                         index.setComment(resultSet.getString(FIELD_INDEX_COMMENT_FALLBACK));
+                    }
+                    try {
+                        index.setVisible(INDEX_VISIBLE_VALUE.equalsIgnoreCase(resultSet.getString(FIELD_IS_VISIBLE)));
+                    } catch (SQLException e) {
+                        index.setVisible(Boolean.TRUE);
                     }
                     List<TableIndexColumn> tableIndexColumns = new ArrayList<>();
                     tableIndexColumns.add(getTableIndexColumn(resultSet));

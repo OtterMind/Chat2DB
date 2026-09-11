@@ -34,6 +34,8 @@ import java.util.regex.Pattern;
 @AllArgsConstructor
 public class JDBCDataValue {
     private static final Logger log = LoggerFactory.getLogger(JDBCDataValue.class);
+    private static final int LARGE_VALUE_THRESHOLD_BYTES = 10 * 1024;
+    private static final int LARGE_VALUE_PREVIEW_CHARS = 200;
     private static final Pattern SUMMARY_SIZE_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(B|KB|MB|GB)\\s*$",
             Pattern.CASE_INSENSITIVE);
     private ResultSet resultSet;
@@ -267,10 +269,11 @@ public class JDBCDataValue {
         int sqlType = getSqlType();
         long displayBytes = value == null ? 0L : value.getBytes(StandardCharsets.UTF_8).length;
         long displayChars = value == null ? 0L : value.length();
-        LargeValueInfo largeValueInfo = detectLargeValue(value, columnType, sqlType);
-        Object rawValue = getRawCellValue(largeValueInfo);
+        LargeValueInfo largeValueInfo = detectLargeValue(value, columnType, sqlType, displayBytes);
+        String displayValue = previewValue(value, largeValueInfo);
+        Object rawValue = getRawCellValue(value, largeValueInfo);
         return ResultCell.builder()
-                .value(value)
+                .value(displayValue)
                 .rawValue(rawValue)
                 .largeValue(largeValueInfo.largeValue)
                 .valueType(largeValueInfo.valueType.code())
@@ -278,8 +281,9 @@ public class JDBCDataValue {
                 .columnType(columnType)
                 .sizeBytes(largeValueInfo.sizeBytes)
                 .sizeChars(largeValueInfo.sizeChars)
-                .loadedBytes(largeValueInfo.largeValue ? displayBytes : null)
-                .loadedChars(largeValueInfo.largeValue ? displayChars : null)
+                .loadedBytes(largeValueInfo.largeValue && displayValue != null
+                        ? (long) displayValue.getBytes(StandardCharsets.UTF_8).length : null)
+                .loadedChars(largeValueInfo.largeValue && displayValue != null ? (long) displayValue.length() : null)
                 .truncated(largeValueInfo.largeValue)
                 .build();
     }
@@ -319,7 +323,7 @@ public class JDBCDataValue {
         }
     }
 
-    private LargeValueInfo detectLargeValue(String value, String columnType, int sqlType) {
+    private LargeValueInfo detectLargeValue(String value, String columnType, int sqlType, long valueBytes) {
         LargeValueInfo info = new LargeValueInfo();
         info.valueType = LargeValueTypeEnum.resolve(columnType, sqlType);
         if (!limitSize || value == null) {
@@ -328,6 +332,7 @@ public class JDBCDataValue {
         Long summaryBytes = parseSummaryBytes(value);
         if (summaryBytes != null) {
             info.largeValue = true;
+            info.summary = true;
             info.sizeBytes = summaryBytes;
             if (info.valueType == LargeValueTypeEnum.BINARY && isImageSummary(value)) {
                 info.valueType = LargeValueTypeEnum.IMAGE;
@@ -337,9 +342,10 @@ public class JDBCDataValue {
             }
             return info;
         }
-        if (LargeValueTypeEnum.isPotentialLargeType(columnType, sqlType) && value.length() > LobUnitEnum.M.getSize()) {
+        if (LargeValueTypeEnum.isPotentialLargeType(columnType, sqlType)
+                && valueBytes > LARGE_VALUE_THRESHOLD_BYTES) {
             info.largeValue = true;
-            info.sizeBytes = (long) value.getBytes(StandardCharsets.UTF_8).length;
+            info.sizeBytes = valueBytes;
             info.sizeChars = (long) value.length();
         }
         return info;
@@ -349,10 +355,18 @@ public class JDBCDataValue {
         return value != null && value.toUpperCase(Locale.ROOT).contains(" IMAGE");
     }
 
-    private Object getRawCellValue(LargeValueInfo largeValueInfo) {
+    private String previewValue(String value, LargeValueInfo largeValueInfo) {
+        if (value == null || !largeValueInfo.largeValue || largeValueInfo.summary
+                || value.length() <= LARGE_VALUE_PREVIEW_CHARS) {
+            return value;
+        }
+        return value.substring(0, LARGE_VALUE_PREVIEW_CHARS);
+    }
+
+    private Object getRawCellValue(String value, LargeValueInfo largeValueInfo) {
         try {
             if (largeValueInfo.valueType == LargeValueTypeEnum.JSON) {
-                return getJsonString();
+                return value;
             }
             if (!largeValueInfo.largeValue) {
                 return getObject();
@@ -422,6 +436,7 @@ public class JDBCDataValue {
 
     private static class LargeValueInfo {
         private boolean largeValue;
+        private boolean summary;
         private LargeValueTypeEnum valueType = LargeValueTypeEnum.UNKNOWN;
         private Long sizeBytes;
         private Long sizeChars;

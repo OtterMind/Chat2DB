@@ -1,11 +1,11 @@
 import { ErrorCodesWithoutToast } from '@/constants/request';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { useGlobalStore } from '@/store/global';
 import { isDesktop } from '@/utils/env';
 import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
-import interceptorsResponse from './interceptorsResponse';
+import interceptorsResponse from '@/service/interceptorsResponse';
 
 export type IErrorLevel = 'toast' | 'notification' | 'prompt' | 'critical' | false;
 export type PermissionError = 'apply' | false;
@@ -22,6 +22,8 @@ export interface IOptions {
   dynamicUrl?: boolean;
   contentType?: string; // Content-Type used to set request headers
   fullResponse?: boolean;
+  // Send parameters as a JSON request body even when the HTTP method normally uses the query string.
+  requestBody?: boolean;
 }
 
 const errorHandler = (error: ResponseError, errorLevel: IErrorLevel) => {
@@ -63,7 +65,7 @@ request.interceptors.response.use(async (response, _options) => {
     if (isDesktop) {
       const Chat2db = response.headers.get('Chat2db') || '';
       if (Chat2db) {
-        localStorage.setItem(runtimeEditionConfig.desktopResponseHeaderStorageKey, Chat2db);
+        localStorage.setItem(clientRuntime.desktopResponseHeaderStorageKey, Chat2db);
       }
     }
   } catch (error) {
@@ -73,7 +75,7 @@ request.interceptors.response.use(async (response, _options) => {
 });
 
 export default function createRequest<P = void, R = void>(url: string, options?: IOptions) {
-  const { method = 'get', isFullPath, dynamicUrl, contentType, fullResponse = false } = options || {};
+  const { method = 'get', isFullPath, dynamicUrl, contentType, fullResponse = false, requestBody } = options || {};
   const { errorLevel: initialErrorLevel = 'notification', timeout = true, permissionError = 'apply' } = options || {};
   return function (
     params: P,
@@ -130,6 +132,9 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           default:
             dataName = 'params';
             break;
+        }
+        if (requestBody) {
+          dataName = 'data';
         }
 
         let eventualUrl = _url;

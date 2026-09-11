@@ -25,17 +25,6 @@ export interface TextToSQLParams {
    * List of table names
    */
   tableList?: PromptTableVO[];
-  /**
-   *Data collection id
-   */
-  dataSourceCollectionId?: number;
-}
-
-// Convert natural language with a dataset ID to SQL.
-export interface TextToSQLWithCollectionIdParams {
-  dataSourceCollectionId: number;
-  message: string;
-  source: ChatSourceType;
 }
 
 // Natural language creation table

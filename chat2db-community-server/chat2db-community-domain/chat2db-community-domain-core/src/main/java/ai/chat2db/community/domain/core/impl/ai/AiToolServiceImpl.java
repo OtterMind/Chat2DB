@@ -30,6 +30,7 @@ import ai.chat2db.community.domain.api.model.request.ai.AiExecuteSqlRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiGetTablesSchemaRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiListTablesRequest;
 import ai.chat2db.community.domain.api.service.ai.IAiToolService;
+import ai.chat2db.community.domain.api.service.ai.IAiSqlAutoExecutionPolicy;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.ExecutionMetrics;
@@ -75,6 +76,8 @@ public class AiToolServiceImpl implements IAiToolService {
     private IDbSqlService sqlService;
     @Autowired
     private IWorkspaceStorageFacade workspaceStorageFacade;
+    @Autowired
+    private IAiSqlAutoExecutionPolicy aiSqlAutoExecutionPolicy;
     private static final int DEFAULT_SQL_PAGE_SIZE = 200;
     private static final int MAX_SQL_PAGE_SIZE = 500;
     private static final int MAX_SQL_RESULT_ROWS = 50;
@@ -204,7 +207,7 @@ public class AiToolServiceImpl implements IAiToolService {
         ConnectionProfile profile = requireScopedConnectInfo(toolContext, dataSourceId, databaseName, schemaName);
         int resolvedPageSize = normalizePageSize(pageSize);
         String trimmedSql = sql.trim();
-        String unsafeSqlMessage = buildNonQueryExecutionMessage(trimmedSql, profile);
+        String unsafeSqlMessage = buildNonQueryExecutionMessage(aiExecuteSqlRequest, trimmedSql, profile);
         if (StringUtils.isNotBlank(unsafeSqlMessage)) {
             return emitToolResult(toolContext, "execute_sql", unsafeSqlMessage);
         }
@@ -608,7 +611,10 @@ public class AiToolServiceImpl implements IAiToolService {
         return Math.min(pageSize, MAX_SQL_PAGE_SIZE);
     }
 
-    private String buildNonQueryExecutionMessage(String sql, ConnectionProfile profile) {
+    private String buildNonQueryExecutionMessage(
+            AiExecuteSqlRequest request,
+            String sql,
+            ConnectionProfile profile) {
         if (StringUtils.isBlank(sql)) {
             return null;
         }
@@ -617,7 +623,7 @@ public class AiToolServiceImpl implements IAiToolService {
             return null;
         }
         boolean queryOnly = sqlTypes.stream().allMatch(this::isSafeQuerySqlType);
-        if (queryOnly) {
+        if (queryOnly || aiSqlAutoExecutionPolicy.allowNonQueryExecution(request, profile, List.copyOf(sqlTypes))) {
             return null;
         }
         String detectedTypes = String.join(", ", sqlTypes);

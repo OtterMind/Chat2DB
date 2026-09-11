@@ -242,8 +242,8 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName,
                           String newTableName, boolean copyData) throws SQLException {
-        String source = qualifiedName(schemaName, tableName, true);
-        String target = qualifiedName(schemaName, newTableName, true);
+        String source = qualifiedName(schemaName, tableName);
+        String target = qualifiedName(schemaName, newTableName);
         String sql;
         if (copyData) {
             sql = "CREATE TABLE " + target + " AS SELECT * FROM " + source;
@@ -255,27 +255,20 @@ public class DMDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return String.format(SQL_DROP_TABLE_EXISTS, qualifiedName(schemaName, tableName, false));
+        return String.format(SQL_DROP_TABLE_EXISTS, qualifiedName(schemaName, tableName));
     }
 
     @Override
     public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return "TRUNCATE TABLE " + qualifiedName(schemaName, tableName, true);
+        return "TRUNCATE TABLE " + qualifiedName(schemaName, tableName);
     }
 
-    private static String qualifiedName(String schemaName, String objectName, boolean normalizeQuotedObject) {
-        String normalizedObject = normalizeQuotedObject ? normalizeQuotedIdentifier(objectName) : objectName;
-        String quotedObject = DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedObject);
+    private static String qualifiedName(String schemaName, String objectName) {
+        String quotedObject = DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(objectName);
         if (StringUtils.isBlank(schemaName)) {
             return quotedObject;
         }
         return DMIdentifierProcessor.INSTANCE.quoteIdentifierAlways(schemaName) + "." + quotedObject;
     }
 
-    private static String normalizeQuotedIdentifier(String identifier) {
-        if (DMIdentifierProcessor.INSTANCE.isQuoteIdentifier(identifier)) {
-            return DMIdentifierProcessor.INSTANCE.removeIdentifierQuote(identifier);
-        }
-        return identifier;
-    }
 }

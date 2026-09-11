@@ -7,7 +7,16 @@ import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
+import ai.chat2db.community.domain.api.model.task.extension.ExportCell;
+import ai.chat2db.community.domain.api.model.task.extension.ExportCellContext;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionContext;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionOperation;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionPlan;
+import ai.chat2db.community.domain.api.model.sql.extension.SqlResultColumnContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import cn.hutool.core.io.FileUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +29,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,10 +42,20 @@ import java.util.zip.ZipOutputStream;
 @Slf4j
 public abstract class BaseExporter implements IExportStrategy {
 
+    private final ExportCellProcessorChain exportCellProcessorChain;
+
+    private final SqlExecutionPolicyManager sqlExecutionPolicyManager;
+
     protected String contentType;
 
     protected String suffix;
     public static int BATCH_SIZE = 1000;
+
+    protected BaseExporter(ExportCellProcessorChain exportCellProcessorChain,
+            SqlExecutionPolicyManager sqlExecutionPolicyManager) {
+        this.exportCellProcessorChain = exportCellProcessorChain;
+        this.sqlExecutionPolicyManager = sqlExecutionPolicyManager;
+    }
 
     @Override
     public void run(ExportTaskSpec spec, TaskExecutionContext context, File outputFile) {
@@ -131,6 +153,90 @@ public abstract class BaseExporter implements IExportStrategy {
         String databaseName = spec.getTarget().getDatabaseName();
         String schemaName = spec.getTarget().getSchemaName();
         return Chat2DBContext.getSqlBuilder().dql().buildSelectTable(databaseName, schemaName, tableName);
+    }
+
+    protected SqlExecutionPlan getQueryPlan(ExportTaskSpec spec, String tableName) {
+        String querySql = getQuerySql(spec, tableName);
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        SqlExecutionContext context = new SqlExecutionContext(
+                spec.getTarget().getDataSourceId(),
+                connectInfo == null ? null : connectInfo.getDbType(),
+                spec.getTarget().getDatabaseName(),
+                spec.getTarget().getSchemaName(),
+                tableName, querySql, SqlExecutionOperation.EXPORT, type());
+        SqlExecutionPlan plan = sqlExecutionPolicyManager.plan(context);
+        sqlExecutionPolicyManager.beforeExecute(plan);
+        return plan;
+    }
+
+    protected boolean nextRow(ResultSet resultSet, SqlExecutionPlan plan, int exportedRowCount)
+            throws SQLException {
+        if (!sqlExecutionPolicyManager.isRowAllowed(plan, exportedRowCount)) {
+            return false;
+        }
+        if (exportedRowCount > 0 && exportedRowCount % BATCH_SIZE == 0) {
+            sqlExecutionPolicyManager.checkpoint(plan);
+        }
+        return resultSet.next();
+    }
+
+    protected ExportCell processJdbcCell(ExportTaskSpec spec, ResultSetMetaData metaData, int columnIndex,
+            String tableName, JDBCDataValue jdbcDataValue) throws SQLException {
+        Object value = jdbcDataValue.getObject();
+        if (value == null) {
+            value = jdbcDataValue.getStringValue();
+        }
+        ExportCell cell = new ExportCell(value, metaData.getColumnType(columnIndex),
+                metaData.getColumnTypeName(columnIndex), metaData.getPrecision(columnIndex),
+                metaData.getScale(columnIndex));
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        ExportCellContext cellContext = new ExportCellContext(
+                spec.getTarget().getDataSourceId(),
+                connectInfo == null ? null : connectInfo.getDbType(),
+                spec.getTarget().getDatabaseName(),
+                spec.getTarget().getSchemaName(),
+                tableName, metaData.getColumnName(columnIndex), type());
+        return exportCellProcessorChain.process(cellContext, cell);
+    }
+
+    protected List<Integer> includedColumnIndexes(ResultSetMetaData metaData, SqlExecutionPlan plan)
+            throws SQLException {
+        int columnCount = metaData.getColumnCount();
+        List<Integer> includedIndexes = new ArrayList<>(columnCount);
+        if (sqlExecutionPolicyManager.isEmpty()) {
+            for (int index = 1; index <= columnCount; index++) {
+                includedIndexes.add(index);
+            }
+            return includedIndexes;
+        }
+        SqlExecutionContext executionContext = plan.getContext();
+        for (int index = 1; index <= columnCount; index++) {
+            String resultTableName = StringUtils.defaultIfBlank(metaData.getTableName(index),
+                    executionContext.getTableName());
+            SqlResultColumnContext columnContext = new SqlResultColumnContext(plan, index,
+                    metaData.getColumnName(index), metaData.getColumnLabel(index), metaData.getColumnType(index),
+                    metaData.getColumnTypeName(index), executionContext.getDatabaseName(),
+                    executionContext.getSchemaName(), resultTableName, false);
+            if (sqlExecutionPolicyManager.includeColumn(columnContext)) {
+                includedIndexes.add(index);
+            }
+        }
+        return includedIndexes;
+    }
+
+    protected <T> List<T> selectColumns(List<T> values, List<Integer> includedColumnIndexes) {
+        List<T> selected = new ArrayList<>(includedColumnIndexes.size());
+        for (Integer columnIndex : includedColumnIndexes) {
+            int listIndex = columnIndex - 1;
+            if (listIndex >= 0 && listIndex < values.size()) {
+                selected.add(values.get(listIndex));
+            }
+        }
+        return selected;
+    }
+
+    protected boolean hasExportCellProcessors() {
+        return !exportCellProcessorChain.isEmpty();
     }
 
     private String tableProgressMessage(String prefix, String tableName, int tableIndex, int totalTables) {

@@ -28,7 +28,7 @@ class TaskControllerDesktopContractTest {
                 .flatMap(mapping -> Arrays.stream(mapping.path()))
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of("/export", "/import", "/list", "/get", "/events", "/cancel", "/delete",
+        assertEquals(Set.of("/export", "/import", "/list", "/get", "/events", "/delete",
                 "/artifact", "/active-count", "/prepare-user-exit", "/abort-user-exit"), paths);
 
         Arrays.stream(TaskController.class.getDeclaredMethods())

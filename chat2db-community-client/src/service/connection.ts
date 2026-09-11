@@ -13,6 +13,7 @@ import {
 import { ISchemaItem } from '@/typings/schema';
 import { UpdatePositionInTree } from '@/typings/tree';
 import createRequest from './base';
+import { connectionCloseRequest } from './connectionCloseRequest';
 
 export interface IDriverResponse {
   driverConfigList: {
@@ -29,9 +30,9 @@ interface IDriverParams {
   dbType: DatabaseTypeCode;
 }
 
-interface IUploadDriver {
-  file: any;
-  jdbcDriverClass: string;
+interface ISaveDriver {
+  jdbcDriver: string[];
+  jdbcDriverClass?: string;
   dbType: string;
 }
 
@@ -87,10 +88,16 @@ const downloadDriver = createRequest<{ dbType: string }, void>('/api/jdbc/driver
   method: 'get',
 });
 
-const saveDriver = createRequest<IUploadDriver, void>('/api/jdbc/driver/save', { method: 'post' });
+const uploadDriver = createRequest<{ file: File }, string[]>('/api/jdbc/driver/upload', {
+  method: 'post',
+  contentType: 'formData',
+});
+
+const saveDriver = createRequest<ISaveDriver, void>('/api/jdbc/driver/save', { method: 'post' });
 
 const deleteDriver = createRequest<{ dbType: string; jdbcDriver: string[] }, void>('/api/jdbc/driver/delete', {
   method: 'delete',
+  requestBody: true,
 });
 
 const getEnvList = createRequest<void, IConnectionEnv[]>('/api/common/environment/list_all', { errorLevel: false });
@@ -159,8 +166,8 @@ const exportDataSource = createRequest<
   method: 'post',
 });
 
-const closeConnection = createRequest<{ id: number }, void>('/api/connection/close', {
-  method: 'get',
+const closeConnection = createRequest<{ id: number }, void>(connectionCloseRequest.path, {
+  method: connectionCloseRequest.method,
 });
 
 export default {
@@ -177,6 +184,7 @@ export default {
   testSSH,
   getDriverList,
   downloadDriver,
+  uploadDriver,
   saveDriver,
   deleteDriver,
   importConnection,

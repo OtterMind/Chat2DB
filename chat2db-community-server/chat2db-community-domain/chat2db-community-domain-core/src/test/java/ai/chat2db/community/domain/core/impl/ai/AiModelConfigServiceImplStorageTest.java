@@ -19,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -83,15 +85,15 @@ class AiModelConfigServiceImplStorageTest {
         beanFactory.registerSingleton("aiModelConfigConverter", new AiModelConfigConverter());
         beanFactory.registerSingleton("identityService", (IIdentityService) () -> USER_ID);
 
-        String previousRuntimeMode = System.getProperty("chat2db.runtime.mode");
-        System.setProperty("chat2db.runtime.mode", "pro");
+        String previousEncryptionKey = System.getProperty(AesGcmUtil.KEY_PROPERTY);
+        System.setProperty(AesGcmUtil.KEY_PROPERTY, KEY);
         try {
             assertNotNull(beanFactory.createBean(AiModelConfigServiceImpl.class));
         } finally {
-            if (previousRuntimeMode == null) {
-                System.clearProperty("chat2db.runtime.mode");
+            if (previousEncryptionKey == null) {
+                System.clearProperty(AesGcmUtil.KEY_PROPERTY);
             } else {
-                System.setProperty("chat2db.runtime.mode", previousRuntimeMode);
+                System.setProperty(AesGcmUtil.KEY_PROPERTY, previousEncryptionKey);
             }
         }
     }
@@ -200,6 +202,30 @@ class AiModelConfigServiceImplStorageTest {
         assertEquals(API_KEY, resolveApiKey(reloaded, saved.getId()));
     }
 
+    @Test
+    void persistToDiskDoesNotReuseLegacyFixedTempFile() throws Exception {
+        Path legacyTemp = Path.of(storagePath + ".tmp");
+        Files.writeString(legacyTemp, "keep", StandardCharsets.UTF_8);
+
+        service(KEY).saveCurrentUserConfig(saveRequest("primary", API_KEY));
+
+        assertEquals("keep", Files.readString(legacyTemp, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void failedReplaceKeepsOriginalFileAndCleansRandomTemporaryFile() throws Exception {
+        AiModelConfigServiceImpl initial = service(KEY);
+        initial.saveCurrentUserConfig(saveRequest("primary", API_KEY));
+        String original = Files.readString(storagePath, StandardCharsets.UTF_8);
+        FailingAiModelConfigService failing = new FailingAiModelConfigService();
+
+        assertThrows(IllegalStateException.class,
+                () -> failing.saveCurrentUserConfig(saveRequest("replacement", "sk-replacement-123456")));
+
+        assertEquals(original, Files.readString(storagePath, StandardCharsets.UTF_8));
+        assertEquals(0, randomTempFileCount());
+    }
+
     private AiModelConfigServiceImpl service(String key) {
         return new AiModelConfigServiceImpl(objectMapper, new AiModelConfigConverter(), () -> USER_ID,
                 storagePath, new AesGcmUtil(key));
@@ -248,6 +274,28 @@ class AiModelConfigServiceImplStorageTest {
         assertTrue(exception.getMessage().startsWith("Failed to load ai config from "));
         assertNotNull(exception.getCause());
         assertEquals(causeMessage, exception.getCause().getMessage());
+    }
+
+    private long randomTempFileCount() throws Exception {
+        String prefix = storagePath.getFileName() + ".";
+        try (var files = Files.list(tempDirectory)) {
+            return files.filter(path -> {
+                String fileName = path.getFileName().toString();
+                return fileName.startsWith(prefix) && fileName.endsWith(".tmp");
+            }).count();
+        }
+    }
+
+    private class FailingAiModelConfigService extends AiModelConfigServiceImpl {
+
+        FailingAiModelConfigService() {
+            super(objectMapper, new AiModelConfigConverter(), () -> USER_ID, storagePath, new AesGcmUtil(KEY));
+        }
+
+        @Override
+        protected void replaceStorageFile(Path temp, Path target) throws IOException {
+            throw new IOException("forced replace failure");
+        }
     }
 
     private static String key(int value) {

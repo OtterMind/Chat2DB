@@ -1,4 +1,4 @@
-import { memo, useState, ForwardedRef, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
+import { memo, useState, useRef, useMemo } from 'react';
 import Pagination from '@/components/Pagination';
 import i18n from '@/i18n';
 import { IconButton } from '@chat2db/ui';
@@ -14,6 +14,7 @@ import DingChartModal, { DingChartModalRef } from '@/blocks/BI/ChartCardBox/Ding
 import ChartNoAxesCombined from '@/components/LucideIcons/ChartNoAxesCombined';
 import { useZoerStore } from '@/store/zoer';
 import { Columns3Cog, RotateCw } from 'lucide-react';
+import type { ResultPaging } from '../ResultSet/pagination';
 
 export enum ToolbarOperationType {
   ADD_BLANK_ROW = 'addBlankRow',
@@ -33,21 +34,17 @@ const RESULT_TOOLBAR_BUTTON_SIZE = {
 
 interface IProps {
   resultData: IManageResultData;
-  handleToolbarOperation: (type: ToolbarOperationType) => void;
-  hasOperationRecord: boolean;
+  handleToolbarOperation: (type: ToolbarOperationType, paging?: ResultPaging) => void;
+  hasPendingChanges: boolean;
   activeFilterCount?: number;
   onClearAllFilters?: () => void;
   onManageColumns: () => void;
 }
 
-export interface ResultSetToolbarRef {
-  getPagingParams: () => { pageNo: number; pageSize: number };
-}
-
-const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetToolbarRef>) => {
+const ResultSetToolbar = (props: IProps) => {
   const {
     resultData,
-    hasOperationRecord,
+    hasPendingChanges,
     handleToolbarOperation,
     activeFilterCount = 0,
     onClearAllFilters,
@@ -86,24 +83,22 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
   }, [resultData]);
 
   const onPageNoChange = (pageNo: number) => {
+    const nextPaging = { pageNo, pageSize: paginationConfig.pageSize };
     setPaginationConfig({
       ...paginationConfig,
       pageNo,
     });
-    setTimeout(() => {
-      handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL);
-    }, 0);
+    handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL, nextPaging);
   };
 
   const onPageSizeChange = (pageSize: number) => {
+    const nextPaging = { pageNo: 1, pageSize };
     setPaginationConfig({
       ...paginationConfig,
       pageNo: 1,
       pageSize,
     });
-    setTimeout(() => {
-      handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL);
-    }, 0);
+    handleToolbarOperation(ToolbarOperationType.EXECUTE_SQL, nextPaging);
   };
 
   const onClickTotalBtn = (): Promise<number> => {
@@ -126,15 +121,6 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
       databaseInfo: resultData.executeSqlParams,
     });
   };
-
-  useImperativeHandle(ref, () => ({
-    getPagingParams: () => {
-      return {
-        pageNo: paginationConfig.pageNo,
-        pageSize: paginationConfig.pageSize,
-      };
-    },
-  }));
 
   return (
     <div className={styles.toolBar}>
@@ -190,8 +176,8 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           />
           {/* Undo. */}
           <IconButton
-            className={styles.toolbarAction}
-            // disabled={revokeDisableBarState}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.revert')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.REVOKE);
@@ -201,8 +187,8 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           />
           {/* View SQL. */}
           <IconButton
-            className={styles.toolbarAction}
-            disabled={!hasOperationRecord}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.previewPendingChanges')}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.VIEW_SQL);
@@ -212,8 +198,8 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
           />
           {/* Submit for execution. */}
           <IconButton
-            className={styles.toolbarAction}
-            disabled={!hasOperationRecord}
+            className={cx(styles.toolbarAction, hasPendingChanges && styles.pendingAction)}
+            disabled={!hasPendingChanges}
             title={i18n('editTableData.tips.submit') + `${keyboardKey.command} + S`}
             onClick={() => {
               handleToolbarOperation(ToolbarOperationType.UPDATE_SUBMIT);
@@ -259,12 +245,12 @@ const ResultSetToolbar = forwardRef((props: IProps, ref: ForwardedRef<ResultSetT
       </div>
     </div>
   );
-});
+};
 
 export default memo(ResultSetToolbar, (prevProps, nextProps) => {
   return isEqualMemo(
     [prevProps.resultData, nextProps.resultData],
-    [prevProps.hasOperationRecord, nextProps.hasOperationRecord],
+    [prevProps.hasPendingChanges, nextProps.hasPendingChanges],
     [prevProps.handleToolbarOperation, nextProps.handleToolbarOperation],
     [prevProps.activeFilterCount, nextProps.activeFilterCount],
     [prevProps.onClearAllFilters, nextProps.onClearAllFilters],

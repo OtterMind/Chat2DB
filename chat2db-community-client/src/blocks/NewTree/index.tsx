@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useRef, useMemo, forwardRef } from 'react';
-import { Tree, TreeProps, ConfigProvider, TreeDataNode, Spin } from 'antd';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo, forwardRef, useState } from 'react';
+import { Tree, TreeProps, ConfigProvider, Spin } from 'antd';
 import { useStyles } from './style';
 import { useStyles as renderTitleUseStyles } from './renderTitleStyle';
 
@@ -23,6 +23,10 @@ import { useGlobalStore } from '@/store/global';
 import connectionService from '@/service/connection';
 import { useSize } from 'ahooks';
 import { decorateDataSourceIdentityTree } from './dataSourceIdentity';
+import { measureTreeScrollWidth, resolveNextTreeScrollWidth } from './treeScrollWidth';
+import { TreePositionMutationCoordinator, TreePositionRefreshError } from './treePositionMutation';
+import i18n from '@/i18n';
+import { staticMessage } from '@chat2db/ui';
 
 interface IProps extends TreeProps<TreeNodeData> {
   className?: string;
@@ -65,27 +69,35 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   // TreeRef
   const treeRef = useRef<any>(null);
   const lastTreeSize = useRef<{ width: number; height: number }>();
+  const horizontalMeasureFrameRef = useRef<number>();
+  const horizontalMeasureResetRef = useRef(false);
+  const horizontalScrollHideTimerRef = useRef<number>();
+  const treePositionMutationRef = useRef(new TreePositionMutationCoordinator());
+  const [treeScrollWidth, setTreeScrollWidth] = useState<number>();
+  const [isHorizontalScrolling, setIsHorizontalScrolling] = useState(false);
   const filteredTreeData = useTrimTreeData({ leafNodes, hiddenNoPermission, excludeNodes });
   const {
     editingTreeNode,
-    setTreeData,
     selectedKeys,
     setSelectedKeys,
     setTreeRef,
     expandedKeys,
     scrollTargetKey,
     setScrollTargetKey,
+    searchBarValue,
     dataSourceList,
+    getTreeData,
   } = useTreeStore((state) => ({
     editingTreeNode: state.editingTreeNode,
-    setTreeData: state.setTreeData,
     selectedKeys: state.selectedKeys,
     setSelectedKeys: state.setSelectedKeys,
     setTreeRef: state.setTreeRef,
     expandedKeys: state.expandedKeys,
     scrollTargetKey: state.scrollTargetKey,
     setScrollTargetKey: state.setScrollTargetKey,
+    searchBarValue: state.searchBarValue,
     dataSourceList: state.dataSourceList,
+    getTreeData: state.getTreeData,
   }));
   const identityTreeData = useMemo(
     () => decorateDataSourceIdentityTree(filteredTreeData, dataSourceList),
@@ -104,7 +116,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   }, [setTreeRef]);
 
   useEffect(() => {
-    if (!scrollTargetKey || !filteredTreeData?.length) {
+    if (searchBarValue || !scrollTargetKey || !filteredTreeData?.length) {
       return;
     }
 
@@ -125,9 +137,66 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [scrollTargetKey, filteredTreeData, expandedKeys, setScrollTargetKey]);
+  }, [searchBarValue, scrollTargetKey, filteredTreeData, expandedKeys, setScrollTargetKey]);
 
   const treeSize = useSize(treeBoxRef);
+
+  const measureHorizontalScrollWidth = useCallback((resetMeasurement = false) => {
+    horizontalMeasureResetRef.current ||= resetMeasurement;
+    if (horizontalMeasureFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(horizontalMeasureFrameRef.current);
+    }
+    horizontalMeasureFrameRef.current = window.requestAnimationFrame(() => {
+      horizontalMeasureFrameRef.current = undefined;
+      const shouldResetMeasurement = horizontalMeasureResetRef.current;
+      horizontalMeasureResetRef.current = false;
+      const container = treeBoxRef.current;
+      if (!container) {
+        return;
+      }
+      const measuredWidth = measureTreeScrollWidth(container);
+      setTreeScrollWidth((currentWidth) =>
+        resolveNextTreeScrollWidth(currentWidth, measuredWidth, shouldResetMeasurement),
+      );
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (treeBoxRef.current?.scrollLeft) {
+      treeBoxRef.current.scrollLeft = 0;
+    }
+    measureHorizontalScrollWidth(true);
+    return () => {
+      if (horizontalMeasureFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(horizontalMeasureFrameRef.current);
+        horizontalMeasureFrameRef.current = undefined;
+      }
+    };
+  }, [editingTreeNode, expandedKeys, identityTreeData, measureHorizontalScrollWidth, treeSize?.width]);
+
+  useEffect(() => {
+    return () => {
+      if (horizontalScrollHideTimerRef.current !== undefined) {
+        window.clearTimeout(horizontalScrollHideTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleHorizontalWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const isShiftScroll = event.shiftKey && event.deltaY !== 0 && event.deltaX === 0;
+    const isHorizontalScroll = isShiftScroll || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!isHorizontalScroll) {
+      return;
+    }
+    setIsHorizontalScrolling(true);
+    if (horizontalScrollHideTimerRef.current !== undefined) {
+      window.clearTimeout(horizontalScrollHideTimerRef.current);
+    }
+    horizontalScrollHideTimerRef.current = window.setTimeout(() => {
+      horizontalScrollHideTimerRef.current = undefined;
+      setIsHorizontalScrolling(false);
+    }, 600);
+  }, []);
 
   // right-click menu
   const onRightClick = ({ event, node }) => {
@@ -137,75 +206,32 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
   };
 
   const onDrop: TreeProps['onDrop'] = (info: any) => {
-    const dropKey = info.node.key;
     const dragKey = info.dragNode.key;
     const dropPos = info.node.pos.split('-');
     const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1]);
     // the drop position relative to the drop node, inside 0, top -1, bottom 1
 
-    const loop = (
-      data: TreeDataNode[],
-      key: React.Key,
-      callback: (node: TreeDataNode, i: number, data: TreeDataNode[]) => void,
-    ) => {
-      for (let i = 0; i < data.length; i++) {
-        if (data[i].key === key) {
-          return callback(data[i], i, data);
+    void treePositionMutationRef.current
+      .run(
+        dragKey,
+        () =>
+          connectionService.updatePosition({
+            dragNode: {
+              id: info.dragNode.id,
+              type: info.dragNode.treeNodeType === TreeNodeType.GROUP ? 'NAMESPACE' : 'DATA_SOURCE',
+            },
+            dropToNode: {
+              id: info.node.id,
+              type: info.node.treeNodeType === TreeNodeType.GROUP ? 'NAMESPACE' : 'DATA_SOURCE',
+            },
+            dropPosition: dropPosition as 0 | 1 | -1,
+          }),
+        () => getTreeData({ refresh: true, throwOnError: true }),
+      )
+      .catch((error) => {
+        if (error instanceof TreePositionRefreshError) {
+          staticMessage.error(i18n('workspace.tips.treePositionRefreshFailed'));
         }
-        if (data[i].children) {
-          loop(data[i].children!, key, callback);
-        }
-      }
-    };
-
-    const data = [...(filteredTreeData || [])];
-
-    // Find dragObject
-    let dragObj: TreeDataNode;
-    loop(data, dragKey, (item, index, arr) => {
-      arr.splice(index, 1);
-      dragObj = item;
-    });
-
-    if (!info.dropToGap) {
-      // Drop on the content
-      loop(data, dropKey, (item) => {
-        item.children = item.children || [];
-        // where to insert. New item was inserted to the start of the array in this example, but can be anywhere
-        item.children.unshift(dragObj);
-      });
-    } else {
-      let ar: TreeDataNode[] = [];
-      let i: number;
-      loop(data, dropKey, (_item, index, arr) => {
-        ar = arr;
-        i = index;
-      });
-      if (dropPosition === -1) {
-        // Drop on the top of the drop node
-        ar.splice(i!, 0, dragObj!);
-      } else {
-        // Drop on the bottom of the drop node
-        ar.splice(i! + 1, 0, dragObj!);
-      }
-    }
-
-    connectionService
-      .updatePosition({
-        dragNode: {
-          id: info.dragNode.id,
-          type: info.dragNode.treeNodeType === TreeNodeType.GROUP ? 'NAMESPACE' : 'DATA_SOURCE',
-          // name: info.dragNode.originalTitle,
-        },
-        dropToNode: {
-          id: info.node.id,
-          type: info.node.treeNodeType === TreeNodeType.GROUP ? 'NAMESPACE' : 'DATA_SOURCE',
-          // name: info.node.originalTitle,
-        },
-        dropPosition: dropPosition as 0 | 1 | -1,
-      })
-      .then(() => {
-        setTreeData(data);
       });
   };
 
@@ -222,7 +248,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     );
   };
 
-  const handleDatabaseTreeShortcut = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleDatabaseTreeShortcut = async (event: React.KeyboardEvent<HTMLDivElement>) => {
     const selectedTreeNode = findTreeNodeByKey(filteredTreeData, selectedKeys[0]);
     if (!selectedTreeNode || isEditableTarget(event.target)) {
       return;
@@ -231,12 +257,13 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     const action = DATABASE_TREE_SHORTCUT_ACTIONS.find((shortcutAction) =>
       isShortcutEventMatch(event, shortcutConfig[shortcutAction].binding),
     );
-    if (!action || !treeDropdownRef.current?.handleShortcut(selectedTreeNode, action)) {
+    if (!action) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
+    await treeDropdownRef.current?.handleShortcut(selectedTreeNode, action);
   };
 
   const antdTreeProps: TreeProps<TreeNodeData> = useMemo(() => {
@@ -255,6 +282,7 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
       motion: false,
       itemHeight: 26,
       height: treeHeight,
+      scrollWidth: treeScrollWidth,
       selectedKeys,
       expandedKeys,
       // Ant Design 5.21.5 supports custom loading and switcher icons.
@@ -297,18 +325,29 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
       onDrop,
       onScroll: () => {
         treeDropdownRef.current?.closeMenu();
+        measureHorizontalScrollWidth();
       },
       titleRender,
       ...restProps,
     };
-  }, [selectedKeys, expandedKeys, treeSize?.height, editingTreeNode, identityTreeData, restProps]);
+  }, [
+    selectedKeys,
+    expandedKeys,
+    treeSize?.height,
+    editingTreeNode,
+    identityTreeData,
+    restProps,
+    treeScrollWidth,
+    measureHorizontalScrollWidth,
+  ]);
 
   return (
     <div
       ref={treeBoxRef}
-      className={cx('bashful-scroller', styles.treeBox, className)}
+      className={cx(styles.treeBox, isHorizontalScrolling && styles.horizontalScrolling, className)}
       tabIndex={0}
       onKeyDown={handleDatabaseTreeShortcut}
+      onWheelCapture={handleHorizontalWheel}
     >
       <ConfigProvider
         theme={{

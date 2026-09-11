@@ -1,6 +1,6 @@
-.tabBox {
-  flex: 1;
-  height: 100%;
+.tabHeaderBox {
+  flex: 0 0 36px;
+  height: 36px;
   overflow: hidden;
 }
 
@@ -44,6 +44,35 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.splitPaneContentSlot {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspaceTabContentLayer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.workspaceTabContentItem {
+  position: absolute;
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.workspaceTabContentItemActive {
+  display: block;
+  pointer-events: auto;
 }
 
 .workspacePaneDropOverlay {

@@ -128,7 +128,7 @@ class DMIdentifierProcessorTest {
         assertEquals("DROP TABLE IF EXISTS \"SA\"\"LES\".\"ORDERS\"",
                 manager.dropTable(null, "ignored_database", "SA\"LES", "ORDERS"));
         assertEquals("TRUNCATE TABLE \"SA\"\"LES\".\"OR\"\"DERS\"",
-                manager.truncateTable(null, "ignored_database", "SA\"LES", "\"OR\"\"DERS\""));
+                manager.truncateTable(null, "ignored_database", "SA\"LES", "OR\"DERS"));
         assertEquals("DROP TABLE IF EXISTS \"T\"\"; DROP TABLE U; --\"",
                 manager.dropTable(null, null, null, "T\"; DROP TABLE U; --"));
     }

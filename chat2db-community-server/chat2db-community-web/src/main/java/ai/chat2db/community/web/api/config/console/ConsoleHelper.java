@@ -275,7 +275,7 @@ public class ConsoleHelper {
             Class[] params = iRequestMappingInfo.getParams();
             Object object = controllerClass.getMethod(method, params).invoke(c, o);
             result.setMessage(ConsoleObjectConverter.object2map(object));
-            if("/api/ai/chat/stream".equals(message.getRequestUrl())){
+            if("/api/v3/ai/chat/stream".equals(message.getRequestUrl())){
                 return null;
             }
             return result;
@@ -314,10 +314,10 @@ public class ConsoleHelper {
                     ActionResult result1 = ActionResult.fail(errorCode, errorCode, null);
                     result.setMessage(ConsoleObjectConverter.object2map(result1));
                     return result;
-                } else if (throwable instanceof BusinessException) {
+                } else if (throwable instanceof BusinessException businessException) {
                     log.error("BusinessException error, param {}", JSON.toJSONString(message), e);
-                    ActionResult result1 = ActionResult.fail(((BusinessException) throwable).getCode()
-                            , I18nUtils.getMessage(((BusinessException) throwable).getCode()), null);
+                    ActionResult result1 = ActionResult.fail(businessException.getCode(),
+                            I18nUtils.getMessage(businessException.getCode(), businessException.getArgs()), null);
                     result.setMessage(ConsoleObjectConverter.object2map(result1));
                     return result;
                 } else if (throwable instanceof SystemException) {

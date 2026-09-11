@@ -8,16 +8,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class DefaultSQLExecutorPageBoundsTest {
 
     @Test
-    void defaultsAndInvalidValuesUseFirstPageAndMaximumPageSize() {
-        assertBounds(null, null, 1, IEasyToolsConstant.MAX_PAGE_SIZE, 0);
-        assertBounds(0, 0, 1, IEasyToolsConstant.MAX_PAGE_SIZE, 0);
-        assertBounds(-1, IEasyToolsConstant.MAX_PAGE_SIZE + 1,
-                1, IEasyToolsConstant.MAX_PAGE_SIZE, 0);
+    void defaultsAndInvalidValuesUseFirstPageAndDefaultPageSize() {
+        assertBounds(null, null, 1, IEasyToolsConstant.DEFAULT_PAGE_SIZE, 0);
+        assertBounds(0, 0, 1, IEasyToolsConstant.DEFAULT_PAGE_SIZE, 0);
+        assertBounds(-1, -1, 1, IEasyToolsConstant.DEFAULT_PAGE_SIZE, 0);
+    }
+
+    @Test
+    void preservesPageSizesAboveTheDefault() {
+        assertBounds(1, 5000, 1, 5000, 0);
+        assertBounds(2, 5000, 2, 5000, 5000);
+        assertBounds(1, Integer.MAX_VALUE, 1, Integer.MAX_VALUE, 0);
     }
 
     @Test
     void clampsPageNumberWithoutOverflowingOffset() {
-        int pageSize = 1000;
+        int pageSize = IEasyToolsConstant.DEFAULT_PAGE_SIZE;
         int maxPageNo = Integer.MAX_VALUE / pageSize + 1;
         int maxOffset = (maxPageNo - 1) * pageSize;
 

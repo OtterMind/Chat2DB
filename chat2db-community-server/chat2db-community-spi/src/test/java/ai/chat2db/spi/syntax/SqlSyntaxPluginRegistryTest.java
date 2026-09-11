@@ -3,12 +3,31 @@ package ai.chat2db.spi.syntax;
 import ai.chat2db.spi.ISqlSyntaxPlugin;
 import org.junit.jupiter.api.Test;
 
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlSyntaxPluginRegistryTest {
+
+    @Test
+    void loadsPluginsWithTheServiceTypeClassLoader() throws Exception {
+        Thread thread = Thread.currentThread();
+        ClassLoader originalClassLoader = thread.getContextClassLoader();
+        try (URLClassLoader unrelatedClassLoader = new URLClassLoader(
+                new URL[0], ClassLoader.getPlatformClassLoader())) {
+            thread.setContextClassLoader(unrelatedClassLoader);
+
+            Map<String, ISqlSyntaxPlugin> plugins = SqlSyntaxPluginRegistry.load();
+
+            assertTrue(plugins.get("REGISTRY_PROBE") instanceof RegistryProbeSyntaxPlugin);
+        } finally {
+            thread.setContextClassLoader(originalClassLoader);
+        }
+    }
 
     @Test
     void findsServiceLoaderRegisteredPluginByDatabaseType() {

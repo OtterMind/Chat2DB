@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { LangType } from '@/constants/settings';
 import { useGlobalStore } from '@/store/global';
 import { refreshPage } from '@/utils';
@@ -13,7 +13,7 @@ const useEnglish = () => {
   }));
 
   useEffect(() => {
-    if (runtimeEditionConfig.languageRegionRestricted && isReady && !isCN && language === LangType.ZH_CN) {
+    if (clientRuntime.restrictChineseOutsideChina && isReady && !isCN && language === LangType.ZH_CN) {
       setLanguage(LangType.EN_US);
       refreshPage();
     }

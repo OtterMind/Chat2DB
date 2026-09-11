@@ -12,8 +12,8 @@ import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
-import ai.chat2db.community.domain.core.impl.task.export.ExportFactory;
 import ai.chat2db.community.domain.core.impl.task.export.IExportStrategy;
+import ai.chat2db.community.domain.core.impl.task.export.ExportStrategyRegistry;
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +21,12 @@ import java.util.Map;
 
 @Component
 public class TableDataExportTaskExecutor implements TaskExecutor<ExportTaskSpec> {
+
+    private final ExportStrategyRegistry exportStrategyRegistry;
+
+    public TableDataExportTaskExecutor(ExportStrategyRegistry exportStrategyRegistry) {
+        this.exportStrategyRegistry = exportStrategyRegistry;
+    }
 
     @Override
     public String taskType() {
@@ -50,7 +56,7 @@ public class TableDataExportTaskExecutor implements TaskExecutor<ExportTaskSpec>
                     Map.of(TaskConstants.FILE_FORMAT_DETAIL_KEY, format,
                             TaskConstants.TOTAL_TABLES_DETAIL_KEY, CollectionUtils.size(spec.getTableNames())));
             context.reportProgress(10, TaskStage.EXPORTING.name(), "Exporting table data");
-            IExportStrategy strategy = ExportFactory.getExporter(format);
+            IExportStrategy strategy = exportStrategyRegistry.getExporter(format);
             strategy.run(spec, context, draft.getTemporaryFile());
             context.reportProgress(92, TaskStage.FINALIZING.name(), "Finalizing table data export");
         } catch (TaskCancelledException | TaskExecutionException e) {

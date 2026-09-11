@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
+import ai.chat2db.community.domain.api.service.task.IImportTaskSubmissionService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
@@ -39,11 +40,15 @@ public class TaskController {
 
     private final TaskDownloadWebConverter taskDownloadWebConverter;
 
+    private final IImportTaskSubmissionService importTaskSubmissionService;
+
     public TaskController(TaskService taskService, TaskWebConverter taskWebConverter,
-            TaskDownloadWebConverter taskDownloadWebConverter) {
+            TaskDownloadWebConverter taskDownloadWebConverter,
+            IImportTaskSubmissionService importTaskSubmissionService) {
         this.taskService = taskService;
         this.taskWebConverter = taskWebConverter;
         this.taskDownloadWebConverter = taskDownloadWebConverter;
+        this.importTaskSubmissionService = importTaskSubmissionService;
     }
 
     @PostMapping("/export")
@@ -54,7 +59,8 @@ public class TaskController {
 
     @PostMapping("/import")
     public DataResult<TaskSubmitResponse> submitImport(@Valid @RequestBody TaskImportRequest request) {
-        Long taskId = taskService.submitImport(taskWebConverter.importRequest2spec(request));
+        Long taskId = importTaskSubmissionService.submit(
+                taskWebConverter.importRequest2spec(request), request.getFileId());
         return DataResult.of(new TaskSubmitResponse(taskId));
     }
 
@@ -80,11 +86,6 @@ public class TaskController {
         }
         return DataResult.of(taskService.listEventsBefore(request.getTaskId(), request.getBeforeSequence(),
                 request.effectiveLimit()));
-    }
-
-    @PostMapping("/cancel")
-    public DataResult<Task> cancel(@Valid @RequestBody TaskIdRequest request) {
-        return DataResult.of(taskService.cancel(request.getTaskId()));
     }
 
     @DeleteMapping("/delete")

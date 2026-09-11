@@ -1,7 +1,7 @@
 import createRequest from './base';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
-import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
+import type { ICsvOptions, ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 
 export interface GenerateJavaClassParams extends IDatabaseBaseInfo {
@@ -59,10 +59,12 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   taskType: ImportTaskType;
   taskName?: string;
   tableName?: string;
-  sourceFile: string;
+  sourceFile?: string;
+  fileId?: string;
   displayFileName?: string;
   format: ImportExportFileType;
   dataTimeFormat?: string;
+  csvOptions?: ICsvOptions;
 }
 
 const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });
@@ -81,7 +83,6 @@ const getTaskEvents = createRequest<TaskEventListParams, ImportExportTaskEvent[]
   errorLevel: false,
 });
 
-const cancelTask = createRequest<TaskIdParams, ImportExportTaskDetails>('/api/tasks/cancel', { method: 'post' });
 const deleteTask = createRequest<TaskIdParams, void>('/api/tasks/delete', { method: 'delete' });
 const getActiveTaskCount = createRequest<void, number>('/api/tasks/active-count', { method: 'get', errorLevel: false });
 const prepareUserExit = createRequest<void, void>('/api/tasks/prepare-user-exit', {
@@ -104,7 +105,6 @@ export default {
   getTaskList,
   getTaskDetails,
   getTaskEvents,
-  cancelTask,
   deleteTask,
   getActiveTaskCount,
   prepareUserExit,

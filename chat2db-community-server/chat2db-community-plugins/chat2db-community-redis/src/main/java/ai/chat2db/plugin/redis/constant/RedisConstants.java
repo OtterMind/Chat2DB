@@ -13,6 +13,7 @@ public final class RedisConstants {
     public static final String COMMAND_EXISTS_KEY = "EXISTS %s";
     public static final String COMMAND_EXPIRE_ARGUMENT_PREFIX = " EX ";
     public static final String COMMAND_EXPIRE_KEY_PREFIX = "EXPIRE ";
+    public static final String COMMAND_PERSIST_KEY_PREFIX = "PERSIST ";
     public static final String COMMAND_GET_KEY_PREFIX = "GET ";
     public static final String COMMAND_HASH_DELETE_PREFIX = "HDEL ";
     public static final String COMMAND_HASH_GET_ALL_PREFIX = "HGETALL ";

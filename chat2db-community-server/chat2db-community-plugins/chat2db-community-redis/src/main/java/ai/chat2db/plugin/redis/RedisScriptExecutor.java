@@ -222,7 +222,7 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
         Connection connection = Chat2DBContext.getConnection();
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+            stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();
@@ -336,11 +336,16 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
                 scripts.addAll(script);
             }
         }
-        if (newKey != null && newKey.getTtl() != null && newKey.getTtl() > 0) {
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(newKey.getName()))
-                    .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(newKey.getTtl());
-            scripts.add(stringBuilder.toString());
+        if (newKey != null && newKey.getTtl() != null) {
+            Long ttl = newKey.getTtl();
+            if (ttl > 0) {
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append(RedisConstants.COMMAND_EXPIRE_KEY_PREFIX).append(getRedisValue(newKey.getName()))
+                        .append(RedisConstants.COMMAND_ARGUMENT_SEPARATOR).append(ttl);
+                scripts.add(stringBuilder.toString());
+            } else if (ttl == -1L) {
+                scripts.add(RedisConstants.COMMAND_PERSIST_KEY_PREFIX + getRedisValue(newKey.getName()));
+            }
         }
         ExecuteResponse executeResult = new ExecuteResponse();
         for (String s : scripts) {

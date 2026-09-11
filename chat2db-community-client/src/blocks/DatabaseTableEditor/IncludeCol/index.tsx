@@ -16,7 +16,8 @@ import { Table, Form, Select, Button } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { Context } from '../index';
 import { IColumnItemNew, IIndexIncludeColumnItem } from '@/typings';
-import { shouldShowSqliteIncludeCollation } from '@/utils/databaseJudgments';
+import { DatabaseCapability } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import i18n from '@/i18n';
 import lodash from 'lodash';
 import Iconfont from '@/components/Iconfont';
@@ -188,7 +189,7 @@ const IncludeCol = forwardRef((props: IProps, ref: ForwardedRef<IIncludeColRef>)
     // },
   ];
   // sqlLite Add sorting rules
-  if (shouldShowSqliteIncludeCollation(databaseType)) {
+  if (isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_INCLUDE_COLLATION)) {
     columns.splice(2, 0, {
       title: i18n('editTable.label.collation'),
       dataIndex: 'collation',

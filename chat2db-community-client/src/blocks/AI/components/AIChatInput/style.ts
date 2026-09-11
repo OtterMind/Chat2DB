@@ -111,9 +111,7 @@ export const useStyles = createStyles(({ css, token }) => {
       background: transparent !important;
       color: ${token.colorPrimary} !important;
       box-shadow: none !important;
-      transition:
-        opacity 0.2s,
-        color 0.2s;
+      transition: opacity 0.2s, color 0.2s;
 
       &:hover {
         opacity: 0.85;

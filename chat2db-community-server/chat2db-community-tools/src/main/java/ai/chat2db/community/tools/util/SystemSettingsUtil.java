@@ -1,6 +1,7 @@
 package ai.chat2db.community.tools.util;
 
 import ai.chat2db.community.tools.config.SystemSettingConstant;
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentityProvider;
 import java.io.File;
 import java.nio.file.Paths;
 
@@ -10,13 +11,7 @@ public class SystemSettingsUtil {
     private static final SettingsFileStore SETTINGS_STORE;
 
     static {
-        if (ConfigUtils.isCommunity()) {
-            CACHE_PATH = "chat2db_cache_community";
-        } else if (ConfigUtils.isLocalEdition()) {
-            CACHE_PATH = "chat2db_cache_local";
-        } else {
-            CACHE_PATH = "chat2db_cache_pro";
-        }
+        CACHE_PATH = ProductRuntimeIdentityProvider.current().settingsDirectoryName();
         SETTINGS_STORE = new SettingsFileStore(Paths.get(getCachePath(), "settings.json"));
     }
 

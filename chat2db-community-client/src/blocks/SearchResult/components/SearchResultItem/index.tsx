@@ -5,7 +5,7 @@ import StatusBar from '../StatusBar';
 import ResultSet from '../ResultSet';
 import i18n from '@/i18n';
 import { useStyles } from './style';
-import { IManageResultData } from '@/typings';
+import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
 import { useWorkspaceStore } from '@/store/workspace';
@@ -15,11 +15,12 @@ interface IProps {
   resultData: IManageResultData;
   active: boolean;
   viewTable?: boolean;
+  onResultPagingChange?: (resultData: IManageResultData, params: IExecuteSqlParams) => Promise<unknown> | void;
 }
 
 export default memo<IProps>(
   (props) => {
-    const { active, resultData, viewTable } = props;
+    const { active, resultData, viewTable, onResultPagingChange } = props;
     const { styles } = useStyles();
     const setCurrentWorkspaceExtend = useWorkspaceStore((s) => s.setCurrentWorkspaceExtend);
 
@@ -52,7 +53,12 @@ export default memo<IProps>(
       return (
         <div className={styles.successResult}>
           {needTable ? (
-            <ResultSet active={active} viewTable={viewTable} resultData={resultData} />
+            <ResultSet
+              active={active}
+              viewTable={viewTable}
+              resultData={resultData}
+              onResultPagingChange={onResultPagingChange}
+            />
           ) : (
             <div className={styles.updateCountBox}>
               <div className={styles.updateCount}>{i18n('common.text.affectedRows', resultData.updateCount)}</div>
@@ -86,5 +92,6 @@ export default memo<IProps>(
   (prevProps, nextProps) =>
     prevProps.active === nextProps.active &&
     prevProps.resultData === nextProps.resultData &&
-    prevProps.viewTable === nextProps.viewTable,
+    prevProps.viewTable === nextProps.viewTable &&
+    prevProps.onResultPagingChange === nextProps.onResultPagingChange,
 );

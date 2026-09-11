@@ -66,7 +66,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 if (StringUtils.isBlank(sequenceName)) {
                     continue;
                 }
-                String quotedSequenceName = qualifiedTableName(schemaName, sequenceName, false);
+                String quotedSequenceName = qualifiedTableName(schemaName, sequenceName);
                 sqlBuilder.append(SQL_DROP_SEQUENCE_EXISTS).append(quotedSequenceName).append(";\n");
                 sqlBuilder.append(SQL_CREATE_SEQUENCE).append(quotedSequenceName).append("\n")
                         .append(" START WITH ").append(startValue).append("\n")
@@ -89,7 +89,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         DefaultSQLExecutor.getInstance().preExecute(connection, ENUM_TYPE_DDL_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
                 typeBuilder.append(SQL_DROP_TYPE_EXISTS)
-                        .append(qualifiedTableName(schemaName, resultSet.getString("type_name"), false))
+                        .append(qualifiedTableName(schemaName, resultSet.getString("type_name")))
                         .append(";\n");
                 typeBuilder.append(resultSet.getString("ddl")).append("\n");
                 context.write(typeBuilder.toString());
@@ -98,7 +98,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
         typeBuilder.setLength(0);
         DefaultSQLExecutor.getInstance().preExecute(connection, UDT_SQL, new String[]{schemaName}, resultSet -> {
             while (resultSet.next()) {
-                String typeName = qualifiedTableName(schemaName, resultSet.getString("type_name"), false);
+                String typeName = qualifiedTableName(schemaName, resultSet.getString("type_name"));
                 typeBuilder.append(SQL_DROP_TYPE_EXISTS).append(typeName).append(";\n");
                 typeBuilder.append(resultSet.getString("create_type_statement")).append("\n");
                 context.write(typeBuilder.toString());
@@ -123,7 +123,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append("\n").append(SQL_DROP_TABLE_EXISTS)
-                .append(qualifiedTableName(schemaName, tableName, false)).append(";").append("\n")
+                .append(qualifiedTableName(schemaName, tableName)).append(";").append("\n")
                 .append(tableDDL).append("\n");
         context.write(sqlBuilder.toString());
         if (containData) {
@@ -140,7 +140,7 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 StringBuilder sqlBuilder = new StringBuilder();
                 String viewName = resultSet.getString("table_name");
                 String viewDefinition = resultSet.getString("view_definition");
-                String quotedObjectName = qualifiedTableName(schemaName, viewName, false);
+                String quotedObjectName = qualifiedTableName(schemaName, viewName);
                 sqlBuilder.append(SQL_DROP_VIEW_EXISTS).append(quotedObjectName).append(";\n");
                 sqlBuilder.append(SQL_CREATE_REPLACE_VIEW).append(quotedObjectName).append(" AS ").append(viewDefinition).append("\n");
                 context.write(sqlBuilder.toString());
@@ -221,12 +221,12 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public String dropTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return "DROP TABLE " + qualifiedTableName(schemaName, tableName, false);
+        return "DROP TABLE " + qualifiedTableName(schemaName, tableName);
     }
 
     @Override
     public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) {
-        return "TRUNCATE TABLE " + qualifiedTableName(schemaName, tableName, true);
+        return "TRUNCATE TABLE " + qualifiedTableName(schemaName, tableName);
     }
 
     @Override
@@ -251,8 +251,8 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     static String buildCopyTableSql(String schemaName, String tableName, String newTableName,
                                     boolean copyData) {
-        String source = qualifiedTableName(schemaName, tableName, true);
-        String target = qualifiedTableName(schemaName, newTableName, true);
+        String source = qualifiedTableName(schemaName, tableName);
+        String target = qualifiedTableName(schemaName, newTableName);
         return "CREATE TABLE " + target + " AS TABLE " + source
                 + (copyData ? " WITH DATA" : " WITH NO DATA");
     }
@@ -265,14 +265,12 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
 
     @Override
     public void dropView(Connection connection, String databaseName, String schemaName, String viewName) {
-        String sql = "DROP VIEW " + qualifiedTableName(schemaName, viewName, false);
+        String sql = "DROP VIEW " + qualifiedTableName(schemaName, viewName);
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> null);
     }
 
-    private static String qualifiedTableName(String schemaName, String tableName,
-                                             boolean normalizeQuotedTable) {
-        String normalizedTable = normalizeQuotedTable ? normalizeQuotedIdentifier(tableName) : tableName;
-        String quotedTable = PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(normalizedTable);
+    private static String qualifiedTableName(String schemaName, String tableName) {
+        String quotedTable = PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableName);
         if (StringUtils.isBlank(schemaName)) {
             return quotedTable;
         }
@@ -280,10 +278,4 @@ public class PostgreSQLDBManager extends DefaultDBManager implements IDbManager 
                 + "." + quotedTable;
     }
 
-    private static String normalizeQuotedIdentifier(String identifier) {
-        if (PostgreSQLIdentifierProcessor.INSTANCE.isQuoteIdentifier(identifier)) {
-            return PostgreSQLIdentifierProcessor.INSTANCE.removeIdentifierQuote(identifier);
-        }
-        return identifier;
-    }
 }

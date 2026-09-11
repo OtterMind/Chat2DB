@@ -17,6 +17,8 @@ import ai.chat2db.spi.model.request.MultiInsertSqlRequest;
 import ai.chat2db.spi.model.request.SingleInsertSqlRequest;
 import ai.chat2db.spi.model.request.TruncateTableRequest;
 import ai.chat2db.spi.model.request.UpdateSqlRequest;
+import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -328,15 +330,22 @@ class XugudbIdentifierProcessorTest {
     }
 
     @Test
-    void metadataAndManagerRespectRawVersusPrequotedNames() throws Exception {
+    void metadataAndManagerQuoteRawNames() throws Exception {
         XUGUDBMetaData metaData = new XUGUDBMetaData();
         assertEquals("\"App\".\"MixedTable\"", metaData.getMetaDataName("ignored", "App", "MixedTable"));
 
         XUGUDBManager manager = new XUGUDBManager();
         assertEquals("DROP TABLE IF EXISTS \"ta\"\"ble\"",
                 manager.dropTable(null, null, null, "ta\"ble"));
-        assertEquals("TRUNCATE TABLE \"App\".\"MixedTable\"",
-                manager.truncateTable(null, null, null, "\"App\".\"MixedTable\""));
+        ConnectInfo context = new ConnectInfo();
+        context.setDbType("XUGUDB");
+        Chat2DBContext.putContext(context);
+        try {
+            assertEquals("TRUNCATE TABLE \"ta\"\"ble\"",
+                    manager.truncateTable(null, null, null, "ta\"ble"));
+        } finally {
+            Chat2DBContext.removeContext();
+        }
     }
 
     @Test

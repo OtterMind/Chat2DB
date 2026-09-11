@@ -17,17 +17,6 @@ on:
         required: true
       DOCKERHUB_TOKEN:
         required: true
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Image version
-        required: true
-        type: string
-      push_latest:
-        description: Also update the latest tag
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +25,7 @@ jobs:
   docker:
     name: Build and push Community image
     runs-on: ubuntu-latest
+    environment: community-release
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -46,10 +36,17 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_PUSH_LATEST: ${{ inputs.push_latest }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${INPUT_VERSION}"
           push_latest="${INPUT_PUSH_LATEST}"
+
+          if [ "${GITHUB_REF_TYPE}" != "tag" ] || [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Community Docker publication requires the matching protected release tag: expected=v${version}, ref=${GITHUB_REF_TYPE}:${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
 
           if [[ ! "${version}" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,4})$ ]]; then
             echo "Version must use numeric SemVer without a v prefix, for example 5.3.0: ${version}" >&2

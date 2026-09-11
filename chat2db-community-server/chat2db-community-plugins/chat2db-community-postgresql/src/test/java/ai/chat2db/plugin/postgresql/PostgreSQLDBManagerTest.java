@@ -32,18 +32,16 @@ class PostgreSQLDBManagerTest {
     @Test
     void buildsSchemaQualifiedTableStatementsWithoutDoubleQuotingServiceNames() throws Exception {
         PostgreSQLDBManager manager = new PostgreSQLDBManager();
-        String source = PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways("ord\"ers");
-        String target = PostgreSQLIdentifierProcessor.INSTANCE.quoteIdentifierAlways("ord\"ers_copy");
 
         assertEquals("DROP TABLE \"analytics\".\"ord\"\"ers\"",
                 manager.dropTable(null, "ignored_database", "analytics", "ord\"ers"));
         assertEquals("TRUNCATE TABLE \"analytics\".\"ord\"\"ers\"",
-                manager.truncateTable(null, "ignored_database", "analytics", source));
+                manager.truncateTable(null, "ignored_database", "analytics", "ord\"ers"));
         assertEquals("CREATE TABLE \"analytics\".\"ord\"\"ers_copy\" AS TABLE "
                         + "\"analytics\".\"ord\"\"ers\" WITH DATA",
-                PostgreSQLDBManager.buildCopyTableSql("analytics", source, target, true));
+                PostgreSQLDBManager.buildCopyTableSql("analytics", "ord\"ers", "ord\"ers_copy", true));
         assertEquals("CREATE TABLE \"ord\"\"ers_copy\" AS TABLE \"ord\"\"ers\" WITH NO DATA",
-                PostgreSQLDBManager.buildCopyTableSql(null, source, target, false));
+                PostgreSQLDBManager.buildCopyTableSql(null, "ord\"ers", "ord\"ers_copy", false));
     }
 
     private static class TestPostgreSQLDBManager extends PostgreSQLDBManager {

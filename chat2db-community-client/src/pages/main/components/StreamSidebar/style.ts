@@ -20,6 +20,12 @@ export const useStyles = createStyles(({ css, token }) => {
       border-radius: 6px;
       justify-content: center;
     `,
+    streamSearchTooltipAnchor: css`
+      display: inline-flex;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+    `,
     streamSearchButton: css`
       flex-shrink: 0;
       border-radius: 6px !important;
@@ -60,9 +66,6 @@ export const useStyles = createStyles(({ css, token }) => {
       &:hover {
         background-color: ${token.colorFillTertiary};
       }
-      &:hover .sidebar-session-delete {
-        opacity: 1;
-      }
     `,
     sidebarSessionItemActive: css`
       background-color: ${token.colorPrimaryBg};
@@ -83,6 +86,10 @@ export const useStyles = createStyles(({ css, token }) => {
       color: ${token.colorTextTertiary};
       white-space: nowrap;
       flex-shrink: 0;
+    `,
+    sidebarSessionRenameInput: css`
+      flex: 1;
+      min-width: 0;
     `,
     sessionEmpty: css`
       font-size: 13px;

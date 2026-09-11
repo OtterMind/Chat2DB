@@ -6,41 +6,48 @@ export const useStyles = createStyles(({ css, token }) => {
       display: flex;
       flex-direction: column;
       font-size: 14px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      /* position: relative; */
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
 
       .ant-tree {
+        flex: 1 1 auto;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
         background-color: transparent;
+      }
+
+      .ant-tree-list,
+      .ant-tree-list-holder {
+        height: 100%;
+        min-height: 0;
+      }
+
+      .ant-tree-list-holder {
+        max-height: 100% !important;
+      }
+
+      .ant-tree-list-scrollbar-horizontal {
+        bottom: 0 !important;
+        height: 6px !important;
+        visibility: visible !important;
+        opacity: 0;
+        pointer-events: auto;
+        transition: opacity 0.1s ease;
+      }
+
+      .ant-tree-list-scrollbar-horizontal .ant-tree-list-scrollbar-thumb {
+        background-color: ${token.colorFill} !important;
+      }
+
+      .ant-tree-list-scrollbar-horizontal:active,
+      .ant-tree-list-scrollbar-horizontal:has(.ant-tree-list-scrollbar-thumb:active) {
+        opacity: 1;
       }
 
       .ant-tree-switcher {
         display: none;
-      }
-
-      .ant-tree-list {
-        width: fit-content;
-        min-width: 100%;
-        position: inherit !important;
-      }
-
-      .ant-tree-list-holder {
-        min-width: fit-content;
-        width: 100%;
-        & > div {
-          position: inherit !important;
-          overflow: visible !important;
-        }
-      }
-
-      .ant-tree-list-holder-inner {
-        width: 100%;
-        position: inherit !important;
-      }
-
-      .ant-tree-treenode {
-        /* width: max-content; */
-        min-width: 100%;
       }
 
       .ant-tree-treenode.chat2db-data-source-identity-node {
@@ -85,7 +92,7 @@ export const useStyles = createStyles(({ css, token }) => {
         white-space: nowrap;
       }
 
-      .ant-tree-list-scrollbar-thumb {
+      .ant-tree-list-scrollbar-vertical .ant-tree-list-scrollbar-thumb {
         background-color: ${token.colorFill} !important;
         transition: background-color 0.1s ease;
       }
@@ -107,6 +114,11 @@ export const useStyles = createStyles(({ css, token }) => {
           background-color: CanvasText;
           box-shadow: none;
         }
+      }
+    `,
+    horizontalScrolling: css`
+      .ant-tree-list-scrollbar-horizontal {
+        opacity: 1;
       }
     `,
     spinBox: css`

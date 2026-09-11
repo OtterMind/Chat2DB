@@ -6,15 +6,7 @@ export interface FilterTreeNodesOptions {
   hiddenNoPermission?: boolean;
   excludeNodes?: string[];
   leafNodes?: string[];
-  aiDataCollectionEnabled?: boolean;
 }
-
-const aiDataCollectionNodeTypes = new Set<string>([
-  TreeNodeType.AI_DATA_COLLECTIONS,
-  TreeNodeType.AI_DATA_COLLECTION,
-  TreeNodeType.AI_DATA_COLLECTION_TABLE,
-  TreeNodeType.AI_DATA_COLLECTION_VIEW,
-]);
 
 export function filterTreeNodesForDisplay(
   treeData: TreeNodeData[],
@@ -26,7 +18,6 @@ export function filterTreeNodesForDisplay(
     hiddenNoPermission,
     excludeNodes,
     leafNodes,
-    aiDataCollectionEnabled = true,
   } = options;
 
   return treeData
@@ -38,10 +29,6 @@ export function filterTreeNodesForDisplay(
       const hiddenIds = inheritedHiddenIds || dataSourceHiddenIds;
 
       if (excludeNodes?.includes(newNode.treeNodeType)) {
-        return null;
-      }
-
-      if (!aiDataCollectionEnabled && aiDataCollectionNodeTypes.has(newNode.treeNodeType)) {
         return null;
       }
 

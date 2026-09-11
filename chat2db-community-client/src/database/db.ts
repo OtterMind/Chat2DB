@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import Dexie, { Table } from 'dexie';
 import { dbSchemaV1 } from './schema';
 import { DataSourceTree } from './types';
@@ -8,7 +8,7 @@ class Chat2dbDatabase extends Dexie {
   dataSourceTree!: Table<DataSourceTree>;
 
   constructor() {
-    super(runtimeEditionConfig.dexieDatabaseName);
+    super(clientRuntime.dexieDatabaseName);
 
     // Define database schema
     this.version(1).stores(dbSchemaV1);

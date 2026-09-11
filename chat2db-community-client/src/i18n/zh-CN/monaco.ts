@@ -70,6 +70,8 @@ export default {
   'monaco.keywordCase.lower': '小写',
   'monaco.completion.all': '全限定补全',
   'monaco.completion.all.tooltip': '选择需要使用全限定名称进行补全的数据库类型；未选择的类型使用简短名称。',
+  'monaco.defaultPageSize': '默认查询行数',
+  'monaco.defaultPageSize.tooltip': 'SQL 查询未指定分页大小时，默认返回的最大行数。修改后对后续查询生效。',
   'monaco.errorContinue': '错误继续执行',
   'monaco.errorContinue.tooltip': '一次执行多条 SQL 时，某条语句失败后是否继续执行后续语句。',
   'monaco.errorContinue.true': '是',

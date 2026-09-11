@@ -72,6 +72,7 @@ export interface ViewDataRef {
 const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => {
   const [viewData, setViewData] = useState<IViewData | null>(null);
   const [editorValue, setEditorContent] = useState('');
+  const [editorViewRevision, setEditorViewRevision] = useState(0);
   const [isJsonContent, setIsJsonContent] = useState(false);
   const activeViewDataRef = useRef<IViewData | null>(null);
   const editorValueRef = useRef('');
@@ -414,13 +415,21 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     applyEditorValue(value);
   };
 
+  const applyJsonPresentation = (value: string) => {
+    setEditorContent(value);
+    setEditorViewRevision((revision) => revision + 1);
+    if (!isLargeValue) {
+      applyEditorValue(value);
+    }
+  };
+
   const formatJson = () => {
     try {
       const parsed = JSON.parse(editorValue);
       const formatted = JSON.stringify(parsed, null, 2);
-      handleEditorValueChange(formatted);
+      applyJsonPresentation(formatted);
     } catch (err) {
-      console.error('无效的 JSON 格式，请检查语法', err);
+      console.error('Invalid JSON format. Check the syntax.', err);
     }
   };
 
@@ -428,9 +437,9 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     try {
       const parsed = JSON.parse(editorValue);
       const compressed = JSON.stringify(parsed);
-      handleEditorValueChange(compressed);
+      applyJsonPresentation(compressed);
     } catch (err) {
-      console.error('无效的 JSON 格式，请检查语法', err);
+      console.error('Invalid JSON format. Check the syntax.', err);
     }
   };
 
@@ -528,6 +537,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
             <JsonAwareMonacoEditor
               id={uuid}
               value={editorValue}
+              resetViewRevision={editorViewRevision}
               readOnly={!editorCanEdit}
               onChange={handleEditorValueChange}
               onJsonChange={setIsJsonContent}
@@ -551,6 +561,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     largeValueStatus,
     displayMode,
     editorValue,
+    editorViewRevision,
     editorCanEdit,
     isJsonContent,
     viewerMode,

@@ -10,7 +10,8 @@ import Iconfont from '@/components/Iconfont';
 
 // ----- store -----
 import { useWorkspaceStore } from '@/store/workspace';
-import { canCreateDatabase, canCreateSchema } from '@/utils/databaseJudgments';
+import { DatabaseCapability } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 
 interface IProps {
   searchValue: string;
@@ -45,10 +46,13 @@ const OperationLine = (props: IProps) => {
 
   const showCreate = useMemo(() => {
     if (currentConnectionDetails?.supportDatabase) {
-      return canCreateDatabase(currentConnectionDetails!.type!);
+      return isDatabaseCapabilitySupported(
+        currentConnectionDetails.type,
+        DatabaseCapability.DATABASE_CREATE,
+      );
     }
     if (currentConnectionDetails?.supportSchema) {
-      return canCreateSchema(currentConnectionDetails!.type!);
+      return isDatabaseCapabilitySupported(currentConnectionDetails.type, DatabaseCapability.SCHEMA_CREATE);
     }
   }, [currentConnectionDetails]);
 

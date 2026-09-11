@@ -8,6 +8,7 @@ public enum SqlOperationLogSourceEnum {
     TABLE_BROWSE,
     MCP,
     AI_TOOL,
+    OPEN_API,
     CHART,
     DASHBOARD,
     SLASH_MAGIC

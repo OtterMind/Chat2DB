@@ -7,6 +7,7 @@ import CustomTabs, { ITabItem } from '@/components/Tabs';
 import { IViewTableParams } from '@/typings';
 import { ConsoleStatus, WorkspaceTabType } from '@/constants';
 import { getDatabaseSupport } from '@/utils/database';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { useStyles } from './style';
 
 interface IRightTab {
@@ -55,7 +56,12 @@ export default function StreamPage() {
         return;
       }
 
-      const label = tableName + (context.dataSourceName ? `[${context.dataSourceName}]` : '');
+      const label = buildWorkspaceObjectTabTitle({
+        dataSourceName: context.dataSourceName,
+        databaseName: context.databaseName,
+        schemaName: context.schemaName,
+        objectName: tableName,
+      });
       const tab: IRightTab = { key, label, type: 'table', tableParams: params };
       setRightTabs((prev) => [...prev, tab]);
       setActiveTabKey(key);

@@ -7,6 +7,7 @@ import ai.chat2db.plugin.sqlserver.enums.type.SqlServerColumnTypeEnum;
 import ai.chat2db.plugin.sqlserver.enums.type.SqlServerIndexTypeEnum;
 import ai.chat2db.plugin.sqlserver.SqlServerSqlGuards;
 import ai.chat2db.plugin.sqlserver.identifier.SqlServerIdentifierProcessor;
+import ai.chat2db.plugin.sqlserver.parser.base.TSqlLexer;
 import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.spi.model.request.UpdateSqlRequest;
@@ -25,10 +26,11 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.Token;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerSqlBuilderConstants.*;
@@ -285,7 +287,7 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
             if (versions.length > 0 && Integer.parseInt(versions[0]) >= 11) {
                 StringBuilder sqlBuilder = new StringBuilder(sql.length() + 14);
                 sqlBuilder.append(sql);
-                if (!sql.toLowerCase(Locale.ROOT).contains(ORDER_BY_KEYWORD_LOWER)) {
+                if (!hasTopLevelOrderBy(sql)) {
                     sqlBuilder.append(SQL_ORDER_BY_OPEN_PAREN_SELECT_NULL_CLOSE_PAREN);
                 }
                 sqlBuilder.append(SQLConstants.LINE_SEPARATOR_OFFSET_SQL);
@@ -308,6 +310,37 @@ public class SqlServerSqlBuilder extends DefaultSqlBuilder {
         sqlBuilder.append(SQL_AND);
         sqlBuilder.append(endRow);
         return sqlBuilder.toString();
+    }
+
+    private static boolean hasTopLevelOrderBy(String sql) {
+        TSqlLexer lexer = new TSqlLexer(CharStreams.fromString(sql));
+        int parenthesisDepth = 0;
+        boolean previousTokenWasOrder = false;
+        Token token;
+        while ((token = lexer.nextToken()).getType() != Token.EOF) {
+            if (token.getChannel() != Token.DEFAULT_CHANNEL) {
+                continue;
+            }
+            int tokenType = token.getType();
+            if (tokenType == TSqlLexer.LR_BRACKET) {
+                parenthesisDepth++;
+                previousTokenWasOrder = false;
+                continue;
+            }
+            if (tokenType == TSqlLexer.RR_BRACKET) {
+                parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+                previousTokenWasOrder = false;
+                continue;
+            }
+            if (parenthesisDepth != 0) {
+                continue;
+            }
+            if (previousTokenWasOrder && tokenType == TSqlLexer.BY) {
+                return true;
+            }
+            previousTokenWasOrder = tokenType == TSqlLexer.ORDER;
+        }
+        return false;
     }
 
 

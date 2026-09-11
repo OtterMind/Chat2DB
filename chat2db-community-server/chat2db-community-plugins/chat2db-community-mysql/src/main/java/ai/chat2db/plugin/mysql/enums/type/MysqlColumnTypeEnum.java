@@ -17,6 +17,8 @@ import java.util.Map;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_KEYWORD;
 import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_COMMENT_SPACE_SINGLE_QUOTE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_INVISIBLE;
+import static ai.chat2db.plugin.mysql.constant.MysqlSqlConstants.SQL_VISIBLE;
 
 import static ai.chat2db.plugin.mysql.constant.MysqlColumnTypeEnumConstants.*;
 @Getter
@@ -122,7 +124,6 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
     JSON("JSON", false, false, true, false, false, false, true, false, false, false, false);
 
-
     private ColumnType columnType;
 
     public static MysqlColumnTypeEnum getByType(String dataType) {
@@ -160,6 +161,10 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildCreateColumnSql(TableColumn column) {
+        return buildCreateColumnSql(column, false);
+    }
+
+    public String buildCreateColumnSql(TableColumn column, boolean forceVisibleKeyword) {
         MysqlColumnTypeEnum type = COLUMN_TYPE_MAP.get(column.getColumnType().toUpperCase());
         if (type == null) {
             return buildDefaultColumn(column,true);
@@ -183,6 +188,14 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
         script.append(buildExt(column, type)).append(" ");
 
         script.append(buildAutoIncrement(column, type)).append(" ");
+
+        // MySQL column grammar puts VISIBLE/INVISIBLE before COMMENT; emitting it after the
+        // comment produces ERROR 1064 for columns that carry a comment.
+        if (column.getVisible() != null && !column.getVisible()) {
+            script.append(SQL_INVISIBLE).append(" ");
+        } else if (forceVisibleKeyword && Boolean.TRUE.equals(column.getVisible())) {
+            script.append(SQL_VISIBLE).append(" ");
+        }
 
         script.append(buildComment(column, type)).append(" ");
 
@@ -237,48 +250,56 @@ public enum MysqlColumnTypeEnum implements IColumnBuilder {
 
     @Override
     public String buildModifyColumn(TableColumn tableColumn) {
+        return buildModifyColumn(tableColumn, false);
+    }
 
+    public String buildModifyColumn(TableColumn tableColumn, boolean forceVisibleKeyword) {
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
             return StringUtils.join("DROP COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
-            return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn));
+            return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
-                return StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn));
+                return StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
             } else {
-                return StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn));
+                return StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
             }
         }
         return "";
     }
 
     public String buildModifyColumn(TableColumn tableColumn, boolean isMove, String columnName) {
+        return buildModifyColumn(tableColumn, isMove, columnName, false);
+    }
+
+    public String buildModifyColumn(TableColumn tableColumn, boolean isMove, String columnName,
+            boolean forceVisibleKeyword) {
         if (EditStatusEnum.DELETE.name().equals(tableColumn.getEditStatus())) {
             return StringUtils.join("DROP COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getName()));
         }
         if (EditStatusEnum.ADD.name().equals(tableColumn.getEditStatus())) {
             if (isMove) {
                 if (columnName.equals("-1")) {
-                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn), " FIRST");
+                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword), " FIRST");
                 } else {
-                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn), " AFTER ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName));
+                    return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword), " AFTER ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(columnName));
                 }
             }
-            return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn));
+            return StringUtils.join("ADD COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
         }
         if (EditStatusEnum.MODIFY.name().equals(tableColumn.getEditStatus())) {
             String sql;
             if (!StringUtils.equalsIgnoreCase(tableColumn.getOldName(), tableColumn.getName())) {
-                sql = StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn));
+                sql = StringUtils.join("CHANGE COLUMN ", MysqlIdentifierProcessor.INSTANCE.quoteIdentifierAlways(tableColumn.getOldName()), " ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
             } else {
-                sql = StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn));
+                sql = StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword));
             }
             return appendColumnPosition(sql, isMove, columnName);
         }
         if (isMove) {
-            return appendColumnPosition(StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn)), true,
+            return appendColumnPosition(StringUtils.join("MODIFY COLUMN ", buildCreateColumnSql(tableColumn, forceVisibleKeyword)), true,
                     columnName);
         }
         return "";

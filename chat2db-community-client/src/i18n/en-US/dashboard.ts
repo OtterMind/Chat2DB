@@ -66,7 +66,6 @@ export default {
   'dashboard.chart.pinToDashboardSuccess': 'Pin it to the dashboard successfully',
   'import.community.dataSource': 'Import community edition link',
   'dashboard.createName.placeholder': 'Please enter the dashboard name (required)',
-  'dashboard.select.aiDataCollection': 'Please select the command set of AI chart (required)',
   'dashboard.createDescription.placeholder': 'Please enter the description of the dashboard (optional)',
   'dashboard.delete.confirm': 'Are you sure you want to delete this dashboard?',
   'dashboard.delete.chart.confirm': 'Are you sure you want to delete this chart?',

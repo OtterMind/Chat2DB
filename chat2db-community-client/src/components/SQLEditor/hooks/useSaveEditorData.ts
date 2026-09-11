@@ -4,7 +4,7 @@ import historyServer from '@/service/history';
 import i18n from '@/i18n';
 import { useWorkspaceStore } from '@/store/workspace';
 import { staticMessage } from '@chat2db/ui';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 import { useIndexDBStore } from '@/store/indexDB';
 import { SQLEditorRef } from '@/components/SQLEditor/editor/SQLEditor';
 import type { IBoundInfo } from '@/typings';
@@ -15,6 +15,7 @@ import {
   type SavedConsoleSaveMode,
 } from '@/store/workspace/utils/savedConsoleMutationCoordinator';
 import { persistSavedConsoleRecord } from '@/store/workspace/utils/savedConsolePersistence';
+import { hasUnsavedSavedConsoleChanges } from '@/utils/savedConsoleDirty';
 
 interface IProps {
   isActive?: boolean;
@@ -44,7 +45,7 @@ export const useSaveEditorData = (props: IProps) => {
   const timerRef = useRef<any>();
   const effectiveConsoleIdRef = useRef<number | undefined>(boundInfo?.consoleId);
   // Console data from the previous synchronization.
-  const lastSyncConsole = useRef<any>(defaultValue);
+  const lastSyncConsole = useRef(defaultValue ?? '');
   const storageId = boundInfo?.workspaceTabId ?? boundInfo?.consoleId;
   const isReadOnly = !!boundInfo?.readOnly;
   const [saveStatus, setSaveStatus] = useState<ConsoleStatus>(boundInfo?.status || ConsoleStatus.DRAFT);
@@ -93,7 +94,7 @@ export const useSaveEditorData = (props: IProps) => {
     }
 
     if (isReadOnly) {
-      lastSyncConsole.current = value;
+      lastSyncConsole.current = value ?? '';
       return Promise.resolve();
     }
 
@@ -106,7 +107,7 @@ export const useSaveEditorData = (props: IProps) => {
           userId: curUser?.id,
         })
         .then(() => {
-          lastSyncConsole.current = value;
+          lastSyncConsole.current = value ?? '';
         });
     }
 
@@ -139,7 +140,7 @@ export const useSaveEditorData = (props: IProps) => {
               userId: curUser?.id,
             })
             .then(() => {
-              lastSyncConsole.current = value;
+              lastSyncConsole.current = value ?? '';
             });
           return;
         }
@@ -163,7 +164,7 @@ export const useSaveEditorData = (props: IProps) => {
         getSavedConsoleList();
         emitSavedConsoleUpdated(savedBoundInfo);
         void indexDB.deleteValue(storageId);
-        lastSyncConsole.current = value;
+        lastSyncConsole.current = value ?? '';
         saveStatusRef.current = ConsoleStatus.RELEASE;
         setSaveStatus(ConsoleStatus.RELEASE);
         markWorkspaceTabConsoleSaved({
@@ -172,6 +173,7 @@ export const useSaveEditorData = (props: IProps) => {
           name: initialName,
           nameCustomized: initialName ? nameCustomized : undefined,
         });
+        editorRef.current?.resetContentDiffBaseline(value ?? '');
         if (mode === 'automatic') {
           return;
         }
@@ -180,31 +182,39 @@ export const useSaveEditorData = (props: IProps) => {
       });
   };
 
+  const persistAutomaticValue = async (value = editorRef.current?.getValue()) => {
+    if (type === WorkspaceTabType.LocalSQLFile) {
+      return true;
+    }
+    if (value === undefined || value === lastSyncConsole.current || isReadOnly) {
+      return true;
+    }
+    if (!storageId) {
+      return false;
+    }
+    try {
+      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
+        await saveConsole(value, { mode: 'automatic' });
+      } else {
+        await indexDB.setValue(storageId, {
+          ddl: value,
+          userId: curUser?.id,
+        });
+        lastSyncConsole.current = value;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to persist editor content', error);
+      return false;
+    }
+  };
+
   function timingAutoSave() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
     timerRef.current = setInterval(() => {
-      const curValue = editorRef.current?.getValue();
-      if (curValue === lastSyncConsole.current) {
-        return;
-      }
-      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        void saveConsole(curValue, { mode: 'automatic' });
-      } else {
-        if (isReadOnly || !storageId) {
-          lastSyncConsole.current = curValue;
-          return;
-        }
-        indexDB
-          .setValue(storageId, {
-            ddl: curValue,
-            userId: curUser?.id,
-          })
-          .then(() => {
-            lastSyncConsole.current = curValue;
-          });
-      }
+      void persistAutomaticValue();
     }, 5000);
   }
 
@@ -218,31 +228,11 @@ export const useSaveEditorData = (props: IProps) => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      const curValue = editorRef?.current?.getValue();
-      if (curValue === lastSyncConsole.current) {
-        return;
-      }
-      if (saveStatusRef.current === ConsoleStatus.RELEASE) {
-        void saveConsole(curValue, { mode: 'automatic' });
-      } else {
-        if (isReadOnly || !storageId) {
-          lastSyncConsole.current = curValue;
-          return;
-        }
-        indexDB
-          .setValue(storageId, {
-            ddl: curValue,
-            userId: curUser?.id,
-          })
-          .then(() => {
-            lastSyncConsole.current = curValue;
-          });
-      }
+      void persistAutomaticValue();
     } else {
       timingAutoSave();
     }
     return () => {
-      lastSyncConsole.current = null;
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -260,6 +250,10 @@ export const useSaveEditorData = (props: IProps) => {
   }, [boundInfo?.consoleId, boundInfo?.status]);
 
   useEffect(() => {
+    if (type === WorkspaceTabType.LocalSQLFile) {
+      editorRef?.current?.setValue(defaultValue || '', 'reset');
+      return;
+    }
     if (saveStatus === ConsoleStatus.RELEASE) {
       editorRef?.current?.setValue(defaultValue || '', 'reset');
     } else {
@@ -278,14 +272,9 @@ export const useSaveEditorData = (props: IProps) => {
   }, []);
 
   const hasUnsavedChanges = useCallback(
-    (value: string) => {
-      if (!value.trim()) {
-        return false;
-      }
-      return !hasSavedSqlRecord || value !== lastSyncConsole.current;
-    },
+    (value: string) => hasUnsavedSavedConsoleChanges(value, hasSavedSqlRecord, lastSyncConsole.current),
     [hasSavedSqlRecord],
   );
 
-  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges };
+  return { saveConsole, saveStatus, hasSavedSqlRecord, hasUnsavedChanges, flushAutoSave: persistAutomaticValue };
 };

@@ -1,10 +1,13 @@
 package ai.chat2db.community.web.api.adapter.ai;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WebClientParameterFilterTest {
@@ -69,5 +72,41 @@ class WebClientParameterFilterTest {
                 """);
 
         assertTrue(modifiedBody.contains("\"reasoning_content\":\"Need schema first. \""));
+    }
+
+    @Test
+    void shouldNotExposeSecretsInHeaderSummary() {
+        WebClientParameterFilter filter = new WebClientParameterFilter("openai");
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.AUTHORIZATION, "Bearer secret-api-key-1234567890");
+        headers.add(HttpHeaders.COOKIE, "CHAT2DB=session-secret-value; tenant=organization-secret-value");
+        headers.add("X-Internal-Token", "internal-token-secret-value");
+
+        String summary = filter.summarizeHeaders(headers).toString();
+
+        assertFalse(summary.contains("secret-api-key-1234567890"));
+        assertFalse(summary.contains("session-secret-value"));
+        assertFalse(summary.contains("organization-secret-value"));
+        assertFalse(summary.contains("internal-token-secret-value"));
+        assertTrue(summary.contains("****"));
+    }
+
+    @Test
+    void shouldSummarizeModelBodyWithoutPromptOrCredentials() {
+        WebClientParameterFilter filter = new WebClientParameterFilter("openai");
+
+        Map<String, Object> summary = filter.summarizeBody("""
+                {"model":"gpt-test","stream":true,"apiKey":"secret-key",
+                 "messages":[{"role":"user","content":"sensitive enterprise prompt"}],
+                 "tools":[{"type":"function"}]}
+                """);
+
+        assertEquals("json", summary.get("format"));
+        assertEquals("gpt-test", summary.get("model"));
+        assertEquals(true, summary.get("stream"));
+        assertEquals(1, summary.get("messageCount"));
+        assertEquals(1, summary.get("toolCount"));
+        assertFalse(summary.toString().contains("secret-key"));
+        assertFalse(summary.toString().contains("sensitive enterprise prompt"));
     }
 }

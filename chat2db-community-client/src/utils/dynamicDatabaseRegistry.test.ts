@@ -67,6 +67,11 @@ const freshRegistries = () => ({
   assert.equal(byName('port').defaultValue, '8812');
   assert.equal(byName('host').defaultValue, 'localhost');
   assert.equal(byName('database').defaultValue, 'qdb');
+  assert.equal(byName('alias').labelName['zh-CN'], '名称');
+  assert.equal(byName('host').labelName['zh-CN'], '主机');
+  assert.equal(byName('authenticationType').labelName['zh-CN'], '身份验证');
+  assert.equal(byName('database').labelName['zh-CN'], '数据库');
+  assert.equal(byName('url').labelName['zh-CN'], 'URL');
   assert.equal(config.baseInfo.template, 'jdbc:postgresql://{host}:{port}/{database}');
   const match = 'jdbc:postgresql://myhost:5555/mydb'.match(config.baseInfo.pattern);
   assert.equal(match?.[1], 'myhost');

@@ -203,8 +203,6 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
-        tableName = unquoteIdentifier(tableName);
-        newTableName = unquoteIdentifier(newTableName);
         String ddl = Chat2DBContext.getDbMetaData().tableDDL(connection,
                 new TableMetadataRequest(databaseName, schemaName, tableName));
         List<String> batches = prepareCopyDdlBatches(ddl, databaseName, schemaName, tableName, newTableName);
@@ -582,18 +580,7 @@ public class SqlServerDBManager extends DefaultDBManager implements IDbManager {
         if (StringUtils.isBlank(identifier)) {
             return identifier;
         }
-        return SqlServerIdentifierProcessor.INSTANCE.quoteIdentifierAlways(unquoteIdentifier(identifier));
-    }
-
-    static String unquoteIdentifier(String identifier) {
-        if (StringUtils.isBlank(identifier)) {
-            return identifier;
-        }
-        String value = identifier;
-        if (value.length() >= 2 && value.startsWith("[") && value.endsWith("]")) {
-            value = value.substring(1, value.length() - 1).replace("]]", "]");
-        }
-        return value;
+        return SqlServerIdentifierProcessor.INSTANCE.quoteIdentifierAlways(identifier);
     }
 
     private static final class DdlLexicalState {

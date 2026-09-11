@@ -420,28 +420,99 @@ public class ConnectInfo {
 
     public ConnectInfo copy() {
         ConnectInfo copy = createCopy();
-        copy.setDbVersion(this.getDbVersion());
-        copy.setDbType(this.getDbType());
-        copy.setHost(this.getHost());
-        copy.setPort(this.getPort());
-        copy.setDatabaseName(this.getDatabaseName());
-        copy.setSchemaName(this.getSchemaName());
-        copy.setUser(this.getUser());
-        copy.setPassword(this.getPassword());
-        copy.setUrl(this.getUrl());
+        copy.setLoginUser(this.getLoginUser());
         copy.setAlias(this.getAlias());
         copy.setDataSourceId(this.getDataSourceId());
+        copy.setDatabaseName(this.getDatabaseName());
+        copy.setSchemaName(this.getSchemaName());
         copy.setConsoleId(this.getConsoleId());
+        copy.setUrl(this.getUrl());
+        copy.setUser(this.getUser());
+        copy.setPassword(this.getPassword());
         copy.setConsoleOwn(this.getConsoleOwn());
-        copy.setDriver(this.getDriver());
-        copy.setSsh(this.getSsh());
-        copy.setSsl(this.getSsl());
-        copy.setJdbc(this.getJdbc());
-        copy.setExtendInfo(this.getExtendInfo());
-        copy.setDriverConfig(this.getDriverConfig());
-        copy.setSid(this.getSid());
+        copy.setDbType(this.getDbType());
+        copy.setPort(this.getPort());
         copy.setUrlWithOutDatabase(this.getUrlWithOutDatabase());
+        copy.setHost(this.getHost());
+        copy.setSsh(copySsh(this.getSsh()));
+        copy.setSsl(copySsl(this.getSsl()));
+        copy.setSid(this.getSid());
+        copy.setDriver(this.getDriver());
+        copy.setJdbc(this.getJdbc());
+        copy.setExtendInfo(copyKeyValues(this.getExtendInfo()));
+        copy.setServiceName(this.getServiceName());
+        copy.setKeyfile(this.getKeyfile());
+        copy.setEmail(this.getEmail());
+        copy.setProject(this.getProject());
+        copy.setDbVersion(this.getDbVersion());
+        copy.setDriverConfig(copyDriverConfig(this.getDriverConfig()));
         copy.setLastAccessTime(new Date());
+        return copy;
+    }
+
+    private static SSHInfo copySsh(SSHInfo source) {
+        if (source == null) {
+            return null;
+        }
+        SSHInfo copy = new SSHInfo();
+        copy.setUse(source.isUse());
+        copy.setHostName(source.getHostName());
+        copy.setPort(source.getPort());
+        copy.setUserName(source.getUserName());
+        copy.setLocalPort(source.getLocalPort());
+        copy.setAuthenticationType(source.getAuthenticationType());
+        copy.setPassword(source.getPassword());
+        copy.setKeyFile(source.getKeyFile());
+        copy.setPassphrase(source.getPassphrase());
+        copy.setRHost(source.getRHost());
+        copy.setRPort(source.getRPort());
+        return copy;
+    }
+
+    private static SSLInfo copySsl(SSLInfo source) {
+        return source == null ? null : new SSLInfo();
+    }
+
+    private static DriverConfig copyDriverConfig(DriverConfig source) {
+        if (source == null) {
+            return null;
+        }
+        DriverConfig copy = new DriverConfig();
+        copy.setUrl(source.getUrl());
+        copy.setJdbcDriver(source.getJdbcDriver());
+        copy.setJdbcDriverClass(source.getJdbcDriverClass());
+        copy.setDownloadJdbcDriverUrls(copyStrings(source.getDownloadJdbcDriverUrls()));
+        copy.setDbType(source.getDbType());
+        copy.setCustom(source.isCustom());
+        copy.setExtendInfo(copyKeyValues(source.getExtendInfo()));
+        copy.setDefaultDriver(source.isDefaultDriver());
+        return copy;
+    }
+
+    private static List<String> copyStrings(List<String> source) {
+        return source == null ? null : new ArrayList<>(source);
+    }
+
+    private static List<KeyValue> copyKeyValues(List<KeyValue> source) {
+        if (source == null) {
+            return null;
+        }
+        List<KeyValue> copy = new ArrayList<>(source.size());
+        for (KeyValue item : source) {
+            copy.add(copyKeyValue(item));
+        }
+        return copy;
+    }
+
+    private static KeyValue copyKeyValue(KeyValue source) {
+        if (source == null) {
+            return null;
+        }
+        KeyValue copy = new KeyValue();
+        copy.setKey(source.getKey());
+        copy.setValue(source.getValue());
+        copy.setRequired(source.isRequired());
+        copy.setChoices(copyStrings(source.getChoices()));
         return copy;
     }
 

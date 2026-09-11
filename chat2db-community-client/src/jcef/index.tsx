@@ -145,6 +145,9 @@ const jcefApi = {
   closeWindow: () => {
     return createJcefApi('close-window');
   },
+  acknowledgeApplicationExit: (data: { operationId: string }) => {
+    return createJcefApi<boolean>('acknowledge-application-exit', data);
+  },
   confirmCloseWindow: (data: { operationId: string }) => {
     return createJcefApi<boolean>('confirm-close-window', data);
   },

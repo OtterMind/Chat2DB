@@ -75,7 +75,7 @@ const executeUpdateDataSql = createRequest<
   { success: boolean; message: string; sql: string }
 >(
   '/api/rdb/dml/execute_update',
-  { method: 'post', errorLevel: false },
+  { method: 'post', errorLevel: false, timeout: false },
 );
 
 const viewTable = createRequest<ITableBrowseRequest, IManageResultData[]>('/api/rdb/dml/execute_table', {

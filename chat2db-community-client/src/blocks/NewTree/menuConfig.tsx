@@ -165,42 +165,12 @@ export const dropMenuConfig = {
       OperationColumn.Divider,
       OperationColumn.RemoveDataSource,
     ],
+    [TreeNodeType.MONITOR]: [],
+    [TreeNodeType.ACTIVE_TRANSACTIONS]: [OperationColumn.ActiveTransactions],
     [TreeNodeType.DATABASE_ACCOUNTS]: [OperationColumn.CreateAccount, OperationColumn.Refresh],
     [TreeNodeType.DATABASE_ACCOUNT]: [OperationColumn.OpenAccountPrivileges],
     [TreeNodeType.SCHEMAS]: [],
     [TreeNodeType.ALL_DATA]: [OperationColumn.CreateConsole, OperationColumn.OpenAllData],
-    [TreeNodeType.AI_DATA_COLLECTIONS]: [
-      OperationColumn.CreateAiDataCollection,
-      OperationColumn.CopyName,
-      OperationColumn.Refresh,
-    ],
-    [TreeNodeType.AI_DATA_COLLECTION]: [
-      // added
-      OperationColumn.AddAiDataCollectionTable,
-      OperationColumn.AddAiDataCollectionView,
-      OperationColumn.SyncAiDataCollection,
-      OperationColumn.Divider,
-      // Edit & Copy
-      OperationColumn.Rename,
-      OperationColumn.CopyName,
-      OperationColumn.CopyAiDataCollectionId,
-      OperationColumn.Divider,
-      OperationColumn.Refresh,
-      OperationColumn.Divider,
-      OperationColumn.RemoveAiDataCollection,
-    ],
-    [TreeNodeType.AI_DATA_COLLECTION_TABLE]: [
-      OperationColumn.ChangeAiTableInfo,
-      OperationColumn.CopyName,
-      OperationColumn.Divider,
-      OperationColumn.RemoveAiDataCollectionElement,
-    ],
-    [TreeNodeType.AI_DATA_COLLECTION_VIEW]: [
-      OperationColumn.ChangeAiTableInfo,
-      OperationColumn.CopyName,
-      OperationColumn.Divider,
-      OperationColumn.RemoveAiDataCollectionElement,
-    ],
     [TreeNodeType.DATABASE]: [
       // Operation
       OperationColumn.CreateConsole,
@@ -261,7 +231,6 @@ export const dropMenuConfig = {
       OperationColumn.ExportData,
       OperationColumn.ExportSqlFile,
       OperationColumn.Divider,
-      // AI
       OperationColumn.ChangeAiTableInfoNodataCollection,
       OperationColumn.Divider,
       // Dangerous operation
@@ -289,7 +258,6 @@ export const dropMenuConfig = {
       OperationColumn.Divider,
       OperationColumn.CreateConsole,
       OperationColumn.Divider,
-      // AI
       OperationColumn.ChangeAiTableInfoNodataCollection,
       OperationColumn.Divider,
       // Copy

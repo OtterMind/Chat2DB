@@ -86,27 +86,26 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
   }));
 
   const isWebOssUpload = webOssUpload && !isDesktop;
+  const isWebLocalUpload = !isDesktop && !isWebOssUpload;
 
   const fileUploadOnChange = ({ file }) => {
-    if (!isWebOssUpload) {
-      setFileList([
-        ...fileList,
-        {
-          file: file.originFileObj,
-          filePath: file.originFileObj?.path,
-          fileName: file.name,
-        },
-      ]);
+    if (isWebLocalUpload) {
+      const selectedFile = file.originFileObj || file;
+      const selection = {
+        file: selectedFile,
+        filePath: selectedFile?.path,
+        fileName: file.name,
+      };
+      setFileList((current) => (multiple ? [...current, selection] : [selection]));
+      return;
     }
 
     if (file.status === 'done') {
-      setFileList([
-        ...fileList,
-        {
-          fileName: file.name,
-          filePath: file.response.privateUrl || file.originFileObj?.path,
-        },
-      ]);
+      const selection = {
+        fileName: file.name,
+        filePath: file.response.privateUrl || file.originFileObj?.path,
+      };
+      setFileList((current) => (multiple ? [...current, selection] : [selection]));
     }
   };
 
@@ -114,9 +113,13 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
     if (fileSize) {
       const isLtxM = file.size / 1024 / 1024 < fileSize;
       if (!isLtxM) {
+        setFileList([]);
         staticMessage.error(i18n('common.text.singleUploadFileSize', fileSize));
         return Upload.LIST_IGNORE;
       }
+    }
+    if (isWebLocalUpload) {
+      return false;
     }
   };
 
@@ -153,18 +156,23 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
         </div>
       ) : null}
       <div className={cx({ [styles.hiddenUploadDraggerBox]: !!fileList.length })}>
-        {isWebOssUpload ? (
+        {!isDesktop ? (
           <Upload.Dragger
             onChange={fileUploadOnChange}
             beforeUpload={beforeUpload}
             showUploadList={false}
             accept={accept}
-            customRequest={(e) => {
-              customRequestOSS({
-                ...e,
-                uploadType: UploadTypeEnum.FEEDBACK_IMG,
-              });
-            }}
+            multiple={multiple}
+            customRequest={
+              isWebOssUpload
+                ? (e) => {
+                    customRequestOSS({
+                      ...e,
+                      uploadType: UploadTypeEnum.FEEDBACK_IMG,
+                    });
+                  }
+                : undefined
+            }
             {...rest}
           >
             <div className={styles.uploadDragger}>

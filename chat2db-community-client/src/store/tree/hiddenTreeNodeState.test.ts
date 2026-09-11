@@ -58,10 +58,10 @@ async function testConcurrentChangesPreserveInitializedData() {
         state = value;
       },
     );
-    const currentState: Record<number, string[]> = state || {};
-    const nextIds = applyHiddenTreeNodeChanges(currentState[1] || [], changedKeys);
-    state = { ...currentState, 1: nextIds };
     await coordinator.write(async () => {
+      const currentState: Record<number, string[]> = state || {};
+      const nextIds = applyHiddenTreeNodeChanges(currentState[1] || [], changedKeys);
+      state = { ...currentState, 1: nextIds };
       persistedValues.push([...nextIds]);
     });
   };
@@ -203,6 +203,92 @@ async function testFailedWriteDoesNotBlockLaterWrites() {
   assert.deepEqual(events, ['failed', 'successful']);
 }
 
+async function testForcedRereadSeesAnotherWindowChanges() {
+  const coordinator = new HiddenTreeNodeStateCoordinator<Record<number, string[]>>();
+  const reads: string[][] = [];
+  const commits: Record<number, string[]>[] = [];
+
+  const firstInitialization = coordinator.initialize(
+    async () => {
+      reads.push(['first']);
+      return { 1: ['first'] };
+    },
+    (value) => commits.push(value),
+  );
+  assert.equal(await firstInitialization, true);
+
+  const secondInitialization = coordinator.initialize(
+    async () => {
+      reads.push(['second']);
+      return { 1: ['second'] };
+    },
+    (value) => commits.push(value),
+    true,
+  );
+
+  assert.equal(await secondInitialization, true);
+  assert.deepEqual(reads, [['first'], ['second']]);
+  assert.deepEqual(commits, [{ 1: ['first'] }, { 1: ['second'] }]);
+}
+
+async function testOverlappingRefreshesAndChangesPreserveFreshHiddenIds() {
+  const coordinator = new HiddenTreeNodeStateCoordinator<Record<number, string[]>>();
+  let state = { 1: ['ALPHA'], 2: ['other'] };
+  await coordinator.initialize(async () => state, (value) => { state = value; });
+  const read = deferred<typeof state>();
+  let reads = 0;
+  const refresh = () => coordinator.initialize(() => { reads++; return read.promise; },
+    (value) => { state = value; }, true);
+  const first = refresh();
+  await nextMicrotask();
+  const changes = ['BETA', 'GAMMA'].map((key) => coordinator.write(async () => {
+    state = { ...state, 1: applyHiddenTreeNodeChanges(state[1], { add: [key], delete: [] }) };
+  }));
+  const second = refresh();
+  assert.equal(first, second, 'repeated refreshes must join the current read');
+  assert.deepEqual(state, { 1: ['ALPHA'], 2: ['other'] }, 'refresh keeps the last known state');
+  read.resolve({ 1: ['ALPHA', 'external'], 2: ['other'] });
+  await Promise.all([first, second, ...changes]);
+  assert.equal(reads, 1);
+  assert.deepEqual(state, { 1: ['ALPHA', 'external', 'BETA', 'GAMMA'], 2: ['other'] });
+}
+
+async function testRefreshAfterQueuedWriteReadsThePersistedChange() {
+  const coordinator = new HiddenTreeNodeStateCoordinator<string[]>();
+  let persisted = ['ALPHA'];
+  let state = persisted;
+  const read = () => coordinator.initialize(async () => persisted, (value) => { state = value; }, true);
+  await read();
+  const gate = deferred<void>();
+  const write = coordinator.write(async () => {
+    await gate.promise;
+    persisted = ['ALPHA', 'BETA'];
+  });
+  const refresh = read();
+  gate.resolve();
+  await Promise.all([write, refresh]);
+  assert.deepEqual(state, ['ALPHA', 'BETA']);
+}
+
+async function testFailedRefreshPreservesStateAndBlocksItsWaitingWrite() {
+  const coordinator = new HiddenTreeNodeStateCoordinator<string[]>();
+  let state = ['ALPHA'];
+  await coordinator.initialize(async () => state, (value) => { state = value; });
+  const gate = deferred<string[]>();
+  const refresh = coordinator.initialize(() => gate.promise, (value) => { state = value; }, true);
+  let wrote = false;
+  const write = coordinator.write(async () => { wrote = true; });
+  const failedRefresh = assert.rejects(refresh, /read failed/);
+  const failedWrite = assert.rejects(write, /read failed/);
+  gate.reject(new Error('read failed'));
+  await Promise.all([failedRefresh, failedWrite]);
+  assert.deepEqual(state, ['ALPHA']);
+  assert.equal(wrote, false);
+  assert.equal(await coordinator.initialize(async () => ['ALPHA', 'external'],
+    (value) => { state = value; }), true, 'a failed refresh remains retryable');
+  assert.deepEqual(state, ['ALPHA', 'external']);
+}
+
 async function run() {
   await testWriteWaitsForPendingInitialization();
   await testConcurrentChangesPreserveInitializedData();
@@ -211,6 +297,10 @@ async function run() {
   await testResetWaitsForWritesBeforeReadingAgain();
   await testInitializedStateDoesNotReadAgain();
   await testFailedWriteDoesNotBlockLaterWrites();
+  await testForcedRereadSeesAnotherWindowChanges();
+  await testOverlappingRefreshesAndChangesPreserveFreshHiddenIds();
+  await testRefreshAfterQueuedWriteReadsThePersistedChange();
+  await testFailedRefreshPreservesStateAndBlocksItsWaitingWrite();
 }
 
 run().catch((error) => {

@@ -117,6 +117,7 @@ export const useStyles = createStyles(({ css, token }) => {
     `,
     testResult: css`
       max-height: 320px;
+      overflow-y: auto;
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;

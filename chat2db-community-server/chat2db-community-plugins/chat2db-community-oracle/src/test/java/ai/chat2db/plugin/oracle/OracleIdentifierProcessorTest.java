@@ -145,12 +145,12 @@ class OracleIdentifierProcessorTest {
     }
 
     @Test
-    void dbManagerQualifiesRawAndServicePrequotedNames() throws Exception {
+    void dbManagerQualifiesRawNames() throws Exception {
         OracleDBManager manager = new OracleDBManager();
         assertEquals("DROP TABLE \"SA\"\"LES\".\"ORDERS\"",
                 manager.dropTable(null, "ignored_database", "SA\"LES", "ORDERS"));
         assertEquals("TRUNCATE TABLE \"SA\"\"LES\".\"OR\"\"DERS\"",
-                manager.truncateTable(null, "ignored_database", "SA\"LES", "\"OR\"\"DERS\""));
+                manager.truncateTable(null, "ignored_database", "SA\"LES", "OR\"DERS"));
     }
 
     @Test

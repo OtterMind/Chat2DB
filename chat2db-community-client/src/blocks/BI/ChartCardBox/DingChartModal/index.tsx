@@ -68,9 +68,11 @@ export default forwardRef((props: IProps, ref: ForwardedRef<DingChartModalRef>) 
           if (newDashboardDetail?.id) {
             updateDashboard(newDashboardDetail).then(() => {
               setChartDetail(null);
-              refreshCurrentDashboard().then(() => {
-                staticMessage.success(i18n('dashboard.chart.pinToDashboardSuccess'));
-              });
+              refreshCurrentDashboard()
+                .then(() => {
+                  staticMessage.success(i18n('dashboard.chart.pinToDashboardSuccess'));
+                })
+                .catch(() => undefined);
             });
           }
         });

@@ -38,6 +38,48 @@ export const useStyles = createStyles(({ css, token }) => {
       font-size: 12px;
       transform: translateX(-50%);
     `,
+    progressPanel: css`
+      flex: none;
+      padding: 8px 16px;
+      border-top: 1px solid ${token.colorBorderSecondary};
+      background: ${token.colorBgElevated};
+    `,
+    progressHeader: css`
+      display: flex;
+      width: 100%;
+      gap: 12px;
+      align-items: center;
+      min-width: 0;
+    `,
+    progressValue: css`
+      flex: none;
+      color: ${token.colorPrimary};
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+
+      &[data-status='SUCCESS'] {
+        color: ${token.colorSuccess};
+      }
+
+      &[data-status='FAILED'] {
+        color: ${token.colorError};
+      }
+
+      &[data-status='CANCELLED'] {
+        color: ${token.colorTextSecondary};
+      }
+    `,
+    progressBar: css`
+      min-width: 80px;
+      flex: 1;
+      line-height: 1;
+
+      :global(.ant-progress-inner),
+      :global(.ant-progress-bg) {
+        border-radius: 999px;
+      }
+    `,
     eventConsole: css`
       display: flex;
       min-height: 0;

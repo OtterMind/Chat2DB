@@ -3,6 +3,7 @@ import i18n from '@/i18n';
 import { Form, Input } from 'antd';
 import { DatabaseTypeCode } from '@/constants';
 import UploadLocalFile from '@/components/UploadLocalFile';
+import { isDesktop } from '@/utils/env';
 
 interface IProps {
   className?: string;
@@ -31,9 +32,11 @@ export default memo<IProps>((props) => {
   }
 
   const handleFileUrlListChange = (fileUrlList: any[]) => {
+    const selectedFile = fileUrlList?.[0];
     setFormData({
       ...formData,
-      jdbcDriver: fileUrlList?.[0]?.filePath ? [fileUrlList?.[0]?.filePath] : [],
+      driverFiles: !isDesktop && selectedFile?.file ? [selectedFile.file] : [],
+      jdbcDriver: selectedFile?.filePath ? [selectedFile.filePath] : [],
     });
   };
 
@@ -43,7 +46,7 @@ export default memo<IProps>((props) => {
         <Input value={formData.jdbcDriverClass} onChange={onChange} />
       </Form.Item>
       <Form.Item label={i18n('connection.title.uploadDriver')}>
-        <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={'jar'} />
+        <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={'.jar'} />
       </Form.Item>
     </Form>
   );

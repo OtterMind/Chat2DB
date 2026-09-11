@@ -262,7 +262,7 @@ class HiveIdentifierProcessorTest {
     void metaDataFormatAndNameQuoteIdentifiers() {
         assertEquals("`a``b`", HiveMetaData.format("a`b"));
         assertEquals("`a``; DROP TABLE b; --`", HiveMetaData.format("a`; DROP TABLE b; --"));
-        assertEquals("`db`.`a``b`", new HiveMetaData().getMetaDataName("ignored", "db", "a`b"));
+        assertEquals("`db`.`a``b`", new HiveMetaData().getQualifiedTableName("db", null, "a`b"));
     }
 
     @Test

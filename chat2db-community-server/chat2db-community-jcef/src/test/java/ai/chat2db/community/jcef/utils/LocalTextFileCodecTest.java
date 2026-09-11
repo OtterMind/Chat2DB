@@ -3,11 +3,17 @@ package ai.chat2db.community.jcef.utils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,6 +120,46 @@ class LocalTextFileCodecTest {
         OSOperateUtil.updateFileContent(file.toString(), updated);
 
         assertArrayEquals(updated.getBytes(GB18030), Files.readAllBytes(file));
+    }
+
+    @Test
+    void shouldWaitForAnExistingFileOperationBeforeUpdating() throws Exception {
+        Path file = tempDir.resolve("serialized.sql");
+        Files.writeString(file, "first", StandardCharsets.UTF_8);
+        CountDownLatch operationStarted = new CountDownLatch(1);
+        CountDownLatch releaseOperation = new CountDownLatch(1);
+        CountDownLatch updateStarted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> operation = executor.submit(() -> OSOperateUtil.withLocalFileOperationLock(file, ignored -> {
+                operationStarted.countDown();
+                try {
+                    if (!releaseOperation.await(5, TimeUnit.SECONDS)) {
+                        throw new IOException("Timed out waiting to release the file operation");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Interrupted while holding the file operation", exception);
+                }
+                return null;
+            }));
+            assertTrue(operationStarted.await(5, TimeUnit.SECONDS));
+
+            Future<?> update = executor.submit(() -> {
+                updateStarted.countDown();
+                return OSOperateUtil.updateFileContent(file.toString(), "second", StandardCharsets.UTF_8, false);
+            });
+            assertTrue(updateStarted.await(5, TimeUnit.SECONDS));
+            assertFalse(update.isDone());
+
+            releaseOperation.countDown();
+            operation.get(5, TimeUnit.SECONDS);
+            update.get(5, TimeUnit.SECONDS);
+            assertEquals("second", Files.readString(file, StandardCharsets.UTF_8));
+        } finally {
+            releaseOperation.countDown();
+            executor.shutdownNow();
+        }
     }
 
     private void assertDetected(

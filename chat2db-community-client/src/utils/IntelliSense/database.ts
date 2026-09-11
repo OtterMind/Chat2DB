@@ -1,6 +1,6 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import i18n from '@/i18n';
-import { SORT_TEXT } from '@/components/MonacoEditor/providers/completionProvider';
+import { SORT_TEXT } from '@/components/SQLEditor/type';
 
 export const resetSenseDatabase = () => {
   intelliSenseDatabase.dispose();

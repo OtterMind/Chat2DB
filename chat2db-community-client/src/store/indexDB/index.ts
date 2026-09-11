@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { del, get, set } from 'idb-keyval';
 import { devtools } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
@@ -29,13 +29,13 @@ export const createIndexDBAction: StateCreator<
   IndexDBAction
 > = () => ({
   setValue: (key, value) => {
-    return set(resolveIndexedDbStorageKey(key, runtimeEditionConfig.indexedDbKeyPrefix), value);
+    return set(resolveIndexedDbStorageKey(key, clientRuntime.indexedDbKeyPrefix), value);
   },
   getValue: (key) => {
-    return get(resolveIndexedDbStorageKey(key, runtimeEditionConfig.indexedDbKeyPrefix));
+    return get(resolveIndexedDbStorageKey(key, clientRuntime.indexedDbKeyPrefix));
   },
   deleteValue: (key) => {
-    return del(resolveIndexedDbStorageKey(key, runtimeEditionConfig.indexedDbKeyPrefix));
+    return del(resolveIndexedDbStorageKey(key, clientRuntime.indexedDbKeyPrefix));
   },
 });
 

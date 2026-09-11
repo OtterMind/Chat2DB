@@ -7,12 +7,11 @@ import {
   ShortcutOverrides,
   ShortcutScope,
   getEffectiveShortcutConfigMap,
-  isShortcutEventMatch,
 } from '@/constants/shortcut';
 import { useAIStore } from '@/store/ai';
 import { requestCloseActiveResultTab } from '@/service/resultTabShortcut';
 import { handleWebFrameZoom, WebFrameZoomType } from './jcefZoom';
-import { prepareGlobalShortcutHandling } from './shortcutDispatch';
+import { prepareGlobalShortcutHandling, resolveShortcutDispatch } from './shortcutDispatch';
 import { AppTitleBarAction, requestAppTitleBarAction } from './appTitleBarAction';
 
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -47,6 +46,18 @@ function isEditableElement(target: EventTarget | null): boolean {
   }
 
   return editable.isContentEditable;
+}
+
+function getShortcutScope(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return undefined;
+  }
+  const scope = target.closest<HTMLElement>('[data-shortcut-scope]')?.dataset.shortcutScope;
+  return Object.values(ShortcutScope).includes(scope as ShortcutScope) ? (scope as ShortcutScope) : undefined;
+}
+
+function isWorkspaceSaveSurface(target: EventTarget | null) {
+  return target instanceof HTMLElement && !!target.closest('[data-workspace-shortcut-surface="true"]');
 }
 
 class ShortcutManager {
@@ -104,6 +115,18 @@ class ShortcutManager {
     handelCreateConsole();
   }
 
+  private handleSaveActiveWorkspaceTab(): void {
+    const { activeConsoleId, editorList } = useWorkspaceStore.getState();
+    const editor =
+      activeConsoleId === null || activeConsoleId === undefined ? undefined : editorList?.[activeConsoleId];
+    if (!editor?.saveBeforeClose) {
+      return;
+    }
+    void editor.saveBeforeClose().catch((error) => {
+      console.error('active workspace save failed', error);
+    });
+  }
+
   private handleArouseAIAssistant(): void {
     const { showPanel, setShowPanel } = useAIStore.getState();
     setShowPanel(!showPanel);
@@ -159,22 +182,26 @@ class ShortcutManager {
   private handleKeyDown = (e: KeyboardEvent): void => {
     const isFromEditable = isEditableElement(e.target);
 
-    const { shortcutOverrides } = useGlobalStore.getState();
+    const { shortcutOverrides, mainPageActiveTab, settingPageActiveTab } = useGlobalStore.getState();
     const shortcutConfig = getEffectiveShortcutConfigMap(shortcutOverrides as ShortcutOverrides);
-
-    const matchedConfig = Object.values(shortcutConfig).find((config) => {
-      return config.scope === ShortcutScope.Global && !config.disabled && isShortcutEventMatch(e, config.binding);
+    const resolution = resolveShortcutDispatch(e, shortcutConfig, {
+      activeScope: getShortcutScope(e.target),
+      editableTarget: isFromEditable,
+      workspaceSaveAllowed:
+        mainPageActiveTab === 'workspace' &&
+        settingPageActiveTab === false &&
+        isWorkspaceSaveSurface(e.target),
     });
-
-    if (!matchedConfig) {
+    if (!resolution) {
+      return;
+    }
+    if (resolution.kind === 'workspace-save') {
+      e.preventDefault();
+      this.handleSaveActiveWorkspaceTab();
       return;
     }
 
-    if (isFromEditable && !matchedConfig.allowInEditable) {
-      return;
-    }
-
-    const action = matchedConfig.action as ShortcutAction;
+    const action = resolution.action;
 
     if (!prepareGlobalShortcutHandling(e, action)) {
       return;

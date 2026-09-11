@@ -21,9 +21,10 @@ public final class SqlSyntaxPluginRegistry {
     private SqlSyntaxPluginRegistry() {
     }
 
-    private static Map<String, ISqlSyntaxPlugin> load() {
+    static Map<String, ISqlSyntaxPlugin> load() {
         Map<String, ISqlSyntaxPlugin> plugins = new HashMap<>();
-        for (ISqlSyntaxPlugin plugin : ServiceLoader.load(ISqlSyntaxPlugin.class)) {
+        ClassLoader pluginClassLoader = ISqlSyntaxPlugin.class.getClassLoader();
+        for (ISqlSyntaxPlugin plugin : ServiceLoader.load(ISqlSyntaxPlugin.class, pluginClassLoader)) {
             String key = normalize(plugin.getDatabaseType());
             if (key != null) {
                 plugins.putIfAbsent(key, plugin);

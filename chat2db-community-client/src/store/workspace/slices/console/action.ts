@@ -1,11 +1,12 @@
 import type { StateCreator } from 'zustand/vanilla';
 import { WorkspaceStore } from '../../store';
 import { ConsoleState } from './initialState';
+import { createNextWorkspaceTabScrollRequest } from '../../utils/workspaceTabScrollRequest';
 import { ICreateConsoleParams, IBoundInfo, IWorkspaceTab } from '@/typings';
 import historyService from '@/service/history';
 import { ConsoleOpenedStatus, ConsoleStatus, WorkspaceTabType } from '@/constants';
 
-import { EditorSetValueType } from '@/components/SQLEditor';
+import type { EditorSetValueType } from '@/components/SQLEditor/type';
 import { useIndexDBStore } from '@/store/indexDB';
 import { useZoerStore } from '@/store/zoer';
 import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersistence';
@@ -135,9 +136,11 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     get().getSavedConsoleList();
   },
   setActiveConsoleId: (data) => {
-    set({
+    set((state) => ({
       activeConsoleId: data,
-    });
+      workspaceTabScrollRequest:
+        data === null ? null : createNextWorkspaceTabScrollRequest(state.workspaceTabScrollRequest, data),
+    }));
   },
   setWorkspaceTabList: (data) => {
     set({
@@ -199,7 +202,8 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
   addWorkspaceTab: (params, options) => {
     const workspaceTabList = get().workspaceTabList;
     const activate = options?.activate ?? true;
-    if (workspaceTabList?.length && workspaceTabList.findIndex((item) => item?.id === params?.id) !== -1) {
+    const existingTabIndex = workspaceTabList?.findIndex((item) => item?.id === params?.id) ?? -1;
+    if (workspaceTabList?.length && existingTabIndex !== -1) {
       if (activate) {
         get().setActiveConsoleId(params.id);
       }

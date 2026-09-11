@@ -1,4 +1,4 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { UpdatedStatus } from '@/constants/settings';
 import jcefApi from '@/jcef';
 import { IHotUpdateConfig } from '@/typings/settings';
@@ -23,7 +23,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
   get,
 ) => ({
   updateAndRestartApp: async () => {
-    if (!runtimeEditionConfig.autoUpdate) {
+    if (!clientRuntime.enableAutoUpdate) {
       return;
     }
     if (get().updateDetail.status === UpdatedStatus.Updated) {
@@ -54,7 +54,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
     }
   },
   handleCheckUpdate: async () => {
-    if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+    if (!isDesktop || !clientRuntime.enableAutoUpdate) {
       return false;
     }
     try {
@@ -72,7 +72,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
     }
   },
   syncUpdatePreferences: async () => {
-    if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+    if (!isDesktop || !clientRuntime.enableAutoUpdate) {
       return;
     }
     try {
@@ -88,7 +88,7 @@ export const createHotUpdateAction: StateCreator<GlobalStore, [['zustand/devtool
   },
   updateHotUpdateConfig: async (property, value) => {
     let persistedValue = value;
-    if (property === 'receiveBeta' && isDesktop && runtimeEditionConfig.autoUpdate) {
+    if (property === 'receiveBeta' && isDesktop && clientRuntime.enableAutoUpdate) {
       try {
         const preferences = await jcefApi.updatePreferences({ receiveBeta: Boolean(value) });
         if (!preferences.saved) {

@@ -109,6 +109,15 @@ public interface IPlugin {
     }
 
     /**
+     * Returns the optional active transaction manager for this plugin.
+     *
+     * @return active transaction manager when supported; otherwise {@code null}.
+     */
+    default IActiveTransactionManager getActiveTransactionManager() {
+        return null;
+    }
+
+    /**
      * Returns all database configurations supported by this plugin instance.
      *
      * @return supported database configurations, or an empty list when the plugin only exposes {@link #getDBConfig()}.

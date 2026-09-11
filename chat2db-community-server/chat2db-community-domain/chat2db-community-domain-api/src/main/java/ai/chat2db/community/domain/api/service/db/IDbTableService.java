@@ -153,6 +153,9 @@ public interface IDbTableService {
      */
     void truncateTable(DbTableQueryRequest dbTableQueryRequest);
 
+    /** Returns a suggested target name without creating a table or copying data. */
+    String prepareCopyTable(String tableName);
+
     /**
      * Copies a table in the current connection scope.
      *

@@ -34,12 +34,20 @@ public class ChatRequest {
 
     private String schemaName;
 
+    private String databaseType;
+
+    private String tableName;
+
+    private String columnList;
+
     private String systemPrompt;
 
 
     private String questionType;
 
     private Boolean enableTools = Boolean.TRUE;
+
+    private Boolean persistHistory = Boolean.TRUE;
 
 
     private String sessionId;

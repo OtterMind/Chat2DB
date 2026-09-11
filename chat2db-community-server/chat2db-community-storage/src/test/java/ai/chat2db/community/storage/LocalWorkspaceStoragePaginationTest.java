@@ -98,6 +98,64 @@ class LocalWorkspaceStoragePaginationTest {
     }
 
     @Test
+    void operationLogListFiltersFullSqlCaseInsensitivelyBeforePagination() {
+        String firstDdl = "a".repeat(220) + " FrOm OrDeRs";
+        String secondDdl = "b".repeat(220) + " FROM ORDERS";
+        Long firstMatchId = saveOperationLog(1L, "sales", "public", firstDdl);
+        Long secondMatchId = saveOperationLog(1L, "sales", "public", secondDdl);
+        saveOperationLog(1L, "sales", "public", "select * from customers");
+
+        OpsOperationLogPageQueryRequest request = new OpsOperationLogPageQueryRequest();
+        request.setPageNo(1);
+        request.setPageSize(1);
+        request.setSearchKey("from orders");
+
+        PageResponse<OperationLog> page1 = workspaceStorage.operationLogList(request);
+        assertEquals(1, page1.getData().size());
+        assertEquals(secondMatchId, page1.getData().get(0).getId());
+        assertEquals(secondDdl, page1.getData().get(0).getDdl());
+        assertEquals(2L, page1.getTotal());
+        assertTrue(page1.getHasNextPage());
+
+        request.setPageNo(2);
+        PageResponse<OperationLog> page2 = workspaceStorage.operationLogList(request);
+        assertEquals(1, page2.getData().size());
+        assertEquals(firstMatchId, page2.getData().get(0).getId());
+        assertEquals(firstDdl, page2.getData().get(0).getDdl());
+        assertEquals(2L, page2.getTotal());
+        assertFalse(page2.getHasNextPage());
+    }
+
+    @Test
+    void operationLogListAppliesAllScopeFiltersBeforePagination() {
+        Long firstMatchId = saveOperationLog(7L, "warehouse", "analytics", "select 1");
+        Long secondMatchId = saveOperationLog(7L, "warehouse", "analytics", "select 2");
+        saveOperationLog(8L, "warehouse", "analytics", "wrong datasource");
+        saveOperationLog(7L, "reporting", "analytics", "wrong database");
+        saveOperationLog(7L, "warehouse", "staging", "wrong schema");
+
+        OpsOperationLogPageQueryRequest request = new OpsOperationLogPageQueryRequest();
+        request.setPageNo(1);
+        request.setPageSize(1);
+        request.setDataSourceId(7L);
+        request.setDatabaseName("warehouse");
+        request.setSchemaName("analytics");
+
+        PageResponse<OperationLog> page1 = workspaceStorage.operationLogList(request);
+        assertEquals(1, page1.getData().size());
+        assertEquals(secondMatchId, page1.getData().get(0).getId());
+        assertEquals(2L, page1.getTotal());
+        assertTrue(page1.getHasNextPage());
+
+        request.setPageNo(2);
+        PageResponse<OperationLog> page2 = workspaceStorage.operationLogList(request);
+        assertEquals(1, page2.getData().size());
+        assertEquals(firstMatchId, page2.getData().get(0).getId());
+        assertEquals(2L, page2.getTotal());
+        assertFalse(page2.getHasNextPage());
+    }
+
+    @Test
     void listDataSourcesReturnsOnlyTheRequestedSlice() {
         for (int i = 0; i < 3; i++) {
             DataSourceStorage.INSTANCE.save(new DataSource());
@@ -190,5 +248,14 @@ class LocalWorkspaceStoragePaginationTest {
         } finally {
             System.clearProperty(AesGcmUtil.KEY_PROPERTY);
         }
+    }
+
+    private static Long saveOperationLog(Long dataSourceId, String databaseName, String schemaName, String ddl) {
+        OperationLog log = new OperationLog();
+        log.setDataSourceId(dataSourceId);
+        log.setDatabaseName(databaseName);
+        log.setSchemaName(schemaName);
+        log.setDdl(ddl);
+        return OperationLogStorage.INSTANCE.save(log);
     }
 }

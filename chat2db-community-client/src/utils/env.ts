@@ -14,6 +14,7 @@ export const isOfflineEnv = __RUNTIME_ENV__ === RUNTIME_ENV.OFFLINE;
 export const isCommunityEnv = __RUNTIME_ENV__ === RUNTIME_ENV.COMMUNITY;
 // Is it the web version?
 export const isWebEnv = __RUNTIME_ENV__ === RUNTIME_ENV.WEB;
+
 // Whether to use hash routing
 export const isHashHistoryEnv = isDesktopEnv || isOfflineEnv || isCommunityEnv;
 
@@ -30,6 +31,3 @@ export const isLocalStorageEnv = isOfflineEnv || isCommunityEnv;
 
 // The local test environment can be imported and exported to facilitate testing
 export const canImportExport = isDesktopEnv || isLocalStorageEnv || isDevelopment;
-
-// Is it a Pro version?
-export const isProEdition = isDesktopEnv || isWebEnv;

@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
-import UploadLocalFile from '@/components/UploadLocalFile';
+import UploadLocalFile, { type FileUrl } from '@/components/UploadLocalFile';
 import { Form, Input, Select } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
@@ -9,10 +9,12 @@ import { ImportExportType, ImportExportFileType, ImportExportTaskType } from '@/
 import { ExportTaskParams, ImportTaskParams } from '@/service/importExport';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import jcefApi from '@/jcef';
+import { hasSelectedImportFile } from './selection';
 
 interface IProps {
   className?: string;
   setIsReady?: (p: boolean) => void;
+  onImportFileChange?: (file?: FileUrl) => void;
 }
 
 export interface ImportExportFileRef {
@@ -34,10 +36,10 @@ const exportTypeOptions = [
 ];
 
 const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExportFileRef>) => {
-  const { setIsReady } = props;
+  const { setIsReady, onImportFileChange } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [exportLocation, setExportLocation] = useState<string>('');
   const [formValue, setFormValue] = useState<ImportExportFormValue>({
     exportType: ImportExportFileType.CSV,
@@ -68,21 +70,18 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
     return formValue.exportType ? exportTypeOptions.find((item) => item.value === formValue.exportType)?.accept : '';
   }, [formValue.exportType]);
 
-  // file list changes
-  useEffect(() => {
-    if (isImport) {
-      setIsReady?.(!!(fileUrlList.length || formValue.fileUrl));
-    }
-  }, [fileUrlList, formValue]);
-
   useEffect(() => {
     if (isExport) {
       setIsReady?.(!isDesktop || !!exportLocation || !!formValue.fileUrl);
     }
   }, [exportLocation, formValue]);
 
-  const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+  const handleSelectedFilesChange = (files: FileUrl[]) => {
+    setSelectedFilePaths(files.map((item) => item.filePath).filter((path): path is string => !!path));
+    if (isImport) {
+      setIsReady?.(hasSelectedImportFile(files));
+      onImportFileChange?.(files[0]);
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -111,7 +110,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
             ? ImportExportTaskType.SQL_FILE_IMPORT
             : ImportExportTaskType.DATA_FILE_IMPORT,
         tableName,
-        sourceFile: fileUrlList[0] || formValue.fileUrl || '',
+        sourceFile: selectedFilePaths[0] || '',
       };
     },
   }));
@@ -159,10 +158,10 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       )}
       {isImport && (
         <Form.Item>
-          <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={uploadLocalFileAccept} />
+          <UploadLocalFile fileUrlListChange={handleSelectedFilesChange} accept={uploadLocalFileAccept} />
         </Form.Item>
       )}
-      {isDevelopment && (
+      {isDevelopment && isExport && (
         <Form.Item label="File URL" name="fileUrl">
           <Input autoComplete="off" />
         </Form.Item>

@@ -66,7 +66,6 @@ export default {
   'dashboard.chart.pinToDashboardSuccess': '대시보드에 고정했습니다',
   'import.community.dataSource': 'Community Edition 연결 가져오기',
   'dashboard.createName.placeholder': '대시보드 이름을 입력해 주세요(필수)',
-  'dashboard.select.aiDataCollection': 'AI 차트의 명령 집합을 선택해 주세요(필수)',
   'dashboard.createDescription.placeholder': '대시보드 설명을 입력해 주세요(선택 사항)',
   'dashboard.delete.confirm': '이 대시보드를 삭제하시겠습니까?',
   'dashboard.delete.chart.confirm': '이 차트를 삭제하시겠습니까?',

@@ -1,12 +1,9 @@
 import * as monaco from 'monaco-editor';
 import keywordObj, { IFunctionParameter, IKeyword } from '../helper/keywords';
-import { DatabaseTypeCode } from '@/constants';
-import { quoteSqlCompletionIdentifier } from '@/utils/databaseJudgments';
+import { DatabaseCapability, DatabaseTypeCode } from '@/constants';
+import { isDatabaseCapabilitySupported, quoteSqlCompletionIdentifier } from '@/utils/databaseJudgments';
 import SQLParserService from '@/service/sqlParser';
-import {
-  isBackendCompletionDatabaseType,
-  isBackendCompletionModel,
-} from './sqlCompletionModelMode';
+import { isBackendCompletionModel } from './sqlCompletionModelMode';
 import {
   getBackendCompletionItemEffectiveFilterText,
   getBackendCompletionItemInsertText,
@@ -44,6 +41,7 @@ import { IBoundInfo } from '@/typings';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 import { getSqlCompletionContextId } from './sqlCompletionContext';
+import { isExpectedSqlCompletionPermissionError } from './sqlCompletionRequestError';
 
 const triggerCharacters = [' ', '.', ',', '(', ')', '[', ']', '{', '}'];
 const ACTIVATE_SNIPPET_SLOT_COMMAND = 'chat2db.sqlCompletion.activateSnippetSlot';
@@ -200,7 +198,10 @@ class CompletionProviderManager {
 
     const { dataSourceId, databaseType, databaseName, schemaName } = dbInfo;
     const completionContextId = getSqlCompletionContextId(dbInfo);
-    const backendCompletionMode = isBackendCompletionDatabaseType(databaseType);
+    const backendCompletionMode = isDatabaseCapabilitySupported(
+      databaseType,
+      DatabaseCapability.BACKEND_COMPLETION,
+    );
     if (databaseType && !backendCompletionMode) {
       this.registerBuiltInKeywordsProvider();
       this.registerBuiltInFunctionsProvider();
@@ -646,7 +647,9 @@ class CompletionProviderManager {
         activeSnippetSlot,
       });
     } catch (error) {
-      console.error('Error fetching tips:', error);
+      if (!isExpectedSqlCompletionPermissionError(error)) {
+        console.error('Error fetching tips:', error);
+      }
       return null;
     }
   }

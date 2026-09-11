@@ -13,9 +13,14 @@ import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
+import ai.chat2db.community.domain.api.model.task.extension.TaskSubmissionContext;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
+import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -113,15 +118,18 @@ class TaskExecutorRegistryTest {
                     draftReference.set(draft);
                     context.write("value");
                 });
-        ArtifactService failingArtifactService = new ArtifactService() {
+        ArtifactService failingArtifactService = new ArtifactServiceImpl() {
             @Override
-            String publish(ArtifactDraft ignored) {
+            public String publish(ArtifactDraft ignored) {
                 throw new IllegalStateException("Publish failed");
             }
         };
         TaskRunner<ExportTaskSpec> runner = new TaskRunner<>(
-                new TaskSubmission<>(task.getId(), exportSpec(), null, null),
-                runningTask, runningTaskRegistry, storage, executor, failingArtifactService);
+                new TaskSubmission<>(task.getId(), exportSpec(), null, null,
+                        new TaskSubmissionContext(task.getId(), TaskType.QUERY_RESULT_EXPORT, null,
+                                null, null, List.of(), TaskOperation.EXPORT).toExecutionContext()),
+                runningTask, runningTaskRegistry, storage, executor, failingArtifactService,
+                emptyExtensionManager());
 
         runner.run();
 
@@ -139,8 +147,13 @@ class TaskExecutorRegistryTest {
                 exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
                         (spec, context) -> {}),
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
-        taskManager = new LocalTaskManager(storage, registry, new ArtifactService(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new ArtifactService());
+        taskManager = new LocalTaskManager(storage, registry, new ArtifactServiceImpl(),
+                new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
+        return new TaskServiceImpl(storage, taskManager, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
+    }
+
+    private TaskExtensionManager emptyExtensionManager() {
+        return new TaskExtensionManager(List.of(), List.of());
     }
 
     private TaskExecutor<ExportTaskSpec> exportExecutor(String taskType,

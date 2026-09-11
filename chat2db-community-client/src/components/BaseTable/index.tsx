@@ -106,6 +106,8 @@ interface IProps {
   showEmptyState?: boolean;
   // Activates a source row from its first cell with Enter or Space.
   onActivateRow?: (index: number, rowData: any) => void;
+  // Handles clicks anywhere inside a selectable source row.
+  onRowClick?: (index: number, rowData: any) => void;
   // Handles Escape while focus is inside the table.
   onEscapeKey?: () => void;
   // Cell-edit callback.
@@ -144,6 +146,7 @@ const BaseTable = forwardRef((props: IProps, ref: ForwardedRef<BaseTableRef>) =>
     getRowIndex,
     showEmptyState = true,
     onActivateRow,
+    onRowClick,
     onEscapeKey,
   } = props;
   const { styles, cx, theme } = useStyles();
@@ -275,6 +278,18 @@ const BaseTable = forwardRef((props: IProps, ref: ForwardedRef<BaseTableRef>) =>
         },
         ...otherColumns,
       ];
+    });
+  }
+  if (onRowClick) {
+    pipeline.appendRowPropsGetter((rowData, rowIndex) => {
+      const sourceRowIndex = getRowIndex ? getRowIndex(rowData, rowIndex) : rowIndex;
+      if (sourceRowIndex === undefined) {
+        return {};
+      }
+      return {
+        onClick: () => onRowClick(sourceRowIndex, rowData),
+        style: { cursor: 'pointer' },
+      };
     });
   }
   pipeline.use(

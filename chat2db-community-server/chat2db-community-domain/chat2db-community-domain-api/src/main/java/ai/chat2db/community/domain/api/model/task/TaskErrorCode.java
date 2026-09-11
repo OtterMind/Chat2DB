@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.api.model.task;
 
 public enum TaskErrorCode {
+    TASK_SUBMISSION_REJECTED,
     TASK_EXECUTOR_REJECTED,
     TASK_INTERNAL_ERROR,
     ARTIFACT_PUBLISH_FAILED,

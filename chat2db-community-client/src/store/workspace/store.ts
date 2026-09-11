@@ -1,10 +1,9 @@
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
-import { PersistOptions, devtools, persist } from 'zustand/middleware';
+import { clientRuntime } from '@client-runtime';
+import { createJSONStorage, PersistOptions, devtools, persist } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
 import { StateCreator } from 'zustand/vanilla';
 import { WorkspaceState, initialState } from './initialState';
-import { AIAction, createAIAction } from './slices/ai/action';
 import { CommonAction, createCommonAction } from './slices/common/action';
 import { ConfigAction, createConfigAction } from './slices/config/action';
 import { ConsoleAction, createConsoleAction } from './slices/console/action';
@@ -14,9 +13,11 @@ import {
   getHydratedWorkspaceLayout,
   getPersistableWorkspaceLayout,
   getPersistableWorkspaceTabList,
+  createSafeWorkspaceStorage,
+  sanitizePersistedWorkspaceTabsState,
 } from './utils/workspaceTabPersistence';
 
-type WorkspaceAction = CommonAction & ConfigAction & ConsoleAction & ModalAction & AIAction;
+type WorkspaceAction = CommonAction & ConfigAction & ConsoleAction & ModalAction;
 export type WorkspaceStore = WorkspaceState & WorkspaceAction;
 
 const createStore: StateCreator<WorkspaceStore, [['zustand/devtools', never]]> = (...parameters) => ({
@@ -25,14 +26,12 @@ const createStore: StateCreator<WorkspaceStore, [['zustand/devtools', never]]> =
   ...createConfigAction(...parameters),
   ...createConsoleAction(...parameters),
   ...createModalAction(...parameters),
-  ...createAIAction(...parameters),
 });
 
 type GlobalPersist = Pick<
   WorkspaceStore,
   | 'layout'
   | 'currentConnectionDetails'
-  | 'defaultDataCollectionList'
   | 'workspaceTabList'
   | 'workspaceTabSplitLayout'
   | 'activeConsoleId'
@@ -41,13 +40,14 @@ type GlobalPersist = Pick<
 
 // local-storage Options
 const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
-  name: runtimeEditionConfig.workspaceStoreName,
+  name: clientRuntime.workspaceStoreName,
+  version: 1,
+  storage: createJSONStorage<GlobalPersist>(() => createSafeWorkspaceStorage(localStorage)),
   partialize: (state) => {
     const workspaceTabList = getPersistableWorkspaceTabList(state.workspaceTabList);
     return {
       layout: getPersistableWorkspaceLayout(state.layout),
       currentConnectionDetails: state.currentConnectionDetails,
-      defaultDataCollectionList: state.defaultDataCollectionList,
       workspaceTabList,
       workspaceTabSplitLayout: state.workspaceTabSplitLayout,
       activeConsoleId: getPersistableActiveConsoleId({
@@ -57,8 +57,9 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
       recentlyClosedWorkspaceTabs: getPersistableWorkspaceTabList(state.recentlyClosedWorkspaceTabs) || [],
     };
   },
+  migrate: (persistedState) => sanitizePersistedWorkspaceTabsState((persistedState || {}) as GlobalPersist),
   merge: (persistedState, currentState) => {
-    const storedState = (persistedState || {}) as Partial<GlobalPersist>;
+    const storedState = sanitizePersistedWorkspaceTabsState((persistedState || {}) as Partial<GlobalPersist>);
     return {
       ...currentState,
       ...storedState,
@@ -70,7 +71,7 @@ const persistOptions: PersistOptions<WorkspaceStore, GlobalPersist> = {
 export const useWorkspaceStore = createWithEqualityFn<WorkspaceStore>()(
   persist(
     devtools(createStore, {
-      name: runtimeEditionConfig.workspaceStoreName,
+      name: clientRuntime.workspaceStoreName,
     }),
     persistOptions,
   ),
@@ -78,9 +79,5 @@ export const useWorkspaceStore = createWithEqualityFn<WorkspaceStore>()(
 );
 
 export const clearWorkspaceStore = () => {
-  useWorkspaceStore.setState({
-    ...initialState,
-    defaultDataCollectionList: useWorkspaceStore.getState().defaultDataCollectionList,
-    createAiDataCollectionTipsCount: useWorkspaceStore.getState().createAiDataCollectionTipsCount,
-  });
+  useWorkspaceStore.setState(initialState);
 };

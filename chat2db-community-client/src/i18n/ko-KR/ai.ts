@@ -37,7 +37,7 @@ export default {
   'ai.syncDBTable.title': '데이터베이스 테이블 구조 동기화',
   'ai.syncDBTable.desc':
     '동기화는 백그라운드에서 실행되며 보통 몇 분 정도 걸립니다. 동기화가 완료되면 AI가 데이터베이스 테이블 구조 정보를 자동으로 식별할 수 있습니다',
-  'ai.select.databaseOrDataCollection': '데이터베이스 또는 데이터 컬렉션을 선택해 주세요',
+  'ai.select.database': '데이터베이스를 선택해 주세요',
   'ai.select.globalDatabaseScope': '전체 쿼리(데이터 소스를 선택하지 않음)',
   'ai.select.model': '모델을 선택해 주세요',
   'ai.sqlDebug.prefill': '다음 SQL 오류를 진단하고 실행 가능한 수정 방법을 제시해 주세요.\n\nSQL:\n{1}\n\n오류:\n{2}',

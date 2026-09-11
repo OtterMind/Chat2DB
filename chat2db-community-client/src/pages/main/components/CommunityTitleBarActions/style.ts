@@ -8,7 +8,15 @@ export const useStyles = createStyles(({ css }) => ({
     width: 100%;
     min-width: 0;
     height: 100%;
+    gap: 2px;
     -webkit-app-region: drag;
+  `,
+  productActions: css`
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    height: 100%;
+    -webkit-app-region: no-drag;
   `,
   workspaceActions: css`
     display: flex;

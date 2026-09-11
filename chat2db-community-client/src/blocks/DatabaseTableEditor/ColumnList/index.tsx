@@ -19,8 +19,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { Context } from '../index';
 import { IColumnItemNew, IColumnTypes } from '@/typings';
 import i18n from '@/i18n';
-import { EditColumnOperationType, NullableType } from '@/constants';
-import { isSqliteExistingColumnReadonly, shouldShowSqlServerSparse } from '@/utils/databaseJudgments';
+import { DatabaseCapability, EditColumnOperationType, MYSQL_VISIBILITY, NullableType } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import CustomSelect from '@/components/CustomSelect';
 import Iconfont from '@/components/Iconfont';
 import { useStyles } from './style';
@@ -197,7 +197,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
 
   const columns = useMemo(() => {
     const isEditing = (record: IColumnItemNew) => record.key === editingData?.key;
-    return [
+    const _columns = [
       {
         key: 'sort',
         width: columnsWidth[0],
@@ -270,7 +270,13 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             <div>
               <Checkbox
                 onChange={() => {
-                  if (isSqliteExistingColumnReadonly(databaseType, record.editStatus)) {
+                  if (
+                    record.editStatus !== EditColumnOperationType.Add &&
+                    !isDatabaseCapabilitySupported(
+                      databaseType,
+                      DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT,
+                    )
+                  ) {
                     return null;
                   }
                   handelNullable(record);
@@ -279,7 +285,11 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
                 disabled={
                   editingConfig?.supportNullable === false ||
                   !!record.primaryKey ||
-                  isSqliteExistingColumnReadonly(databaseType, record.editStatus)
+                  (record.editStatus !== EditColumnOperationType.Add &&
+                    !isDatabaseCapabilitySupported(
+                      databaseType,
+                      DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT,
+                    ))
                 }
               />
             </div>
@@ -295,7 +305,13 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             <div
               className={cx(styles.keyBox)}
               onClick={() => {
-                if (isSqliteExistingColumnReadonly(databaseType, record.editStatus)) {
+                if (
+                  record.editStatus !== EditColumnOperationType.Add &&
+                  !isDatabaseCapabilitySupported(
+                    databaseType,
+                    DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT,
+                  )
+                ) {
                   return null;
                 }
                 handelPrimaryKey(record);
@@ -325,7 +341,10 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
         width: columnsWidth[7],
         render: (text: string, record: IColumnItemNew) => {
           // sqlLite does not support deleting fields. New fields can be deleted.
-          if (isSqliteExistingColumnReadonly(databaseType, record.editStatus)) {
+          if (
+            record.editStatus !== EditColumnOperationType.Add &&
+            !isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT)
+          ) {
             return null;
           }
           return (
@@ -343,7 +362,42 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
         },
       },
     ];
-  }, [columnsWidth, editingData, editingConfig, databaseType, dataSource]);
+    if (isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_COLUMN_VISIBILITY)) {
+      _columns.splice(-1, 0, {
+        title: i18n('editTable.label.columnVisible'),
+        dataIndex: 'visible',
+        width: 80,
+        render: (text: boolean | null | undefined, record: IColumnItemNew) => {
+          const editable = isEditing(record);
+          const value =
+            record.visible === MYSQL_VISIBILITY.INVISIBLE.value
+              ? MYSQL_VISIBILITY.INVISIBLE.label
+              : MYSQL_VISIBILITY.VISIBLE.label;
+          return editable ? (
+            <Form.Item name="visible" style={{ margin: 0 }}>
+              <Select size="small" style={{ width: '100%' }}>
+                <Select.Option value={MYSQL_VISIBILITY.VISIBLE.value}>
+                  {MYSQL_VISIBILITY.VISIBLE.label}
+                </Select.Option>
+                <Select.Option value={MYSQL_VISIBILITY.INVISIBLE.value}>
+                  {MYSQL_VISIBILITY.INVISIBLE.label}
+                </Select.Option>
+              </Select>
+            </Form.Item>
+          ) : (
+            <div className={styles.editableCell}>{value}</div>
+          );
+        },
+      });
+    }
+    return _columns;
+  }, [
+    columnsWidth,
+    editingData,
+    editingConfig,
+    databaseType,
+    dataSource,
+  ]);
 
   const handleResize = useCallback(
     (index) =>
@@ -572,7 +626,7 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
             <Checkbox>{i18n('editTable.label.autoIncrement')}</Checkbox>
           </Form.Item>
         )}
-        {shouldShowSqlServerSparse(databaseType) && (
+        {isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_SPARSE_COLUMN) && (
           <Form.Item className={styles.checkboxContainer} labelCol={labelCol} name="sparse" valuePropName="checked">
             <Checkbox>{i18n('editTable.label.sparse')}</Checkbox>
           </Form.Item>
@@ -631,7 +685,10 @@ const ColumnList = forwardRef((props: IProps, ref: ForwardedRef<IColumnListRef>)
     return {
       onClick: () => {
         // sqlLite does not support modifying fields. New fields can be modified.
-        if (isSqliteExistingColumnReadonly(databaseType, record.editStatus)) {
+        if (
+          record.editStatus !== EditColumnOperationType.Add &&
+          !isDatabaseCapabilitySupported(databaseType, DatabaseCapability.TABLE_EDITOR_EXISTING_COLUMN_EDIT)
+        ) {
           return;
         }
         if (editingData?.key !== record.key) {

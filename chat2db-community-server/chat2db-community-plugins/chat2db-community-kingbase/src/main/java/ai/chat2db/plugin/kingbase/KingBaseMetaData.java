@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -235,159 +236,49 @@ public class KingBaseMetaData extends DefaultMetaService implements IDbMetaData 
                     }
                     return parentTableInfo;
                 });
+        StringBuilder autoIncrementDDL = new StringBuilder();
         int columnCount;
         if (!partitionInfo[0]) {
             columnCount = DefaultSQLExecutor.getInstance().preExecute(connection, COLUMN_SQL, new String[]{schemaName, tableName}, resultSet -> {
+                // Catalog attributes vary by server capability; a.* never references absent attributes.
+                Set<String> attributes = new HashSet<>();
+                ResultSetMetaData metadata = resultSet.getMetaData();
+                for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                    attributes.add(metadata.getColumnLabel(i).toLowerCase(Locale.ROOT));
+                }
                 int total = 0;
                 while (resultSet.next()) {
-                    total++;
-                    String columnName = resultSet.getString("column_name");
+                    if (total++ > 0) {
+                        ddlBuilder.append(",\n");
+                    }
+                    String columnName = resultSet.getString("attname");
                     String dataType = resultSet.getString("data_type");
                     String columnDefault = resultSet.getString("column_default");
-                    String udtName = resultSet.getString("udt_name");
-                    String identityGeneration = resultSet.getString("identity_generation");
-                    boolean isNullable = "YES".equals(resultSet.getString("is_nullable"));
-                    boolean isIdentity = "YES".equals(resultSet.getString("is_identity"));
-                    int identityIncrement = resultSet.getInt("identity_increment");
-                    int identityStart = resultSet.getInt("identity_start");
-                    int characterMaximumLength = resultSet.getInt("character_maximum_length");
-                    int numericPrecision = resultSet.getInt("numeric_precision");
-                    int numericScale = resultSet.getInt("numeric_scale");
-                    int datetimePrecision = resultSet.getInt("datetime_precision");
-                    ddlBuilder.append("\t").append(columnName).append("  ").append("\t");
-
-
-                    if ("ARRAY".equals(dataType)) {
-                        if (udtName.contains(KingBaseColumnTypeEnum.INT4.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.INTEGER.getColumnType().getTypeName().toLowerCase()).append("[]");
-                        }
-
-
- else if (udtName.contains(KingBaseColumnTypeEnum.TEXT.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.TEXT.getColumnType().getTypeName().toLowerCase()).append("[]");
-                        }
-
- else if (udtName.substring(1).equals(KingBaseColumnTypeEnum.BIT.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.BIT.getColumnType().getTypeName().toLowerCase()).append("[]");
-                        } else if (udtName.substring(1).equals(KingBaseColumnTypeEnum.TIME.name().toLowerCase())) {
-                            ddlBuilder.append("time without time zone").append("[]");
-                        } else if (udtName.substring(1).equals(KingBaseColumnTypeEnum.TIMESTAMP.name().toLowerCase())) {
-                            ddlBuilder.append("timestamp without time zone").append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.TIMETZ.name().toLowerCase())) {
-                            ddlBuilder.append("time with time zone").append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.TIMESTAMPTZ.name().toLowerCase())) {
-                            ddlBuilder.append("timestamp with time zone").append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.PATH.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.PATH.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.POINT.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.POINT.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.LINE.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.LINE.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.BOX.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.BOX.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.LSEG.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.LSEG.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.POLYGON.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.POLYGON.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.CIRCLE.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.CIRCLE.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.CIDR.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.CIDR.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.INET.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.INET.name().toLowerCase()).append("[]");
-                        } else if (udtName.substring(1).equals(KingBaseColumnTypeEnum.MACADDR.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.MACADDR.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains("macaddr8")) {
-                            ddlBuilder.append("macaddr8").append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.XML.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.XML.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.TSQUERY.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.TSQUERY.name().toLowerCase()).append("[]");
-                        } else if (udtName.contains(KingBaseColumnTypeEnum.TSVECTOR.name().toLowerCase())) {
-                            ddlBuilder.append(KingBaseColumnTypeEnum.TSVECTOR.name().toLowerCase()).append("[]");
-                        } else {
-                            ddlBuilder.append(dataType);
-                        }
-                    } else if (dataType.equalsIgnoreCase("bpchar")) {
-                        ddlBuilder.append(KingBaseColumnTypeEnum.CHAR.name().toLowerCase());
-                        if (characterMaximumLength > 0 && characterMaximumLength != 1) {
-                            ddlBuilder.append("(").append(characterMaximumLength).append(")");
-                        }
-                    } else if (dataType.equalsIgnoreCase("pg_catalog.bit")) {
-                        ddlBuilder.append(KingBaseColumnTypeEnum.BIT.name().toLowerCase());
-                        if (characterMaximumLength > 0 && characterMaximumLength != 1) {
-                            ddlBuilder.append("(").append(characterMaximumLength).append(")");
-                        }
-                    } else if (KingBaseColumnTypeEnum.BIT.name().toLowerCase().equals(dataType)) {
-                        ddlBuilder.append(udtName);
-                        if (characterMaximumLength > 0 && characterMaximumLength != 1) {
-                            ddlBuilder.append("(").append(characterMaximumLength).append(")");
-                        }
-                    }
-
-
- else if ("USER-DEFINED".equals(dataType)) {
-                        dataType = format(udtName);
-                        ddlBuilder.append(dataType);
-
-                    } else if (KingBaseColumnTypeEnum.TIMETZ.getColumnType().getTypeName().toLowerCase().equals(udtName)) {
-                        if (datetimePrecision >= 0 && datetimePrecision != 6) {
-                            dataType = "time" + "(" + datetimePrecision + ")" + " with time zone";
-                        }
-                        ddlBuilder.append(dataType);
-
-                    } else if (KingBaseColumnTypeEnum.TIMESTAMPTZ.getColumnType().getTypeName().toLowerCase().equals(udtName)) {
-                        if (datetimePrecision >= 0 && datetimePrecision != 6) {
-                            dataType = "timestamp" + "(" + datetimePrecision + ")" + " with time zone";
-                        }
-                        ddlBuilder.append(dataType);
-                    } else if (KingBaseColumnTypeEnum.TIMESTAMP.name().toLowerCase().equals(udtName)) {
-                        ddlBuilder.append(udtName);
-                        if (datetimePrecision >= 0 && datetimePrecision != 6) {
-                            ddlBuilder.append("(").append(datetimePrecision).append(")");
-                        }
-                    } else if (KingBaseColumnTypeEnum.INTERVAL.name().toLowerCase().equals(udtName)) {
-                        ddlBuilder.append(udtName);
-                        if (datetimePrecision >= 0 && datetimePrecision != 6) {
-                            ddlBuilder.append("(").append(datetimePrecision).append(")");
-                        }
-                    } else if (KingBaseColumnTypeEnum.TIME.name().toLowerCase().equals(udtName)) {
-                        ddlBuilder.append(udtName);
-                        if (datetimePrecision >= 0 && datetimePrecision != 6) {
-                            ddlBuilder.append("(").append(datetimePrecision).append(")");
-                        }
-                    } else if (KingBaseColumnTypeEnum.CHARACTER.name().toLowerCase().equals(dataType)) {
-                        ddlBuilder.append(KingBaseColumnTypeEnum.CHAR.name().toLowerCase());
-                        if (characterMaximumLength > 1) {
-                            ddlBuilder.append("(").append(characterMaximumLength).append(")");
-                        }
-                    } else if (KingBaseColumnTypeEnum.NUMERIC.name().toLowerCase().equals(dataType)) {
-                        ddlBuilder.append(dataType);
-                        if (numericPrecision > 0) {
-                            ddlBuilder.append("(").append(numericPrecision);
-                            if (numericScale != 0) {
-                                ddlBuilder.append(",").append(numericScale);
-                            }
-                            ddlBuilder.append(")");
-                        }
-                    } else {
-                        ddlBuilder.append(dataType);
-                        if (isIdentity) {
-                            ddlBuilder.append(" generated ").append(identityGeneration.toLowerCase()).append(" as identity");
-                            if (!(identityStart == 1 && identityIncrement == 1)) {
-                                ddlBuilder.append(" (start with ").append(identityStart).append(" increment by ").append(identityIncrement).append(")");
-                            }
-                        }
-                    }
-                    if (StringUtils.isNotBlank(columnDefault) && !isIdentity) {
+                    String identity = attributes.contains("attidentity") ? resultSet.getString("attidentity") : "";
+                    String generated = attributes.contains("attgenerated") ? resultSet.getString("attgenerated") : "";
+                    ddlBuilder.append("\t").append(format(columnName)).append("  \t").append(dataType);
+                    if ("i".equals(identity)) {
+                        appendAutoIncrement(connection, formatTableName, columnName, autoIncrementDDL);
+                    } else if (StringUtils.isNotBlank(identity)) {
+                        String generation = switch (identity) {
+                            case "a" -> "always";
+                            case "d" -> "by default";
+                            default -> throw new SQLException("Unsupported identity kind: " + identity);
+                        };
+                        ddlBuilder.append(" generated ").append(generation).append(" as identity");
+                        appendIdentityOptions(connection, formatTableName, columnName, ddlBuilder);
+                    } else if (StringUtils.isNotBlank(generated)) {
+                        String storage = switch (generated) {
+                            case "s" -> "stored";
+                            case "v" -> "virtual";
+                            default -> throw new SQLException("Unsupported generated column kind: " + generated);
+                        };
+                        ddlBuilder.append(" generated always as (").append(columnDefault).append(") ").append(storage);
+                    } else if (StringUtils.isNotBlank(columnDefault)) {
                         ddlBuilder.append(" default ").append(columnDefault);
                     }
-                    if (!isNullable && !isIdentity) {
+                    if (resultSet.getBoolean("attnotnull")) {
                         ddlBuilder.append(" not null");
-                    }
-
-                    if (!resultSet.isLast()) {
-                        ddlBuilder.append(",\n");
                     }
                 }
                 return total;
@@ -467,6 +358,7 @@ public class KingBaseMetaData extends DefaultMetaService implements IDbMetaData 
             });
         }
 
+        ddlBuilder.append(autoIncrementDDL);
         List<Table> tables = this.tables(connection, databaseName, schemaName, tableName);
         if (CollectionUtils.isNotEmpty(tables) && tables.size() == 1) {
             Table table = tables.get(0);
@@ -518,6 +410,52 @@ public class KingBaseMetaData extends DefaultMetaService implements IDbMetaData 
     }
 
 
+
+    private void appendIdentityOptions(Connection connection, String tableName, String columnName, StringBuilder ddl) {
+        DefaultSQLExecutor.getInstance().preExecute(connection, IDENTITY_SEQUENCE_SQL, new String[]{tableName, columnName}, resultSet -> {
+            if (!resultSet.next()) {
+                throw new SQLException("Identity sequence metadata is missing");
+            }
+            ddl.append(" (");
+            appendSequenceOptions(resultSet, ddl);
+            ddl.append(")");
+        });
+    }
+
+    private void appendAutoIncrement(Connection connection, String tableName, String columnName, StringBuilder ddl) {
+        DefaultSQLExecutor.getInstance().preExecute(connection, IDENTITY_SEQUENCE_SQL, new String[]{tableName, columnName}, resultSet -> {
+            if (!resultSet.next()) {
+                throw new SQLException("Auto-increment sequence metadata is missing");
+            }
+            String sequenceName = getMetaDataName(resultSet.getString("sequence_schema"), resultSet.getString("sequence_name"));
+            // Match sys_dump: attach AUTO_INCREMENT after keys, then restore its current counter.
+            ddl.append("alter table ").append(tableName).append(" alter column ").append(format(columnName))
+                    .append(" add auto_increment (sequence name ").append(sequenceName).append(" ");
+            appendSequenceOptions(resultSet, ddl);
+            ddl.append(")");
+            DefaultSQLExecutor.getInstance().execute(connection, SEQUENCE_STATE_SQL.formatted(sequenceName), state -> {
+                if (!state.next()) {
+                    throw new SQLException("Auto-increment sequence state is missing");
+                }
+                long nextValue = state.getLong("next_value");
+                if (nextValue > 0) {
+                    ddl.append(", auto_increment = ").append(nextValue);
+                }
+                ddl.append(";\nselect pg_catalog.setval('").append(getSQLIdentifierProcessor().escapeString(sequenceName))
+                        .append("', ").append(state.getLong("last_value")).append(", ")
+                        .append(state.getBoolean("is_called")).append(");\n");
+            });
+        });
+    }
+
+    private void appendSequenceOptions(ResultSet resultSet, StringBuilder ddl) throws SQLException {
+        ddl.append("start with ").append(resultSet.getLong("seqstart"))
+                .append(" increment by ").append(resultSet.getLong("seqincrement"))
+                .append(" minvalue ").append(resultSet.getLong("seqmin"))
+                .append(" maxvalue ").append(resultSet.getLong("seqmax"))
+                .append(" cache ").append(resultSet.getLong("seqcache"))
+                .append(resultSet.getBoolean("seqcycle") ? " cycle" : " no cycle");
+    }
 
     @Override
     public List<TableIndex> indexes(Connection connection, String databaseName, String schemaName, String tableName) {

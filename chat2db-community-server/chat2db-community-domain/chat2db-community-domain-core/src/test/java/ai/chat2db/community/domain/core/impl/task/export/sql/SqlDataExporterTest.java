@@ -2,6 +2,8 @@ package ai.chat2db.community.domain.core.impl.task.export.sql;
 
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
+import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
+import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,7 +25,7 @@ class SqlDataExporterTest {
 
     @Test
     void createsUtf8Writer(@TempDir Path tempDirectory) throws IOException {
-        SqlDataExporter exporter = new SqlDataExporter();
+        SqlDataExporter exporter = exporter();
         Path output = tempDirectory.resolve("data.sql");
         String content = "INSERT INTO test VALUES ('\u6570\u636e', '\u00e9');";
 
@@ -36,7 +38,7 @@ class SqlDataExporterTest {
 
     @Test
     void writerIOExceptionBecomesFileWriteFailure() {
-        SqlDataExporter exporter = new SqlDataExporter();
+        SqlDataExporter exporter = exporter();
         IOException failure = new IOException("Disk write failed");
         BufferedWriter writer = new BufferedWriter(new Writer() {
             @Override
@@ -59,5 +61,10 @@ class SqlDataExporterTest {
 
         assertEquals(TaskErrorCode.FILE_WRITE_FAILED.name(), exception.getCode());
         assertInstanceOf(IOException.class, exception.getCause());
+    }
+
+    private SqlDataExporter exporter() {
+        return new SqlDataExporter(new ExportCellProcessorChain(List.of()),
+                new SqlExecutionPolicyManager(List.of()));
     }
 }

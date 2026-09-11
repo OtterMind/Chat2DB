@@ -300,11 +300,14 @@ public class DefaultDBManager implements IDbManager {
 
     @Override
     public String truncateTable(Connection connection, String databaseName, String schemaName, String tableName) throws SQLException {
-        return String.format(SQL_TRUNCATE_TABLE, tableName);
+        return String.format(SQL_TRUNCATE_TABLE, Chat2DBContext.getDbMetaData().getMetaDataName(tableName));
     }
 
     @Override
     public void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName, boolean copyData) throws SQLException {
+        IDbMetaData metaData = Chat2DBContext.getDbMetaData();
+        tableName = metaData.getMetaDataName(tableName);
+        newTableName = metaData.getMetaDataName(newTableName);
         String sql;
         if (copyData) {
             sql = String.format(SQL_COPY_TABLE_DATA, newTableName, tableName);

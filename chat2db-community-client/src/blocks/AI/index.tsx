@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown, Flex, Modal } from 'antd';
 import feedback from '@/utils/feedback';
 import {
@@ -17,9 +17,14 @@ import { IChartItem } from '@/typings/dashboard';
 import { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { ChartType, LineType, OrderByType, OrderByRule } from '@/blocks/BI/Chart/constants';
 import { TableDataType } from '@/constants/table';
+import { QuestionType } from '@/constants/chat';
 import useSSERequest, { SSERequestStatus } from '@/hooks/useSSERequest';
 import AIChatInput, { ChatInputPropsRef, SendParams } from './components/AIChatInput';
-import aiStreamService, { IChatMessage, IChatSession, IModelOptionItem } from '@/service/aiStream';
+import aiStreamService, {
+  IChatMessage,
+  IChatSession,
+  IModelOptionItem,
+} from '@/service/aiStream';
 import { IChatAttachment } from '@/service/aiAttachment';
 import { useAIStore } from '@/store/ai';
 import { useTreeStore } from '@/store/tree';
@@ -36,10 +41,18 @@ import { keyboardKey } from '@/utils';
 import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
+import { ErrorCode } from '@/constants/request';
 import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
+import { usePermission } from '@/hooks/usePermission';
+import { clientRuntime } from '@client-runtime';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import type { IConnectionEnv } from '@/typings';
 import { resolveAIDataSourceContext } from './dataSourceContext';
+import { buildUserMessageNavigationItems } from './messageNavigation';
+import { Pencil } from 'lucide-react';
+import MessageNavigationRail from './components/MessageNavigationRail';
+import InlineRenameInput from '@/components/InlineRenameInput';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -137,30 +150,34 @@ function normalizeAiMarkdown(content: string) {
 
 /** applies format repair rules to normal text segments outside code fences */
 function normalizeTextSegment(text: string) {
-  return text
-    // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
-    // This avoids damaging inline ## fragments such as URL anchors.
-    .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
-    .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
-    // The title at the beginning of the line is missing a space (###1. → ### 1.)
-    .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
-    // Move a separator stuck to a sentence onto its own line (text---\n).
-    // It must end the line and cannot be preceded by |, :, or whitespace.
-    // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
-    .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
-    .replace(/((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g, (segment) =>
-      Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
-        .map(([, date, value]) => `- ${date}: ${value}`)
-        .join('\n') + '\n',
-    )
-    // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
-    .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
-    // Split list items attached to the previous sentence into standalone items.
-    // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
-    .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
-    .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
-    .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
-    .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2');
+  return (
+    text
+      // Repair headings stuck to the previous paragraph only for "text### title" and "text###1." forms.
+      // This avoids damaging inline ## fragments such as URL anchors.
+      .replace(/([^\s#\n])(#{2,6}) (?=\S)/g, '$1\n\n$2 ')
+      .replace(/([^\s#\n])(#{2,6})(?=\d)/g, '$1\n\n$2 ')
+      // The title at the beginning of the line is missing a space (###1. → ### 1.)
+      .replace(/(^|\n)(#{2,6})(?=[^#\s])/g, '$1$2 ')
+      // Move a separator stuck to a sentence onto its own line (text---\n).
+      // It must end the line and cannot be preceded by |, :, or whitespace.
+      // Avoid accidentally damaging the table separator line | --- | and alignment syntax: ---
+      .replace(/([^\n|:\s-])(-{3,})(?=\n|$)/g, '$1\n\n$2')
+      .replace(
+        /((?:-\s*\d{4}-\d{2}-\d{2}\s*[:：]\s*[-+]?\d+(?:\.\d+)?\s*)+)/g,
+        (segment) =>
+          Array.from(segment.matchAll(/-\s*(\d{4}-\d{2}-\d{2})\s*[:：]\s*([-+]?\d+(?:\.\d+)?)/g))
+            .map(([, date, value]) => `- ${date}: ${value}`)
+            .join('\n') + '\n',
+      )
+      // Add a missing space after a leading hyphen, excluding double hyphens and dividers.
+      .replace(/(^|\n)-(?=[^\s-])/g, '$1- ')
+      // Split list items attached to the previous sentence into standalone items.
+      // Exclude a preceding hyphen to preserve dividers and SQL double-hyphen comments.
+      .replace(/([^\n\s-])-\s+(?=[*`A-Za-z0-9一-鿿])/g, '$1\n- ')
+      .replace(/([0-9：:])-(?=[A-Za-z一-鿿])/g, '$1\n- ')
+      .replace(/([^\n])\s+-\s*(\d{4}-\d{2}-\d{2}\s*[：:])/g, '$1\n- $2')
+      .replace(/(^|\n)-(\d{4}-\d{2}-\d{2})/g, '$1- $2')
+  );
 }
 
 /** Table name click callback Context, used by MarkdownCodeBlock */
@@ -380,9 +397,7 @@ function parseTraceEntries(raw?: string): ITraceEntry[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed
-      .map((item) => normalizeTraceEntry(item))
-      .filter((item): item is ITraceEntry => !!item);
+    return parsed.map((item) => normalizeTraceEntry(item)).filter((item): item is ITraceEntry => !!item);
   } catch {
     return raw.trim()
       ? [
@@ -494,6 +509,12 @@ function isLikelySameSessionFromPrefix(serverMessages: IChatItem[], snapshotMess
 export default function AI({ variant = 'page', onTableClick, onPinSql, onSessionChange }: IAIProps) {
   const isPanel = variant === 'panel';
   const { styles } = useStyles();
+  const [modal, modalContextHolder] = Modal.useModal();
+  const language = useGlobalStore((state) => state.baseSetting.language);
+  const { canAny } = usePermission();
+  const canManageCustomModels =
+    clientRuntime.usesLocalPersistence ||
+    canAny(['ai', 'model', 'create'], ['ai', 'model', 'update'], ['ai', 'model', 'delete']);
   const [modelOptions, setModelOptions] = useState<Array<{ label: string; value: string; isDefault?: boolean }>>([]);
   const [modelOptionMap, setModelOptionMap] = useState<Record<string, IModelOptionItem>>({});
   const [messages, setMessages] = useState<IChatItem[]>([]);
@@ -501,8 +522,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [streamTraceEntries, setStreamTraceEntries] = useState<ITraceEntry[]>([]);
   const [expandedTraceMap, setExpandedTraceMap] = useState<Record<string, boolean>>({});
   const [streamThoughtPulse, setStreamThoughtPulse] = useState(false);
-  const [prefillInputState, setPrefillInputState] = useState<{ text: string; token: number } | null>(null);
+  const [prefillInputState, setPrefillInputState] = useState<{
+    text: string;
+    token: number;
+    questionType?: QuestionType;
+  } | null>(null);
   const [currentRoundUserMessageId, setCurrentRoundUserMessageId] = useState<string | null>(null);
+  const [highlightedUserMessageId, setHighlightedUserMessageId] = useState<string | null>(null);
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
 
   // Session management.
@@ -510,6 +536,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
   const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
 
   const streamingRef = useRef('');
@@ -539,6 +566,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const topAlignmentTimerRef = useRef<number | null>(null);
   const pendingInitialBottomSyncRef = useRef(false);
   const initialBottomSyncTimerRef = useRef<number | null>(null);
+  const messageHighlightTimerRef = useRef<number | null>(null);
+
+  const userMessageNavigationItems = useMemo(
+    () => buildUserMessageNavigationItems(messages, i18n('stream.messageNavigation.userMessage')),
+    [messages, language],
+  );
 
   const lockScrollTracking = useCallback((behavior: ScrollBehavior = 'auto') => {
     suppressScrollTrackingRef.current = true;
@@ -552,74 +585,83 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }, delay);
   }, []);
 
-  const correctMessageTopAlignment = useCallback((messageId: string) => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const messageRect = messageElement.getBoundingClientRect();
-    const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
+  const correctMessageTopAlignment = useCallback(
+    (messageId: string) => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      const delta = messageRect.top - containerRect.top - MESSAGE_TOP_ALIGNMENT_GAP;
 
-    if (Math.abs(delta) <= 1) {
-      return;
-    }
+      if (Math.abs(delta) <= 1) {
+        return;
+      }
 
-    lockScrollTracking('auto');
-    container.scrollTop += delta;
-  }, [lockScrollTracking]);
+      lockScrollTracking('auto');
+      container.scrollTop += delta;
+    },
+    [lockScrollTracking],
+  );
 
-  const scrollMessageToTop = useCallback((messageId: string, behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    const messageElement = messageElementMapRef.current.get(messageId);
-    if (!container || !messageElement) {
-      return false;
-    }
-    lockScrollTracking(behavior);
-    const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
-    container.scrollTo({
-      top: nextScrollTop,
-      behavior,
-    });
-
-    if (topAlignmentTimerRef.current !== null) {
-      window.clearTimeout(topAlignmentTimerRef.current);
-      topAlignmentTimerRef.current = null;
-    }
-
-    if (behavior === 'smooth') {
-      topAlignmentTimerRef.current = window.setTimeout(() => {
-        correctMessageTopAlignment(messageId);
-        topAlignmentTimerRef.current = null;
-      }, INITIAL_VIEWPORT_ANIMATION_MS);
-    } else {
-      requestAnimationFrame(() => {
-        correctMessageTopAlignment(messageId);
-      });
-    }
-
-    return true;
-  }, [correctMessageTopAlignment, lockScrollTracking]);
-
-  const scrollMessageListToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = messageListRef.current;
-    if (!container) {
-      return;
-    }
-    lockScrollTracking(behavior);
-    if (bottomSentinelRef.current) {
-      bottomSentinelRef.current.scrollIntoView({
-        block: 'end',
+  const scrollMessageToTop = useCallback(
+    (messageId: string, behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      const messageElement = messageElementMapRef.current.get(messageId);
+      if (!container || !messageElement) {
+        return false;
+      }
+      lockScrollTracking(behavior);
+      const nextScrollTop = Math.max(messageElement.offsetTop - MESSAGE_TOP_ALIGNMENT_GAP, 0);
+      container.scrollTo({
+        top: nextScrollTop,
         behavior,
       });
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior,
-    });
-  }, [lockScrollTracking]);
+
+      if (topAlignmentTimerRef.current !== null) {
+        window.clearTimeout(topAlignmentTimerRef.current);
+        topAlignmentTimerRef.current = null;
+      }
+
+      if (behavior === 'smooth') {
+        topAlignmentTimerRef.current = window.setTimeout(() => {
+          correctMessageTopAlignment(messageId);
+          topAlignmentTimerRef.current = null;
+        }, INITIAL_VIEWPORT_ANIMATION_MS);
+      } else {
+        requestAnimationFrame(() => {
+          correctMessageTopAlignment(messageId);
+        });
+      }
+
+      return true;
+    },
+    [correctMessageTopAlignment, lockScrollTracking],
+  );
+
+  const scrollMessageListToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const container = messageListRef.current;
+      if (!container) {
+        return;
+      }
+      lockScrollTracking(behavior);
+      if (bottomSentinelRef.current) {
+        bottomSentinelRef.current.scrollIntoView({
+          block: 'end',
+          behavior,
+        });
+        return;
+      }
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    },
+    [lockScrollTracking],
+  );
 
   const getMessageListContentHeight = useCallback(() => {
     const container = messageListRef.current;
@@ -690,26 +732,44 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!container) {
       return;
     }
-    const isAtBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
   }, [setAutoFollow]);
 
-  const setMessageElement = useCallback((id: string, node: HTMLDivElement | null) => {
-    if (node) {
-      messageElementMapRef.current.set(id, node);
-      if (pendingViewportAnchorRef.current === id) {
-        requestAnimationFrame(() => {
-          const anchored = scrollMessageToTop(id);
-          if (anchored && pendingViewportAnchorRef.current === id) {
-            pendingViewportAnchorRef.current = null;
-          }
-        });
+  const setMessageElement = useCallback(
+    (id: string, node: HTMLDivElement | null) => {
+      if (node) {
+        messageElementMapRef.current.set(id, node);
+        if (pendingViewportAnchorRef.current === id) {
+          requestAnimationFrame(() => {
+            const anchored = scrollMessageToTop(id);
+            if (anchored && pendingViewportAnchorRef.current === id) {
+              pendingViewportAnchorRef.current = null;
+            }
+          });
+        }
+        return;
       }
-      return;
-    }
-    messageElementMapRef.current.delete(id);
-  }, [scrollMessageToTop]);
+      messageElementMapRef.current.delete(id);
+    },
+    [scrollMessageToTop],
+  );
+
+  const handleNavigateToUserMessage = useCallback(
+    (messageId: string) => {
+      setAutoFollow(false);
+      scrollMessageToTop(messageId);
+      setHighlightedUserMessageId(messageId);
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+      }
+      messageHighlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedUserMessageId(null);
+        messageHighlightTimerRef.current = null;
+      }, 1600);
+    },
+    [scrollMessageToTop, setAutoFollow],
+  );
 
   const flushPendingBuffer = useCallback(() => {
     return;
@@ -813,6 +873,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const { status, request, stop } = useSSERequest<IStreamChunk>(
     {
       baseURL: '/api/v3/ai/chat/stream',
+      lang: language,
       onChunk: handleChunk,
     },
     undefined,
@@ -846,11 +907,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (nextSelectedModel?.value !== selectedModel?.value || nextSelectedModel?.label !== selectedModel?.label) {
         setSelectedModel(nextSelectedModel);
       }
-    } catch {
+    } catch (error: any) {
       setModelOptions([]);
       setModelOptionMap({});
       setSelectedModel(null);
-      feedback.error(i18n('stream.error.loadModelList'));
+      if (error?.errorCode !== ErrorCode.NeedLoggedIn) {
+        feedback.error(i18n('stream.error.loadModelList'));
+      }
     }
   }, [selectedModel?.label, selectedModel?.value, setSelectedModel]);
 
@@ -899,6 +962,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (initialBottomSyncTimerRef.current !== null) {
         window.clearTimeout(initialBottomSyncTimerRef.current);
         initialBottomSyncTimerRef.current = null;
+      }
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+        messageHighlightTimerRef.current = null;
       }
     };
   }, []);
@@ -966,11 +1033,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!isPanel) return;
 
     const handlePrefillEvent = (e: Event) => {
-      const { input } = (e as CustomEvent<{ input: string }>).detail || {};
+      const { input, questionType } = (e as CustomEvent<{ input: string; questionType?: QuestionType }>).detail || {};
       if (!input) return;
       setPrefillInputState({
         text: input,
         token: Date.now(),
+        questionType,
       });
     };
 
@@ -1190,6 +1258,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     currentSessionTitleRef.current = '';
     setCurrentRoundUserMessageId(null);
     currentRoundUserMessageIdRef.current = null;
+    setHighlightedUserMessageId(null);
+    if (messageHighlightTimerRef.current !== null) {
+      window.clearTimeout(messageHighlightTimerRef.current);
+      messageHighlightTimerRef.current = null;
+    }
     currentRoundBlockRef.current = null;
     newSessionIdRef.current = null;
     inProgressSessionRef.current = null;
@@ -1198,6 +1271,30 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     onSessionChange?.();
   }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
+
+  const startPanelHistoryRename = useCallback((session: IChatSession) => {
+    setPanelRenamingSessionId(session.id);
+  }, []);
+
+  const renamePanelHistorySession = useCallback(async (sessionId: string, title: string) => {
+    try {
+      await aiStreamService.renameChatSession({ id: sessionId, title });
+      setSessionList((prev) => prev.map((item) => (item.id === sessionId ? { ...item, title } : item)));
+      if (currentSessionIdRef.current === sessionId) {
+        setCurrentSessionTitle(title);
+        currentSessionTitleRef.current = title;
+      }
+      window.dispatchEvent(
+        new CustomEvent('stream:sessionRenamed', {
+          detail: { sessionId, title },
+        }),
+      );
+      feedback.success(i18n('common.message.modifySuccessfully'));
+    } catch (error) {
+      feedback.error(i18n('stream.sidebar.renameFailed'));
+      throw error;
+    }
+  }, []);
 
   const handleDeleteHistorySession = useCallback(
     async (sessionId: string) => {
@@ -1220,7 +1317,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const confirmDeleteHistorySession = useCallback(
     (sessionId: string) => {
-      Modal.confirm({
+      modal.confirm({
         title: i18n('stream.sidebar.deleteConfirm'),
         okText: i18n('common.button.delete'),
         cancelText: i18n('common.button.cancel'),
@@ -1228,7 +1325,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         onOk: () => handleDeleteHistorySession(sessionId),
       });
     },
-    [handleDeleteHistorySession],
+    [handleDeleteHistorySession, modal],
   );
 
   // Load a historical conversation by session ID.
@@ -1288,6 +1385,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       currentSessionTitleRef.current = title || '';
       setCurrentRoundUserMessageId(null);
       currentRoundUserMessageIdRef.current = null;
+      setHighlightedUserMessageId(null);
+      if (messageHighlightTimerRef.current !== null) {
+        window.clearTimeout(messageHighlightTimerRef.current);
+        messageHighlightTimerRef.current = null;
+      }
       currentRoundBlockRef.current = null;
 
       const inProgressSession = inProgressSessionRef.current;
@@ -1410,6 +1512,23 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     };
   }, [isPanel, handleLoadSessionById]);
 
+  useEffect(() => {
+    const handleSessionRenamed = (event: Event) => {
+      const { sessionId, title } = (event as CustomEvent<{ sessionId: string; title: string }>).detail || {};
+      if (!sessionId || !title) {
+        return;
+      }
+      setSessionList((prev) => prev.map((session) => (session.id === sessionId ? { ...session, title } : session)));
+      if (currentSessionIdRef.current === sessionId) {
+        setCurrentSessionTitle(title);
+        currentSessionTitleRef.current = title;
+      }
+    };
+
+    window.addEventListener('stream:sessionRenamed', handleSessionRenamed);
+    return () => window.removeEventListener('stream:sessionRenamed', handleSessionRenamed);
+  }, []);
+
   // Send a message.
 
   const handleSend = useCallback(
@@ -1487,7 +1606,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         inputPreview: content.slice(0, 200),
         sessionId: currentSessionId || undefined,
         dataSourceId: params.dataSourceId,
-        dataSourceCollectionId: params.dataSourceCollectionId,
         databaseName: params.databaseName,
         schemaName: params.schemaName,
         attachmentCount: params.attachments?.length || 0,
@@ -1508,10 +1626,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         history: historyPayload,
         enableTools: true,
         ...modelRequestPayload,
-        dataSourceCollectionId: params.dataSourceCollectionId,
         dataSourceId: params.dataSourceId,
         databaseName: params.databaseName,
         schemaName: params.schemaName,
+        databaseType: params.databaseType,
+        tableName: params.tableName,
+        questionType: params.questionType,
         attachments: params.attachments,
       });
 
@@ -1597,7 +1717,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       // Open a tab directly by default in workspace panel mode.
       if (isPanel && dataSourceId && databaseType) {
         const _tableName = compatibleDataBaseName(tableName, databaseType);
-        const title = [tableName].filter(Boolean).join('.') + (dataSourceName ? `[${dataSourceName}]` : '');
+        const title = buildWorkspaceObjectTabTitle({ dataSourceName, databaseName, schemaName, objectName: tableName });
         const id = `${OperationColumn.OpenTable}-${dataSourceId}-${databaseName || ''}-${
           schemaName || ''
         }-${tableName}`;
@@ -1613,6 +1733,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             dataSourceName,
             tableName,
             sql: 'select * from ' + _tableName,
+            popoverContent: title,
           },
         });
       }
@@ -1761,12 +1882,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
-  const renderThoughtStrip = (
-    traceEntries: ITraceEntry[],
-    traceKey: string,
-    active = false,
-    pulse = false,
-  ) => {
+  const renderThoughtStrip = (traceEntries: ITraceEntry[], traceKey: string, active = false, pulse = false) => {
     const hasEntries = traceEntries.length > 0;
     const expanded = !!expandedTraceMap[traceKey];
     const previewText = getTracePreview(traceEntries[traceEntries.length - 1]);
@@ -1845,7 +1961,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
               style={isLastRound && messageListContentHeight > 0 ? { minHeight: messageListContentHeight } : undefined}
             >
               {round.user && (
-                <div className={styles.userRow} ref={(node) => setMessageElement(round.user!.id, node)}>
+                <div
+                  className={cx(
+                    styles.userRow,
+                    highlightedUserMessageId === round.user.id && styles.userRowHighlighted,
+                  )}
+                  ref={(node) => setMessageElement(round.user!.id, node)}
+                >
                   <div className={styles.userBubbleWrap}>
                     {round.user.attachments?.length ? (
                       <div className={styles.userAttachmentList}>
@@ -1939,12 +2061,42 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 <div
                   className={styles.panelHistoryItem}
                   title={item.title || i18n('stream.session.title')}
-                  onClick={() => handleLoadSessionById(item.id, item.title)}
+                  onClick={() => {
+                    if (panelRenamingSessionId !== item.id) {
+                      handleLoadSessionById(item.id, item.title);
+                    }
+                  }}
                 >
-                  <span className={styles.panelHistoryTitle}>{item.title || i18n('stream.session.title')}</span>
+                  {panelRenamingSessionId === item.id ? (
+                    <InlineRenameInput
+                      key={item.id}
+                      className={styles.panelHistoryRenameInput}
+                      initialValue={item.title || ''}
+                      maxLength={50}
+                      onCancel={() => setPanelRenamingSessionId(null)}
+                      onSubmit={(title) => renamePanelHistorySession(item.id, title)}
+                    />
+                  ) : (
+                    <span className={styles.panelHistoryTitle}>{item.title || i18n('stream.session.title')}</span>
+                  )}
                   <button
+                    type="button"
+                    className={styles.panelHistoryEditBtn}
+                    title={i18n('common.text.rename')}
+                    aria-label={i18n('common.text.rename')}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      startPanelHistoryRename(item);
+                    }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
                     className={styles.panelHistoryDeleteBtn}
                     title={i18n('common.button.delete')}
+                    aria-label={i18n('common.button.delete')}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -1980,11 +2132,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   return (
     <div className={styles.main}>
+      {modalContextHolder}
       {isPanel
         ? renderPanelHeader()
         : (!isEmptyState || sessionLoading) && (
             <div className={styles.header}>
-              {currentSessionTitle || i18n('stream.session.title')}
+              <span className={styles.headerTitle}>{currentSessionTitle || i18n('stream.session.title')}</span>
               {sessionLoading && <div className={styles.topLoadingBar} />}
             </div>
           )}
@@ -1992,10 +2145,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       {sessionLoading ? null : (
         <div className={isEmptyState && !isPanel ? styles.chatPanelCenter : styles.chatPanel}>
           {!isEmptyState && (
-            <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
-              <div className={styles.contentWidth} ref={messageContentRef}>
-                {renderMessages()}
-                <div ref={bottomSentinelRef} aria-hidden="true" />
+            <div className={styles.messageListShell}>
+              <MessageNavigationRail
+                items={userMessageNavigationItems}
+                onNavigate={handleNavigateToUserMessage}
+              />
+              <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
+                <div className={styles.contentWidth} ref={messageContentRef}>
+                  {renderMessages()}
+                  <div ref={bottomSentinelRef} aria-hidden="true" />
+                </div>
               </div>
             </div>
           )}
@@ -2046,8 +2205,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                     : { minRows: 2, maxRows: 6 }
                 }
                 modelOptions={modelOptions}
-                showCustomModelEntry
-                onCustomModelClick={() => setOpenSettings(true)}
+                showCustomModelEntry={canManageCustomModels}
+                onCustomModelClick={canManageCustomModels ? () => setOpenSettings(true) : undefined}
                 customModelText={i18n('setting.modelConfig.entry')}
                 prefillInputState={prefillInputState}
                 autoFocus={isDesktop}
@@ -2056,11 +2215,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           </div>
         </div>
       )}
-      <AIModelConfigModal
-        open={openSettings}
-        onClose={() => setOpenSettings(false)}
-        onChanged={loadModelOptions}
-      />
+      {canManageCustomModels ? (
+        <AIModelConfigModal open={openSettings} onClose={() => setOpenSettings(false)} onChanged={loadModelOptions} />
+      ) : null}
     </div>
   );
 }

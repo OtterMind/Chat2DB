@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { SuggestionItem } from './interface';
 import { useEvent, useMergedState } from 'rc-util';
-import { Cascader, CascaderProps, Flex } from 'antd';
+import { Cascader, CascaderProps } from 'antd';
 import useActive from './useActive';
 import { useStyles } from './style';
 import { IconfontSvg } from '@chat2db/ui';
@@ -24,7 +24,7 @@ export interface AIAtMetionProps<T> {
 
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  onSelect?: (value: string) => void;
+  onSelect?: (item: SuggestionItem) => void;
   children?: (props: RenderChildrenProps<T>) => React.ReactElement;
   /**
    * list of suggestions
@@ -35,7 +35,15 @@ export interface AIAtMetionProps<T> {
 }
 
 function AIAtMetion<T>(props: AIAtMetionProps<T>) {
-  const { className, rootClassName, open, onOpenChange, onSelect, items, children } = props;
+  const {
+    className,
+    rootClassName,
+    open,
+    onOpenChange,
+    onSelect,
+    items,
+    children,
+  } = props;
 
   const {
     styles,
@@ -69,34 +77,37 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
   // ============================ Suggestion Items =============================
   const itemList = useMemo(() => (typeof items === 'function' ? items(info) : items), [items, info]);
 
-  const optionRender: CascaderProps<SuggestionItem>['optionRender'] = (node) => {
-    return (
-      <Flex align="center" gap={4} justify="space-between">
-        <Flex align="center" gap={4} className={styles.optionTitle}>
-          {/* {node.icon} */}
-          <IconfontSvg
-            size="md"
-            existDark={true}
-            appearance={appearance}
-            code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
-          />
-          {node.label}
-        </Flex>
-        <div className={styles.optionExtra}>{node.extra}</div>
-      </Flex>
-    );
-  };
-
   // =========================== Cascader ===========================
   const onInternalChange = (valuePath: string[]) => {
-    if (onSelect) {
-      onSelect(valuePath.at(-1) ?? '');
+    const value = valuePath.at(-1);
+    const item = itemList.find((candidate) => candidate.value === value);
+    if (onSelect && item) {
+      onSelect(item);
     }
     triggerOpen(false);
   };
 
   // =========================== Accessibility ===========================
   const [activePath, onKeyDown] = useActive(itemList, mergedOpen, onInternalChange, onClose);
+
+  const optionRender: CascaderProps<SuggestionItem>['optionRender'] = (node) => {
+    return (
+      <div className={styles.optionRow}>
+        <div className={styles.optionTitle}>
+          <IconfontSvg
+            size="md"
+            existDark={true}
+            appearance={appearance}
+            code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
+          />
+          <span className={styles.optionLabel} title={node.label}>
+            {node.label}
+          </span>
+        </div>
+        <div className={styles.optionExtra}>{node.extra}</div>
+      </div>
+    );
+  };
 
   // =========================== Children ===========================
   const childNode = children?.({
@@ -108,6 +119,7 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
   return (
     <Cascader
       size="small"
+      placement="topLeft"
       rootClassName={cx(styles.container, rootClassName)}
       options={itemList}
       open={mergedOpen}

@@ -160,19 +160,9 @@ export interface ChatVO {
    */
   fileName?: string;
   /**
-   * Data source collection ID
-   */
-  dataSourceCollectionId?: number;
-  /**
    * Excel configuration filled in by user
    */
   excelConfig?: any;
-}
-
-export interface IChatItem {
-  id: number;
-  title: string;
-  dataSourceCollectionId: number;
 }
 
 export interface PromptTableVO {

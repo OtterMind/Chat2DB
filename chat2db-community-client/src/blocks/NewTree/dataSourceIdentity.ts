@@ -84,7 +84,7 @@ export function decorateDataSourceIdentityTree(
     const style: IdentityTreeNodeStyle = {
       ...cleanNode.style,
       '--chat2db-data-source-identity-color': color,
-      '--chat2db-data-source-identity-tint': withIdentityColorAlpha(color, isDataSourceRoot ? 0.1 : 0.06),
+      '--chat2db-data-source-identity-tint': withIdentityColorAlpha(color, isDataSourceRoot ? 0.4 : 0.2),
     };
     const identityClassName = appendClassName(cleanNode.className, DATA_SOURCE_IDENTITY_NODE_CLASS);
     const className = isDataSourceRoot

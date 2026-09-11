@@ -28,4 +28,19 @@ export enum ImportExportTaskStatus {
   CANCELLED = 'CANCELLED',
 }
 
-export const ACTIVE_TASK_STATUSES = [ImportExportTaskStatus.PENDING, ImportExportTaskStatus.RUNNING];
+export const ACTIVE_TASK_STATUSES: ImportExportTaskStatus[] = [
+  ImportExportTaskStatus.PENDING,
+  ImportExportTaskStatus.RUNNING,
+];
+
+export const SKIP_IMPORT_SOURCE_FIELD = '__skip__';
+
+export enum ImportUnmappedTarget {
+  DEFAULT = 'DEFAULT',
+  NULL = 'NULL',
+}
+
+export enum ImportPreviewErrorCode {
+  DUPLICATE_SOURCE_COLUMNS = 'import.preview.duplicateSourceColumns',
+  INVALID_CSV_OPTIONS = 'import.preview.invalidCsvOptions',
+}

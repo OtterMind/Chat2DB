@@ -9,6 +9,7 @@ import ai.chat2db.plugin.sqlserver.SqlServerPlugin;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
+import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +49,37 @@ class SqlServerSqlBuilderTest {
 
         assertEquals("[dbo].[orders]", builder.tableName(null, "dbo", "orders"));
         assertEquals("[analytics].[dbo].[orders]", builder.tableName("analytics", "dbo", "orders"));
+    }
+
+    @Test
+    void shouldAddOuterOrderByWhenOnlyWindowFunctionIsOrdered() {
+        String sql = "SELECT ROW_NUMBER() OVER (ORDER BY id) AS row_no, id FROM users";
+
+        assertEquals(sql + "\n ORDER BY (SELECT NULL)\n OFFSET 0 ROWS  FETCH NEXT 10 ROWS ONLY",
+                buildPageLimit(sql));
+    }
+
+    @Test
+    void shouldAddOuterOrderByWhenOnlyNestedQueryIsOrdered() {
+        String sql = "SELECT id FROM (SELECT TOP 10 id FROM users ORDER BY id) recent_users";
+
+        assertEquals(sql + "\n ORDER BY (SELECT NULL)\n OFFSET 0 ROWS  FETCH NEXT 10 ROWS ONLY",
+                buildPageLimit(sql));
+    }
+
+    @Test
+    void shouldIgnoreOrderByInStringAndCommentWhenPaginating() {
+        String sql = "SELECT 'order by' AS label FROM users -- order by is not an outer clause";
+
+        assertEquals(sql + "\n ORDER BY (SELECT NULL)\n OFFSET 0 ROWS  FETCH NEXT 10 ROWS ONLY",
+                buildPageLimit(sql));
+    }
+
+    @Test
+    void shouldKeepExistingOuterOrderByWhenPaginating() {
+        String sql = "SELECT id FROM users ORDER /* keep deterministic */\n BY id";
+
+        assertEquals(sql + "\n OFFSET 0 ROWS  FETCH NEXT 10 ROWS ONLY", buildPageLimit(sql));
     }
 
     @Test
@@ -122,6 +154,24 @@ class SqlServerSqlBuilderTest {
 
     private static String buildCopyWhere(String columnType, String value) {
         return buildCopyWhere(columnType, Collections.singletonList(value));
+    }
+
+    private static String buildPageLimit(String sql) {
+        ConnectInfo connectInfo = new ConnectInfo();
+        connectInfo.setDbType("SQLSERVER");
+        connectInfo.setDbVersion("15.0");
+        connectInfo.setDriverConfig(new DriverConfig());
+        Chat2DBContext.putContext(connectInfo);
+        try {
+            return new SqlServerSqlBuilder().buildPageLimit(PageLimitRequest.builder()
+                    .sql(sql)
+                    .offset(0)
+                    .pageNo(1)
+                    .pageSize(10)
+                    .build());
+        } finally {
+            Chat2DBContext.removeContext();
+        }
     }
 
     private static String buildCopyWhere(String columnType, List<String> values) {

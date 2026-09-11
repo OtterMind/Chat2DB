@@ -32,7 +32,12 @@ class HTTPSRequestClass {
       throw new Error('The baseURL is not valid!');
     }
 
-    const id = options.baseURL;
+    const id = JSON.stringify([
+      options.baseURL,
+      options.model || '',
+      options.dangerouslyApiKey || '',
+      options.lang || '',
+    ]);
 
     if (!HTTPSRequestClass.instanceBuffer.has(id)) {
       HTTPSRequestClass.instanceBuffer.set(id, new HTTPSRequestClass(options));

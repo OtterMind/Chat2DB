@@ -5,11 +5,9 @@ import { useGlobalStore } from '@/store/global';
 import { debounce } from 'lodash';
 import MonacoEditor, { MonacoEditorRef } from '../MonacoEditor';
 import CompletionProviderManager from '../../core/completionProviderManager';
-import {
-  isBackendCompletionDatabaseType,
-  isBackendEditorHintsDatabaseType,
-  setBackendCompletionModel,
-} from '../../core/sqlCompletionModelMode';
+import { setBackendCompletionModel } from '../../core/sqlCompletionModelMode';
+import { DatabaseCapability } from '@/constants';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import {
   SqlCompletionHintScope,
   createSqlCompletionHintStore,
@@ -245,7 +243,10 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         if (!model) {
           return;
         }
-        const backendCompletionMode = isBackendCompletionDatabaseType(dbInfo.databaseType);
+        const backendCompletionMode = isDatabaseCapabilitySupported(
+          dbInfo.databaseType,
+          DatabaseCapability.BACKEND_COMPLETION,
+        );
         setBackendCompletionModel(model, backendCompletionMode);
         completionProvider.current?.bindModelDBInfo(model, dbInfo);
         if (!backendCompletionMode) {
@@ -702,7 +703,11 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         positionSnapshot?: monaco.Position | null,
         scope?: SqlCompletionHintScope | null,
       ) => {
-        if (!isBackendEditorHintsDatabaseType(dbInfo.databaseType) || !completionProvider.current || !editor) {
+        if (
+          !isDatabaseCapabilitySupported(dbInfo.databaseType, DatabaseCapability.BACKEND_EDITOR_HINTS) ||
+          !completionProvider.current ||
+          !editor
+        ) {
           return;
         }
         const model = editor.getModel();

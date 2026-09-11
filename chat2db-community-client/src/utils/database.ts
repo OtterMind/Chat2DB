@@ -1,9 +1,8 @@
 import { DatabaseTypeCode, NoSQLDataBaseType } from '@/constants/common';
 import { SqlTypeEnum } from '@/typings/sqlParser';
 import { TreeNodeType } from '@/constants';
-import { v4 as uuidv4 } from 'uuid';
-import { IManageResultData, IExecuteSqlParams } from '@/typings';
 import { getDatabaseSupport as getDatabaseJudgmentSupport, quoteOpenTableIdentifier } from './databaseJudgments';
+export { processResultDataList } from './resultData';
 
 /**
  * Compatible with processing database names
@@ -72,24 +71,4 @@ export const resultAndTreeNodeMap = (sqlType: SqlTypeEnum, databaseType: Databas
       break;
   }
   return treeNodeType;
-};
-
-// Perform initial processing on the execution results given by the backend. Add uuid and execution parameters
-export const processResultDataList = (
-  res: IManageResultData[],
-  executeSqlParams: Omit<IExecuteSqlParams, 'sql'> & { sql?: string },
-) => {
-  return res.map((item) => {
-    return {
-      ...item,
-      uuid: uuidv4(),
-      executeSqlParams: {
-        ...executeSqlParams,
-        // Remove single-line execution and error continuation parameters
-        single: undefined,
-        resultSetId: item.resultSetId,
-        sql: item.originalSql,
-      },
-    };
-  });
 };

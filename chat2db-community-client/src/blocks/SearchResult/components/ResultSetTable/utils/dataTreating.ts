@@ -5,6 +5,7 @@ import i18n from '@/i18n';
 import { resolveResultSetEditor } from './editorType';
 import type { HeaderMetadataVisibility } from '../headerMetadata';
 import { createResultHeaderCustomRender } from '../headerRender';
+import { getCollapsedResultCellPreview, isResultTableRowExpanded } from '../rowHeight';
 
 const handleDataDisplay = (params: {
   data: ITableHeaderItem;
@@ -144,6 +145,32 @@ const handleDataDisplay = (params: {
           ],
           expectedHeight: 28,
           expectedWidth: 90,
+        };
+      }
+      const collapsedPreview = getCollapsedResultCellPreview(
+        args.dataValue,
+        isResultTableRowExpanded(args.table, args.row),
+      );
+      if (collapsedPreview !== undefined) {
+        return {
+          elements: [
+            {
+              type: 'text',
+              fill: theme.colorText,
+              fontSize: customFontSize,
+              fontFamily: theme.fontFamily,
+              fontWeight: 400,
+              text: collapsedPreview,
+              x: 6,
+              y: 19,
+              maxLineWidth: Math.max(0, (args.rect?.width ?? 160) - 12),
+              heightLimit: 20,
+              lineClamp: 1,
+              ellipsis: true,
+            },
+          ],
+          expectedHeight: 28,
+          expectedWidth: 160,
         };
       }
       return {

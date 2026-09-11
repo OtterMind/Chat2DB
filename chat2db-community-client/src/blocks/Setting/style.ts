@@ -273,6 +273,13 @@ export const useStyles = createStyles(({ css, token }) => ({
       padding: 22px 18px 36px;
     }
   `,
+  menuContentInnerNoHeader: css`
+    padding-top: 0;
+
+    @media (max-width: 760px) {
+      padding-top: 0;
+    }
+  `,
   pageHeader: css`
     padding-bottom: 22px;
     border-bottom: 1px solid ${token.colorSplit};

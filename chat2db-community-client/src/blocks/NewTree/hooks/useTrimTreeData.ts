@@ -1,7 +1,6 @@
 import { useTreeStore } from '@/store/tree';
 import { TreeNodeData } from '@/typings';
 import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
-import useRuntimeEditionCapabilities from '@/hooks/useRuntimeEditionCapabilities';
 import { useMemo } from 'react';
 import { applyDatabaseObjectTreeSorting } from '../utils/sortTreeNodes';
 
@@ -11,7 +10,6 @@ export default function useTrimTreeData(props?: {
   excludeNodes?: string[];
 }): TreeNodeData[] | null {
   const { leafNodes, hiddenNoPermission, excludeNodes } = props || {};
-  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const { treeData, searchResult, hiddenTreeNodeIds, userConfigTree } = useTreeStore((state) => ({
     treeData: state.treeData,
     searchResult: state.searchResult,
@@ -33,7 +31,6 @@ export default function useTrimTreeData(props?: {
       hiddenNoPermission,
       excludeNodes,
       leafNodes,
-      aiDataCollectionEnabled: aiDataCollection,
     });
 
     return applyDatabaseObjectTreeSorting(filteredDatabaseAndSchema, userConfigTree.sortDatabaseObjects === true);
@@ -44,7 +41,6 @@ export default function useTrimTreeData(props?: {
     hiddenNoPermission,
     excludeNodes,
     leafNodes,
-    aiDataCollection,
     userConfigTree.sortDatabaseObjects,
   ]);
 

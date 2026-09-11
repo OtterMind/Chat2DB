@@ -55,9 +55,13 @@ public interface IDbManager {
     void exportTable(Connection connection, String databaseName, String schemaName, String tableName,
             boolean containData, TaskExecutionContext context) throws SQLException;
 
+    /** Builds truncate SQL from raw object names, quoting them inside the implementation. */
     String truncateTable(Connection connection, String databaseName, String schemaName, String tableName)
             throws SQLException;
 
+    /**
+     * Copies a table using raw object names; implementations quote identifiers when building SQL.
+     */
     void copyTable(Connection connection, String databaseName, String schemaName, String tableName, String newTableName,
             boolean copyData) throws SQLException;
 

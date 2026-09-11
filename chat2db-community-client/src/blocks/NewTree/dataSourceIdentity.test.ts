@@ -29,10 +29,10 @@ const decorated = decorateDataSourceIdentityTree([source], [identitySource]);
 assert.match(decorated?.[0].className || '', new RegExp(DATA_SOURCE_IDENTITY_NODE_CLASS));
 assert.match(decorated?.[0].className || '', new RegExp(DATA_SOURCE_IDENTITY_ROOT_CLASS));
 assert.equal(decorated?.[0].style?.['--chat2db-data-source-identity-color'], '#112233');
-assert.equal(decorated?.[0].style?.['--chat2db-data-source-identity-tint'], 'rgba(17, 34, 51, 0.1)');
+assert.equal(decorated?.[0].style?.['--chat2db-data-source-identity-tint'], 'rgba(17, 34, 51, 0.4)');
 assert.match(decorated?.[0].children?.[0].className || '', new RegExp(DATA_SOURCE_IDENTITY_NODE_CLASS));
 assert.equal(decorated?.[0].children?.[0].style?.['--chat2db-data-source-identity-color'], '#112233');
-assert.equal(decorated?.[0].children?.[0].style?.['--chat2db-data-source-identity-tint'], 'rgba(17, 34, 51, 0.06)');
+assert.equal(decorated?.[0].children?.[0].style?.['--chat2db-data-source-identity-tint'], 'rgba(17, 34, 51, 0.2)');
 assert.doesNotMatch(decorated?.[0].children?.[0].className || '', new RegExp(DATA_SOURCE_IDENTITY_ROOT_CLASS));
 assert.equal(source.style, undefined);
 

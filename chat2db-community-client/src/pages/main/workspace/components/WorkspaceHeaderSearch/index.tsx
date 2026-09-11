@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { IconButton } from '@chat2db/ui';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
 import { PANEL_TOOLBAR_BUTTON_SIZE } from '@/components/PanelToolbar';
 import SearchBar, { type SearchBarRef } from '@/components/SearchBar';
@@ -14,6 +14,7 @@ import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 
 import { useStyles } from './style';
+import { transitionWorkspaceTreeSearchQuery } from '../WorkspaceTreeSearch/lifecycle';
 
 interface WorkspaceHeaderSearchProps {
   active?: boolean;
@@ -31,7 +32,6 @@ const WorkspaceHeaderSearch = ({
   value,
 }: WorkspaceHeaderSearchProps) => {
   const [expanded, setExpanded] = useState(() => Boolean(value));
-  const searchRef = useRef<HTMLDivElement>(null);
   const searchBarRef = useRef<SearchBarRef>(null);
   const { styles, cx } = useStyles();
   const shortcutOverrides = useGlobalStore((state) => state.shortcutOverrides);
@@ -47,24 +47,9 @@ const WorkspaceHeaderSearch = ({
 
   const closeSearch = useCallback(() => {
     setExpanded(false);
-    onChange('');
+    onChange(transitionWorkspaceTreeSearchQuery(value, { type: 'exit' }));
     onClose?.();
-  }, [onChange, onClose]);
-
-  useEffect(() => {
-    if (!expanded) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!searchRef.current?.contains(event.target as Node)) {
-        closeSearch();
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [closeSearch, expanded]);
+  }, [onChange, onClose, value]);
 
   useEffect(() => {
     if (!active) {
@@ -96,22 +81,36 @@ const WorkspaceHeaderSearch = ({
   }
 
   return (
-    <div ref={searchRef} className={cx(styles.search, styles.searchExpanded)}>
+    <div className={cx(styles.search, styles.searchExpanded)}>
       <SearchBar
         ref={searchBarRef}
         className={styles.searchBar}
         placeholder={i18n('common.text.search')}
         value={value}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
+        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+          onChange(transitionWorkspaceTreeSearchQuery(value, { type: 'query-change', value: event.target.value }))
+        }
         onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
           if (event.key === 'Escape') {
             event.stopPropagation();
             closeSearch();
           }
         }}
-        suffix={
-          <span className={styles.searchMatchCount}>{value && matchCount !== undefined ? matchCount : null}</span>
-        }
+        suffix={(
+          <span className={styles.searchSuffix}>
+            <span className={styles.searchMatchCount}>{value && matchCount !== undefined ? matchCount : null}</span>
+            <button
+              type="button"
+              className={styles.closeButton}
+              aria-label={i18n('common.button.close')}
+              title={i18n('common.button.close')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={closeSearch}
+            >
+              <X aria-hidden size={13} />
+            </button>
+          </span>
+        )}
       />
     </div>
   );

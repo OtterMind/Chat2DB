@@ -73,9 +73,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                         String bodyString = new String(capturedBody, StandardCharsets.UTF_8);
                         String modifiedBody = modifyRequestBody(bodyString);
                         log.info("Original Request Url: {}", request.url().toString());
-                        log.info("Original Request Headers: {}", JSON.toJSONString(request.headers()));
                         log.info("Original Request Header Summary: {}", JSON.toJSONString(summarizeHeaders(request.headers())));
-                        log.info("Original Request Body: {}", bodyString);
+                        log.info("Original Request Body Summary: {}", JSON.toJSONString(summarizeBody(bodyString)));
                         DataBufferFactory bufferFactory = outputMessage.bufferFactory();
                         DataBuffer buffer = bufferFactory.wrap(modifiedBody.getBytes(StandardCharsets.UTF_8));
                         HttpHeaders headers = outputMessage.getHeaders();
@@ -87,7 +86,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
         return next.exchange(modifiedRequest)
                 .map(response -> {
                     log.info("Original Response Status: {}", response.statusCode());
-                    log.info("Original Response Headers: {}", JSON.toJSONString(response.headers().asHttpHeaders()));
+                    log.info("Original Response Header Summary: {}",
+                            JSON.toJSONString(summarizeHeaders(response.headers().asHttpHeaders())));
                     if (response.statusCode().isError()) {
                         return response;
                     }
@@ -118,8 +118,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                             }))
                             .doOnError(error -> {
                                 String partialResponseBody = responseBodyBuilder.get().toString();
-                                log.error("Original Response Body,error:{},Body:{}",
-                                        error.getMessage(), partialResponseBody, error);
+                                log.error("Original Response Body,error:{},summary:{}",
+                                        error.getMessage(), JSON.toJSONString(summarizeBody(partialResponseBody)), error);
                             })
                             .doFinally(signalType -> {
                                 if (signalType == SignalType.ON_ERROR) {
@@ -127,7 +127,8 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
                                 }
                                 String fullResponseBody = responseBodyBuilder.get().toString();
                                 rememberOpenAiReasoningForToolCalls(fullResponseBody);
-                                log.info("Original Response Body,signal:{},body:{}", signalType, fullResponseBody);
+                                log.info("Original Response Body,signal:{},summary:{}", signalType,
+                                        JSON.toJSONString(summarizeBody(fullResponseBody)));
                             })
                             .concatWith(Flux.defer(() -> {
                                 String body = responseBodyBuilder.get().toString();
@@ -373,7 +374,7 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
         return value == null || value.trim().isEmpty();
     }
 
-    private List<Map<String, Object>> summarizeHeaders(org.springframework.http.HttpHeaders headers) {
+    List<Map<String, Object>> summarizeHeaders(org.springframework.http.HttpHeaders headers) {
         List<Map<String, Object>> summary = new ArrayList<>();
         headers.forEach((key, values) -> {
             if (values == null) {
@@ -388,6 +389,50 @@ public class WebClientParameterFilter implements ExchangeFilterFunction {
             }
         });
         return summary;
+    }
+
+    Map<String, Object> summarizeBody(String body) {
+        Map<String, Object> summary = new java.util.LinkedHashMap<>();
+        summary.put("length", body == null ? 0 : body.length());
+        if (isBlank(body)) {
+            return summary;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            if (root != null && root.isObject()) {
+                summary.put("format", "json");
+                putTextMetadata(summary, root, "model");
+                putBooleanMetadata(summary, root, "stream");
+                putArraySize(summary, root, "messages", "messageCount");
+                putArraySize(summary, root, "tools", "toolCount");
+                return summary;
+            }
+        } catch (Exception ignored) {
+            // SSE and partial responses are summarized by shape only.
+        }
+        summary.put("format", body.contains("data:") ? "sse" : "text");
+        return summary;
+    }
+
+    private void putTextMetadata(Map<String, Object> summary, JsonNode root, String fieldName) {
+        JsonNode value = root.get(fieldName);
+        if (value != null && value.isTextual()) {
+            summary.put(fieldName, truncateForLog(value.asText()));
+        }
+    }
+
+    private void putBooleanMetadata(Map<String, Object> summary, JsonNode root, String fieldName) {
+        JsonNode value = root.get(fieldName);
+        if (value != null && value.isBoolean()) {
+            summary.put(fieldName, value.asBoolean());
+        }
+    }
+
+    private void putArraySize(Map<String, Object> summary, JsonNode root, String fieldName, String summaryName) {
+        JsonNode value = root.get(fieldName);
+        if (value != null && value.isArray()) {
+            summary.put(summaryName, value.size());
+        }
     }
 
 

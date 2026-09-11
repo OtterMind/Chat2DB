@@ -113,6 +113,11 @@ public final class MysqlSqlCompletionStatementLocator implements ISqlCompletionS
                     SqlCompletionStatementWindowTypeEnum.EMPTY_STATEMENT.name());
         }
 
+        List<Token> tokens = MysqlSqlCompletionTokenUtil.tokens(parseSql);
+        if (canUseTokenWindow(tokens) && !hasUnsafeLexerErrors(sourceSql)) {
+            return tokenFallbackWindow(sourceSql, parseSql, cursor, tokens, List.of());
+        }
+
         ParserWindowResult rawResult = parseWindow(parseSql, cursor, StatementWindowAuthorityEnum.RAW_PARSE);
         if (rawResult.proof().isPresent() && rawResult.syntaxErrors() == 0) {
             return toWindow(sourceSql, parseSql, rawResult.proof().get(), cursor);
@@ -146,9 +151,16 @@ public final class MysqlSqlCompletionStatementLocator implements ISqlCompletionS
     }
 
     private SqlCompletionStatementWindow tokenFallbackWindow(String sourceSql, String parseSql, int cursor) {
-        CommonTokenStream tokenStream = MysqlSqlCompletionTokenUtil.tokenStream(parseSql);
-        List<Token> tokens = tokenStream.getTokens();
+        List<Token> tokens = MysqlSqlCompletionTokenUtil.tokens(parseSql);
         List<RoutineWindow> routineWindows = findRoutineWindows(tokens, parseSql);
+        return tokenFallbackWindow(sourceSql, parseSql, cursor, tokens, routineWindows);
+    }
+
+    private SqlCompletionStatementWindow tokenFallbackWindow(String sourceSql,
+                                                              String parseSql,
+                                                              int cursor,
+                                                              List<Token> tokens,
+                                                              List<RoutineWindow> routineWindows) {
         RoutineWindow routineWindow = containingRoutineWindow(routineWindows, cursor);
         if (Objects.nonNull(routineWindow)) {
             return new SqlCompletionStatementWindow(
@@ -183,6 +195,52 @@ public final class MysqlSqlCompletionStatementLocator implements ISqlCompletionS
                 windowEnd,
                 cursor - windowStart,
                 type.name());
+    }
+
+    private boolean canUseTokenWindow(List<Token> tokens) {
+        boolean hasStatementSeparator = false;
+        int parenthesisDepth = 0;
+        int topLevelStatementStarts = 0;
+        boolean balancedParentheses = true;
+        for (Token token : tokens) {
+            if (!MysqlSqlCompletionTokenUtil.isDefaultToken(token)) {
+                continue;
+            }
+            int tokenType = token.getType();
+            if (tokenType == MySqlLexer.SEMI) {
+                hasStatementSeparator = true;
+                continue;
+            }
+            if (tokenType == MySqlLexer.CREATE || tokenType == MySqlLexer.DELIMITER_STATEMENT) {
+                return false;
+            }
+            if (tokenType == MySqlLexer.LR_BRACKET) {
+                parenthesisDepth++;
+                continue;
+            }
+            if (tokenType == MySqlLexer.RR_BRACKET) {
+                if (parenthesisDepth == 0) {
+                    balancedParentheses = false;
+                } else {
+                    parenthesisDepth--;
+                }
+                continue;
+            }
+            if (parenthesisDepth == 0 && isSqlStatementStartToken(tokenType)) {
+                topLevelStatementStarts++;
+            }
+        }
+        return balancedParentheses && parenthesisDepth == 0
+                && (hasStatementSeparator || topLevelStatementStarts == 1);
+    }
+
+    private boolean hasUnsafeLexerErrors(String sourceSql) {
+        for (Token token : MysqlSqlCompletionTokenUtil.tokens(sourceSql)) {
+            if (token.getChannel() == MySqlLexer.ERRORCHANNEL && !"?".equals(token.getText())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ParserWindowResult parseWindow(String sql, int cursor, StatementWindowAuthorityEnum authority) {

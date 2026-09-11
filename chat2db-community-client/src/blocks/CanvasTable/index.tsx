@@ -40,6 +40,7 @@ interface IProps {
   customOptions?: ICustomOptions;
   // callback after initialization is completed
   onInit?: (tableInstance: ITableInstance) => void;
+  onBeforeRecordsChange?: (tableInstance: ITableInstance) => void;
   onCopy?: () => void;
   onPaste?: () => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
@@ -90,6 +91,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
     records,
     columns,
     onInit,
+    onBeforeRecordsChange,
     tooltip,
     options = null,
     customOptions,
@@ -211,8 +213,9 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   // update records
   useEffect(() => {
     if (!tableInstance) return;
+    onBeforeRecordsChange?.(tableInstance);
     tableInstance.setRecords(records);
-  }, [records]);
+  }, [records, onBeforeRecordsChange, tableInstance]);
 
   // update columns
   useEffect(() => {

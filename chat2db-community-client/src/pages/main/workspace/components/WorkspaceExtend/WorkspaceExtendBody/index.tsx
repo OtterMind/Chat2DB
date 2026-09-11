@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { extendConfig, isWorkspaceRecordCode } from '../config';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useStyles } from './style';
@@ -10,7 +10,7 @@ import {
 } from '@/store/workspace/utils/resultInspector';
 import WorkspaceRecordSwitcher from '../WorkspaceRecordSwitcher';
 
-export default () => {
+export default memo(() => {
   const { styles } = useStyles();
 
   const currentWorkspaceExtend = useWorkspaceStore((state) => state.currentWorkspaceExtend);
@@ -43,4 +43,4 @@ export default () => {
   ) : (
     false
   );
-};
+});

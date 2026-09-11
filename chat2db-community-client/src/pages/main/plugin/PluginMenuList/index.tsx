@@ -6,7 +6,7 @@ import { openWebPage } from '@/utils/url';
 import { useStyles } from './style';
 import PluginMenuItem from '../PluginMenuItem';
 import i18n from '@/i18n';
-import { useUserStore } from '@/store/user';
+import { useUserStore } from '@/store/session';
 import { staticMessage } from '@chat2db/ui';
 interface PluginMenuListProps {
   curPlugin?: IPluginItem;

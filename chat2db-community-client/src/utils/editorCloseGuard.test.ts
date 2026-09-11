@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { WorkspaceTabType } from '@/constants/workspace';
 import type { IWorkspaceTab } from '@/typings';
-import { confirmDirtyEditorTabs, isEditorCloseConfirmationEnabled, type EditorCloseGuardMap } from './editorCloseGuard';
+import {
+  confirmDirtyEditorTabs,
+  isEditorCloseConfirmationEnabled,
+  prepareEditorsForApplicationExit,
+  type EditorCloseGuardMap,
+} from './editorCloseGuard';
 
 const editorOne: IWorkspaceTab = {
   id: 'editor-1',
@@ -38,6 +43,44 @@ async function run() {
     true,
   );
   assert.equal(decisionCount, 0, 'clean editors close without confirmation');
+
+  let releasePendingSave!: () => void;
+  const pendingSave = new Promise<void>((resolve) => {
+    releasePendingSave = resolve;
+  });
+  let pendingCloseResolved = false;
+  const pendingClose = confirmDirtyEditorTabs(
+    [editorOne],
+    {
+      [editorOne.id]: {
+        waitForPendingSave: () => pendingSave,
+        hasUnsavedChangesBeforeClose: () => false,
+      },
+    },
+    async () => 'cancel',
+  ).then((result) => {
+    pendingCloseResolved = true;
+    return result;
+  });
+  await Promise.resolve();
+  assert.equal(pendingCloseResolved, false, 'close waits for an in-flight save before checking dirty state');
+  releasePendingSave();
+  assert.equal(await pendingClose, true);
+
+  assert.equal(
+    await confirmDirtyEditorTabs([editorOne], {}, async () => 'discard'),
+    false,
+    'editable tabs without a close guard fail closed',
+  );
+  assert.equal(
+    await confirmDirtyEditorTabs(
+      [{ id: 'preview', type: WorkspaceTabType.LocalSQLFile, title: 'Preview', uniqueData: { filePreviewMimeType: 'image/png' } }],
+      {},
+      async () => 'cancel',
+    ),
+    true,
+    'non-editable previews do not require a close guard',
+  );
 
   const discarded = await confirmDirtyEditorTabs(
     [editorOne],
@@ -98,10 +141,59 @@ async function run() {
   const alreadySaved = await confirmDirtyEditorTabs([editorOne], editorList, async () => 'saved');
   assert.equal(alreadySaved, true, 'a decision handler may complete the save while its dialog is open');
 
+  let persistedDrafts = 0;
+  let applicationExitPrompts = 0;
+  assert.equal(
+    await prepareEditorsForApplicationExit(
+      [editorOne, editorTwo],
+      {
+        [editorOne.id]: {
+          hasUnsavedChangesBeforeClose: () => true,
+          persistBeforeApplicationExit: async () => {
+            persistedDrafts += 1;
+            return true;
+          },
+        },
+        [editorTwo.id]: {
+          hasUnsavedChangesBeforeClose: () => true,
+        },
+      },
+      async () => {
+        applicationExitPrompts += 1;
+        return 'discard';
+      },
+      true,
+    ),
+    true,
+  );
+  assert.equal(persistedDrafts, 1, 'application exit flushes recoverable console drafts');
+  assert.equal(applicationExitPrompts, 1, 'only non-auto-saved editors require an application-exit prompt');
+
+  let exitPendingSaveWaited = false;
+  assert.equal(
+    await prepareEditorsForApplicationExit(
+      [editorTwo],
+      {
+        [editorTwo.id]: {
+          waitForPendingSave: async () => {
+            exitPendingSaveWaited = true;
+          },
+          hasUnsavedChangesBeforeClose: () => true,
+        },
+      },
+      async () => 'cancel',
+      false,
+    ),
+    true,
+  );
+  assert.equal(exitPendingSaveWaited, true, 'application exit drains pending saves even when prompts are disabled');
+
   const workspaceTabsSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/index.tsx', 'utf8');
   const consoleActionSource = readFileSync('src/store/workspace/slices/console/action.ts', 'utf8');
   const editorSource = readFileSync('src/components/SQLEditor/editor/SQLEditorWithOperation/index.tsx', 'utf8');
   const confirmationSource = readFileSync('src/utils/editorCloseConfirmation.tsx', 'utf8');
+  const markdownSource = readFileSync('src/pages/main/workspace/components/WorkspaceTabs/FilePreviewTab.tsx', 'utf8');
+  const localFileTreeSource = readFileSync('src/pages/main/workspace/components/LocalSQLFileTree/index.tsx', 'utf8');
   assert.match(
     workspaceTabsSource,
     /beforeRemove=\{confirmWorkspaceTabItemsClose\}/,
@@ -119,6 +211,15 @@ async function run() {
   );
   assert.match(editorSource, /hasUnsavedChangesBeforeClose/, 'editor refs expose dirty-state detection');
   assert.match(editorSource, /saveBeforeClose/, 'editor refs expose a real save operation');
+  assert.match(markdownSource, /setEditorToList\(workspaceTabId, markdownCloseGuard\)/, 'markdown files register a close guard');
+  assert.match(localFileTreeSource, /confirmWorkspaceFileTabsBeforeRemoval/, 'file deletion checks open dirty files');
+  assert.match(localFileTreeSource, /waitForPendingWorkspaceEditors/, 'file rename waits for pending writes');
+  assert.match(markdownSource, /shortcutBindingToMonacoKeybinding/, 'markdown uses the configured save shortcut');
+  assert.doesNotMatch(
+    markdownSource,
+    /monaco\.KeyMod\.CtrlCmd\s*\|\s*monaco\.KeyCode\.KeyS/,
+    'markdown must not retain a hard-coded save shortcut',
+  );
   assert.match(
     confirmationSource,
     /const footerButtonStyle = \{ marginInlineStart: 0 \}/,
@@ -128,6 +229,21 @@ async function run() {
     confirmationSource.match(/style=\{footerButtonStyle\}/g)?.length,
     3,
     'all close-dialog actions share the same horizontal alignment',
+  );
+  assert.match(
+    confirmationSource,
+    /const handleSave = \(\) => \{[\s\S]*?onDecision\('save'\)/,
+    'the save action resolves the close dialog before the guard starts saving',
+  );
+  assert.doesNotMatch(
+    confirmationSource,
+    /await editor\.saveBeforeClose\(\)/,
+    'the close dialog must not keep a second save modal blocked behind it',
+  );
+  assert.match(
+    confirmationSource,
+    /afterClose: \(\) => \{[\s\S]*?resolve\(selectedDecision \?\? 'cancel'\)/,
+    'the guard waits for the close mask to finish its exit lifecycle',
   );
 
   console.log('Editor close guard tests passed');

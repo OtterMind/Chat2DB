@@ -1,5 +1,9 @@
 import { AuthenticationType, InputType } from '@/components/ConnectionEdit/config/enum';
-import type { IConnectionConfig, IFormItem } from '@/components/ConnectionEdit/config/types';
+import type {
+  IConnectionConfig,
+  IFormItem,
+  ILocalizedConnectionText,
+} from '@/components/ConnectionEdit/config/types';
 import type { ISupportedDatabaseSummary } from '@/service/supportedDatabase';
 import type { IDatabase } from '@/typings';
 
@@ -15,8 +19,73 @@ import type { IDatabase } from '@/typings';
 /** Fallback glyph from the shared colourful sprite; has a -dark variant. */
 export const DYNAMIC_DATABASE_ICON = 'icon-colourful-table';
 
-const localized = (text: string) =>
-  ({ 'en-US': text, 'zh-CN': text, 'ja-JP': text, 'es-ES': text, 'ko-KR': text }) as any;
+const CONNECTION_FORM_LABELS: Record<string, ILocalizedConnectionText> = {
+  Name: {
+    'en-US': 'Name',
+    'zh-CN': '名称',
+    'ja-JP': '名前',
+    'es-ES': 'Nombre',
+    'ko-KR': '이름',
+  },
+  Host: {
+    'en-US': 'Host',
+    'zh-CN': '主机',
+    'ja-JP': 'ホスト',
+    'es-ES': 'Host',
+    'ko-KR': '호스트',
+  },
+  Authentication: {
+    'en-US': 'Authentication',
+    'zh-CN': '身份验证',
+    'ja-JP': '認証',
+    'es-ES': 'Autenticación',
+    'ko-KR': '인증',
+  },
+  User: {
+    'en-US': 'User',
+    'zh-CN': '用户名',
+    'ja-JP': 'ユーザー名',
+    'es-ES': 'Usuario',
+    'ko-KR': '사용자',
+  },
+  Password: {
+    'en-US': 'Password',
+    'zh-CN': '密码',
+    'ja-JP': 'パスワード',
+    'es-ES': 'Contraseña',
+    'ko-KR': '비밀번호',
+  },
+  Database: {
+    'en-US': 'Database',
+    'zh-CN': '数据库',
+    'ja-JP': 'データベース',
+    'es-ES': 'Base de datos',
+    'ko-KR': '데이터베이스',
+  },
+  URL: {
+    'en-US': 'URL',
+    'zh-CN': 'URL',
+    'ja-JP': 'URL',
+    'es-ES': 'URL',
+    'ko-KR': 'URL',
+  },
+  File: {
+    'en-US': 'File',
+    'zh-CN': '文件',
+    'ja-JP': 'ファイル',
+    'es-ES': 'Archivo',
+    'ko-KR': '파일',
+  },
+};
+
+const localized = (text: string): ILocalizedConnectionText =>
+  CONNECTION_FORM_LABELS[text] || {
+    'en-US': text,
+    'zh-CN': text,
+    'ja-JP': text,
+    'es-ES': text,
+    'ko-KR': text,
+  };
 
 export interface SharedFormItems {
   envItem: IFormItem;

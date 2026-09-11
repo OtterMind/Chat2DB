@@ -37,7 +37,7 @@ function MyNotification() {
     const systemErrorMessageApi = (myProps: IProps) => {
       const { errorCode, errorMessage, solutionLink } = myProps;
       setProps(myProps);
-      const btn = (
+      const actions = (
         <Space>
           <Button
             type="link"
@@ -59,7 +59,7 @@ function MyNotification() {
       const renderDescription = () => {
         return (
           <div className={styles.description}>
-            {errorCode} {errorMessage}
+            {errorCode}
           </div>
         );
       };
@@ -68,7 +68,7 @@ function MyNotification() {
         return (
           <div className={styles.message}>
             <Iconfont className={styles.messageIcon} code="&#xe60c;" />
-            <div className={styles.messageText}>{errorCode}</div>
+            <div className={styles.messageText}>{errorMessage || errorCode}</div>
           </div>
         );
       };
@@ -78,15 +78,14 @@ function MyNotification() {
         message: renderMessage(),
         description: renderDescription(),
         placement: 'bottomRight',
-        btn,
+        actions,
       });
     };
     setSystemErrorMessage(systemErrorMessageApi);
   }, []);
 
   function renderModalTitle() {
-    const list = [props?.errorCode, props?.errorMessage];
-    return <div className={styles.modalTitle}>{list.filter((t) => t).join(':')}</div>;
+    return <div className={styles.modalTitle}>{props?.errorMessage || props?.errorCode}</div>;
   }
 
   function copyError() {

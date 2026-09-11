@@ -1,6 +1,7 @@
 package ai.chat2db.spi.sql;
 
 import ai.chat2db.spi.IAccountManager;
+import ai.chat2db.spi.IActiveTransactionManager;
 import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
@@ -20,11 +21,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 
 @Slf4j
 public class Chat2DBContext {
     private static final ThreadLocal<ConnectInfo> CONNECT_INFO_THREAD_LOCAL = new ThreadLocal<>();
+
+    private static final ThreadLocal<Consumer<String>> STATEMENT_GUARD_THREAD_LOCAL = new ThreadLocal<>();
 
 
     public static Map<String, IPlugin> PLUGIN_MAP = new ConcurrentHashMap<>();
@@ -121,8 +125,35 @@ public class Chat2DBContext {
         return plugin == null ? null : plugin.getRoutineManager();
     }
 
+    public static IActiveTransactionManager getActiveTransactionManager() {
+        ConnectInfo connectInfo = getConnectInfo();
+        if (connectInfo == null || StringUtils.isBlank(connectInfo.getDbType())) {
+            return null;
+        }
+        IPlugin plugin = PLUGIN_MAP.get(connectInfo.getDbType());
+        return plugin == null ? null : plugin.getActiveTransactionManager();
+    }
+
     public static Connection getConnection() {
-        return ConnectionPool.getConnection(getConnectInfo());
+        Connection connection = ConnectionPool.getConnection(getConnectInfo());
+        return StatementGuardConnection.wrap(connection, STATEMENT_GUARD_THREAD_LOCAL.get());
+    }
+
+    public static StatementGuardScope bindStatementGuard(Consumer<String> statementGuard) {
+        Consumer<String> previous = STATEMENT_GUARD_THREAD_LOCAL.get();
+        if (statementGuard == null) {
+            STATEMENT_GUARD_THREAD_LOCAL.remove();
+        } else {
+            STATEMENT_GUARD_THREAD_LOCAL.set(statementGuard);
+        }
+        return new StatementGuardScope(previous);
+    }
+
+    public static void guardStatement(String sql) {
+        Consumer<String> statementGuard = STATEMENT_GUARD_THREAD_LOCAL.get();
+        if (statementGuard != null) {
+            statementGuard.accept(sql);
+        }
     }
 
 
@@ -166,6 +197,30 @@ public class Chat2DBContext {
 
     public static void close() {
         removeContext();
+    }
+
+    public static final class StatementGuardScope implements AutoCloseable {
+
+        private final Consumer<String> previous;
+
+        private boolean closed;
+
+        private StatementGuardScope(Consumer<String> previous) {
+            this.previous = previous;
+        }
+
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (previous == null) {
+                STATEMENT_GUARD_THREAD_LOCAL.remove();
+            } else {
+                STATEMENT_GUARD_THREAD_LOCAL.set(previous);
+            }
+        }
     }
 
 }

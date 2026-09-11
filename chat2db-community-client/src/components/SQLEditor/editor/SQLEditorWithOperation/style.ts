@@ -25,6 +25,19 @@ export const useStyles = createStyles(({ css, token }) => {
       width: 100%;
       height: 0px;
       border-top: 1px solid ${colorBorderLayout};
+
+      > .monaco-editor {
+        width: 100% !important;
+      }
+
+      > .monaco-editor > .overflow-guard {
+        width: 100% !important;
+      }
+
+      > .monaco-editor .editor-scrollable {
+        right: 0 !important;
+        width: auto !important;
+      }
     `,
     watermarkLayer: css`
       position: absolute;

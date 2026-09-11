@@ -10,6 +10,9 @@ import lombok.Data;
 public class DbStreamingExecuteRequest {
 
     @NotNull
+    private String executionId;
+
+    @NotNull
     private DbDlExecuteRequest dlExecuteRequest;
 
     @NotNull

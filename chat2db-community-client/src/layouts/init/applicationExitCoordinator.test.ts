@@ -4,6 +4,8 @@ import { ApplicationExitConfirmation, coordinateApplicationExit } from './applic
 async function testExitWithoutActiveTasks() {
   const calls: string[] = [];
   await coordinateApplicationExit({
+    confirmDirtyEditors: async () => true,
+    shouldManageTasks: () => true,
     getActiveTaskCount: async () => 0,
     prepareUserExit: async () => {
       calls.push('prepare');
@@ -33,6 +35,8 @@ async function testExitWithActiveTasks() {
   const calls: string[] = [];
   let confirmation: ApplicationExitConfirmation | undefined;
   await coordinateApplicationExit({
+    confirmDirtyEditors: async () => true,
+    shouldManageTasks: () => true,
     getActiveTaskCount: async () => 2,
     prepareUserExit: async () => {
       calls.push('prepare');
@@ -70,6 +74,8 @@ async function testPrepareFailureKeepsNativeWindowOpen() {
   const prepareError = new Error('prepare failed');
   await assert.rejects(
     coordinateApplicationExit({
+      confirmDirtyEditors: async () => true,
+      shouldManageTasks: () => true,
       getActiveTaskCount: async () => 0,
       prepareUserExit: async () => {
         throw prepareError;
@@ -92,6 +98,8 @@ async function testMissingNativeExitRequestFailsClosed() {
   const calls: string[] = [];
   await assert.rejects(
     coordinateApplicationExit({
+      confirmDirtyEditors: async () => true,
+      shouldManageTasks: () => true,
       getActiveTaskCount: async () => 0,
       prepareUserExit: async () => {
         calls.push('prepare');
@@ -115,11 +123,73 @@ async function testMissingNativeExitRequestFailsClosed() {
   assert.deepEqual(calls, ['prepare', 'confirm', 'abort', 'cancel-native']);
 }
 
+async function testDirtyEditorCancellationStopsBeforeTaskQueries() {
+  const calls: string[] = [];
+  await coordinateApplicationExit({
+    confirmDirtyEditors: async () => false,
+    shouldManageTasks: () => true,
+    getActiveTaskCount: async () => {
+      calls.push('active-count');
+      return 1;
+    },
+    prepareUserExit: async () => {
+      calls.push('prepare');
+    },
+    abortUserExit: async () => {
+      calls.push('abort');
+    },
+    confirmCloseWindow: async () => {
+      calls.push('confirm');
+      return true;
+    },
+    cancelApplicationExit: async () => true,
+    requestConfirmation: () => {
+      calls.push('prompt');
+    },
+    onCancel: () => {
+      calls.push('cancel');
+    },
+  });
+  assert.deepEqual(calls, ['cancel']);
+}
+
+async function testUnavailableTaskCapabilityConfirmsWithoutTaskApis() {
+  const calls: string[] = [];
+  await coordinateApplicationExit({
+    confirmDirtyEditors: async () => true,
+    shouldManageTasks: () => false,
+    getActiveTaskCount: async () => {
+      calls.push('active-count');
+      return 1;
+    },
+    prepareUserExit: async () => {
+      calls.push('prepare');
+    },
+    abortUserExit: async () => {
+      calls.push('abort');
+    },
+    confirmCloseWindow: async () => {
+      calls.push('confirm');
+      return true;
+    },
+    cancelApplicationExit: async () => true,
+    requestConfirmation: () => {
+      calls.push('prompt');
+    },
+    onCancel: () => {
+      calls.push('cancel');
+    },
+  });
+  assert.deepEqual(calls, ['confirm']);
+}
+
 void Promise.all([
   testExitWithoutActiveTasks(),
   testExitWithActiveTasks(),
   testPrepareFailureKeepsNativeWindowOpen(),
   testMissingNativeExitRequestFailsClosed(),
+  testDirtyEditorCancellationStopsBeforeTaskQueries(),
+  testUnavailableTaskCapabilityConfirmsWithoutTaskApis(),
 ]).then(() => {
   console.log('Application exit coordinator tests passed');
 });

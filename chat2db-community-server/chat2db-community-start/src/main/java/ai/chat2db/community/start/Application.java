@@ -3,6 +3,7 @@ package ai.chat2db.community.start;
 import ai.chat2db.community.jcef.context.JcefContext;
 import ai.chat2db.community.jcef.frame.MainJFrame;
 import ai.chat2db.community.jcef.utils.CallJsFunctionUtil;
+import ai.chat2db.community.jcef.utils.SingleInstanceUtil;
 import ai.chat2db.community.tools.console.ConsoleCodec;
 import ai.chat2db.community.tools.console.ConsoleOutboundRegistry;
 import ai.chat2db.community.tools.console.bridge.JcefServerBridgeRegistry;
@@ -40,6 +41,9 @@ public class Application {
 
     public static void main(String[] args) {
         initializeCommunityRuntimeMode();
+        if (!SingleInstanceUtil.registerDesktopInstance(args)) {
+            return;
+        }
         validateCommunityEncryptionKey();
         log.info("Starting Application, args: {}", Arrays.toString(args));
         log.info("Chat2DB runtime mode: {}, networkStatus: {}, basePath: {}",

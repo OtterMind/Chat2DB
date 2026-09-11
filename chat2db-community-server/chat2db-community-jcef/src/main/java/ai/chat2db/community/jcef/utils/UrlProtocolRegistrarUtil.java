@@ -1,6 +1,7 @@
 package ai.chat2db.community.jcef.utils;
 
-import ai.chat2db.community.tools.util.ConfigUtils;
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentity;
+import ai.chat2db.community.tools.runtime.ProductRuntimeIdentityProvider;
 import org.cef.OS;
 
 import java.io.BufferedReader;
@@ -12,25 +13,19 @@ import java.io.IOException;
 
 public class UrlProtocolRegistrarUtil {
 
-    private static String APP_NAME = "Chat2DB Pro";
-    private static String PROTOCOL_NAME = "chat2db-pro";
+    private static String APP_NAME;
+    private static String PROTOCOL_NAME;
     private static String REGISTRY_KEY_PATH = "HKEY_CURRENT_USER\\Software\\Classes\\" + PROTOCOL_NAME;
 
 
     public static void register() {
+        ProductRuntimeIdentity product = ProductRuntimeIdentityProvider.current();
+        APP_NAME = product.displayName();
+        PROTOCOL_NAME = product.protocolScheme();
+        REGISTRY_KEY_PATH = "HKEY_CURRENT_USER\\Software\\Classes\\" + PROTOCOL_NAME;
         if (!OS.isWindows()) {
             System.out.println("Non-Windows system; skipping registry registration.");
             return;
-        }
-
-        if (ConfigUtils.isCommunity()) {
-            APP_NAME = "Chat2DB Community";
-            PROTOCOL_NAME = "chat2db-community";
-            REGISTRY_KEY_PATH = "HKEY_CURRENT_USER\\Software\\Classes\\" + PROTOCOL_NAME;
-        } else if (ConfigUtils.isLocalEdition()) {
-            APP_NAME = "Chat2DB Local";
-            PROTOCOL_NAME = "chat2db-local";
-            REGISTRY_KEY_PATH = "HKEY_CURRENT_USER\\Software\\Classes\\" + PROTOCOL_NAME;
         }
 
         File tempRegFile = null;

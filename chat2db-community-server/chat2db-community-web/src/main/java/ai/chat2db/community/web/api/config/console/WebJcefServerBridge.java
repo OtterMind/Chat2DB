@@ -33,7 +33,7 @@ public class WebJcefServerBridge implements IJcefServerBridge {
 
     @Override
     public ConsoleResult doController(ConsoleMessage message) {
-        return ConsoleHelper.doController(message);
+        return DesktopBridgeRequestContext.invoke(() -> ConsoleHelper.doController(message));
     }
 
     @Override

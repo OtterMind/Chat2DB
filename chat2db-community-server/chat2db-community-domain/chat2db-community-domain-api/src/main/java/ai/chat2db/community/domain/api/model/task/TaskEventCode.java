@@ -3,7 +3,6 @@ package ai.chat2db.community.domain.api.model.task;
 public enum TaskEventCode {
     TASK_CREATED,
     TASK_STARTED,
-    TASK_CANCEL_ACCEPTED,
     TASK_CANCELLED,
     TASK_SUCCEEDED,
     TASK_FAILED,
@@ -25,5 +24,9 @@ public enum TaskEventCode {
     FILE_WRITE_COMPLETED,
     ROWS_EXPORTED,
     BATCH_EXECUTED,
+    IMPORT_BATCH_FAILED,
+    IMPORT_PREPARING,
+    TARGET_METADATA_LOADED,
+    IMPORT_COMPLETED,
     OBJECT_SKIPPED
 }

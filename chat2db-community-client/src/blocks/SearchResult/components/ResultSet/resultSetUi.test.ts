@@ -33,6 +33,12 @@ import {
   isResultHeaderContext,
   joinContextMenuGroups,
 } from '../ResultSetTable/event/onContextmenuCell/menuGroups';
+import { matchResultSearchValue } from '../FESearch/searchMatcher';
+import {
+  hasActiveResultEditorChange,
+  hasPendingResultEdit,
+  resolvePendingResultEditOperations,
+} from './resultEditActions';
 
 const exportBarSource = readFileSync('src/blocks/SearchResult/components/ExportBar/index.tsx', 'utf8');
 const tabsSource = readFileSync('src/components/Tabs/index.tsx', 'utf8');
@@ -40,6 +46,14 @@ const dropdownTriggerSource = readFileSync('src/components/DropdownChevronTrigge
 const dropdownTriggerStyleSource = readFileSync('src/components/DropdownChevronTrigger/style.ts', 'utf8');
 const resultToolbarStyleSource = readFileSync(
   'src/blocks/SearchResult/components/ResultSetToolbar/style.ts',
+  'utf8',
+);
+const resultToolbarSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetToolbar/index.tsx',
+  'utf8',
+);
+const resultSetTableComponentSource = readFileSync(
+  'src/blocks/SearchResult/components/ResultSetTable/index.tsx',
   'utf8',
 );
 const columnVisibilityModalSource = readFileSync(
@@ -56,6 +70,10 @@ const rowDetailSource = readFileSync(
 );
 const resultSetSource = readFileSync(
   'src/blocks/SearchResult/components/ResultSet/index.tsx',
+  'utf8',
+);
+const sqlExecuteSource = readFileSync(
+  'src/pages/main/workspace/components/SQLExecute/index.tsx',
   'utf8',
 );
 const headerTooltipSource = readFileSync(
@@ -82,6 +100,75 @@ test('more-tabs and export chevrons share one aligned trailing slot', () => {
 test('query result export sends the concrete table as the task target', () => {
   assert.match(exportBarSource, /const tableName = resultData\.tableName \|\| params\.tableName;/);
   assert.match(exportBarSource, /tableNames: tableName \? \[tableName\] : undefined,/);
+});
+
+test('result edit actions commit the active editor before reading pending operations', async () => {
+  const calls: string[] = [];
+  let operations: Array<{ type: string }> = [];
+  const result = await resolvePendingResultEditOperations({
+    completeActiveEditor: async () => {
+      calls.push('complete');
+      await Promise.resolve();
+      operations = [{ type: 'UPDATE' }];
+    },
+    getOperations: () => {
+      calls.push('read');
+      return operations;
+    },
+  });
+
+  assert.deepEqual(calls, ['complete', 'read']);
+  assert.deepEqual(result, [{ type: 'UPDATE' }]);
+  assert.deepEqual(
+    await resolvePendingResultEditOperations({
+      completeActiveEditor: async () => undefined,
+      getOperations: () => undefined,
+    }),
+    [],
+    'an unchanged edit cannot produce an empty preview or submit request',
+  );
+  assert.equal(hasPendingResultEdit(false, false), false);
+  assert.equal(hasPendingResultEdit(true, false), true);
+  assert.equal(hasPendingResultEdit(false, true), true);
+  const editorState = {
+    editorManager: {
+      editingEditor: { getValue: () => 'original' },
+      editCell: { col: 2, row: 1 },
+    },
+    getCellOriginValue: () => 'original',
+  };
+  assert.equal(hasActiveResultEditorChange(editorState), false);
+  editorState.editorManager.editingEditor.getValue = () => 'changed';
+  assert.equal(hasActiveResultEditorChange(editorState), true);
+  editorState.editorManager.editingEditor.getValue = () => 'original';
+  assert.equal(hasActiveResultEditorChange(editorState), false);
+  assert.match(resultToolbarSource, /disabled=\{!hasPendingChanges\}/);
+  assert.doesNotMatch(resultToolbarSource, /isActive=\{hasPendingChanges\}/);
+  assert.doesNotMatch(resultToolbarSource, /type="primary"/);
+  assert.equal(
+    resultToolbarSource.match(/hasPendingChanges && styles\.pendingAction/g)?.length,
+    3,
+    'revert, preview, and submit should highlight only their icons when changes are pending',
+  );
+  assert.match(resultSetTableComponentSource, /tableElement\.addEventListener\('input', syncActiveEditState, true\)/);
+  assert.doesNotMatch(resultSetTableComponentSource, /document\.addEventListener\('(input|change)'/);
+  assert.match(
+    resultSetSource,
+    /const handleRevocation = useCallback\(async \(\) => \{[\s\S]*?await completeActiveEditor\(\);[\s\S]*?operationRecordUtils\?\.handleRevocation\(\)/,
+  );
+  assert.match(
+    resultSetSource,
+    /const operations = await getPendingEditOperations\(\);[\s\S]*?if \(!operations\.length\) \{[\s\S]*?return;/,
+  );
+  assert.match(resultSetSource, /data-shortcut-scope=\{ShortcutScope\.ResultSet\}/);
+});
+
+test('result table sorting and paging refresh the current result instead of creating a console result', () => {
+  assert.doesNotMatch(sqlExecuteSource, /onResultPagingChange=\{handleResultPagingChange\}/);
+  assert.match(
+    resultSetSource,
+    /const requestSequence = \+\+executeRequestSequenceRef\.current;[\s\S]*?executeSQL\(executeSqlParams\)[\s\S]*?setResultData\(/,
+  );
 });
 
 test('manage-columns title exposes an aligned localized help tooltip', () => {
@@ -127,6 +214,18 @@ test('result search escape and close action use the same close lifecycle', () =>
   });
 
   assert.deepEqual(calls, ['close']);
+});
+
+test('result search matches custom-rendered field names and regular cell values', () => {
+  const table = {
+    columns: [{ field: '1', originalData: { name: 'record_primary_key' } }],
+    getHeaderField: (col: number) => (col === 1 ? '1' : undefined),
+    isHeader: (_col: number, row: number) => row === 0,
+  } as any;
+
+  assert.equal(matchResultSearchValue('primary', '', { col: 1, row: 0, table }), true);
+  assert.equal(matchResultSearchValue('missing', '', { col: 1, row: 0, table }), false);
+  assert.equal(matchResultSearchValue('customer', 'customer-001', { col: 1, row: 1, table }), true);
 });
 
 test('record field focus updates the cell used by the value inspector', () => {

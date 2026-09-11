@@ -24,4 +24,5 @@ public class AiChatMessageAddRequest {
     private String reasoningContent;
 
     private List<ChatAttachment> attachments;
+
 }

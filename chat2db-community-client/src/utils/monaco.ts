@@ -29,32 +29,42 @@ const createWorkerProxyUrl = (workerUrl: string) => {
   return proxyUrl;
 };
 
-const isCancellationError = (reason: unknown) => {
+export const isMonacoCancellationError = (reason: unknown) => {
+  if (typeof reason === 'string') {
+    return reason === 'Canceled' || reason === 'CanceledError';
+  }
+
   if (!reason || typeof reason !== 'object') {
     return false;
   }
 
-  const error = reason as { name?: unknown; message?: unknown };
-  return error.name === 'Canceled' || error.message === 'Canceled';
+  const error = reason as { name?: unknown; message?: unknown; code?: unknown };
+  return (
+    error.name === 'Canceled' ||
+    error.name === 'CanceledError' ||
+    error.message === 'Canceled' ||
+    error.message === 'CanceledError' ||
+    error.code === 'ERR_CANCELED'
+  );
 };
 
-const isLikelyMonacoCancellationError = (reason: unknown) => {
-  if (!isCancellationError(reason)) {
-    return false;
+export const runMonacoDisposalSafely = (task: () => unknown) => {
+  try {
+    const result = task();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      Promise.resolve(result).catch((error) => {
+        if (!isMonacoCancellationError(error)) {
+          setTimeout(() => {
+            throw error;
+          }, 0);
+        }
+      });
+    }
+  } catch (error) {
+    if (!isMonacoCancellationError(error)) {
+      throw error;
+    }
   }
-
-  const error = reason as { stack?: unknown };
-  const stack = typeof error.stack === 'string' ? error.stack : '';
-  return [
-    'Delayer.cancel',
-    'WordHighlighter',
-    'WordHighlighterContribution',
-    'StandaloneEditor.dispose',
-    'CodeEditorContributions.dispose',
-    'DisposableStore.dispose',
-    'vs/editor/',
-    'monaco-editor',
-  ].some((marker) => stack.includes(marker));
 };
 
 const setupMonacoCancellationRejectionHandler = () => {
@@ -66,7 +76,7 @@ const setupMonacoCancellationRejectionHandler = () => {
   window.addEventListener(
     'unhandledrejection',
     (event) => {
-      if (isLikelyMonacoCancellationError(event.reason)) {
+      if (isMonacoCancellationError(event.reason)) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }

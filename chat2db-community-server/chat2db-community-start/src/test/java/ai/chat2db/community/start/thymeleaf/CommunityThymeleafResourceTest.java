@@ -34,4 +34,12 @@ class CommunityThymeleafResourceTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("index"));
     }
+
+    @Test
+    void enterpriseKnowledgeRouteIsNotOwnedByCommunity() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ThymeleafController()).build();
+
+        mockMvc.perform(get("/knowledge-management"))
+                .andExpect(status().isNotFound());
+    }
 }

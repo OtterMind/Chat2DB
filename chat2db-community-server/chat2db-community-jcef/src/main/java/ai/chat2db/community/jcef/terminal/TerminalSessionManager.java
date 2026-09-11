@@ -51,7 +51,34 @@ public final class TerminalSessionManager {
     }
 
     public static Map<String, Object> create(Path directory, int columns, int rows, String shellId) throws IOException {
-        return create(directory, columns, rows, resolveShell(shellId));
+        return create(
+                directory,
+                columns,
+                rows,
+                resolveShellCandidates(shellId),
+                TerminalSessionManager::defaultProcessFactory
+        );
+    }
+
+    static Map<String, Object> create(Path directory, int columns, int rows, List<ShellCommand> candidates,
+                                      TerminalProcessFactory processFactory) throws IOException {
+        Path cwd = resolveTerminalDirectory(directory);
+        IOException lastFailure = null;
+        for (ShellCommand shell : candidates) {
+            try {
+                return createSession(cwd, columns, rows, shell, processFactory);
+            } catch (IOException failure) {
+                // Some corporate security suites (e.g. QiAnXin) deny process creation for
+                // powershell.exe even though the binary is present in PATH. Treat a spawn-time
+                // failure as "this shell cannot be invoked" and try the next candidate so the
+                // terminal still opens via, for example, cmd.exe.
+                lastFailure = failure;
+                log.warn("Unable to start terminal shell [{}]", shell.displayName(), failure);
+            }
+        }
+        throw lastFailure != null
+                ? lastFailure
+                : new IOException("No terminal shell is available");
     }
 
     public static Map<String, Object> createInUserHome(int columns, int rows, String shellId) throws IOException {
@@ -66,11 +93,25 @@ public final class TerminalSessionManager {
     }
 
     private static Map<String, Object> create(Path directory, int columns, int rows, ShellCommand shell) throws IOException {
+        return createSession(
+                resolveTerminalDirectory(directory),
+                columns,
+                rows,
+                shell,
+                TerminalSessionManager::defaultProcessFactory
+        );
+    }
+
+    private static Path resolveTerminalDirectory(Path directory) throws IOException {
         Path cwd = directory.toRealPath();
         if (!Files.isDirectory(cwd)) {
             throw new IllegalArgumentException("Terminal working directory is not available");
         }
+        return cwd;
+    }
 
+    private static Map<String, Object> createSession(Path cwd, int columns, int rows, ShellCommand shell,
+                                                     TerminalProcessFactory processFactory) throws IOException {
         Map<String, String> environment = new HashMap<>(System.getenv());
         environment.put("TERM", "xterm-256color");
         environment.put("COLORTERM", "truecolor");
@@ -80,14 +121,13 @@ public final class TerminalSessionManager {
             applyShellColorEnvironment(environment, shell);
         }
 
-        PtyProcess process = new PtyProcessBuilder(shell.command().toArray(String[]::new))
-                .setDirectory(cwd.toString())
-                .setEnvironment(environment)
-                .setInitialColumns(Math.max(columns, 20))
-                .setInitialRows(Math.max(rows, 5))
-                .setRedirectErrorStream(true)
-                .setWindowsAnsiColorEnabled(true)
-                .start();
+        PtyProcess process = processFactory.create(
+                shell.command().toArray(String[]::new),
+                cwd.toString(),
+                environment,
+                Math.max(columns, 20),
+                Math.max(rows, 5)
+        );
 
         String sessionId = UUID.randomUUID().toString();
         TerminalSession session = new TerminalSession(sessionId, cwd, shell, process);
@@ -100,6 +140,18 @@ public final class TerminalSessionManager {
         result.put("shell", shell.displayName());
         result.put("shellId", shell.id());
         return result;
+    }
+
+    static PtyProcess defaultProcessFactory(String[] command, String directory, Map<String, String> environment,
+                                            int columns, int rows) throws IOException {
+        return new PtyProcessBuilder(command)
+                .setDirectory(directory)
+                .setEnvironment(environment)
+                .setInitialColumns(columns)
+                .setInitialRows(rows)
+                .setRedirectErrorStream(true)
+                .setWindowsAnsiColorEnabled(true)
+                .start();
     }
 
     static boolean applyColorEnvironment(Map<String, String> environment) {
@@ -226,6 +278,19 @@ public final class TerminalSessionManager {
         return session;
     }
 
+    static List<ShellCommand> resolveShellCandidates(String requestedShellId) {
+        String shellId = requestedShellId == null || requestedShellId.isBlank()
+                ? "system"
+                : requestedShellId.toLowerCase(Locale.ROOT);
+        if ("system".equals(shellId)) {
+            // The default shell may be denied at runtime (e.g. powershell.exe blocked by a
+            // corporate security suite). Return the ordered fallback chain so create(...) can
+            // move on to cmd.exe when an earlier candidate cannot be started.
+            return resolveSystemShellCandidates(normalizedOsName());
+        }
+        return List.of(resolveShell(shellId));
+    }
+
     private static ShellCommand resolveShell(String requestedShellId) {
         String shellId = requestedShellId == null || requestedShellId.isBlank()
                 ? "system"
@@ -243,33 +308,43 @@ public final class TerminalSessionManager {
                     "Windows PowerShell",
                     requireCommand(os, "Windows PowerShell", "powershell.exe")
             );
-            case "cmd" -> new ShellCommand(
-                    "cmd",
-                    List.of(requireCommand(os, "Command Prompt", resolveCommandPrompt())),
-                    "Command Prompt",
-                    ShellFamily.CMD
-            );
+            case "cmd" -> commandPrompt("cmd", requireCommand(os, "Command Prompt", resolveCommandPrompt()));
             default -> throw new IllegalArgumentException("Unsupported terminal shell: " + shellId);
         };
     }
 
     private static ShellCommand resolveSystemShell(String os) {
+        return resolveSystemShellCandidates(os).get(0);
+    }
+
+    private static List<ShellCommand> resolveSystemShellCandidates(String os) {
+        return resolveSystemShellCandidates(os, TerminalSessionManager::findCommand);
+    }
+
+    static List<ShellCommand> resolveSystemShellCandidates(String os, CommandResolver resolver) {
         if (isWindows(os)) {
-            String pwsh = findCommand(os, "pwsh.exe", "pwsh");
+            List<ShellCommand> candidates = new ArrayList<>();
+            String pwsh = resolver.find(os, "pwsh.exe", "pwsh");
             if (pwsh != null) {
-                return powerShell("system", "PowerShell 7", pwsh);
+                candidates.add(powerShell("system", "PowerShell 7", pwsh));
             }
-            String powerShell = findCommand(os, "powershell.exe");
+            String powerShell = resolver.find(os, "powershell.exe");
             if (powerShell != null) {
-                return powerShell("system", "Windows PowerShell", powerShell);
+                candidates.add(powerShell("system", "Windows PowerShell", powerShell));
             }
-            return new ShellCommand(
-                    "system",
-                    List.of(requireCommand(os, "Command Prompt", resolveCommandPrompt())),
-                    "Command Prompt",
-                    ShellFamily.CMD
-            );
+            // Keep cmd.exe as the last resort so a blocked PowerShell still yields a usable shell.
+            String cmd = resolver.find(os, resolveCommandPrompt());
+            candidates.add(commandPrompt("system", cmd == null ? resolveCommandPrompt() : cmd));
+            return candidates;
         }
+        return List.of(resolveNonWindowsSystemShell(os));
+    }
+
+    private static ShellCommand commandPrompt(String id, String command) {
+        return new ShellCommand(id, List.of(command), "Command Prompt", ShellFamily.CMD);
+    }
+
+    private static ShellCommand resolveNonWindowsSystemShell(String os) {
         String configuredShell = System.getenv("SHELL");
         if (configuredShell != null && Files.isExecutable(Path.of(configuredShell))) {
             return unixShell("system", Path.of(configuredShell).getFileName().toString(), configuredShell);
@@ -388,11 +463,22 @@ public final class TerminalSessionManager {
     }
 
     @FunctionalInterface
+    interface CommandResolver {
+        String find(String os, String... candidates);
+    }
+
+    @FunctionalInterface
+    interface TerminalProcessFactory {
+        PtyProcess create(String[] command, String directory, Map<String, String> environment,
+                          int columns, int rows) throws IOException;
+    }
+
+    @FunctionalInterface
     interface TerminalEventPublisher {
         void publish(String sessionId, ActionTypeEnum actionType, Map<String, Object> message);
     }
 
-    private enum ShellFamily {
+    enum ShellFamily {
         BASH,
         ZSH,
         POWERSHELL,
@@ -400,7 +486,7 @@ public final class TerminalSessionManager {
         OTHER
     }
 
-    private record ShellCommand(String id, List<String> command, String displayName, ShellFamily family) {
+    record ShellCommand(String id, List<String> command, String displayName, ShellFamily family) {
     }
 
     private static final class TerminalSession {

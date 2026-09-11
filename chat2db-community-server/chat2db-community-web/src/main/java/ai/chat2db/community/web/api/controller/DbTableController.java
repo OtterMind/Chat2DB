@@ -284,6 +284,12 @@ public class DbTableController {
         return ActionResult.isSuccess();
     }
 
+    /** Returns a suggested target name without creating a table or copying data. */
+    @GetMapping("/copy/prepare")
+    public DataResult<String> prepareCopy(@Valid TableDetailQueryRequest request) {
+        return DataResult.of(tableService.prepareCopyTable(request.getTableName()));
+    }
+
     /**
      * Copies tables.
      * <p>

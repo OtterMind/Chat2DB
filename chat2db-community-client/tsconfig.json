@@ -3,6 +3,14 @@
   "compilerOptions": {
     "moduleResolution": "node",
     "jsx": "react-jsx",
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "paths": {
+      "@/*": ["src/*"],
+      "@@/*": ["src/.umi/*"],
+      "@client-extension": ["src/client-extension/community.tsx"],
+      "@client-runtime": ["src/client-runtime/index.ts"],
+      "umi": ["node_modules/umi"],
+      "umi/typings": ["src/.umi/typings"]
+    }
   }
 }

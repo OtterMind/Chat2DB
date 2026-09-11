@@ -107,7 +107,7 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
         int pageNo = Optional.ofNullable(command.getPageNo()).orElse(1);
         command.setPageNo(pageNo);
-        int pageSize = Optional.ofNullable(command.getPageSize()).orElse(IEasyToolsConstant.MAX_PAGE_SIZE);
+        int pageSize = Optional.ofNullable(command.getPageSize()).orElse(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
         command.setPageSize(pageSize);
         List<ExecuteResponse> resultList = Lists.newArrayList();
         List<String> sqlList = parseSql(command.getScript());
@@ -128,7 +128,7 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         Connection connection = Chat2DBContext.getConnection();
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setFetchSize(IEasyToolsConstant.MAX_PAGE_SIZE);
+            stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             long startedAtEpochMs = System.currentTimeMillis();
             long executeStartedNanos = System.nanoTime();
             boolean query = stmt.execute();

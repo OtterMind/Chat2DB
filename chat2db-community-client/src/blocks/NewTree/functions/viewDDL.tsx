@@ -4,6 +4,7 @@ import mysqlService from '@/service/sql';
 import { createStyles } from 'antd-style';
 import SQLPreview from '@/components/SQLPreview';
 import { openModal } from '@/store/common/components';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 
 export const useStyles = createStyles(({ css }) => {
   return {
@@ -15,6 +16,13 @@ export const useStyles = createStyles(({ css }) => {
 });
 
 export const viewDDL = (treeNodeData) => {
+  const { dataSourceName, databaseName, schemaName } = treeNodeData.extraParams;
+  const objectTitle = buildWorkspaceObjectTabTitle({
+    dataSourceName,
+    databaseName,
+    schemaName,
+    objectName: treeNodeData.originalTitle,
+  });
   const getSql = () => {
     return new Promise((resolve) => {
       mysqlService
@@ -31,7 +39,7 @@ export const viewDDL = (treeNodeData) => {
   };
 
   openModal({
-    title: `DDL-${treeNodeData.originalTitle}`,
+    title: `DDL - ${objectTitle}`,
     width: '60%',
     footer: false,
     content: <DDLPreviewAsync getSql={getSql} />,

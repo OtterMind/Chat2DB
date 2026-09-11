@@ -7,7 +7,7 @@ public interface IEasyToolsConstant {
     String LOG_TRACE_ID = "EAGLEEYE_TRACE_ID";
 
 
-    int MAX_PAGE_SIZE = 1000;
+    int DEFAULT_PAGE_SIZE = 1000;
 
 
     long SERIAL_VERSION_UID = 1L;

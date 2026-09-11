@@ -1,4 +1,4 @@
-// import { clearOrgStore } from '@/store/organization';
+// import { clearOrgStore } from '@/store/workspaceContext';
 // import { clearCurrentConnectionDetails } from '@/pages/main/workspace/store/common';
 // import { clearMainCommonStore } from '@/pages/main/store/common';
 

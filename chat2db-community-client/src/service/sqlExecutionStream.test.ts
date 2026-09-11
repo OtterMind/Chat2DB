@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import type { IManageResultData } from '@/typings';
 import {
-  appendCompletedQueryResult,
+  appendRowsToPendingResult,
   clearClosedSqlExecutionResults,
   cancelSqlExecutionWithReconciliation,
+  discardPendingRowsForExecution,
   isSqlExecutionResultClosed,
   markSqlExecutionResultsClosed,
   mergeRows,
+  upsertResultFinished,
   type ClosedSqlExecutionResults,
 } from './sqlExecutionStream';
 
@@ -43,39 +45,37 @@ const appendedRows = mergeRows(restoredAfterClear, chunk([['second']]));
 assert.equal(appendedRows.length, 1, 'later chunks stay in the same execution result');
 assert.deepEqual(appendedRows[0].dataList, [['first'], ['second']]);
 
-const completedQuery = chunk([['finished']]);
-const ignoredRowsEvent = appendCompletedQueryResult([], {
-  executionId: 'execution-1',
-  eventType: 'rows',
-  message: chunk([['streamed']]),
-});
-assert.deepEqual(ignoredRowsEvent, [], 'row chunks do not trigger completed-result callbacks');
-
-const completedResults = appendCompletedQueryResult(ignoredRowsEvent, {
-  executionId: 'execution-1',
-  eventType: 'resultFinished',
-  message: completedQuery,
-});
-assert.deepEqual(completedResults, [completedQuery], 'a completed query result is retained for callback consumers');
-
-const emptyCompletedQuery = chunk([]);
-const completedResultsWithEmptyQuery = appendCompletedQueryResult(completedResults, {
-  executionId: 'execution-1',
-  eventType: 'resultFinished',
-  message: emptyCompletedQuery,
-});
-assert.deepEqual(
-  completedResultsWithEmptyQuery,
-  [completedQuery, emptyCompletedQuery],
-  'an empty query result still retains its headers for callback consumers',
+const completedStreamingResult = upsertResultFinished(
+  appendedRows,
+  {
+    ...chunk([]),
+    pageSize: 50_000,
+    fuzzyTotal: '50000+',
+    hasNextPage: true,
+  },
 );
+assert.deepEqual(
+  completedStreamingResult[0].dataList,
+  [['first'], ['second']],
+  'metadata-only completion preserves rows already received from the stream',
+);
+assert.equal(completedStreamingResult[0].pageSize, 50_000);
+assert.equal(completedStreamingResult[0].fuzzyTotal, '50000+');
 
-const ignoredUpdate = appendCompletedQueryResult(completedResultsWithEmptyQuery, {
-  executionId: 'execution-1',
-  eventType: 'updateCount',
-  message: { ...chunk([]), dataList: null },
-});
-assert.equal(ignoredUpdate, completedResultsWithEmptyQuery, 'non-query results do not enter query callbacks');
+const pendingRows = new Map<string, IManageResultData>();
+assert.equal(
+  appendRowsToPendingResult(pendingRows, 'execution-1:1:1', chunk([['first']])),
+  1,
+  'the first streamed chunk is buffered without changing the source chunk',
+);
+assert.equal(
+  appendRowsToPendingResult(pendingRows, 'execution-1:1:1', chunk([['second'], ['third']])),
+  3,
+  'subsequent chunks append to one pending result buffer',
+);
+assert.deepEqual(pendingRows.get('execution-1:1:1')!.dataList, [['first'], ['second'], ['third']]);
+discardPendingRowsForExecution(pendingRows, 'execution-1');
+assert.equal(pendingRows.size, 0, 'terminal cleanup discards buffered rows for the completed execution');
 
 const closedResults: ClosedSqlExecutionResults = new Map();
 markSqlExecutionResultsClosed(closedResults, [

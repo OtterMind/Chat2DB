@@ -64,6 +64,7 @@ export const useStyles = createStyles(({ css, token }) => {
       padding: 0px 8px;
       display: flex;
       align-items: center;
+      white-space: nowrap;
     `,
     treeTitleCount: css`
       color: ${token.colorTextSecondary};
@@ -114,9 +115,20 @@ export const useStyles = createStyles(({ css, token }) => {
       .ant-tree-node-content-wrapper {
         padding: 0px !important;
       }
+      .ant-tree-list-scrollbar {
+        pointer-events: none;
+      }
       .ant-tree-list-scrollbar-thumb {
         background-color: ${token.colorFill} !important;
-        transition: background-color 0.1s ease;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease, background-color 0.1s ease;
+      }
+      &:hover .ant-tree-list-scrollbar-thumb,
+      .ant-tree-list-scrollbar-thumb-moving {
+        opacity: 1;
+        pointer-events: auto;
+        visibility: visible;
       }
     `,
   };

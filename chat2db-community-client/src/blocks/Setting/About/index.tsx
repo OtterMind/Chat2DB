@@ -1,7 +1,7 @@
 import Iconfont from '@/components/Iconfont';
 import Logo from '@/components/Logo';
 import { APP_CONFIG } from '@/constants/appConfig';
-import { runtimeEditionConfig } from '@/constants/runtimeEdition';
+import { clientRuntime } from '@client-runtime';
 import { UpdatedStatus } from '@/constants/settings';
 import i18n from '@/i18n';
 import jcefApi from '@/jcef';
@@ -36,7 +36,7 @@ export default function AboutUs() {
 
   const jumpDoc = () => {
     let CHANGE_LOG_URL = appUrlConfig.CHANGE_LOG_URL;
-    if (runtimeEditionConfig.localPersistence) {
+    if (clientRuntime.usesLocalPersistence) {
       CHANGE_LOG_URL = `${CHANGE_LOG_URL}?type=local`;
     }
     openWebPage(CHANGE_LOG_URL);
@@ -69,7 +69,7 @@ export default function AboutUs() {
   };
 
   const updateButton = useMemo(() => {
-    if (!isDesktop || !runtimeEditionConfig.autoUpdate) {
+    if (!isDesktop || !clientRuntime.enableAutoUpdate) {
       return false;
     }
     switch (updateDetail.status) {
@@ -126,7 +126,7 @@ export default function AboutUs() {
           </div> */}
           <div className={styles.updateButton}>
             {updateButton}
-            {!runtimeEditionConfig.localPersistence && (
+            {!clientRuntime.usesLocalPersistence && (
               <Button size="small" onClick={jumpDoc}>
                 {i18n('setting.button.changeLog')}
               </Button>
@@ -134,7 +134,7 @@ export default function AboutUs() {
           </div>
         </div>
       </div>
-      {isDesktop && runtimeEditionConfig.autoUpdate && (
+      {isDesktop && clientRuntime.enableAutoUpdate && (
         <>
           {!!updateDetail.progress && (
             <div className={styles.updateRule}>

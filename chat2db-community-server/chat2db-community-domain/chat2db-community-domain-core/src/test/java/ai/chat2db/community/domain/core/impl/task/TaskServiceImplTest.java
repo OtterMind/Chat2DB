@@ -49,7 +49,7 @@ class TaskServiceImplTest {
                 task(1L, 10L, 100L, ownedArtifact),
                 task(2L, 20L, 100L, otherUserArtifact),
                 task(3L, 10L, 200L, otherOrganizationArtifact)));
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)
@@ -69,7 +69,6 @@ class TaskServiceImplTest {
         assertEquals(1, service.listEvents(1L, 0L, 10).size());
         assertEquals(List.of(), service.listEvents(2L, 0L, 10));
         assertEquals(List.of(), service.listEventsBefore(3L, null, 10));
-        assertNull(service.cancel(2L));
         assertThrows(DataNotFoundException.class, () -> service.delete(2L));
         assertThrows(DataNotFoundException.class, () -> service.delete(3L));
         assertThrows(DataNotFoundException.class, () -> service.resolveArtifact(2L));

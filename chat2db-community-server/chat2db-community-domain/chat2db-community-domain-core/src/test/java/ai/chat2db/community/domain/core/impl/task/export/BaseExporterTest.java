@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,7 +27,8 @@ class BaseExporterTest {
 
     @Test
     void cancellationInterruptsMultiTableZipCompressionAndCleansIntermediateFiles() throws Exception {
-        BaseExporter exporter = new BaseExporter() {
+        BaseExporter exporter = new BaseExporter(new ExportCellProcessorChain(List.of()),
+                new SqlExecutionPolicyManager(List.of())) {
             {
                 suffix = ".sql";
             }
@@ -35,6 +37,11 @@ class BaseExporterTest {
             protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
                     File file) throws Exception {
                 Files.write(file.toPath(), new byte[32 * 1024]);
+            }
+
+            @Override
+            public String type() {
+                return "sql";
             }
         };
         ExportTaskSpec spec = ExportTaskSpec.builder()

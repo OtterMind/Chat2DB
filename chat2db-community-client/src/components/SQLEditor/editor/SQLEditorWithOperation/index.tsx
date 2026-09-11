@@ -9,7 +9,7 @@ import { EditorSetValueType, EditorType, SQLOptType } from '../../type';
 import { staticMessage } from '@chat2db/ui';
 import { Modal } from 'antd';
 import { IConsoleReturnExecuteSql, IBoundInfo, TreeNodeData } from '@/typings';
-import { saveFileToDesktop, updateFileContent } from '@/utils/file';
+import { saveFileToDesktop, saveLocalFileContent, waitForLocalFileSave } from '@/utils/file';
 import i18n from '@/i18n';
 import { useSaveEditorData } from '@/components/SQLEditor/hooks/useSaveEditorData';
 import { formatSql } from '../../helper/utils';
@@ -19,13 +19,12 @@ import { useGlobalStore } from '@/store/global';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useAIStore } from '@/store/ai';
-import { useChatStore } from '@/store/chat';
-import ChatService from '@/service/chat';
 import sqlService, { type IRoutineMigrationParams } from '@/service/sql';
-import { isRoutineOperationSupportedDatabaseType, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
+import { DatabaseCapability, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { EditorTableIdentifier } from '../../helper/tableIdentifier';
 import { useTreeStore } from '@/store/tree';
 import { isTemporaryId } from '@/utils';
+import { isDatabaseCapabilitySupported } from '@/utils/databaseJudgments';
 import { readClipboard } from '@/utils/clipboard';
 import executeSql from '@/service/executeSql';
 import { parseClipboardTextToSqlInTokens } from '@/utils/sqlInClipboard';
@@ -47,6 +46,7 @@ import {
 import { normalizeSavedConsoleName, resolveInitialSavedConsoleName } from '../../helper/savedConsoleName';
 import { hasUnsavedLocalFileChanges } from '@/utils/localFileEncoding';
 import type { EditorCloseGuardRef } from '@/utils/editorCloseGuard';
+import { buildWorkspaceObjectTabTitle } from '@/utils/workspaceObjectTabTitle';
 import { getDataSourceWatermarkContent, getDataSourceWatermarkLayout } from '@/utils/dataSourceWatermark';
 import { withIdentityColorAlpha } from '@/utils/dataSourceIdentity';
 import { useDataSourceIdentityColor } from '@/components/DataSourceIdentityMark';
@@ -71,7 +71,7 @@ interface ISQLEditorWithOperationProps {
   active: boolean;
   defaultSQL?: string;
   dbInfo: IBoundInfo;
-  setDBInfo: (dbInfo: IBoundInfo) => void;
+  setDBInfo: (dbInfo: Partial<IBoundInfo>) => void;
 
   sqlFileName?: string;
   workspaceTabsTitle?: string;
@@ -140,9 +140,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
   } = props;
   const isReadOnly = !!dbInfo.readOnly;
   const isSupportedRoutineEditor =
-    isRoutineOperationSupportedDatabaseType(dbInfo.databaseType) &&
+    isDatabaseCapabilitySupported(dbInfo.databaseType, DatabaseCapability.ROUTINE_OPERATION) &&
     [WorkspaceTabType.FUNCTION, WorkspaceTabType.PROCEDURE].includes(type as WorkspaceTabType);
-  const { styles } = useStyles();
+  const { styles, theme } = useStyles();
   const [modal, modalContextHolder] = Modal.useModal();
   const [contextMenuInfo, setContextMenuInfo] = useState<IContextMenuInfo>(contextMenuDefaultConfig);
   const [contextTableIdentifier, setContextTableIdentifier] = useState<EditorTableIdentifier | null>(null);
@@ -209,6 +209,11 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     executeSQL: handleExecuteSQL,
     hasUnsavedChangesBeforeClose,
     saveBeforeClose,
+    waitForPendingSave:
+      type === WorkspaceTabType.LocalSQLFile && dbInfo.filePath
+        ? () => waitForLocalFileSave(dbInfo.filePath!)
+        : undefined,
+    persistBeforeApplicationExit: type === WorkspaceTabType.CONSOLE ? flushAutoSave : undefined,
   }));
 
   const getInstance = useCallback(() => {
@@ -311,7 +316,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     }
   }, [active]);
 
-  const { saveConsole, hasSavedSqlRecord, hasUnsavedChanges } = useSaveEditorData({
+  const { saveConsole, hasSavedSqlRecord, hasUnsavedChanges, flushAutoSave } = useSaveEditorData({
     editorRef: sqlEditorRef,
     isActive: active,
     boundInfo: dbInfo,
@@ -603,10 +608,12 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       return;
     }
 
-    const title = [tableIdentifier.tableName].filter(Boolean).join('.') + `[${tableIdentifier.dataSourceName || ''}]`;
-    const popoverContent =
-      [tableIdentifier.databaseName, tableIdentifier.schemaName, tableIdentifier.tableName].filter(Boolean).join('.') +
-      `[${tableIdentifier.dataSourceName || ''}]`;
+    const title = buildWorkspaceObjectTabTitle({
+      dataSourceName: tableIdentifier.dataSourceName,
+      databaseName: tableIdentifier.databaseName,
+      schemaName: tableIdentifier.schemaName,
+      objectName: tableIdentifier.tableName,
+    });
     const tabId =
       treeConfig?.[TreeNodeType.TABLE]?.createTreeNodeKey?.({
         dataSourceId: tableIdentifier.dataSourceId,
@@ -626,59 +633,66 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         databaseName: tableIdentifier.databaseName,
         schemaName: tableIdentifier.schemaName,
         tableName: tableIdentifier.tableName,
-        popoverContent,
+        popoverContent: title,
       },
     });
   };
 
   const handleAI = async (actionType: SQLOptType) => {
-    if (actionType === SQLOptType.SQL_OPTIMIZER) {
-      const selectSQL = sqlEditorRef.current?.getSelectedContent();
-      if (!selectSQL) {
-        staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
-        return;
-      }
-
-      const { dataSourceId, databaseName, schemaName, databaseType, supportDatabase, supportSchema } = dbInfo;
-      if (!dataSourceId || !databaseType) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.dataSource.title')));
-        return;
-      }
-      if (supportDatabase && !databaseName) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.database.title')));
-        return;
-      }
-      if (supportSchema && !schemaName) {
-        staticMessage.warning(i18n('common.placeholder.select', i18n('common.schema.title')));
-        return;
-      }
-
-      useAIStore.getState().setShowPanel(true);
-      const chatVO = await ChatService.getChatBriefByDataSourceId({
-        dataSourceId,
-      });
-      const page = useGlobalStore.getState().mainPageActiveTab;
-      const currentChat = useChatStore.getState().currentChat;
-      useChatStore
-        .getState()
-        .setCurrentChat({
-          ...currentChat,
-          [page]: chatVO,
-        })
-        .then(() => {
-          if (!useChatStore.getState().handleSend) return;
-          useChatStore.getState().handleSend?.({
-            questionType: QuestionType.SQL_OPTIMIZER,
-            input: `${i18n('ai.aiType.SQLOptimizer.preContent')}: \\\n ${selectSQL}`,
-            source: ChatSourceType.DATASOURCE_CHAT,
-            dataSourceId,
-            databaseName,
-            schemaName,
-            databaseType,
-            sql: selectSQL,
-          } as any);
-        });
+    const selectSQL = sqlEditorRef.current?.getSelectedContent();
+    if (!selectSQL) {
+      staticMessage.warning(i18n('common.placeholder.select', 'SQL'));
+      return;
     }
+
+    const { dataSourceId, databaseName, schemaName, databaseType, supportDatabase, supportSchema } = dbInfo;
+    if (!dataSourceId || !databaseType) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.dataSource.title')));
+      return;
+    }
+    if (supportDatabase && !databaseName) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.database.title')));
+      return;
+    }
+    if (supportSchema && !schemaName) {
+      staticMessage.warning(i18n('common.placeholder.select', i18n('common.schema.title')));
+      return;
+    }
+
+    const scenario = {
+      [SQLOptType.NL_2_SQL]: {
+        questionType: QuestionType.NL_2_SQL,
+        input: selectSQL,
+      },
+      [SQLOptType.SQL_EXPLAIN]: {
+        questionType: QuestionType.SQL_EXPLAIN,
+        input: `${i18n('ai.aiType.SQLExplain.preContent')}: \\\n ${selectSQL}`,
+      },
+      [SQLOptType.SQL_OPTIMIZER]: {
+        questionType: QuestionType.SQL_OPTIMIZER,
+        input: `${i18n('ai.aiType.SQLOptimizer.preContent')}: \\\n ${selectSQL}`,
+      },
+    }[actionType];
+    if (!scenario) return;
+
+    useAIStore.getState().setShowPanel(true);
+    window.setTimeout(
+      () =>
+        window.dispatchEvent(
+          new CustomEvent('stream:sendMessage', {
+            detail: {
+              ...scenario,
+              source: ChatSourceType.DATASOURCE_CHAT,
+              dataSourceId,
+              databaseName,
+              schemaName,
+              databaseType,
+              sql: selectSQL,
+            },
+          }),
+        ),
+      0,
+    );
   };
 
   const handleCopy = useCallback(() => {
@@ -885,10 +899,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     const executionBoundInfo = createDataSourceExecutionBoundInfo(dbInfo);
     const executionTarget = createDataSourceExecutionSnapshot(executionBoundInfo);
     const executionDataSourceState = dataSourceState;
-    await sqlEditorRef.current?.handleQuickSQLParser(
-      sqlEditorRef.current?.getValue() || '',
-      executionBoundInfo,
-    );
+    await sqlEditorRef.current?.handleQuickSQLParser(sqlEditorRef.current?.getValue() || '', executionBoundInfo);
     // await sqlEditorRef.current?.handleSQLParser(sqlEditorRef.current?.getValue() || '', dbInfo);
 
     const selectSQL = sqlEditorRef.current?.getSelectedContent() || '';
@@ -934,7 +945,10 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       }
       return;
     }
-    void saveConsole(getValue(), { mode: 'manual' });
+    void saveConsole(getValue(), { mode: 'manual' }).catch((error) => {
+      console.error('save saved-console error', error);
+      staticMessage.error(i18n('common.text.failure'));
+    });
   }, [
     dbInfo.consoleId,
     dbInfo.databaseName,
@@ -977,8 +991,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
 
   const handleSaveFile = async () => {
     const fileContent = sqlEditorRef.current?.getValue() ?? '';
+    let result: Awaited<ReturnType<typeof saveLocalFileContent>>;
     try {
-      await updateFileContent({
+      result = await saveLocalFileContent({
         filePath: dbInfo.filePath!,
         fileContent,
         charset: dbInfo.fileCharset,
@@ -990,10 +1005,11 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       return false;
     }
     try {
-      sqlEditorRef.current?.resetContentDiffBaseline(fileContent);
+      sqlEditorRef.current?.resetContentDiffBaseline(result.fileContent);
     } catch {
       // Content diff is only a hint and must not affect file saving.
     }
+    setDBInfo({ ddl: result.fileContent });
     staticMessage.success(i18n('workspace.text.changeFileSuccess'));
     return true;
   };
@@ -1022,7 +1038,9 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       try {
         await saveConsole(getValue(), { mode: 'manual' });
         return true;
-      } catch {
+      } catch (error) {
+        console.error('save saved-console before close error', error);
+        staticMessage.error(i18n('common.text.failure'));
         return false;
       }
     }
@@ -1146,7 +1164,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     isConsole && type === WorkspaceTabType.CONSOLE && dbInfo.dataSourceId
       ? getDataSourceWatermarkContent(dbInfo, dataSourceState)
       : undefined;
-  const watermarkColor = identityColor ? withIdentityColorAlpha(identityColor, 0.4) : undefined;
+  const watermarkColor = withIdentityColorAlpha(identityColor || theme.colorPrimary, 0.4);
   const watermarkLayout = getDataSourceWatermarkLayout(editorViewportSize?.width, editorViewportSize?.height);
 
   return (

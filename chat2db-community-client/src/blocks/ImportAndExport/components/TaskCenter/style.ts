@@ -154,6 +154,9 @@ export const useStyles = createStyles(({ css, token, cx }) => {
       color: ${token.colorTextSecondary};
       font-variant-numeric: tabular-nums;
     `,
+    activeStatus: css`
+      color: ${token.colorPrimary};
+    `,
     taskProgress: css`
       display: flex;
       grid-column: 1 / -1;
@@ -182,14 +185,6 @@ export const useStyles = createStyles(({ css, token, cx }) => {
       max-width: 360px;
       overflow-wrap: anywhere;
       font-variant-numeric: tabular-nums;
-    `,
-    listItemRight: css`
-      display: flex;
-      grid-column: 2;
-      grid-row: 1;
-      gap: 4px;
-      align-items: center;
-      align-self: center;
     `,
     taskActions: cx(
       'task-item-actions',

@@ -1,8 +1,18 @@
-import React, { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect, useRef, useCallback } from 'react';
+import React, {
+  memo,
+  useState,
+  forwardRef,
+  ForwardedRef,
+  useImperativeHandle,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import { Input } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
+import { DatabaseTypeCode } from '@/constants';
 
 import i18n from '@/i18n';
 import AICascaderSource, { IAICascaderData } from '../AICascaderSource';
@@ -10,7 +20,6 @@ import AIAtMetion from '../AIAtMetion';
 import { SuggestionItem } from '../AIAtMetion/interface';
 import AIModelSelect from '../AIModelSelect';
 import sqlService from '@/service/sql';
-import aiDataCollectionService from '@/service/aiDataCollection';
 import { ITable } from '@/typings';
 import { useGlobalStore } from '@/store/global';
 import { useStyles } from './style';
@@ -26,20 +35,24 @@ import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
-import useRuntimeEditionCapabilities, {
-  getRuntimeEditionCapabilities,
-} from '@/hooks/useRuntimeEditionCapabilities';
+import {
+  detectMentionTrigger,
+  reconcileSelectedMentions,
+  replaceMentionTrigger,
+  upsertSelectedMention,
+  type MentionTrigger,
+  type SelectedMention,
+} from './mentionSelection';
 
 export interface SendParams {
   input: string;
   questionType: QuestionType;
   source: ChatSourceType;
-  // dataset ID
-  dataSourceCollectionId?: number;
   // database information
   dataSourceId?: number;
   databaseName?: string;
   schemaName?: string;
+  databaseType?: DatabaseTypeCode;
   tableName?: string;
   // selected table
   tableList?: PromptTableVO[];
@@ -60,7 +73,6 @@ interface ChatInputProps {
   onContextChange?: (contextInfo: IAICascaderData) => void;
   // Whether to clear the input box after sending
   clearAfterSend?: boolean;
-  dataSourceCollectionId?: number;
   inputRightAddons?: React.ReactNode;
   // Hide selection database
   hideDatabaseSelect?: boolean;
@@ -68,7 +80,7 @@ interface ChatInputProps {
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;
-  prefillInputState?: { text: string; token: number } | null;
+  prefillInputState?: { text: string; token: number; questionType?: QuestionType } | null;
   onChatSend?: (param: SendParams) => void;
   onStop?: () => void;
   autoSize?: boolean | { minRows?: number; maxRows?: number };
@@ -86,7 +98,6 @@ export interface ChatInputPropsRef {
 const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.md,.txt,.json,.csv,.xlsx,.xls';
 const ATTACHMENT_FILE_TYPES = ['pdf', 'doc', 'docx', 'md', 'txt', 'json', 'csv', 'xlsx', 'xls'];
 const ATTACHMENT_PARSE_MESSAGE_KEY = 'chat-attachment-parse';
-
 const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInputPropsRef>) => {
   const {
     className,
@@ -105,18 +116,18 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     autoSize,
     autoFocus = false,
   } = props;
-  const { aiDataCollection } = useRuntimeEditionCapabilities();
   const { styles } = useStyles();
   const [inputValue, setInputValue] = useState('');
+  const [prefillQuestionType, setPrefillQuestionType] = useState<QuestionType>();
   const [tableList, setTableList] = useState<ITable[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string[]>([]);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
   const [attachments, setAttachments] = useState<IChatAttachment[]>([]);
   const [attachmentLoading, setAttachmentLoading] = useState(false);
   const textareaRef = useRef<TextAreaRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const atInputRef = useRef<string>(''); // tracks the input after @
-  const isTypingAfterAtRef = useRef<boolean>(false); // Whether to enter after @
   const isComposingRef = useRef<boolean>(false); // IME input method combination status
+  const tableRequestSequenceRef = useRef(0);
 
   // caches tables without search conditions
   const tableListWithoutSearchKey = useRef<ITable[]>([]);
@@ -141,7 +152,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
 
   useImperativeHandle(ref, () => ({
     triggerSend,
-    setQuestionType: () => {},
+    setQuestionType: setPrefillQuestionType,
     focusInput,
     resetAttachments: () => {
       setAttachments([]);
@@ -168,14 +179,9 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
 
   useEffect(() => {
     if (props.contextInfo) {
-      if (!aiDataCollection && 'dataSourceCollectionId' in props.contextInfo) {
-        clearCascaderData(mainPageActiveTab as PageType);
-        onContextChange?.(null);
-        return;
-      }
       setCascaderData(mainPageActiveTab as PageType, props.contextInfo ?? null);
     }
-  }, [aiDataCollection, clearCascaderData, mainPageActiveTab, onContextChange, props.contextInfo, setCascaderData]);
+  }, [props.contextInfo, mainPageActiveTab]);
 
   useEffect(() => {
     if (!prefillInputState?.token) {
@@ -183,6 +189,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     }
 
     setInputValue(prefillInputState.text || '');
+    setPrefillQuestionType(prefillInputState.questionType);
     window.setTimeout(() => {
       focusInput();
     }, 0);
@@ -190,49 +197,19 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
 
   useEffect(() => {
     tableListWithoutSearchKey.current = [];
-    setSelectedTable([]);
+    tableRequestSequenceRef.current += 1;
+    setSelectedMentions([]);
+    setMentionTrigger(null);
     setTableList([]);
-    const currentContext = cascaderDataMap[mainPageActiveTab];
-    if (!aiDataCollection && currentContext && 'dataSourceCollectionId' in currentContext) {
-      clearCascaderData(mainPageActiveTab as PageType);
-      return;
+    if (cascaderDataMap[mainPageActiveTab]) {
+      fetchTableList(cascaderDataMap[mainPageActiveTab], '');
     }
-    if (currentContext) {
-      fetchTableList(currentContext, '');
-    }
-  }, [aiDataCollection, cascaderDataMap[mainPageActiveTab], clearCascaderData, mainPageActiveTab]);
+  }, [cascaderDataMap[mainPageActiveTab]]);
 
   const fetchTableList = useRef(
-    debounce(async (_contextInfo: IAICascaderData, searchKey: string) => {
+    debounce(async (_contextInfo: IAICascaderData, searchKey: string, requestSequence?: number) => {
       if (!_contextInfo) return;
-      if ('dataSourceCollectionId' in _contextInfo && _contextInfo?.dataSourceCollectionId) {
-        if (!getRuntimeEditionCapabilities().aiDataCollection) {
-          return;
-        }
-        if (!searchKey && tableListWithoutSearchKey.current.length) {
-          setTableList(tableListWithoutSearchKey.current);
-          return;
-        }
-        const res = await aiDataCollectionService.getAiDataCollectionElementList({
-          id: _contextInfo.dataSourceCollectionId,
-          pageNo: 1,
-          pageSize: 1000,
-        });
-        const list: ITable[] =
-          res?.elements?.map((item) => ({
-            name: item.tableName,
-            comment: '',
-            tableType: item.type,
-          })) || [];
-        const filteredList = searchKey
-          ? list.filter((item) => item.name.toLowerCase().includes(searchKey.toLowerCase()))
-          : list;
-        if (!searchKey) {
-          tableListWithoutSearchKey.current = filteredList;
-        }
-        setTableList(filteredList);
-        return;
-      }
+      if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
       if ('dataSourceId' in _contextInfo && _contextInfo?.dataSourceId) {
         if (!searchKey && tableListWithoutSearchKey.current.length) {
           setTableList(tableListWithoutSearchKey.current);
@@ -258,13 +235,20 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             searchKey,
           });
         } catch (error) {
-          if (error?.errorCode === 'QUERY_DATASOURCE_ERROR' || error?.errorCode === ErrorCode.NeedLoggedIn) {
+          if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
+          const requestError = error as { errorCode?: string };
+          if (
+            requestError.errorCode === 'QUERY_DATASOURCE_ERROR' ||
+            requestError.errorCode === ErrorCode.NeedLoggedIn
+          ) {
             tableListWithoutSearchKey.current = [];
             setTableList([]);
             clearCascaderData(mainPageActiveTab as PageType);
           }
           return;
         }
+
+        if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
 
         const atTableList =
           res.data?.map((s) => ({
@@ -318,7 +302,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
      * default is ORDINARY_CHAT
      * console opens as NL_2_SQL
      */
-    const questionType = params?.questionType || QuestionType.ORDINARY_CHAT;
+    const questionType = params?.questionType || prefillQuestionType || QuestionType.ORDINARY_CHAT;
 
     const finalAttachments = params?.attachments ?? attachments;
     const rawInput = params?.input ?? inputValue;
@@ -337,10 +321,6 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     const _contextInfo = contextInfo
       ? {
           ...contextInfo,
-          dataSourceCollectionId: aiDataCollection
-            ? params?.dataSourceCollectionId ||
-              ('dataSourceCollectionId' in contextInfo ? contextInfo?.dataSourceCollectionId : undefined)
-            : undefined,
           dataSourceId: params?.dataSourceId || ('dataSourceId' in contextInfo ? contextInfo?.dataSourceId : undefined),
           databaseName: params?.databaseName || ('databaseName' in contextInfo ? contextInfo?.databaseName : undefined),
           schemaName: params?.schemaName || ('schemaName' in contextInfo ? contextInfo?.schemaName : undefined),
@@ -355,16 +335,15 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       input: finalInput,
       source,
       model: useAIStore.getState().selectedModel?.value,
-      tableList: (selectedTable || []).map((i) => ({
-        tableName: i,
-        tableType: tableList.find((s) => s.name === i)?.tableType,
-      })) as any,
+      tableList: selectedMentions
+        .map((mention) => ({ tableName: mention.tableName, tableType: mention.tableType })) as any,
       attachments: finalAttachments,
     };
 
     onChatSend?.(_params);
 
-    setSelectedTable([]);
+    setSelectedMentions([]);
+    setPrefillQuestionType(undefined);
     setAttachments([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -381,20 +360,11 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const handleChange = (value: string) => {
-    // Check whether the table name is deleted
-    const removedTables = selectedTable.filter((tableName) => {
-      const pattern = new RegExp(`@${tableName}\\s`);
-      return !pattern.test(value);
-    });
-
-    // Remove deleted tables from selectedTable.
-    if (removedTables.length > 0) {
-      setSelectedTable((prev) => prev.filter((table) => !removedTables.includes(table)));
-    }
-
+    setSelectedMentions((previous) => reconcileSelectedMentions(value, previous));
     setInputValue(value);
 
     if (!value) {
+      setPrefillQuestionType(undefined);
       return;
     }
   };
@@ -403,10 +373,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     if (!contextInfo) {
       return false;
     }
-    return Boolean(
-      ('dataSourceCollectionId' in contextInfo && contextInfo.dataSourceCollectionId) ||
-        ('dataSourceId' in contextInfo && contextInfo.dataSourceId),
-    );
+    return Boolean('dataSourceId' in contextInfo && contextInfo.dataSourceId);
   };
 
   const parseSelectedFiles = useCallback(
@@ -536,20 +503,39 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const getTableList = (info: string) => {
+  const getMentionList = (info?: MentionTrigger) => {
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
       label: table.name,
-      value: table.name,
+      value: `table:${table.tableType}:${table.name}`,
+      kind: 'table',
+      tableName: table.name,
       tableType: table.tableType,
+      extra: table.tableType === 'VIEW' ? '视图' : '表',
     }));
-
-    if (!info) return tables;
-
-    return tables.filter((item) => item.label.toLowerCase().includes(info.toLowerCase()));
+    if (!info?.query) return tables;
+    return tables.filter((item) => item.label.toLowerCase().includes(info.query.toLowerCase()));
   };
 
-  const getTextBeforeCursor = (input: string, cursorPosition: number) => {
-    return input.slice(0, cursorPosition);
+  const updateMentionSuggestions = (
+    value: string,
+    cursor: number,
+    onTrigger: (info?: MentionTrigger | false) => void,
+  ) => {
+    const nextTrigger = detectMentionTrigger(value, cursor);
+    if (!nextTrigger) {
+      tableRequestSequenceRef.current += 1;
+      setMentionTrigger(null);
+      onTrigger(false);
+      return;
+    }
+
+    const requestSequence = tableRequestSequenceRef.current + 1;
+    tableRequestSequenceRef.current = requestSequence;
+    setTableList([]);
+    setMentionTrigger(nextTrigger);
+    const contextInfo = cascaderDataMap[mainPageActiveTab];
+    fetchTableList(contextInfo, nextTrigger.query, requestSequence);
+    onTrigger(nextTrigger);
   };
 
   const isSameContextInfo = (prev: IAICascaderData, next: IAICascaderData) => {
@@ -560,16 +546,6 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       return !prev && !next;
     }
 
-    const prevIsCollection = 'dataSourceCollectionId' in prev;
-    const nextIsCollection = 'dataSourceCollectionId' in next;
-    if (prevIsCollection || nextIsCollection) {
-      return (
-        prevIsCollection &&
-        nextIsCollection &&
-        prev.dataSourceCollectionId === next.dataSourceCollectionId
-      );
-    }
-
     return (
       prev.dataSourceId === next.dataSourceId &&
       prev.databaseName === next.databaseName &&
@@ -578,26 +554,34 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   return (
-    <AIAtMetion
+    <AIAtMetion<MentionTrigger>
       className={className}
-      items={getTableList as any}
-      onSelect={(v) => {
-        const textarea = textareaRef.current;
-        const cursorPos = textarea?.resizableTextArea?.textArea?.selectionStart || 0;
+      items={getMentionList}
+      onSelect={(item) => {
+        const textarea = textareaRef.current?.resizableTextArea?.textArea;
+        const cursor = textarea?.selectionStart ?? inputValue.length;
+        const activeTrigger = mentionTrigger || detectMentionTrigger(inputValue, cursor);
+        const replacement = activeTrigger
+          ? replaceMentionTrigger(inputValue, activeTrigger, item.label)
+          : { value: `${inputValue}${item.label}`, cursor: inputValue.length + item.label.length };
 
-        const textBeforeCursor = inputValue.slice(0, cursorPos);
-        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-        if (lastAtIndex !== -1) {
-          const beforeAt = inputValue.slice(0, lastAtIndex);
-          const afterCursor = inputValue.slice(cursorPos);
-
-          setInputValue(beforeAt + '@' + v + ' ' + afterCursor);
-        } else {
-          setInputValue((prev) => prev + '@' + v + ' ');
-        }
-
-        setSelectedTable((prev) => [...prev, v]);
+        setInputValue(replacement.value);
+        setSelectedMentions((previous) => {
+          const nextMention: SelectedMention = {
+            value: item.value,
+            label: item.label,
+            kind: item.kind,
+            tableName: item.tableName!,
+            tableType: item.tableType,
+          };
+          return upsertSelectedMention(previous, nextMention);
+        });
+        tableRequestSequenceRef.current += 1;
+        setMentionTrigger(null);
+        window.setTimeout(() => {
+          textarea?.focus();
+          textarea?.setSelectionRange(replacement.cursor, replacement.cursor);
+        }, 0);
       }}
     >
       {({ onTrigger, onKeyDown, isOpen }) => (
@@ -635,74 +619,39 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             value={inputValue}
             disabled={loading || attachmentLoading}
             autoSize={autoSize ?? { minRows: 1, maxRows: 8 }}
-            onChange={(e) => handleChange(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              handleChange(value);
+              if (!isComposingRef.current) {
+                updateMentionSuggestions(value, e.target.selectionStart, onTrigger);
+              }
+            }}
             onCompositionStart={() => {
               isComposingRef.current = true;
             }}
-            onCompositionEnd={() => {
+            onCompositionEnd={(e) => {
               isComposingRef.current = false;
+              updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
+            }}
+            onClick={(e) => {
+              updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
             }}
             onKeyDown={(e) => {
-              // Enter sends, Shift+Enter inserts a newline, and IME composition does not send.
-              if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current && !loading) {
-                if (!isOpen) {
-                  e.preventDefault();
-                  handleSend();
-                }
+              if (isOpen && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', 'Escape'].includes(e.key)) {
+                onKeyDown(e);
+                if (e.defaultPrevented) return;
               }
 
-              // Mention handling waits for the value update with setTimeout.
-              setTimeout(() => {
-                const target = e.target as HTMLTextAreaElement;
-                const cursorPosition = target.selectionStart;
-                const currentInputValue = target.value;
-                const textBeforeCursor = getTextBeforeCursor(currentInputValue, cursorPosition);
-
-                if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-                  isTypingAfterAtRef.current = false;
-                  atInputRef.current = '';
-                  onTrigger(false);
-                }
-
-                if (e.key === '@') {
-                  isTypingAfterAtRef.current = true;
-                  atInputRef.current = '';
-                  onTrigger('');
-                  fetchTableList(cascaderDataMap[mainPageActiveTab], '');
-                } else if (isTypingAfterAtRef.current) {
-                  if (
-                    e.key.startsWith('Arrow') ||
-                    e.key === 'Home' ||
-                    e.key === 'End' ||
-                    e.key === 'PageUp' ||
-                    e.key === 'PageDown' ||
-                    e.key === 'Shift' ||
-                    e.key === 'Control' ||
-                    e.key === 'Alt' ||
-                    e.key === 'Meta' ||
-                    e.key === ' '
-                  ) {
-                    onKeyDown(e);
-                    return;
-                  }
-
-                  const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-                  if (lastAtIndex === -1) {
-                    isTypingAfterAtRef.current = false;
-                    atInputRef.current = '';
-                    onTrigger(false);
-                  } else {
-                    const newAtInput = textBeforeCursor.slice(lastAtIndex + 1);
-                    if (newAtInput !== atInputRef.current) {
-                      atInputRef.current = newAtInput;
-                      onTrigger(atInputRef.current);
-                      fetchTableList(cascaderDataMap[mainPageActiveTab], atInputRef.current);
-                    }
-                  }
-                }
-
-                onKeyDown(e);
-              });
+              // Enter sends, Shift+Enter inserts a newline, and IME composition does not send.
+              if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current && !loading) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            onKeyUp={(e) => {
+              if (!isOpen && !isComposingRef.current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
+              }
             }}
           />
           <div className={styles.bottomAddonsRow}>

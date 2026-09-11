@@ -65,14 +65,6 @@ export interface TableCommentExt {
   columnAlias: ColumnAlias[];
 }
 
-export interface AITableComment {
-  dataSourceId: number;
-  databaseName?: string;
-  schemaName?: string;
-  tableName: string;
-  tableCommentExt: TableCommentExt;
-}
-
 export interface IBoundInfo {
   consoleId?: number;
   workspaceTabId?: number | string;
