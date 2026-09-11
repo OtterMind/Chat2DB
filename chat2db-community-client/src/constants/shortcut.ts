@@ -9,6 +9,7 @@ export enum ShortcutScope {
   ResultSet = 'resultSet',
   Workspace = 'workspace',
   Table = 'table',
+  ViewDdl = 'viewDdl',
 }
 
 export enum ShortcutAction {
@@ -58,6 +59,7 @@ export enum ShortcutAction {
   ResultSearch = 'resultSearch',
   ResultSubmit = 'resultSubmit',
   ResultRefresh = 'resultRefresh',
+  DdlSearch = 'ddlSearch',
   TableCopy = 'tableCopy',
   TablePaste = 'tablePaste',
   TableSelectAll = 'tableSelectAll',
@@ -463,6 +465,15 @@ export const DEFAULT_SHORTCUT_CONFIG: Record<ShortcutAction, ShortcutDefinition>
     action: ShortcutAction.ResultSearch,
     defaultBinding: `${modifierKey} + F`,
     scope: ShortcutScope.ResultSet,
+    allowInEditable: true,
+    canModify: true,
+  },
+  [ShortcutAction.DdlSearch]: {
+    key: ShortcutAction.DdlSearch,
+    label: 'setting.shortcut.ddlSearch',
+    action: ShortcutAction.DdlSearch,
+    defaultBinding: `${modifierKey} + F`,
+    scope: ShortcutScope.ViewDdl,
     allowInEditable: true,
     canModify: true,
   },

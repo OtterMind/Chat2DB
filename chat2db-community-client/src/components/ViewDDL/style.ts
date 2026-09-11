@@ -5,7 +5,6 @@ export const useStyles = createStyles(({ css }) => {
     viewDDL: css`
       height: 100%;
       max-height: 100%;
-      overflow-y: auto;
     `,
   };
 });

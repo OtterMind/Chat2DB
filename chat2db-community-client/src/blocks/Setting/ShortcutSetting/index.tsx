@@ -61,6 +61,11 @@ const SHORTCUT_SCOPE_GROUPS: Array<{
     targetId: 'shortcut.table',
     title: 'setting.shortcut.group.table',
   },
+  {
+    scope: ShortcutScope.ViewDdl,
+    targetId: 'shortcut.viewDdl',
+    title: 'setting.shortcut.group.viewDdl',
+  },
 ];
 
 export default function ShortcutSetting() {

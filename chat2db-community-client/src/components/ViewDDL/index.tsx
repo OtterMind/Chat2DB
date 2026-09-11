@@ -2,8 +2,8 @@ import React, { memo, useEffect } from 'react';
 import { useStyles } from './style';
 import classnames from 'classnames';
 import sqlServer from '@/service/sql';
-import SQLPreview from '@/components/SQLPreview';
 import { TreeNodeType } from '@/constants';
+import DdlPreview from './DdlSearch/DdlPreview';
 interface IProps {
   className?: string;
   data: any;
@@ -13,35 +13,58 @@ export default memo<IProps>((props) => {
   const { className, data } = props;
   const { styles } = useStyles();
 
-  const [sql, setSql] = React.useState('');
+  const [loadedDdl, setLoadedDdl] = React.useState({ key: '', sql: '' });
   const requestIdRef = React.useRef(0);
+  // Scoped DDL search (Issue #2748): switching the inspected object resets it.
+  // The key is built from stable identifiers so unrelated re-renders that
+  // recreate the data object do not reset an in-progress search.
+  const searchResetKey = data
+    ? JSON.stringify([
+        data.dataSourceId,
+        data.databaseName,
+        data.schemaName,
+        data.treeNodeType,
+        data.tableName,
+        data.viewName,
+        data.functionName,
+        data.procedureName,
+      ])
+    : '';
+  const sql = loadedDdl.key === searchResetKey ? loadedDdl.sql : '';
 
   useEffect(() => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
     if (!data) {
-      setSql('');
+      setLoadedDdl({ key: searchResetKey, sql: '' });
       return;
     }
 
-    setSql('');
+    setLoadedDdl({ key: searchResetKey, sql: '' });
 
-    getDDL(data).then((res) => {
-      if (requestIdRef.current !== requestId) {
-        return;
-      }
-      setSql(res || '');
-    })
-.catch(() => {
-      // Keep current error handling behavior in the service layer.
-    });
+    getDDL(data)
+      .then((res) => {
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+        setLoadedDdl({ key: searchResetKey, sql: res || '' });
+      })
+      .catch(() => {
+        // Keep current error handling behavior in the service layer.
+      });
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [data]);
 
   return (
-    <div className={classnames(styles.viewDDL, className)}>
-      <SQLPreview sql={sql} source="view-ddl" foldable />
-    </div>
+    <DdlPreview
+      className={classnames(styles.viewDDL, className)}
+      sql={sql}
+      resetKey={searchResetKey}
+      source="view-ddl"
+    />
   );
 });
 
