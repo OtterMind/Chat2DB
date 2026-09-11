@@ -62,7 +62,7 @@
         <flatlaf.version>3.6</flatlaf.version>
         <jackson.version>2.15.3</jackson.version>
         <jackson-afterburner.version>2.15.0</jackson-afterburner.version>
-        <junit-jupiter.version>5.11.4</junit-jupiter.version>
+        <junit-jupiter.version>6.1.2</junit-jupiter.version>
         <vavr.version>0.10.4</vavr.version>
         <jsch.version>0.2.9</jsch.version>
         <bouncycastle.version>1.71</bouncycastle.version>
