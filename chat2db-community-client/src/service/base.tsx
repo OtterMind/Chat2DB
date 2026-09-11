@@ -6,6 +6,7 @@ import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
 import interceptorsResponse from '@/service/interceptorsResponse';
+import { redactSensitiveParams } from '@/utils/sensitiveParams';
 
 export type IErrorLevel = 'toast' | 'notification' | 'prompt' | 'critical' | false;
 export type PermissionError = 'apply' | false;
@@ -199,7 +200,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
               interceptorsResponse({
                 errorCode: responseErrorCode,
                 errorMessage: responseErrorMessage,
-                requestParams: params,
+                requestParams: redactSensitiveParams(params),
                 errorLevel: effectiveErrorLevel,
                 permissionError,
               });
@@ -217,7 +218,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
                   errorDetail,
                   solutionLink,
                   requestUrl: eventualUrl,
-                  requestParams: JSON.stringify(params),
+                  requestParams: JSON.stringify(redactSensitiveParams(params)),
                 });
                 break;
               default:

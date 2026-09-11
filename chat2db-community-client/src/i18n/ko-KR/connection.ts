@@ -46,6 +46,8 @@ export default {
   'connection.import.success': '연결 {1}개를 가져왔습니다',
   'connection.import.unable.password.tips':
     '연결 비밀번호는 가져올 수 없습니다. 가져오기가 완료된 후 연결 비밀번호를 다시 입력해 주세요',
+  'connection.import.dbeaver.masterPassword.placeholder':
+    'DBeaver 마스터 비밀번호(선택 사항, 연결 비밀번호를 복호화하는 데 사용)',
   'connection.export.exporting': '연결 파일을 준비하는 중...',
   'connection.export.success': '연결을 내보냈습니다',
   'connection.export.cancelled': '내보내기를 취소했습니다',

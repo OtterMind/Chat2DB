@@ -19,9 +19,25 @@ public interface ITaskNcxImportService {
      * Imports datasource definitions from a DBP file.
      *
      * @param file uploaded DBP file.
+     * @param masterPassword optional DBeaver master password, used to decrypt connection credentials
+     *                       when the default local key does not match (e.g. master password is set in DBeaver).
+     *                       May be null, in which case connections whose credentials cannot be decrypted
+     *                       are imported without a user or password. The value is used only while this
+     *                       call runs and is never persisted, logged, or returned.
      * @return import response.
      */
-    NcxImportResponse dbpUploadFile(File file);
+    NcxImportResponse dbpUploadFile(File file, String masterPassword);
+
+    /**
+     * Imports datasource definitions from a DBP file without a DBeaver master password, so callers
+     * that have no password to offer keep their existing call shape.
+     *
+     * @param file uploaded DBP file.
+     * @return import response.
+     */
+    default NcxImportResponse dbpUploadFile(File file) {
+        return dbpUploadFile(file, null);
+    }
 
     /**
      * Imports datasource definitions from DataGrip export text.

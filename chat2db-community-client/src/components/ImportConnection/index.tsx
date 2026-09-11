@@ -5,7 +5,7 @@ import ConnectionServer from '@/service/connection';
 import { isDesktop } from '@/utils/env';
 import { Modal, staticMessage } from '@chat2db/ui';
 import { Input } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useStyles } from './style';
 
 interface IImportConnectionProps {
@@ -61,6 +61,7 @@ export const importConfigMap = importConfigList.reduce((acc, cur) => {
 const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClose, onConfirm }) => {
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [importContent, setImportContent] = useState<any>();
+  const [masterPassword, setMasterPassword] = useState<string>('');
   const { styles } = useStyles();
 
   const currentConfig = useMemo(() => {
@@ -69,6 +70,14 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
     }
     return importConfigMap[type];
   }, [type]);
+
+  // The dialog is only toggled open and closed, so the password has to be dropped explicitly:
+  // otherwise a value typed for an earlier import would still be sent with the next one.
+  useEffect(() => {
+    if (!open) {
+      setMasterPassword('');
+    }
+  }, [open]);
 
   const handleConfirmUpload = () => {
     if (!type) {
@@ -81,6 +90,14 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
       file: importContent,
     };
 
+    if (type === ImportConnectionType.DBEAVER && masterPassword) {
+      // DBeaver encrypts saved credentials with the master password when one is set.
+      params = {
+        ...params,
+        masterPassword,
+      };
+    }
+
     if (type === ImportConnectionType.DATAGRIP) {
       params = {
         text: importContent,
@@ -92,6 +109,7 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
       .then((res) => {
         onConfirm && onConfirm();
         setDesktopLoading(false);
+        setMasterPassword('');
         if (res.result) {
           staticMessage.success(res.result);
           return;
@@ -137,6 +155,18 @@ const ImportConnection: React.FC<IImportConnectionProps> = ({ open, type, onClos
         ) : (
           <>
             <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={currentConfig?.accept} />
+            {currentConfig?.type === ImportConnectionType.DBEAVER && (
+              <Input.Password
+                allowClear
+                className={styles.masterPasswordInput}
+                placeholder={i18n('connection.import.dbeaver.masterPassword.placeholder')}
+                // Controlled, so the field always shows exactly the value that would be sent.
+                value={masterPassword}
+                onChange={(event) => {
+                  setMasterPassword(event.target.value);
+                }}
+              />
+            )}
             <div className={styles.tips}>{currentConfig?.tips}</div>
           </>
         )}

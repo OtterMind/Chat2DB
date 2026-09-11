@@ -16,6 +16,9 @@ export const useStyles = createStyles(({ css, cx, token }) => {
       font-size: 12px;
       color: ${token.colorTextSecondary};
     `,
+    masterPasswordInput: css`
+      margin-top: 4px;
+    `,
     uploadDragger: css`
       display: flex;
       flex-direction: column;
