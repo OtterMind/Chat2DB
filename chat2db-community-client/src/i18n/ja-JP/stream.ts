@@ -1,4 +1,5 @@
 export default {
+  "stream.skill.loadFailed": "スキルを読み込めませんでした。もう一度お試しください。",
   "stream.question.prompt": "質問",
   "stream.question.answer": "あなたの回答",
   "stream.directory.clear": "作業ディレクトリをクリア",

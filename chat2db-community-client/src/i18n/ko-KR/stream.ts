@@ -1,4 +1,5 @@
 export default {
+  "stream.skill.loadFailed": "스킬을 불러올 수 없습니다. 다시 시도하세요.",
   "stream.question.prompt": "질문",
   "stream.question.answer": "내 답변",
   "stream.directory.clear": "작업 디렉터리 지우기",

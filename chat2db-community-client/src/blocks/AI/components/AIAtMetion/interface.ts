@@ -1,14 +1,15 @@
-import React from 'react';
+import type React from 'react';
 import type { AgentContextObject } from '@/types/agentContext';
 
-export interface SuggestionItem {
+interface SuggestionBase {
   label: string;
   value: string;
-  kind: 'table';
-  tableType?: string;
-  tableName?: string;
-  contextObject?: AgentContextObject;
   children?: SuggestionItem[];
   extra?: React.ReactNode;
 }
+
+export type SuggestionItem = SuggestionBase & (
+  | { kind: 'table'; tableName: string; tableType?: string; contextObject?: AgentContextObject }
+  | { kind: 'skill' }
+);
 export type SuggestionItems = SuggestionItem[];

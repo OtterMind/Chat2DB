@@ -1,4 +1,5 @@
 export default {
+  "stream.skill.loadFailed": "No se pueden cargar las habilidades. Inténtalo de nuevo.",
   "stream.question.prompt": "Pregunta",
   "stream.question.answer": "Tu respuesta",
   "stream.directory.clear": "Borrar el directorio de trabajo",

@@ -95,6 +95,7 @@ export interface AgentEvent {
   occurredAt: string;
 }
 
+const listSkills = createRequest<void, string[]>('/api/v3/ai/skills', { errorLevel: false });
 const listRuntimeFeatures = createRequest<void, AgentRuntimeFeatureState[]>('/api/v3/ai/features');
 const checkPi = createRequest<void, AgentRuntimeFeatureState>('/api/v3/ai/features/pi/check', { method: 'post' });
 const enablePi = createRequest<{ confirmed: true }, AgentRuntimeEnableResult>('/api/v3/ai/features/pi/enable', {
@@ -164,6 +165,7 @@ const answerQuestion = createRequest<{ sessionId: string; questionId: string } &
 );
 
 export default {
+  listSkills,
   listQuestions,
   answerQuestion,
   listRuntimeFeatures,

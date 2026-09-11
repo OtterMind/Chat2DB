@@ -1,4 +1,5 @@
 export default {
+  "stream.skill.loadFailed": "Unable to load skills. Please try again.",
   "stream.question.prompt": "Question",
   "stream.question.answer": "Your answer",
   "stream.directory.clear": "Clear working directory",

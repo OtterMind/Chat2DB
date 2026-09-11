@@ -29,6 +29,8 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { captureAgentContext, contextScope } from '../../agentContext';
 import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
+import agentService from '@/service/agent';
+import { detectInputSuggestion, replaceSkillTrigger, skillSuggestions, type InputSuggestionTrigger } from './inputSuggestions';
 
 import { TextAreaRef } from 'antd/es/input/TextArea';
 import { PageType } from '@/store/ai/slices/cascader/initialState';
@@ -40,11 +42,9 @@ import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import feedback from '@/utils/feedback';
 import {
-  detectMentionTrigger,
   reconcileSelectedMentions,
   replaceMentionTrigger,
   upsertSelectedMention,
-  type MentionTrigger,
   type SelectedMention,
 } from './mentionSelection';
 
@@ -132,7 +132,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const [prefillQuestionType, setPrefillQuestionType] = useState<QuestionType>();
   const [tableList, setTableList] = useState<ITable[]>([]);
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
-  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
+  const [suggestionTrigger, setSuggestionTrigger] = useState<InputSuggestionTrigger | null>(null);
+  const [skills, setSkills] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<IChatAttachment[]>([]);
   const [attachmentLoading, setAttachmentLoading] = useState(false);
   const textareaRef = useRef<TextAreaRef>(null);
@@ -152,6 +153,17 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setCascaderData: state.setCascaderData,
     clearCascaderData: state.clearCascaderData,
   }));
+
+  useEffect(() => {
+    setSuggestionTrigger(null);
+    setSkills([]);
+    if (runtimeChoice !== 'PI') return;
+    const controller = new AbortController();
+    agentService.listSkills(undefined, { signal: controller.signal })
+      .then((names) => { if (!controller.signal.aborted) setSkills(names); })
+      .catch(() => { if (!controller.signal.aborted) feedback.error(i18n('stream.skill.loadFailed')); });
+    return () => controller.abort();
+  }, [runtimeChoice]);
 
   const activeWorkspaceTab = useWorkspaceStore((state) =>
     state.workspaceTabList?.find((tab) => tab.id === state.activeConsoleId));
@@ -230,7 +242,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     tableListWithoutSearchKey.current = [];
     tableRequestSequenceRef.current += 1;
     setSelectedMentions([]);
-    setMentionTrigger(null);
+    setSuggestionTrigger(null);
     setTableList([]);
     if (cascaderDataMap[mainPageActiveTab]) {
       fetchTableList(cascaderDataMap[mainPageActiveTab], '');
@@ -390,6 +402,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     }
     if (clearAfterSend) {
       setInputValue('');
+      setSuggestionTrigger(null);
     }
   };
 
@@ -543,7 +556,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const getMentionList = (info?: MentionTrigger) => {
+  const getSuggestionList = (info?: InputSuggestionTrigger) => {
+    if (info?.kind === 'skill') return runtimeChoice === 'PI' ? skillSuggestions(skills, info.query) : [];
     const selected = cascaderDataMap[mainPageActiveTab];
     const scope = contextScope(selected && 'dataSourceId' in selected ? selected : null);
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
@@ -560,26 +574,19 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     return tables.filter((item) => item.label.toLowerCase().includes(info.query.toLowerCase()));
   };
 
-  const updateMentionSuggestions = (
+  const updateSuggestions = (
     value: string,
     cursor: number,
-    onTrigger: (info?: MentionTrigger | false) => void,
+    onTrigger: (info?: InputSuggestionTrigger | false) => void,
   ) => {
-    const nextTrigger = detectMentionTrigger(value, cursor);
-    if (!nextTrigger) {
-      tableRequestSequenceRef.current += 1;
-      setMentionTrigger(null);
-      onTrigger(false);
-      return;
+    const nextTrigger = detectInputSuggestion(value, cursor, runtimeChoice);
+    tableRequestSequenceRef.current += 1;
+    setSuggestionTrigger(nextTrigger);
+    if (nextTrigger?.kind === 'table') {
+      setTableList([]);
+      fetchTableList(cascaderDataMap[mainPageActiveTab], nextTrigger.query, tableRequestSequenceRef.current);
     }
-
-    const requestSequence = tableRequestSequenceRef.current + 1;
-    tableRequestSequenceRef.current = requestSequence;
-    setTableList([]);
-    setMentionTrigger(nextTrigger);
-    const contextInfo = cascaderDataMap[mainPageActiveTab];
-    fetchTableList(contextInfo, nextTrigger.query, requestSequence);
-    onTrigger(nextTrigger);
+    onTrigger(nextTrigger || false);
   };
 
   const isSameContextInfo = (prev: IAICascaderData, next: IAICascaderData) => {
@@ -598,31 +605,34 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   return (
-    <AIAtMetion<MentionTrigger>
+    <AIAtMetion<InputSuggestionTrigger>
       className={className}
-      items={getMentionList}
+      items={getSuggestionList}
+      open={!!suggestionTrigger}
+      onOpenChange={(open) => { if (!open) setSuggestionTrigger(null); }}
       onSelect={(item) => {
         const textarea = textareaRef.current?.resizableTextArea?.textArea;
         const cursor = textarea?.selectionStart ?? inputValue.length;
-        const activeTrigger = mentionTrigger || detectMentionTrigger(inputValue, cursor);
-        const replacement = activeTrigger
-          ? replaceMentionTrigger(inputValue, activeTrigger, item.label)
-          : { value: `${inputValue}${item.label}`, cursor: inputValue.length + item.label.length };
+        const activeTrigger = suggestionTrigger || detectInputSuggestion(inputValue, cursor, runtimeChoice);
+        if (!activeTrigger || activeTrigger.kind !== item.kind) return;
+        const replacement = item.kind === 'skill'
+          ? replaceSkillTrigger(inputValue, activeTrigger, item.label)
+          : replaceMentionTrigger(inputValue, activeTrigger, item.label);
 
         setInputValue(replacement.value);
-        setSelectedMentions((previous) => {
+        if (item.kind === 'table') setSelectedMentions((previous) => {
           const nextMention: SelectedMention = {
             value: item.value,
             label: item.label,
             kind: item.kind,
-            tableName: item.tableName!,
+            tableName: item.tableName,
             tableType: item.tableType,
             contextObject: item.contextObject,
           };
           return upsertSelectedMention(previous, nextMention);
         });
         tableRequestSequenceRef.current += 1;
-        setMentionTrigger(null);
+        setSuggestionTrigger(null);
         window.setTimeout(() => {
           textarea?.focus();
           textarea?.setSelectionRange(replacement.cursor, replacement.cursor);
@@ -668,7 +678,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               const value = e.target.value;
               handleChange(value);
               if (!isComposingRef.current) {
-                updateMentionSuggestions(value, e.target.selectionStart, onTrigger);
+                updateSuggestions(value, e.target.selectionStart, onTrigger);
               }
             }}
             onCompositionStart={() => {
@@ -676,13 +686,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             }}
             onCompositionEnd={(e) => {
               isComposingRef.current = false;
-              updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
+              updateSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
             }}
             onClick={(e) => {
-              updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
+              updateSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
             }}
             onKeyDown={(e) => {
-              if (isOpen && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', 'Escape'].includes(e.key)) {
+              if (isComposingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (isOpen && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
                 onKeyDown(e);
                 if (e.defaultPrevented) return;
               }
@@ -694,8 +705,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               }
             }}
             onKeyUp={(e) => {
-              if (!isOpen && !isComposingRef.current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
-                updateMentionSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
+              if (!isComposingRef.current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                updateSuggestions(e.currentTarget.value, e.currentTarget.selectionStart, onTrigger);
               }
             }}
           />

@@ -5,6 +5,7 @@ import { Cascader, CascaderProps } from 'antd';
 import useActive from './useActive';
 import { useStyles } from './style';
 import { IconfontSvg } from '@chat2db/ui';
+import { BookOpen } from 'lucide-react';
 
 export interface RenderChildrenProps<T> {
   /**
@@ -94,12 +95,12 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
     return (
       <div className={styles.optionRow}>
         <div className={styles.optionTitle}>
-          <IconfontSvg
+          {node.kind === 'skill' ? <BookOpen size={16} aria-hidden="true" /> : <IconfontSvg
             size="md"
             existDark={true}
             appearance={appearance}
             code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
-          />
+                                                                               />}
           <span className={styles.optionLabel} title={node.label}>
             {node.label}
           </span>

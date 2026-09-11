@@ -1,4 +1,5 @@
 export default {
+  "stream.skill.loadFailed": "无法加载技能列表，请重试。",
   "stream.question.prompt": "问题",
   "stream.question.answer": "你的回答",
   "stream.directory.clear": "清除工作目录",

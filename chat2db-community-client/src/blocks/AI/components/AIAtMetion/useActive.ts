@@ -34,7 +34,7 @@ export default function useActive(
   };
 
   const onKeyDown = useEvent((e: React.KeyboardEvent) => {
-    if (!open) {
+    if (!open || e.nativeEvent.isComposing || e.keyCode === 229 || e.shiftKey) {
       return;
     }
     switch (e.key) {
@@ -49,6 +49,7 @@ export default function useActive(
         e.preventDefault();
         break;
       }
+      case 'Tab':
       case 'Enter': {
         if (activeValue) {
           onSelect([activeValue]);
