@@ -10,20 +10,14 @@ export default function useActive(
   onCancel: () => void,
 ) {
   const [activePaths, setActivePaths] = useState<string[]>([]);
-  const [previewValue, setPreviewValue] = useState<string>();
 
   const activeValue = activePaths[0];
-  const activeItem = items.find((item) => item.value === activeValue);
-  const previewItem = items.find((item) => item.value === previewValue);
 
   const offsetRow = (offset: number) => {
     if (!items.length) return;
     const currentRowIndex = items.findIndex((item) => item.value === activeValue);
     const nextItem = items[(currentRowIndex + offset + items.length) % items.length];
     setActivePaths([nextItem.value]);
-    if (previewValue) {
-      setPreviewValue(nextItem.kind === 'knowledge' ? nextItem.value : undefined);
-    }
 
     // Add a delay to wait for the DOM to update before scrolling
     setTimeout(() => {
@@ -55,23 +49,6 @@ export default function useActive(
         e.preventDefault();
         break;
       }
-
-      case 'ArrowRight': {
-        if (activeItem?.kind === 'knowledge') {
-          setPreviewValue(activeItem.value);
-          e.preventDefault();
-        }
-        break;
-      }
-
-      case 'ArrowLeft': {
-        if (previewValue) {
-          setPreviewValue(undefined);
-          e.preventDefault();
-        }
-        break;
-      }
-
       case 'Enter': {
         if (activeValue) {
           onSelect([activeValue]);
@@ -96,9 +73,8 @@ export default function useActive(
       setActivePaths((previous) => (items.some((item) => item.value === previous[0]) ? previous : [items[0].value]));
     } else if (!open) {
       setActivePaths([]);
-      setPreviewValue(undefined);
     }
   }, [open, items]);
 
-  return [activePaths, onKeyDown, previewItem, setPreviewValue] as const;
+  return [activePaths, onKeyDown] as const;
 }

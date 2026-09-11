@@ -14,7 +14,6 @@ export default {
   'setting.nav.aboutUs': 'About Us',
   'setting.nav.aboutUsDescribe': 'About us',
   'setting.nav.editSetting': 'Editor Settings',
-  'setting.nav.apiKeys': 'Api Keys',
   'setting.nav.editSettingDescribe': 'SQL Editor Settings',
   'setting.nav.terminal': 'Terminal',
   'setting.nav.terminalDescribe': 'Configure terminal position, close behavior, default shell, and colors',
@@ -250,15 +249,6 @@ export default {
   'setting.text.updateLog': 'Update Log',
   'setting.nav.editorFontSize': 'Editor Font Size',
   'setting.nav.editorFontSizeDescribe': 'Set the font size of the editor',
-  'setting.apiKeys.describe':
-    '{PRODUCT_NAME} provides AI services through APIs. For detailed usage, please refer to the documentation. {1} Do not expose your API key to other clients or code.',
-  'setting.apiKeys.CreateApiKey': 'Create API key',
-  'setting.apiKeys.addApiDoc': '《API call method》',
-  'setting.apiKeys.CreateSuccess': 'Create success',
-  'setting.apiKeys.createSuccessTips1': 'Your APIKey is:',
-  'setting.apiKeys.createSuccessTips2': 'We will not show you this key anymore, so please keep it safe',
-  'setting.text.APIKeyList': 'API Key List',
-  'setting.apiKeys.deleteTips': 'After deletion, the key will not be available, please be careful!',
 
   'setting.placeholder.customFont': 'Please enter the font name, such as SN Pro, Arial',
   'setting.modelConfig.title': 'Custom Models',

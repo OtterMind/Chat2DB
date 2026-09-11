@@ -27,9 +27,6 @@ public class ChatRequest {
     @Valid
     private List<ChatAttachment> attachments = new ArrayList<>();
 
-    @Valid
-    private List<SelectedKnowledgeRequest> selectedKnowledge = new ArrayList<>();
-
 
     private Long dataSourceId;
 

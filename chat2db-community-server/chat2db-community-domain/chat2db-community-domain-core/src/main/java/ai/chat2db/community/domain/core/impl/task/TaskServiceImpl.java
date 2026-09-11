@@ -11,8 +11,9 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskSpec;
-import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
+import ai.chat2db.community.domain.api.model.task.TaskStatus;
+import ai.chat2db.community.domain.api.service.task.TaskDeletionService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.tools.exception.BusinessException;
@@ -21,7 +22,7 @@ import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
-import com.google.common.util.concurrent.Striped;
+import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -29,23 +30,25 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.locks.Lock;
 
 @Service
 public class TaskServiceImpl implements TaskService {
-
-    private final Striped<Lock> deletionLocks = Striped.lazyWeakLock(64);
 
     private final TaskStorage taskStorage;
 
     private final LocalTaskManager localTaskManager;
 
-    private final ArtifactService artifactService;
+    private final TaskDeletionService deletionService;
 
-    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService) {
+    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, TaskDeletionService deletionService) {
         this.taskStorage = taskStorage;
         this.localTaskManager = localTaskManager;
-        this.artifactService = artifactService;
+        this.deletionService = deletionService;
+    }
+
+    @PostConstruct
+    void recoverInterruptedArtifactDeletions() {
+        deletionService.retryPendingDeletions();
     }
 
     @Override
@@ -91,34 +94,14 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void delete(Long taskId) {
-        Lock deletionLock = deletionLocks.get(taskId);
-        deletionLock.lock();
-        try {
-            Task task = get(taskId);
-            if (task == null) {
-                throw new DataNotFoundException();
-            }
-            if (!TaskStatus.isTerminal(task.getStatus())) {
-                throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
-            }
-            ArtifactService.PublishedArtifactDeletion deletion =
-                    artifactService.stagePublishedDeletion(task.getArtifactId());
-            try {
-                if (!taskStorage.deleteTerminalTask(taskId,
-                        () -> artifactService.commitPublishedDeletion(deletion))) {
-                    throw new DataNotFoundException();
-                }
-            } catch (RuntimeException e) {
-                try {
-                    artifactService.restorePublishedDeletion(deletion);
-                } catch (RuntimeException rollbackFailure) {
-                    e.addSuppressed(rollbackFailure);
-                }
-                throw e;
-            }
-        } finally {
-            deletionLock.unlock();
+        Task task = get(taskId);
+        if (task == null) {
+            throw new DataNotFoundException();
         }
+        if (!TaskStatus.isTerminal(task.getStatus())) {
+            throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
+        }
+        deletionService.delete(task);
     }
 
     @Override
@@ -145,11 +128,12 @@ public class TaskServiceImpl implements TaskService {
                 || StringUtils.isBlank(task.getArtifactId())) {
             throw new DataNotFoundException();
         }
-        File file = new File(task.getArtifactId());
+        File file = deletionService.resolveArtifact(task);
         if (!file.isFile() || !file.canRead()) {
             throw new DataNotFoundException();
         }
-        return TaskDownload.builder().fileName(file.getName()).fileUri(file.toURI().toString()).build();
+        return TaskDownload.builder().fileName(new File(task.getArtifactId()).getName())
+                .fileUri(file.toURI().toString()).build();
     }
 
     private <S extends TaskSpec> Long submit(S spec) {

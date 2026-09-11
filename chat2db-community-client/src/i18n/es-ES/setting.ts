@@ -14,7 +14,6 @@ export default {
   'setting.nav.aboutUs': 'Acerca de',
   'setting.nav.aboutUsDescribe': 'Acerca de nosotros',
   'setting.nav.editSetting': 'Configuración del editor',
-  'setting.nav.apiKeys': 'Claves API',
   'setting.nav.editSettingDescribe': 'Configuración del editor SQL',
   'setting.nav.terminal': 'Terminal',
   'setting.nav.terminalDescribe': 'Configura la posición, la confirmación de cierre, el shell y los colores',
@@ -252,15 +251,6 @@ export default {
   'setting.text.updateLog': 'Registro de actualizaciones',
   'setting.nav.editorFontSize': 'Tamaño de fuente del editor',
   'setting.nav.editorFontSizeDescribe': 'Establecer el tamaño de fuente del editor',
-  'setting.apiKeys.describe':
-    '{PRODUCT_NAME} ofrece servicios de IA mediante API. Consulte la documentación para obtener información detallada. {1} No exponga su clave API a otros clientes ni en el código.',
-  'setting.apiKeys.CreateApiKey': 'Crear clave API',
-  'setting.apiKeys.addApiDoc': '«Método de llamada a la API»',
-  'setting.apiKeys.CreateSuccess': 'Creación correcta',
-  'setting.apiKeys.createSuccessTips1': 'Su APIKey es:',
-  'setting.apiKeys.createSuccessTips2': 'No volveremos a mostrar esta clave; guárdela de forma segura',
-  'setting.text.APIKeyList': 'Lista de claves API',
-  'setting.apiKeys.deleteTips': 'Después de eliminarla, la clave dejará de estar disponible. Proceda con cuidado.',
 
   'setting.placeholder.customFont': 'Introduzca el nombre de la fuente, por ejemplo, SN Pro o Arial',
   'setting.modelConfig.title': 'Modelos personalizados',

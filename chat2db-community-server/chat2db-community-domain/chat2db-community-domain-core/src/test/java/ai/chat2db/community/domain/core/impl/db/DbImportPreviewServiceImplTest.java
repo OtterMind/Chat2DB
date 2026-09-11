@@ -18,6 +18,7 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.db.ImportPreview;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.Table;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.spi.DefaultSQLIdentifierProcessor;
@@ -67,7 +68,7 @@ class DbImportPreviewServiceImplTest {
     @Test
     void previewCanonicalizesTableCaseWithoutLosingTargetColumns(@TempDir Path directory)
             throws Exception {
-        ImportPreview preview = new DbImportPreviewServiceImpl()
+        ImportPreview preview = service()
                 .preview(DATA_SOURCE_ID, DATABASE, null, "ORDERS", csv(directory));
 
         assertEquals(1, metaData.requests.size());
@@ -84,7 +85,7 @@ class DbImportPreviewServiceImplTest {
     void previewAcceptsPunctuationInARealTableName(@TempDir Path directory) throws Exception {
         metaData.tableName = "order.items";
 
-        ImportPreview preview = new DbImportPreviewServiceImpl()
+        ImportPreview preview = service()
                 .preview(DATA_SOURCE_ID, DATABASE, null, "order.items", csv(directory));
 
         assertEquals("order.items", preview.getTargetTableName());
@@ -101,7 +102,7 @@ class DbImportPreviewServiceImplTest {
             }
         };
 
-        ImportPreview preview = new DbImportPreviewServiceImpl()
+        ImportPreview preview = service()
                 .preview(DATA_SOURCE_ID, "<app>", null, "<orders>", csv(directory));
 
         assertEquals("orders", preview.getTargetTableName());
@@ -113,7 +114,7 @@ class DbImportPreviewServiceImplTest {
         Chat2DBContext.getDBConfig().setSupportSchema(true);
         Chat2DBContext.getConnectInfo().setSchemaName("public");
 
-        new DbImportPreviewServiceImpl()
+        service()
                 .preview(DATA_SOURCE_ID, DATABASE, "public", "orders", csv(directory));
 
         TableMetadataRequest request = metaData.requests.get(0);
@@ -124,7 +125,7 @@ class DbImportPreviewServiceImplTest {
 
     @Test
     void previewRejectsDatabaseMismatchBeforeMetadataLookup(@TempDir Path directory) throws Exception {
-        assertThrows(BusinessException.class, () -> new DbImportPreviewServiceImpl()
+        assertThrows(BusinessException.class, () -> service()
                 .preview(DATA_SOURCE_ID, "other", null, "orders", csv(directory)));
 
         assertEquals(0, metaData.tablesRequests);
@@ -133,7 +134,7 @@ class DbImportPreviewServiceImplTest {
 
     @Test
     void previewRejectsTableNameThatDoesNotExist(@TempDir Path directory) throws Exception {
-        assertThrows(BusinessException.class, () -> new DbImportPreviewServiceImpl()
+        assertThrows(BusinessException.class, () -> service()
                 .preview(DATA_SOURCE_ID, DATABASE, null, "orders%", csv(directory)));
 
         assertEquals(1, metaData.tablesRequests);
@@ -149,7 +150,7 @@ class DbImportPreviewServiceImplTest {
         Path path = directory.resolve("large-orders.csv");
         Files.writeString(path, content, StandardCharsets.UTF_8);
 
-        ImportPreview preview = new DbImportPreviewServiceImpl()
+        ImportPreview preview = service()
                 .preview(DATA_SOURCE_ID, DATABASE, null, "orders", path.toFile());
 
         assertEquals(10, preview.getPreviewLimit());
@@ -164,17 +165,79 @@ class DbImportPreviewServiceImplTest {
         Path path = directory.resolve("duplicate-columns.csv");
         Files.writeString(path, "Name,name\nAlice,Bob\n", StandardCharsets.UTF_8);
 
-        assertThrows(BusinessException.class, () -> new DbImportPreviewServiceImpl()
+        assertThrows(BusinessException.class, () -> service()
                 .preview(DATA_SOURCE_ID, DATABASE, null, "orders", path.toFile()));
 
         assertEquals(0, metaData.tablesRequests);
         assertEquals(0, metaData.requests.size());
     }
 
+    @Test
+    void previewMapsHeaderlessColumnsByPositionAndSkipsAutoIncrementTargets(@TempDir Path directory)
+            throws Exception {
+        metaData.columns = List.of(
+                TableColumn.builder().name("id").columnType("BIGINT").autoIncrement(true).build(),
+                TableColumn.builder().name("name").columnType("VARCHAR").build(),
+                TableColumn.builder().name("email").columnType("VARCHAR").build());
+        Path path = directory.resolve("headerless.csv");
+        Files.writeString(path, "Alice,alice@example.com,extra\n", StandardCharsets.UTF_8);
+
+        ImportPreview preview = service().preview(DATA_SOURCE_ID, DATABASE, null,
+                "orders", path.toFile(), CsvOptions.builder().hasHeader(false).build());
+
+        assertEquals(List.of("column_1", "column_2", "column_3"), preview.getSourceColumns());
+        assertEquals(2, preview.getSuggestedMapping().size());
+        assertEquals("column_1", preview.getSuggestedMapping().get(0).getSourceColumn());
+        assertEquals("name", preview.getSuggestedMapping().get(0).getTargetColumn());
+        assertEquals("column_2", preview.getSuggestedMapping().get(1).getSourceColumn());
+        assertEquals("email", preview.getSuggestedMapping().get(1).getTargetColumn());
+    }
+
+    @Test
+    void previewUsesCsvDelimiterEncodingAndHeaderOptions(@TempDir Path directory) throws Exception {
+        Path path = directory.resolve("custom.csv");
+        Files.write(path, "Alice;olá\n".getBytes(java.nio.charset.Charset.forName("ISO-8859-1")));
+        CsvOptions options = CsvOptions.builder()
+                .encoding("ISO-8859-1")
+                .delimiter(";")
+                .quote("\"")
+                .escape("\"")
+                .hasHeader(false)
+                .emptyAsNull(false)
+                .build();
+
+        ImportPreview preview = service()
+                .preview(DATA_SOURCE_ID, DATABASE, null, "orders", path.toFile(), options);
+
+        assertEquals(List.of("column_1", "column_2"), preview.getSourceColumns());
+        assertEquals(List.of("Alice", "olá"), preview.getPreviewData().get(0));
+    }
+
+    @Test
+    void previewUsesConfiguredHeaderAndDataRowRange(@TempDir Path directory) throws Exception {
+        Path path = directory.resolve("row-range.csv");
+        Files.writeString(path, "Generated report\nName,Note\nAlice,first\nBob,second\nFooter,ignored\n");
+        CsvOptions options = CsvOptions.builder()
+                .headerRow(2)
+                .dataStartRow(3)
+                .dataEndRow(4)
+                .build();
+
+        ImportPreview preview = service()
+                .preview(DATA_SOURCE_ID, DATABASE, null, "orders", path.toFile(), options);
+
+        assertEquals(List.of("Name", "Note"), preview.getSourceColumns());
+        assertEquals(List.of(List.of("Alice", "first"), List.of("Bob", "second")), preview.getPreviewData());
+    }
+
     private File csv(Path directory) throws Exception {
         Path path = directory.resolve("orders.csv");
         Files.writeString(path, "Name\nAlice\n", StandardCharsets.UTF_8);
         return path.toFile();
+    }
+
+    private DbImportPreviewServiceImpl service() {
+        return new DbImportPreviewServiceImpl(new ImportPreviewFileParser());
     }
 
     private IPlugin plugin(DBConfig config) {
@@ -220,6 +283,8 @@ class DbImportPreviewServiceImplTest {
         private int tablesRequests;
         private String tableName = "orders";
         private ISQLIdentifierProcessor identifierProcessor = new DefaultSQLIdentifierProcessor();
+        private List<TableColumn> columns = List.of(TableColumn.builder().name("name").columnType("VARCHAR")
+                .dataType(Types.VARCHAR).comment("Contact name").build());
 
         @Override
         public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
@@ -236,8 +301,7 @@ class DbImportPreviewServiceImplTest {
         @Override
         public List<TableColumn> columns(Connection connection, TableMetadataRequest request) {
             requests.add(request);
-            return List.of(TableColumn.builder().name("name").columnType("VARCHAR")
-                    .dataType(Types.VARCHAR).comment("Contact name").build());
+            return columns;
         }
     }
 }

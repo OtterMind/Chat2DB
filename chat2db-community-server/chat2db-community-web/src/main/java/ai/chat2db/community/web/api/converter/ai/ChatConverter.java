@@ -1,9 +1,7 @@
 package ai.chat2db.community.web.api.converter.ai;
 
 import ai.chat2db.community.domain.api.model.request.ai.AiModelConfigSaveRequest;
-import ai.chat2db.community.domain.api.model.request.ai.AiBusinessContextBuildRequest;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
-import ai.chat2db.community.domain.api.model.request.ai.AiSelectedKnowledge;
 import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
 import ai.chat2db.community.domain.api.model.ai.AiChatSession;
 import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
@@ -44,25 +42,6 @@ public abstract class ChatConverter {
         param.setLocation(request.getLocation());
         param.setTemperature(request.getTemperature());
         param.setMaxTokens(request.getMaxTokens());
-        return param;
-    }
-
-    public AiBusinessContextBuildRequest toBusinessContextParam(ChatRequest request) {
-        AiBusinessContextBuildRequest param = new AiBusinessContextBuildRequest();
-        if (request == null) {
-            return param;
-        }
-        param.setDataSourceId(request.getDataSourceId());
-        param.setDatabaseName(request.getDatabaseName());
-        param.setSchemaName(request.getSchemaName());
-        param.setSelectedKnowledge(request.getSelectedKnowledge() == null
-                ? List.of()
-                : request.getSelectedKnowledge().stream().map(source -> {
-                    AiSelectedKnowledge selected = new AiSelectedKnowledge();
-                    selected.setId(source.getId());
-                    selected.setType(source.getType());
-                    return selected;
-                }).toList());
         return param;
     }
 

@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
+import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
@@ -41,9 +42,11 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                         "Unsupported data import format");
             }
             context.reportProgress(5, TaskStage.READING.name(), "Preparing data import");
+            context.logInfo(TaskEventCode.IMPORT_PREPARING.name(), "Preparing data import");
             IImportStrategy strategy = ImportFactory.get(format);
             strategy.run(spec, context);
             context.reportProgress(95, TaskStage.IMPORTING.name(), "Data import completed");
+            context.logInfo(TaskEventCode.IMPORT_COMPLETED.name(), "Data import completed");
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {

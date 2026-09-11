@@ -6,17 +6,14 @@ import ai.chat2db.community.web.api.model.request.ai.ChatMessage;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import ai.chat2db.community.domain.api.model.ai.AiChatMessage;
 import ai.chat2db.community.domain.api.model.ai.AiChatSession;
-import ai.chat2db.community.domain.api.model.ai.AiBusinessContextResult;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
 import ai.chat2db.community.domain.api.model.ai.ChatAttachment;
 import ai.chat2db.community.domain.api.model.request.ai.AiChatMessageAddRequest;
-import ai.chat2db.community.domain.api.model.request.ai.AiSelectedKnowledge;
 import ai.chat2db.community.domain.api.model.runtime.ConnectionProfile;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.ai.IAiChatStreamService;
 import ai.chat2db.community.domain.api.service.ai.IAiAttachmentService;
-import ai.chat2db.community.domain.api.service.ai.IAiBusinessContextService;
 import ai.chat2db.community.domain.api.service.ai.IAiChatHistoryService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
@@ -30,7 +27,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -228,8 +224,6 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
 
     private final IAiChatHistoryService historyService;
 
-    private final IAiBusinessContextService businessContextService;
-
     private final IAiAttachmentService aiAttachmentService;
 
     private final ChatConverter chatConverter;
@@ -241,7 +235,6 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                            AiModelFactory modelFactory,
                            AiToolAdapter aiToolAdapter,
                            IAiChatHistoryService historyService,
-                           IAiBusinessContextService businessContextService,
                            IAiAttachmentService aiAttachmentService,
                            ChatConverter chatConverter,
                            IDbConnectionContextService connectionContextService,
@@ -252,7 +245,6 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                 .toolObjects(aiToolAdapter)
                 .build();
         this.historyService = historyService;
-        this.businessContextService = businessContextService;
         this.aiAttachmentService = aiAttachmentService;
         this.chatConverter = chatConverter;
         this.connectionContextService = connectionContextService;
@@ -268,10 +260,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
             List<ChatMessage> effectiveHistory = request.getHistory() != null
                     ? request.getHistory()
                     : new ArrayList<>();
-            AiBusinessContextResult businessContext = businessContextService.resolve(
-                    chatConverter.toBusinessContextParam(request));
-            List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory,
-                    businessContext.getStructuredContext());
+            List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory);
             Map<String, Object> toolContext = buildToolContext(request);
             putRequestContext(toolContext);
             boolean hasExecutableToolContext = !toolContext.isEmpty();
@@ -319,17 +308,13 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         StringBuilder persistedTraceBuilder = new StringBuilder();
         StringBuilder streamedReasoningState = new StringBuilder();
         Long userId = identityService.currentUserId();
-        AiBusinessContextResult businessContext = businessContextService.resolve(
-                chatConverter.toBusinessContextParam(request));
         String sessionId = shouldPersistHistory(request)
-                ? prepareSession(request, userId, businessContext.getSelectedKnowledge()) : null;
+                ? prepareSession(request, userId) : null;
         Context capturedContext = ContextUtils.queryContext();
         List<ChatMessage> effectiveHistory = resolveHistory(request, sessionId, userId);
-        String structuredBusinessContext = businessContext.getStructuredContext();
         String structuredAttachmentContext = aiAttachmentService.buildStructuredContext(request.getAttachments());
         logAttachmentDebug(request, effectiveHistory, structuredAttachmentContext);
-        List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory,
-                structuredBusinessContext);
+        List<Message> messages = buildMessages(request.getInput(), request.getAttachments(), effectiveHistory);
         Map<String, Object> toolContext = buildToolContext(request);
         putRequestContext(toolContext);
         boolean hasExecutableToolContext = !toolContext.isEmpty();
@@ -365,7 +350,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
                         if (finalSessionId != null && (responseBuilder.length() > 0 || !traceEvents.isEmpty())) {
                             try {
                                 historyService.addMessage(addMessageRequest(finalSessionId, userId, "assistant",
-                                        responseBuilder.toString(), serializeTraceEvents(traceEvents), null, null));
+                                        responseBuilder.toString(), serializeTraceEvents(traceEvents), null));
                             } catch (Exception e) {
                                 log.error("save assistant message failed, sessionId={}", finalSessionId, e);
                             }
@@ -393,13 +378,12 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
 
-    private String prepareSession(ChatRequest request, Long userId,
-                                  List<AiSelectedKnowledge> selectedKnowledgeSnapshot) {
+    private String prepareSession(ChatRequest request, Long userId) {
         if (StringUtils.isNotBlank(request.getSessionId())) {
             String sessionId = request.getSessionId().trim();
             try {
                 historyService.addMessage(addMessageRequest(sessionId, userId, "user", request.getInput(), null,
-                        request.getAttachments(), selectedKnowledgeSnapshot));
+                        request.getAttachments()));
             } catch (Exception e) {
                 log.error("save user message failed, sessionId={}", sessionId, e);
             }
@@ -408,7 +392,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         try {
             AiChatSession session = historyService.createSession(userId, request.getInput());
             historyService.addMessage(addMessageRequest(session.getId(), userId, "user", request.getInput(), null,
-                    request.getAttachments(), selectedKnowledgeSnapshot));
+                    request.getAttachments()));
             return session.getId();
         } catch (Exception e) {
             log.error("create session failed", e);
@@ -417,8 +401,7 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
     private AiChatMessageAddRequest addMessageRequest(String sessionId, Long userId, String role, String content,
-                                                      String reasoningContent, List<ChatAttachment> attachments,
-                                                      List<AiSelectedKnowledge> selectedKnowledge) {
+                                                      String reasoningContent, List<ChatAttachment> attachments) {
         AiChatMessageAddRequest request = new AiChatMessageAddRequest();
         request.setSessionId(sessionId);
         request.setUserId(userId);
@@ -426,7 +409,6 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
         request.setContent(content);
         request.setReasoningContent(reasoningContent);
         request.setAttachments(attachments);
-        request.setSelectedKnowledge(selectedKnowledge);
         return request;
     }
 
@@ -456,12 +438,8 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
 
     private List<Message> buildMessages(String input,
                                         List<ai.chat2db.community.domain.api.model.ai.ChatAttachment> currentAttachments,
-                                        List<ChatMessage> history,
-                                        String structuredBusinessContext) {
+                                        List<ChatMessage> history) {
         List<Message> messages = new ArrayList<>();
-        if (StringUtils.isNotBlank(structuredBusinessContext)) {
-            messages.add(new SystemMessage(structuredBusinessContext));
-        }
         if (Objects.nonNull(history)) {
             for (ChatMessage h : history) {
                 if (Objects.isNull(h) || StringUtils.isBlank(h.getContent()) || StringUtils.isBlank(h.getRole())) {

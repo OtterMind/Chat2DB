@@ -14,7 +14,6 @@ export default {
   'setting.nav.aboutUs': '关于我们',
   'setting.nav.aboutUsDescribe': '关于我们',
   'setting.nav.editSetting': '编辑器设置',
-  'setting.nav.apiKeys': 'Api Keys',
   'setting.nav.editSettingDescribe': 'SQL编辑器设置',
   'setting.nav.terminal': '终端设置',
   'setting.nav.terminalDescribe': '配置终端打开位置、关闭行为、默认 Shell 和配色',
@@ -229,15 +228,6 @@ export default {
   'setting.text.updateLog': '更新日志',
   'setting.nav.editorFontSize': '编辑器字体大小',
   'setting.nav.editorFontSizeDescribe': '设置SQL编辑器内字体大小',
-  'setting.apiKeys.describe':
-    '{PRODUCT_NAME} 提供 API 方式调用 AI 服务，详细使用方式请查看文档，{1} 请勿将你的 API key 暴露在其他客户端或者代码中。',
-  'setting.apiKeys.CreateApiKey': '创建API key',
-  'setting.apiKeys.addApiDoc': '《API调用方式》',
-  'setting.apiKeys.CreateSuccess': 'API key创建成功',
-  'setting.apiKeys.createSuccessTips1': '你的APIKey为',
-  'setting.apiKeys.createSuccessTips2': '我们后续不再为你展示该key，请妥善保管',
-  'setting.text.APIKeyList': 'API Key 列表',
-  'setting.apiKeys.deleteTips': '删除后该key将无法使用，请谨慎操作！',
 
   'setting.placeholder.customFont': '请输入字体名，如 SN Pro, Arial',
   'setting.shortcut.arouseAIAssistant': '唤起 AI 助手',

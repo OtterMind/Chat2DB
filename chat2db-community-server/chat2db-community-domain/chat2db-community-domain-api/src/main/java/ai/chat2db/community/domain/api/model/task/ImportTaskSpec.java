@@ -30,6 +30,8 @@ public class ImportTaskSpec implements TaskSpec {
 
     private String dataTimeFormat;
 
+    private CsvOptions csvOptions;
+
     /** Optional mapping supplied by the import-preview workflow. */
     private List<ImportColumnMapping> columnMappings;
 

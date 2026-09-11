@@ -14,7 +14,6 @@ export default {
   'setting.nav.aboutUs': 'Chat2DB 정보',
   'setting.nav.aboutUsDescribe': 'Chat2DB 정보',
   'setting.nav.editSetting': '편집기 설정',
-  'setting.nav.apiKeys': 'API 키',
   'setting.nav.editSettingDescribe': 'SQL 편집기 설정',
   'setting.nav.terminal': '터미널 설정',
   'setting.nav.terminalDescribe': '터미널 위치, 닫기 확인, 기본 셸 및 색상 구성',
@@ -250,15 +249,6 @@ export default {
   'setting.text.updateLog': '업데이트 로그',
   'setting.nav.editorFontSize': '편집기 글꼴 크기',
   'setting.nav.editorFontSizeDescribe': '편집기 글꼴 크기 설정',
-  'setting.apiKeys.describe':
-    '{PRODUCT_NAME}는 API를 통해 AI 서비스를 제공합니다. 자세한 사용 방법은 문서를 참조하세요. {1} API 키를 다른 클라이언트나 코드에 노출하지 마세요.',
-  'setting.apiKeys.CreateApiKey': 'API 키 생성',
-  'setting.apiKeys.addApiDoc': '《API 호출 방법》',
-  'setting.apiKeys.CreateSuccess': '생성되었습니다',
-  'setting.apiKeys.createSuccessTips1': 'API Key:',
-  'setting.apiKeys.createSuccessTips2': '이 키는 다시 표시되지 않으므로 안전하게 보관해 주세요',
-  'setting.text.APIKeyList': 'API 키 목록',
-  'setting.apiKeys.deleteTips': '삭제하면 키를 사용할 수 없습니다. 신중하게 진행해 주세요!',
 
   'setting.placeholder.customFont': 'SN Pro, Arial 등의 글꼴 이름을 입력해 주세요',
   'setting.modelConfig.title': '사용자 지정 모델',

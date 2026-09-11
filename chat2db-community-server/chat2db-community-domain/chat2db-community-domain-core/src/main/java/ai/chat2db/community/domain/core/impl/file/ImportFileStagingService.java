@@ -54,7 +54,7 @@ public class ImportFileStagingService implements IImportFileStagingService {
             }
             Path stagingDirectory = stagingDirectory();
             Files.createDirectories(stagingDirectory);
-            Path target = stagingFile(id, extension);
+            Path target = stagingTarget(id, extension);
             if (!target.getParent().equals(stagingDirectory)) {
                 throw new IOException("invalid staging target");
             }
@@ -72,8 +72,9 @@ public class ImportFileStagingService implements IImportFileStagingService {
         }
         cleanupExpiredFiles();
         try {
-            Path file = stagedFile(fileId);
-            if (!Files.isRegularFile(file) || !Files.isReadable(file)) {
+            Path file = stagedFile(fileId).toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!file.getParent().equals(stagingDirectory())
+                    || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(file)) {
                 throw new BusinessException("import.preview.fileUnreadable");
             }
             return file.toFile();
@@ -96,7 +97,7 @@ public class ImportFileStagingService implements IImportFileStagingService {
         claimedFiles.remove(fileId);
         for (String extension : ALLOWED_EXTENSIONS) {
             try {
-                deleteQuietly(stagingFile(fileId, extension));
+                deleteQuietly(stagingTarget(fileId, extension));
             } catch (BusinessException ignored) {
                 // Cleanup does not change the task outcome once execution has completed.
             }
@@ -122,7 +123,7 @@ public class ImportFileStagingService implements IImportFileStagingService {
         return Path.of(ConfigUtils.getBasePath(), STAGING_DIRECTORY_NAME).normalize().toAbsolutePath();
     }
 
-    private static Path stagingFile(String id, String extension) {
+    private static Path stagingTarget(String id, String extension) {
         if (!isFileId(id) || !ALLOWED_EXTENSIONS.contains(extension)) {
             throw new BusinessException("import.preview.fileUnreadable");
         }
@@ -135,13 +136,19 @@ public class ImportFileStagingService implements IImportFileStagingService {
     }
 
     private static Path stagedFile(String id) throws IOException {
-        for (String extension : ALLOWED_EXTENSIONS) {
-            Path file = stagingFile(id, extension);
-            if (Files.exists(file)) {
-                return file;
-            }
+        if (!isFileId(id)) {
+            throw new BusinessException("import.preview.fileUnreadable");
         }
-        throw new BusinessException("import.preview.fileUnreadable");
+        Path directory = stagingDirectory();
+        if (!Files.isDirectory(directory)) {
+            throw new BusinessException("import.preview.fileUnreadable");
+        }
+        try (var files = Files.list(directory)) {
+            return files.filter(ImportFileStagingService::isStagedImportFile)
+                    .filter(path -> id.equals(stagedFileId(path)))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException("import.preview.fileUnreadable"));
+        }
     }
 
     private void cleanupExpiredFiles() {

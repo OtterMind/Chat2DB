@@ -282,7 +282,7 @@ class LocalTaskManagerTest {
                 new TaskSubmission<>(task.getId(), spec(), null, invalidConnectInfo,
                         new TaskSubmissionContext(task.getId(), TaskType.QUERY_RESULT_EXPORT, null,
                                 null, null, List.of(), TaskOperation.EXPORT).toExecutionContext()),
-                runningTask, registry, storage, executor, new ArtifactService(), emptyExtensionManager());
+                runningTask, registry, storage, executor, new ArtifactServiceImpl(), emptyExtensionManager());
 
         runner.run();
 
@@ -475,7 +475,7 @@ class LocalTaskManagerTest {
                 execution.execute(spec, context);
             }
         };
-        return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactService(),
+        return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactServiceImpl(),
                 new ConnectionContextConverter(), extensionManager, 1, 4);
     }
 

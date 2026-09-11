@@ -44,6 +44,10 @@ export default function useViewTablePaging() {
       paramsRef.current = params;
       return executeSQL(params).then((data) => {
         const normalizedData = normalizeViewTablePageResults(data, params);
+        const pageResult = normalizedData[0] || pagingStateRef.current?.result;
+        if (pageResult?.success === false) {
+          throw new Error(pageResult.message);
+        }
         if (normalizedData.length) {
           setResultData(normalizedData[0]);
         }

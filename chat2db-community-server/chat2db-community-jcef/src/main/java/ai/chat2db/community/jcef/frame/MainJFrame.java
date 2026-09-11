@@ -799,6 +799,16 @@ public class MainJFrame extends JFrame {
         } else {
             this.splitPane.setBackground(ThemeUtil.getThemeColor());
         }
+        this.splitPane.addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                if (Math.abs(e.getX() - splitPane.getDividerLocation()) < 3) {
+                    splitPane.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+                } else {
+                    splitPane.setCursor(Cursor.getDefaultCursor());
+                }
+            }
+        });
         createBrowserImmediatelyForHiddenStartup(browser_, showWindowOnStartup);
         log.info("4. CefBrowser and UI component creation completed.");
     }

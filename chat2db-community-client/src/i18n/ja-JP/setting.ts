@@ -14,7 +14,6 @@ export default {
   'setting.nav.aboutUs': '私たちについて',
   'setting.nav.aboutUsDescribe': '私たちについて',
   'setting.nav.editSetting': 'エディタ設定',
-  'setting.nav.apiKeys': 'APIキー',
   'setting.nav.editSettingDescribe': 'SQL エディタ設定',
   'setting.nav.terminal': 'ターミナル設定',
   'setting.nav.terminalDescribe': 'ターミナルの表示位置、終了確認、既定のシェル、配色を設定',
@@ -209,15 +208,6 @@ export default {
   'setting.text.updateLog': '更新ログ',
   'setting.nav.editorFontSize': 'エディタのフォントサイズ',
   'setting.nav.editorFontSizeDescribe': 'SQLエディタ内のフォントサイズを設定します',
-  'setting.apiKeys.describe':
-    '{PRODUCT_NAME}は、APIを使用してAIサービスを提供します。詳細な使用方法については、ドキュメントを参照してください。{1} APIキーを他のクライアントやコードに公開しないでください。',
-  'setting.apiKeys.CreateApiKey': 'APIキーを追加',
-  'setting.apiKeys.addApiDoc': '《API呼び出し方法》',
-  'setting.apiKeys.CreateSuccess': 'APIキーが作成されました',
-  'setting.apiKeys.createSuccessTips1': 'あなたのapiKeyは',
-  'setting.apiKeys.createSuccessTips2': 'これ以上あなたにこのキーを表示しませんので、大切に保管してください',
-  'setting.text.APIKeyList': 'APIキーリスト',
-  'setting.apiKeys.deleteTips': 'APIキーを削除すると、関連するすべてのサービスが停止します。本当に削除しますか？',
 
   'setting.placeholder.customFont': 'フォント名を入力してください。例：SN Pro、Arial',
   'setting.shortcut.arouseAIAssistant': 'AI アシスタントを起動',

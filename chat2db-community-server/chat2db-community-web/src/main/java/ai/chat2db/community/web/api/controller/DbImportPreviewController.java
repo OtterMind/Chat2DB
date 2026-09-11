@@ -63,7 +63,8 @@ public class DbImportPreviewController {
     @PostMapping("/preview")
     public DataResult<ImportPreview> preview(@Valid @RequestBody ImportPreviewRequest request) {
         return DataResult.of(importPreviewService.preview(request.getDataSourceId(), request.getDatabaseName(),
-                request.getSchemaName(), request.getTableName(), importFileStagingService.resolve(request.getFileId())));
+                request.getSchemaName(), request.getTableName(), importFileStagingService.resolve(request.getFileId()),
+                request.getCsvOptions()));
     }
 
     @PostMapping("/execute")

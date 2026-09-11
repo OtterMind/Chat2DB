@@ -11,6 +11,8 @@ import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
@@ -35,11 +37,14 @@ public abstract class BaseImporter implements IImportStrategy {
                             spec.getTarget().getTableName()));
             context.checkCancelled();
             context.reportProgress(20, TaskStage.READING.name(), "Target table metadata loaded");
+            context.logInfo(TaskEventCode.TARGET_METADATA_LOADED.name(), "Target table metadata loaded");
             context.logInfo(TaskEventCode.FILE_READ_STARTED.name(), "Reading import file");
             doImportData(spec, context, tableColumns);
             context.logInfo(TaskEventCode.FILE_READ_COMPLETED.name(), "Import file read completed");
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
+        } catch (BusinessException e) {
+            throw new TaskExecutionException(e.getCode(), I18nUtils.getMessage(e.getCode(), e.getArgs()), e);
         } catch (Exception e) {
             log.error("Could not import data file", e);
             throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),

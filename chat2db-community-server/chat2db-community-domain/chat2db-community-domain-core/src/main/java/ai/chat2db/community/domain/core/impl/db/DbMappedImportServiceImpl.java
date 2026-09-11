@@ -48,7 +48,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
         validateUniqueMappings(mappings);
         File file = importFileStagingService.resolve(execution.getFileId());
         ImportPreview preview = importPreviewService.preview(execution.getDataSourceId(), execution.getDatabaseName(),
-                execution.getSchemaName(), execution.getTableName(), file);
+                execution.getSchemaName(), execution.getTableName(), file, execution.getCsvOptions());
         validateMappings(mappings, preview);
         UnmappedTargetStrategy strategy = execution.getUnmappedTarget() == null
                 ? UnmappedTargetStrategy.DEFAULT : execution.getUnmappedTarget();
@@ -67,6 +67,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .importFileId(execution.getFileId())
                 .displayFileName(file.getName())
                 .format(extension(file.getName()))
+                .csvOptions(execution.getCsvOptions())
                 .columnMappings(mappings)
                 .unmappedTarget(strategy)
                 .build();

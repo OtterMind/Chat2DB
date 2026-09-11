@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.api.service.db;
 
 import ai.chat2db.community.domain.api.model.db.ImportPreview;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 
 import java.io.File;
 
@@ -24,4 +25,9 @@ public interface IDbImportPreviewService {
      */
     ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
                           String tableName, File file);
+
+    default ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
+                                  String tableName, File file, CsvOptions csvOptions) {
+        return preview(dataSourceId, databaseName, schemaName, tableName, file);
+    }
 }

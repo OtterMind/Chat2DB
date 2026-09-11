@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
@@ -42,7 +43,6 @@ public abstract class BaseExcelImporter extends BaseImporter {
                 .headRowNumber(1)
                 .doRead();
         context.checkCancelled();
-
     }
 
     protected abstract ExcelTypeEnum getExcelType();
@@ -81,6 +81,10 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         private final ImportSqlExecutor sqlExecutor;
 
+        private final CsvOptions csvOptions;
+
+        private long sourceRowNumber;
+
         public NoModelDataListener(ImportTaskSpec spec, TaskExecutionContext taskContext,
                 List<TableColumn> columns) {
             this.spec = spec;
@@ -90,13 +94,17 @@ public abstract class BaseExcelImporter extends BaseImporter {
             this.connectInfo = Chat2DBContext.getConnectInfo();
             this.sqlBuilder = Chat2DBContext.getSqlBuilder();
             this.sqlExecutor = new ImportSqlExecutor(taskContext);
+            this.csvOptions = spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
         }
 
 
         @Override
         public void invokeHead(Map<Integer, ReadCellData<?>> headMap, AnalysisContext context) {
+            acceptHead(ConverterUtils.convertToStringMap(headMap, context));
+        }
+
+        void acceptHead(Map<Integer, String> map) {
             this.taskContext.checkCancelled();
-            Map<Integer, String> map = ConverterUtils.convertToStringMap(headMap, context);
             this.headMap = invertMap(map);
             this.mappedHeadMap = mappedHeadMap();
             this.tableColumns = getTableColumns(columns, this.headMap);
@@ -129,7 +137,16 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         @Override
         public void invoke(Map<Integer, String> data, AnalysisContext context) {
+            acceptRow(data);
+        }
+
+        void acceptRow(Map<Integer, String> data) {
+            acceptRow(data, 0);
+        }
+
+        void acceptRow(Map<Integer, String> data, long sourceRowNumber) {
             this.taskContext.checkCancelled();
+            this.sourceRowNumber = sourceRowNumber;
             if (data == null || data.isEmpty()) {
                 skippedCount++;
                 return;
@@ -165,6 +182,9 @@ public abstract class BaseExcelImporter extends BaseImporter {
                 if (value == null) {
                     values.add(null);
                 } else {
+                    if (csvOptions != null) {
+                        value = CsvImportValueNormalizer.normalize(value, column, csvOptions, sourceRowNumber);
+                    }
                     String stringValue = valueProcessor.getSqlValueString(getSQLDataValue(value, column));
                     values.add(stringValue);
                 }
@@ -219,6 +239,10 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         @Override
         public void doAfterAllAnalysed(AnalysisContext context) {
+            finish();
+        }
+
+        void finish() {
             this.taskContext.checkCancelled();
             executeBatchInsert();
         }

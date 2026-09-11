@@ -4,6 +4,7 @@ import type { Key } from 'react';
 interface DataSourceMutationRefreshDependencies {
   refreshTreeData: () => Promise<boolean>;
   getDataSourceList: () => TreeNodeData[] | null;
+  expandParent?: (node: TreeNodeData) => void;
   setSelectedKeys: (keys: Key[]) => void;
   setScrollTargetKey: (key: Key | null) => void;
   loadData: (node: TreeNodeData) => Promise<unknown>;
@@ -13,21 +14,28 @@ export async function hydrateDataSourceAfterMutation(
   dataSourceId: number,
   dependencies: DataSourceMutationRefreshDependencies,
 ): Promise<TreeNodeData | null> {
-  const refreshed = await dependencies.refreshTreeData();
-  if (!refreshed) {
+  try {
+    const refreshed = await dependencies.refreshTreeData();
+    if (!refreshed) {
+      return null;
+    }
+
+    const dataSource =
+      dependencies
+        .getDataSourceList()
+        ?.find((node) => node.extraParams?.dataSourceId === dataSourceId) ?? null;
+    if (!dataSource) {
+      return null;
+    }
+
+    dependencies.expandParent?.(dataSource);
+    dependencies.setSelectedKeys([dataSource.key]);
+    dependencies.setScrollTargetKey(dataSource.key);
+    await dependencies.loadData(dataSource);
+    return dataSource;
+  } catch (error) {
+    // Saving already succeeded; a refresh failure must not be reported as a failed save.
+    console.warn('Failed to refresh the datasource tree after a successful save', error);
     return null;
   }
-
-  const dataSource =
-    dependencies
-      .getDataSourceList()
-      ?.find((node) => node.extraParams?.dataSourceId === dataSourceId) ?? null;
-  if (!dataSource) {
-    return null;
-  }
-
-  dependencies.setSelectedKeys([dataSource.key]);
-  dependencies.setScrollTargetKey(dataSource.key);
-  await dependencies.loadData(dataSource);
-  return dataSource;
 }
