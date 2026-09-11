@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.service.task.ITaskNcxImportService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.core.impl.ncx.cipher.CommonCipher;
+import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DbeaverArchiveExtraction;
 import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DbeaverCredentialsResolver;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import cn.hutool.core.io.FileUtil;
@@ -32,6 +33,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -118,9 +120,11 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
         NcxImportResponse vo = new NcxImportResponse();
         Document metaTree;
         int n = 0;
-        List<String> projects = new ArrayList<>();
         // Request-scoped: each project's credential file is decrypted once and never outlives this import.
         DbeaverCredentialsResolver credentialsResolver = new DbeaverCredentialsResolver(masterPassword);
+        // The archive is extracted into a directory created for this import alone, so cleanup never
+        // has to delete a path named by the archive.
+        File extractionRoot = null;
         try (ZipFile zipFile = new ZipFile(file, ZipFile.OPEN_READ)) {
             ZipEntry metaEntry = zipFile.getEntry(ExportConstants.META_FILENAME);
             if (metaEntry == null) {
@@ -136,19 +140,15 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
 
             Element projectsElement = XMLUtils.getChildElement(metaTree.getDocumentElement(), ExportConstants.TAG_PROJECTS);
             if (projectsElement != null) {
+                DbeaverArchiveExtraction extraction = DbeaverArchiveExtraction.create(
+                        Path.of(ConfigUtils.getBasePath()), zipFile);
+                extractionRoot = extraction.getExtractionRoot();
                 final Collection<Element> projectList = XMLUtils.getChildElementList(projectsElement, ExportConstants.TAG_PROJECT);
                 for (Element projectElement : projectList) {
-                    String projectName = projectElement.getAttribute(ExportConstants.ATTR_NAME);
-                    String config = ConfigUtils.getBasePath() + File.separator + projectName + File.separator + ExportConstants.CONFIG_FILE;
-                    // Registered before extraction so a failure mid-import still removes the extracted copy.
-                    projects.add(projectName);
-                    importDbeaverConfig(new File(config),
-                            projectElement,
-                            ExportConstants.DIR_PROJECTS + "/" + projectName + "/",
-                            zipFile);
+                    File config = new File(extraction.extractProject(projectElement), ExportConstants.CONFIG_FILE);
                     JSONObject credentialsJson = credentialsResolver.resolve(
-                            new File(config + File.separator + ExportConstants.CONFIG_CREDENTIALS_FILE));
-                    File json = new File(config + File.separator + ExportConstants.CONFIG_DATASOURCE_FILE);
+                            new File(config, ExportConstants.CONFIG_CREDENTIALS_FILE));
+                    File json = new File(config, ExportConstants.CONFIG_DATASOURCE_FILE);
                     JSONObject jsonObject;
                     try (InputStream dataSourceStream = new FileInputStream(json)) {
                         jsonObject = JSON.parseObject(dataSourceStream);
@@ -189,9 +189,11 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
                 }
             }
         } finally {
-            // Extracted projects hold decrypted credentials, so remove every one of them and the upload.
+            // The upload and the extraction directory of this import are the only paths removed here.
             FileUtils.delete(file);
-            projects.forEach(v -> FileUtils.delete(new File(ConfigUtils.getBasePath() + File.separator + v)));
+            if (null != extractionRoot) {
+                FileUtils.delete(extractionRoot);
+            }
         }
         vo.setCount(n);
         return vo;
@@ -344,29 +346,6 @@ public class TaskNcxImportServiceImpl implements ITaskNcxImportService {
             }
         }
         return n;
-    }
-
-    @SneakyThrows
-    private static void importDbeaverConfig(File resource, Element resourceElement, String containerPath, ZipFile zipFile) {
-        for (Element childElement : XMLUtils.getChildElementList(resourceElement, ExportConstants.TAG_RESOURCE)) {
-            String childName = childElement.getAttribute(ExportConstants.ATTR_NAME);
-            String entryPath = containerPath + childName;
-            ZipEntry resourceEntry = zipFile.getEntry(entryPath);
-            if (resourceEntry == null) {
-                continue;
-            }
-            boolean isDirectory = resourceEntry.isDirectory();
-            if (isDirectory) {
-                File folder = new File(resource.getPath());
-                if (!folder.exists()) {
-                    FileUtil.mkdir(folder);
-                }
-                importDbeaverConfig(folder, childElement, entryPath + "/", zipFile);
-            } else {
-                File file = new File(resource.getPath() + File.separator + childName);
-                FileUtil.writeFromStream(zipFile.getInputStream(resourceEntry), file, true);
-            }
-        }
     }
 
     /**

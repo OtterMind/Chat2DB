@@ -3,7 +3,9 @@ package ai.chat2db.community.domain.core.impl.ncx;
 import ai.chat2db.community.domain.api.model.ncx.NcxImportResponse;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
+import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DbeaverArchiveExtraction;
 import ai.chat2db.community.domain.core.impl.ncx.dbeaver.DefaultValueEncryptor;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -29,10 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Covers the DBeaver (.dbp) import path: which keys decrypt the credential file, what happens when
- * a connection has no credentials, and that no extracted project survives the import.
+ * a connection has no credentials, that an archive cannot reach outside its own extraction
+ * directory, and that neither the extracted copy nor the upload survives the import.
  */
 class TaskNcxImportServiceDbeaverImportTest {
 
@@ -162,6 +167,7 @@ class TaskNcxImportServiceDbeaverImportTest {
         assertFalse(extractedProject("alpha").exists());
         assertFalse(extractedProject("beta").exists());
         assertFalse(archive.exists());
+        assertNoExtractionLeftovers();
     }
 
     @Test
@@ -180,6 +186,62 @@ class TaskNcxImportServiceDbeaverImportTest {
         assertFalse(extractedProject("valid").exists());
         assertFalse(extractedProject("corrupt").exists());
         assertFalse(archive.exists());
+        assertNoExtractionLeftovers();
+    }
+
+    @Test
+    void refusesAnArchiveWhoseProjectNameEscapesTheExtractionDirectory() throws Exception {
+        List<WorkspaceDataSource> imported = new ArrayList<>();
+        File archive = archive("escaped-project.dbp", Map.of("../escaped",
+                project(dataSources("mysql-1"),
+                        encrypt(DefaultValueEncryptor.getLocalSecretKey(), credentials("mysql-1")))));
+        TaskNcxImportServiceImpl service = service(imported);
+        Path traversalTarget = Path.of(ConfigUtils.getBasePath(), "../escaped").normalize();
+
+        assertThrows(BusinessException.class, () -> service.dbpUploadFile(archive, null));
+
+        assertTrue(imported.isEmpty());
+        assertFalse(Files.exists(traversalTarget), "the archive wrote outside the extraction directory");
+        assertFalse(archive.exists());
+        assertNoExtractionLeftovers();
+    }
+
+    @Test
+    void refusesAnArchiveWhoseResourceNameEscapesTheExtractionDirectory() throws Exception {
+        List<WorkspaceDataSource> imported = new ArrayList<>();
+        Map<String, Map<String, byte[]>> projects = new LinkedHashMap<>();
+        Map<String, byte[]> files = new LinkedHashMap<>();
+        files.put("../../../../pwned.json", "{}".getBytes(StandardCharsets.UTF_8));
+        projects.put("alpha", files);
+        File archive = archive("escaped-resource.dbp", projects);
+        TaskNcxImportServiceImpl service = service(imported);
+        Path traversalTarget = Path.of(ConfigUtils.getBasePath(), "alpha", CONFIG_DIR, "../../../../pwned.json")
+                .normalize();
+
+        assertThrows(BusinessException.class, () -> service.dbpUploadFile(archive, null));
+
+        assertTrue(imported.isEmpty());
+        assertFalse(Files.exists(traversalTarget), "the archive wrote outside the extraction directory");
+        assertFalse(archive.exists());
+        assertNoExtractionLeftovers();
+    }
+
+    @Test
+    void keepsAnExistingDirectoryThatSharesTheProjectName() throws Exception {
+        List<WorkspaceDataSource> imported = new ArrayList<>();
+        Path existing = Path.of(ConfigUtils.getBasePath(), "alpha");
+        Files.createDirectories(existing);
+        Files.writeString(existing.resolve("keep.txt"), "user data");
+        File archive = archive("collision.dbp", Map.of("alpha", project(dataSources("mysql-1"),
+                encrypt(DefaultValueEncryptor.getLocalSecretKey(), credentials("mysql-1")))));
+
+        NcxImportResponse response = service(imported).dbpUploadFile(archive, null);
+
+        assertEquals(1, response.getCount());
+        assertTrue(Files.exists(existing.resolve("keep.txt")),
+                "an import removed a directory it did not create");
+        assertFalse(archive.exists());
+        assertNoExtractionLeftovers();
     }
 
     private TaskNcxImportServiceImpl service(List<WorkspaceDataSource> imported) {
@@ -201,6 +263,19 @@ class TaskNcxImportServiceDbeaverImportTest {
 
     private static File extractedProject(String projectName) {
         return new File(ConfigUtils.getBasePath() + File.separator + projectName);
+    }
+
+    /**
+     * Asserts that the import left none of its extraction directories behind.
+     */
+    private static void assertNoExtractionLeftovers() throws IOException {
+        try (Stream<Path> entries = Files.list(Path.of(ConfigUtils.getBasePath()))) {
+            List<String> leftovers = entries
+                    .map(entry -> entry.getFileName().toString())
+                    .filter(name -> name.startsWith(DbeaverArchiveExtraction.EXTRACTION_DIRECTORY_PREFIX))
+                    .toList();
+            assertTrue(leftovers.isEmpty(), "extraction directories were left behind: " + leftovers);
+        }
     }
 
     private static WorkspaceDataSource byAlias(List<WorkspaceDataSource> imported, String alias) {
