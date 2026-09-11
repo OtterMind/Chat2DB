@@ -19,4 +19,3 @@ Read the reference for the selected chart type from the index in [SKILL.md](../S
 A chart plots one saved query page. Check both the chosen statement's page and response warnings. page.number > 1 is a partial slice even when hasMore is false. hasMore=true, unknown completeness, or other warnings must not be described as the full population.
 
 The current db_query defaults are page=1 and pageSize=50, with pageSize at most 200. Prefer SQL aggregation at the grain required by the question. Each query page reruns the SQL and gets its own resultId; render_chart cannot merge resultIds or accept a hand-built data array. Do not silently introduce Top N, a different denominator, or a narrower date range to fit a page.
-
