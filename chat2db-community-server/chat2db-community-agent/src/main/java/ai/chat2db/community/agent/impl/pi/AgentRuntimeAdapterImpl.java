@@ -1,0 +1,96 @@
+package ai.chat2db.community.agent.impl.pi;
+
+import ai.chat2db.community.agent.exception.pi.PiRpcException;
+import ai.chat2db.community.agent.pi.IPiSessionLauncher;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeEventSink;
+import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeCapability;
+import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCapabilities;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
+
+public class AgentRuntimeAdapterImpl implements IAgentRuntimeAdapter {
+
+    private final AgentRuntimeDescriptor descriptor;
+    private final AgentRuntimeEnvironmentCheckerImpl environmentChecker;
+    private final IPiSessionLauncher sessionLauncher;
+    private final BooleanSupplier enabled;
+
+    public AgentRuntimeAdapterImpl(
+            String version,
+            String protocolVersion,
+            AgentRuntimeEnvironmentCheckerImpl environmentChecker,
+            IPiSessionLauncher sessionLauncher,
+            BooleanSupplier enabled) {
+        this.descriptor = new AgentRuntimeDescriptor(
+                AgentRuntimeType.PI,
+                "Pi",
+                version,
+                protocolVersion,
+                new AgentRuntimeCapabilities(Set.of(
+                        AgentRuntimeCapability.STREAMING,
+                        AgentRuntimeCapability.CANCELLATION,
+                        AgentRuntimeCapability.USAGE,
+                        AgentRuntimeCapability.COMPACTION,
+                        AgentRuntimeCapability.STRUCTURED_INTERACTION), 1));
+        this.environmentChecker = environmentChecker;
+        this.sessionLauncher = sessionLauncher;
+        this.enabled = enabled;
+    }
+
+    @Override
+    public AgentRuntimeDescriptor descriptor() {
+        return descriptor;
+    }
+
+    @Override
+    public AgentRuntimeEnvironmentReport inspectEnvironment(AgentRuntimeEnvironmentRequest request) {
+        AgentRuntimeEnvironmentReport report = environmentChecker.inspect(request);
+        if (enabled.getAsBoolean()) {
+            return report;
+        }
+        return new AgentRuntimeEnvironmentReport(
+                AgentRuntimeType.PI,
+                ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus.BLOCKED,
+                report.runtimeVersion(), report.operatingSystem(), report.architecture(), report.checks(),
+                java.util.Map.of("reason", "Pi Beta is disabled"), report.checkedAt());
+    }
+
+    @Override
+    public IAgentRuntimeSessionHandle openSession(
+            AgentRuntimeSessionOpenRequest request,
+            IAgentRuntimeEventSink eventSink) {
+        requireEnabled();
+        return sessionLauncher.launch(
+                request.sessionId(), request.externalSessionId(), null, request.systemPrompt(), request.model(), eventSink);
+    }
+
+    @Override
+    public IAgentRuntimeSessionHandle resumeSession(
+            AgentRuntimeSessionResumeRequest request,
+            IAgentRuntimeEventSink eventSink) {
+        requireEnabled();
+        return sessionLauncher.launch(
+                request.sessionId(), request.binding().externalSessionId(),
+                request.binding().resumeReference(), request.systemPrompt(), request.model(), eventSink);
+    }
+
+    @Override
+    public void deleteSession(AgentRuntimeSessionDeleteRequest request) {
+        // Product storage owns V2 session deletion; closing the registered handle stops Pi first.
+    }
+
+    private void requireEnabled() {
+        if (!enabled.getAsBoolean()) {
+            throw new PiRpcException("Pi Beta is disabled");
+        }
+    }
+}

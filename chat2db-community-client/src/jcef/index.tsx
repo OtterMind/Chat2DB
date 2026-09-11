@@ -24,8 +24,8 @@ const jcefApi = {
     return createJcefApi('reveal-in-explorer', { path });
   },
   // Get file URL
-  selectDirectory: () => {
-    return createJcefApi('select-directory');
+  selectDirectory: async () => {
+    return (await createJcefApi<string | null>('select-directory')) ?? undefined;
   },
   // Select SQL file directory
   selectSqlDirectory: () => {

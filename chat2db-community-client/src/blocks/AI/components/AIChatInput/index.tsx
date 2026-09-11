@@ -8,7 +8,7 @@ import React, {
   useRef,
   useCallback,
 } from 'react';
-import { Input } from 'antd';
+import { Input, Select, Tag } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
@@ -25,12 +25,16 @@ import { useGlobalStore } from '@/store/global';
 import { useStyles } from './style';
 import { keyboardKey } from '@/utils';
 import { useAIStore } from '@/store/ai';
+import { useWorkspaceStore } from '@/store/workspace';
+import { captureAgentContext, contextScope } from '../../agentContext';
+import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
 
 import { TextAreaRef } from 'antd/es/input/TextArea';
 import { PageType } from '@/store/ai/slices/cascader/initialState';
 import { debounce } from 'lodash';
 import { IconButton } from '@chat2db/ui';
+import PiToolSettings from '../PiToolSettings';
 import aiAttachmentService, { IChatAttachment } from '@/service/aiAttachment';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
@@ -63,12 +67,14 @@ export interface SendParams {
   sql?: string;
 
   attachments?: IChatAttachment[];
+  agentContext?: AgentRunContextRequest;
 }
 
 interface ChatInputProps {
   className?: string;
   chatInputAreaClassName?: string;
   loading?: boolean;
+  sendDisabled?: boolean;
   contextInfo?: IAICascaderData;
   onContextChange?: (contextInfo: IAICascaderData) => void;
   // Whether to clear the input box after sending
@@ -80,6 +86,8 @@ interface ChatInputProps {
   showCustomModelEntry?: boolean;
   onCustomModelClick?: () => void;
   customModelText?: string;
+  runtimeChoice?: 'DEFAULT' | 'PI';
+  onRuntimeChange?: (value: 'DEFAULT' | 'PI') => void;
   prefillInputState?: { text: string; token: number; questionType?: QuestionType } | null;
   onChatSend?: (param: SendParams) => void;
   onStop?: () => void;
@@ -103,11 +111,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     className,
     chatInputAreaClassName,
     loading,
+    sendDisabled = false,
     hideDatabaseSelect,
     modelOptions,
     showCustomModelEntry,
     onCustomModelClick,
     customModelText,
+    runtimeChoice,
+    onRuntimeChange,
     prefillInputState,
     onChatSend,
     onContextChange,
@@ -141,6 +152,26 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setCascaderData: state.setCascaderData,
     clearCascaderData: state.clearCascaderData,
   }));
+
+  const activeWorkspaceTab = useWorkspaceStore((state) =>
+    state.workspaceTabList?.find((tab) => tab.id === state.activeConsoleId));
+  const activeTable = activeWorkspaceTab?.uniqueData;
+
+  useEffect(() => {
+    if (runtimeChoice !== 'PI' || mainPageActiveTab !== 'workspace' || !activeTable?.dataSourceId
+        || !(activeTable.tableName || activeTable.viewName)) return;
+    const selected = {
+      dataSourceId: activeTable.dataSourceId,
+      dataSourceName: activeTable.dataSourceName,
+      databaseType: activeTable.databaseType,
+      databaseName: activeTable.databaseName,
+      schemaName: activeTable.schemaName,
+    };
+    if (!isSameContextInfo(useAIStore.getState().cascaderDataMap.workspace, selected)) {
+      setCascaderData('workspace', selected);
+    }
+  }, [runtimeChoice, mainPageActiveTab, activeWorkspaceTab?.id, activeTable?.dataSourceId, activeTable?.databaseName,
+    activeTable?.schemaName, activeTable?.tableName, activeTable?.viewName]);
 
   const focusInput = useCallback(() => {
     const textarea = textareaRef.current?.resizableTextArea?.textArea;
@@ -278,7 +309,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   }, []);
 
   const handleSend = async (params?: SendParams) => {
-    if (loading || attachmentLoading) return;
+    if (loading || attachmentLoading || sendDisabled) return;
 
     /**
      * source parameter
@@ -328,6 +359,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         }
       : null;
 
+    const workspace = useWorkspaceStore.getState();
+    const currentWorkspaceTable = mainPageActiveTab === 'workspace'
+      ? workspace.workspaceTabList?.find((tab) => tab.id === workspace.activeConsoleId)?.uniqueData : undefined;
+    const selectedScope = params?.dataSourceId !== undefined
+      ? params : contextInfo && 'dataSourceId' in contextInfo ? contextInfo : null;
+    const mentions = selectedMentions.flatMap((mention) => mention.contextObject ? [mention.contextObject] : []);
+    const currentTable = params?.tableName ? params : currentWorkspaceTable;
+    const agentContext = captureAgentContext(selectedScope, currentTable, mentions);
     const _params = {
       ..._contextInfo,
       ...params,
@@ -335,6 +374,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       input: finalInput,
       source,
       model: useAIStore.getState().selectedModel?.value,
+      agentContext,
       tableList: selectedMentions
         .map((mention) => ({ tableName: mention.tableName, tableType: mention.tableType })) as any,
       attachments: finalAttachments,
@@ -354,7 +394,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const triggerSend = (params: SendParams) => {
-    if (loading) return;
+    if (loading || sendDisabled) return;
 
     handleSend(params);
   };
@@ -504,12 +544,16 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const getMentionList = (info?: MentionTrigger) => {
+    const selected = cascaderDataMap[mainPageActiveTab];
+    const scope = contextScope(selected && 'dataSourceId' in selected ? selected : null);
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
       label: table.name,
-      value: `table:${table.tableType}:${table.name}`,
+      value: JSON.stringify([scope?.dataSourceId, scope?.database, scope?.schema, table.tableType, table.name]),
       kind: 'table',
       tableName: table.name,
       tableType: table.tableType,
+      contextObject: scope ? { ...scope, type: table.tableType === 'VIEW' ? 'VIEW' : 'TABLE',
+        name: table.name, source: 'MENTION' } : undefined,
       extra: table.tableType === 'VIEW' ? '视图' : '表',
     }));
     if (!info?.query) return tables;
@@ -573,6 +617,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             kind: item.kind,
             tableName: item.tableName!,
             tableType: item.tableType,
+            contextObject: item.contextObject,
           };
           return upsertSelectedMention(previous, nextMention);
         });
@@ -672,6 +717,29 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               )}
             </div>
             <div className={styles.bottomAddonsRight}>
+              {runtimeChoice ? (
+                <Select
+                  className={styles.runtimeSelect}
+                  size="small"
+                  variant="borderless"
+                  aria-label="Agent"
+                  disabled={loading || !onRuntimeChange}
+                  popupMatchSelectWidth={156}
+                  value={runtimeChoice}
+                  options={[
+                  { value: 'DEFAULT', label: i18n('stream.runtime.default') },
+                  { value: 'PI', label: i18n('stream.runtime.pi') },
+                ]}
+                  optionRender={(option) => (
+                  <div className={styles.runtimeOption}>
+                    <span>{option.label}</span>
+                    {option.value === 'PI' ? <Tag color="gold">Beta</Tag> : null}
+                  </div>
+                )}
+                  onChange={onRuntimeChange}
+                />
+              ) : null}
+              {runtimeChoice === 'PI' ? <PiToolSettings /> : null}
               <AIModelSelect
                 options={modelOptions}
                 showCustomModelEntry={showCustomModelEntry}
@@ -696,7 +764,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                   }}
                   code="icon-chat-send"
                   className={styles.sendButton}
-                  disabled={!inputValue.trim() && !attachments.length}
+                  disabled={sendDisabled || (!inputValue.trim() && !attachments.length)}
                   onClick={() => handleSend()}
                 />
                 // <Button

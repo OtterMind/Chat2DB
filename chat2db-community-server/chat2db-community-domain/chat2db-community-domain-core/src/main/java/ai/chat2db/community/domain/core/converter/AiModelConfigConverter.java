@@ -17,6 +17,7 @@ public class AiModelConfigConverter {
         response.setName(config.getName());
         response.setProvider(config.getProvider());
         response.setModel(config.getModel());
+        response.setAgentApi(config.getAgentApi());
         response.setBaseUrl(config.getBaseUrl());
         response.setProjectId(config.getProjectId());
         response.setLocation(config.getLocation());

@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.core.impl.ai;
 
+import ai.chat2db.community.domain.api.enums.ai.AiAgentModelApi;
 import ai.chat2db.community.domain.api.enums.ai.AiProviderEnum;
 import ai.chat2db.community.domain.api.model.ai.AiModelCatalogItem;
 import ai.chat2db.community.domain.api.model.ai.AiModelConfig;
@@ -16,6 +17,27 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.security.AesGcmUtil;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -30,26 +52,6 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-
-import jakarta.annotation.PostConstruct;
-import java.net.URI;
-import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.StandardCopyOption;
-import java.util.LinkedHashMap;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -216,6 +218,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     public ModelConfigTestResponse testModelConfig(AiModelConfigSaveRequest request) {
         AiProviderEnum provider = AiProviderEnum.from(request.getProvider());
+        if (StringUtils.isNotBlank(request.getAgentApi())) return testAgentModelConfig(request);
         if (provider == AiProviderEnum.OPENAI) {
             return testOpenAiCompatibleConfig(request, DEFAULT_OPENAI_BASE_URL);
         }
@@ -279,6 +282,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         runtimeModel.setSystemPreset(systemPreset);
         runtimeModel.setProvider(defaultValue(request.getProvider(), baseConfig.getProvider()));
         runtimeModel.setModel(defaultValue(trimToNull(request.getModel()), trimToNull(baseConfig.getModel())));
+        runtimeModel.setAgentApi(baseConfig.getAgentApi());
         runtimeModel.setApiKey(defaultValue(trimToNull(request.getApiKey()), trimToNull(baseConfig.getApiKey())));
         runtimeModel.setBaseUrl(defaultValue(trimToNull(request.getBaseUrl()), trimToNull(baseConfig.getBaseUrl())));
         runtimeModel.setProjectId(defaultValue(trimToNull(request.getProjectId()), trimToNull(baseConfig.getProjectId())));
@@ -503,6 +507,66 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         return presets;
     }
 
+    private ModelConfigTestResponse testAgentModelConfig(AiModelConfigSaveRequest request) {
+        var api = AiAgentModelApi.from(request.getAgentApi());
+        if (api == AiAgentModelApi.OPENAI_COMPLETIONS) {
+            return testOpenAiCompatibleConfig(request, "MINIMAX".equalsIgnoreCase(request.getProvider())
+                    ? DEFAULT_MINIMAX_BASE_URL : DEFAULT_OPENAI_BASE_URL);
+        }
+        String base = trimToNull(request.getBaseUrl());
+        String endpoint;
+        String authHeader;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        switch (api) {
+            case OPENAI_RESPONSES -> {
+                base = StringUtils.defaultIfBlank(base, DEFAULT_OPENAI_BASE_URL);
+                endpoint = base.endsWith("/responses") ? base : appendPath(stripTrailingV1(base), "/v1/responses");
+                authHeader = HttpHeaders.AUTHORIZATION;
+                payload.put("model", request.getModel());
+                payload.put("input", "ping");
+                payload.put("max_output_tokens", 64);
+            }
+            case ANTHROPIC_MESSAGES -> {
+                base = StringUtils.defaultIfBlank(base, "https://api.anthropic.com");
+                endpoint = base.endsWith("/messages") ? base : appendPath(stripTrailingV1(base), "/v1/messages");
+                authHeader = "x-api-key";
+                payload.put("model", request.getModel());
+                payload.put("messages", List.of(Map.of("role", "user", "content", "ping")));
+                payload.put("max_tokens", 16);
+            }
+            case GOOGLE_GENERATIVE_AI -> {
+                base = StringUtils.removeEnd(StringUtils.defaultIfBlank(base, "https://generativelanguage.googleapis.com"), "/");
+                if (!base.matches(".*/v1(?:beta|alpha)?$")) base += "/v1beta";
+                String model = StringUtils.removeStart(request.getModel(), "models/");
+                endpoint = base + "/models/" + URLEncoder.encode(model, StandardCharsets.UTF_8)
+                        .replace("+", "%20") + ":generateContent";
+                authHeader = "x-goog-api-key";
+                payload.put("contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "ping")))));
+                payload.put("generationConfig", Map.of("maxOutputTokens", 16));
+            }
+            default -> throw new IllegalArgumentException("Unsupported Agent API");
+        }
+        String key = resolveTestApiKey(request);
+        if (StringUtils.isBlank(key)) return ModelConfigTestResponse.failure(endpoint, null, "API Key is required for this protocol.");
+        try {
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(10_000);
+            factory.setReadTimeout(20_000);
+            var call = RestClient.builder().requestFactory(factory).build().post().uri(URI.create(endpoint))
+                    .header(authHeader, HttpHeaders.AUTHORIZATION.equals(authHeader) ? "Bearer " + key : key)
+                    .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON);
+            if (api == AiAgentModelApi.ANTHROPIC_MESSAGES) {
+                call.header("anthropic-version", "2023-06-01");
+            }
+            call.body(payload).retrieve().toBodilessEntity();
+            return ModelConfigTestResponse.success(endpoint);
+        } catch (RestClientResponseException error) { // impl-contract: fallback - connection test reports the protocol's upstream failure.
+            return ModelConfigTestResponse.failure(endpoint, error.getStatusCode().value(), truncate(error.getResponseBodyAsString()));
+        } catch (Exception error) { // impl-contract: fallback - connection test reports connectivity failures to the model configuration UI.
+            return ModelConfigTestResponse.failure(endpoint, null, truncate(error.getMessage()));
+        }
+    }
+
     private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request, String defaultBaseUrl) {
         String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), defaultBaseUrl);
         String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/chat/completions");
@@ -637,6 +701,8 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         config.setName(request.getName());
         config.setProvider(request.getProvider());
         config.setModel(request.getModel());
+        config.setAgentApi(StringUtils.isBlank(request.getAgentApi()) ? null
+                : AiAgentModelApi.from(request.getAgentApi()).getCode());
         config.setBaseUrl(request.getBaseUrl());
         config.setProjectId(request.getProjectId());
         config.setLocation(request.getLocation());

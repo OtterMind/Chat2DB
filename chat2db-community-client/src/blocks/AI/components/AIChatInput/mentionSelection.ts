@@ -1,9 +1,12 @@
+import type { AgentContextObject } from '@/types/agentContext';
+
 export interface SelectedMention {
   value: string;
   label: string;
   kind: 'table';
   tableName: string;
   tableType?: string;
+  contextObject?: AgentContextObject;
 }
 
 export interface MentionTrigger {
@@ -53,7 +56,7 @@ export const upsertSelectedMention = (
   selected: readonly SelectedMention[],
   nextMention: SelectedMention,
 ): SelectedMention[] => [
-  ...selected.filter((mention) => mention.value !== nextMention.value && mention.label !== nextMention.label),
+  ...selected.filter((mention) => mention.value !== nextMention.value),
   nextMention,
 ];
 

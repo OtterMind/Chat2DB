@@ -299,7 +299,7 @@ public class LocalTaskManager {
         List<String> tableNames = taskTableNames(spec, target);
         TaskOperation operation = switch (taskType) {
             case QUERY_RESULT_EXPORT, SQL_EXPORT, TABLE_DATA_EXPORT -> TaskOperation.EXPORT;
-            case DATA_FILE_IMPORT, SQL_FILE_IMPORT -> TaskOperation.IMPORT;
+            case DATA_FILE_IMPORT, SQL_FILE_IMPORT, PI_RUNTIME_INSTALL -> TaskOperation.IMPORT;
         };
         return new TaskSubmissionContext(task.getId(), taskType,
                 connectionContextConverter.connectInfo2profile(connectInfo),

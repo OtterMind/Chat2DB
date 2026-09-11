@@ -3,12 +3,14 @@ import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
 
 export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'MINIMAX';
+export type AgentModelApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai';
 
 export interface IAIModelConfigItem {
   id: string;
   name: string;
   provider: AIProvider;
   model: string;
+  agentApi?: AgentModelApi;
   apiKey?: string;
   baseUrl?: string;
   projectId?: string;
@@ -27,6 +29,7 @@ export interface IAIModelConfigSaveRequest {
   name: string;
   provider: AIProvider;
   model: string;
+  agentApi?: AgentModelApi;
   apiKey?: string;
   baseUrl?: string;
   projectId?: string;
@@ -215,6 +218,35 @@ export const listAvailableModelOptions = async (): Promise<IModelOptionItem[]> =
     merged[0].defaultOption = true;
   }
   return merged;
+};
+
+export const prepareAgentModelOption = async (option: IModelOptionItem): Promise<IModelOptionItem> => {
+  if (!clientRuntime.usesLocalPersistence || !option.customOption || !option.modelConfigId) {
+    return option;
+  }
+  const config = loadLocalConfigs().find((item) => item.id === option.modelConfigId);
+  if (!config) {
+    throw new Error('Agent model configuration is unavailable');
+  }
+  const saved = await saveRemoteModelConfig({
+    id: config.id,
+    name: config.name,
+    provider: config.provider,
+    model: config.model,
+    agentApi: config.agentApi,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    projectId: config.projectId,
+    location: config.location,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    enabled: config.enabled,
+    defaultConfig: config.defaultConfig,
+  });
+  return {
+    ...option,
+    modelConfigId: saved.id,
+  };
 };
 
 export const resolveModelRequestPayload = async (option: IModelOptionItem) => {

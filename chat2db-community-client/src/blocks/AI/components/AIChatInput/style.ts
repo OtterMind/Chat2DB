@@ -98,6 +98,19 @@ export const useStyles = createStyles(({ css, token }) => {
       justify-content: flex-end;
       flex-shrink: 0;
     `,
+    runtimeSelect: css`
+      width: 96px;
+
+      .ant-select-selector {
+        padding: 0 4px !important;
+      }
+    `,
+    runtimeOption: css`
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    `,
     attachmentButton: css`
       border-radius: 50% !important;
       color: ${token.colorTextSecondary};

@@ -11,6 +11,8 @@ public class AiRuntimeModel {
 
     private String model;
 
+    private String agentApi;
+
     private String apiKey;
 
     private String baseUrl;
