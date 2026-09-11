@@ -1,4 +1,7 @@
 export default {
+  "stream.activity.tool": "Running tools",
+  "stream.activity.responding": "Responding",
+
   "stream.skill.loadFailed": "Unable to load skills. Please try again.",
   "stream.question.prompt": "Question",
   "stream.question.answer": "Your answer",

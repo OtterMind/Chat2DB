@@ -1,4 +1,7 @@
 export default {
+  "stream.activity.tool": "ツールを実行中",
+  "stream.activity.responding": "回答中",
+
   "stream.skill.loadFailed": "スキルを読み込めませんでした。もう一度お試しください。",
   "stream.question.prompt": "質問",
   "stream.question.answer": "あなたの回答",

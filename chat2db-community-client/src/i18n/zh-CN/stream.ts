@@ -1,4 +1,7 @@
 export default {
+  "stream.activity.tool": "正在调用工具",
+  "stream.activity.responding": "正在回复",
+
   "stream.skill.loadFailed": "无法加载技能列表，请重试。",
   "stream.question.prompt": "问题",
   "stream.question.answer": "你的回答",

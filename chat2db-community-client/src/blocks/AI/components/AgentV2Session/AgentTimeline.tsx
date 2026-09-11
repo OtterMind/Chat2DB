@@ -8,10 +8,13 @@ import type { AgentChart } from '../../agentCharts';
 import AgentApprovalCard from '../AgentApprovalCard';
 import AgentChartCard from '../AgentChartCard';
 import AgentTraceGroup from './AgentTraceGroup';
+import AgentActivityIndicator from './AgentActivityIndicator';
+import { getAgentActivity, type AgentActivity } from './presentation';
 
 export interface AgentTimelineProps {
   entries: AgentTimelineEntry[];
   runId?: string;
+  active?: boolean;
   charts: AgentChart[];
   approvals: AgentApprovalItem[];
   questions: AgentQuestionItem[];
@@ -22,6 +25,7 @@ export interface AgentTimelineProps {
 
 export default function AgentTimeline(props: AgentTimelineProps) {
   const { entries, runId } = props;
+  const activity = getAgentActivity(!!props.active, entries, runId, props.questions, props.approvals);
   const charts = new Map(props.charts.filter((chart) => chart.runId === runId).map((chart) => [chart.id, chart]));
   const receipts = new Map<string, AgentTraceEntry[]>();
   entries.forEach((entry) => {
@@ -33,9 +37,11 @@ export default function AgentTimeline(props: AgentTimelineProps) {
   const nodes: ReactNode[] = [];
   let traces: AgentTraceEntry[] = [];
   let firstSequence = 0;
-  const flush = () => {
+  const flush = (currentActivity?: AgentActivity) => {
     if (!traces.length) return;
-    nodes.push(<div key={firstSequence} data-agent-sequence={firstSequence}><AgentTraceGroup entries={traces} /></div>);
+    nodes.push(<div key={firstSequence} data-agent-sequence={firstSequence}>
+      <AgentTraceGroup entries={traces} activity={currentActivity} />
+    </div>);
     traces = [];
   };
   entries.forEach((entry) => {
@@ -84,6 +90,7 @@ export default function AgentTimeline(props: AgentTimelineProps) {
     }
     if (content) nodes.push(<div key={entry.sequence} data-agent-sequence={entry.sequence}>{content}</div>);
   });
-  flush();
+  if (traces.length) flush(activity);
+  else if (activity) nodes.push(<div key="activity"><AgentActivityIndicator activity={activity} /></div>);
   return <>{nodes}</>;
 }

@@ -1,4 +1,7 @@
 export default {
+  "stream.activity.tool": "Ejecutando herramientas",
+  "stream.activity.responding": "Respondiendo",
+
   "stream.skill.loadFailed": "No se pueden cargar las habilidades. Inténtalo de nuevo.",
   "stream.question.prompt": "Pregunta",
   "stream.question.answer": "Tu respuesta",

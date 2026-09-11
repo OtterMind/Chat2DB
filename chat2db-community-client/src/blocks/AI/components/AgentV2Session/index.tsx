@@ -7,6 +7,7 @@ import type { IChatAttachment } from '@/service/aiAttachment';
 import type { AgentTimelineEntry, AgentTraceEntry } from '../../agentEvents';
 import { useStyles } from '../../style';
 import AgentTimeline, { AgentTimelineProps } from './AgentTimeline';
+import AgentUserMessage from './AgentUserMessage';
 
 export interface AgentV2Message {
   id: string;
@@ -53,8 +54,8 @@ export default function AgentV2Session(props: AgentV2SessionProps) {
         <div className={styles.aiIconWrap}><span className={styles.aiSpark}>✦</span></div>
       </div>
       <div className={styles.assistantContent} aria-busy={active}>
-        {timeline.length
-          ? <AgentTimeline {...props} entries={timeline} runId={runId} />
+        {timeline.length || active
+          ? <AgentTimeline {...props} entries={timeline} runId={runId} active={active} />
           : props.renderMarkdown(content)}
         {error && <Alert type="error" showIcon message={error} />}
       </div>
@@ -84,7 +85,7 @@ export default function AgentV2Session(props: AgentV2SessionProps) {
               <IconfontSvg size="sm" code={icon?.icon || 'icon-database'} existDark={icon?.iconExistDark} />
               <span>{user.contextSummary}</span>
             </div>}
-            <div className={styles.userBubble}>{user.content}</div>
+            <div className={styles.userBubble}><AgentUserMessage content={user.content} /></div>
           </div>
         </div>}
         {assistant && renderReply(assistant.content, assistant.timeline, assistant.runId, false, assistant.error)}

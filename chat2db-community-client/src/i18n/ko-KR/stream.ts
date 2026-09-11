@@ -1,4 +1,7 @@
 export default {
+  "stream.activity.tool": "도구 실행 중",
+  "stream.activity.responding": "답변 중",
+
   "stream.skill.loadFailed": "스킬을 불러올 수 없습니다. 다시 시도하세요.",
   "stream.question.prompt": "질문",
   "stream.question.answer": "내 답변",
