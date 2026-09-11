@@ -41,7 +41,10 @@ export default function QuestionCard({ question, options, status, answer, onAnsw
       <strong>{i18n('stream.question.title')}</strong>
       <span className={styles.status} role="status">{i18n(`stream.question.${status}`)}</span>
     </div>
-    <div className={styles.question}>{question}</div>
+    <div className={styles.question}>
+      <div className={styles.label}>{i18n('stream.question.prompt')}</div>
+      {question}
+    </div>
     {pending ? <>
       {options.length > 0 && <div className={styles.options}>
         {options.map((option) => (
@@ -74,6 +77,7 @@ export default function QuestionCard({ question, options, status, answer, onAnsw
       </form>
       {error && <div className={styles.error} role="alert">{error}</div>}
     </> : status === 'answered' && answer && <div className={styles.answer}>
+      <div className={styles.label}>{i18n('stream.question.answer')}</div>
       {answer.optionLabel && <strong>{answer.optionLabel}</strong>}
       {answer.text && <div>{answer.text}</div>}
     </div>}

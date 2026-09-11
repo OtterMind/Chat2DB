@@ -25,6 +25,9 @@ import { useGlobalStore } from '@/store/global';
 import { useStyles } from './style';
 import { keyboardKey } from '@/utils';
 import { useAIStore } from '@/store/ai';
+import { useWorkspaceStore } from '@/store/workspace';
+import { captureAgentContext, contextScope } from '../../agentContext';
+import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
 
 import { TextAreaRef } from 'antd/es/input/TextArea';
@@ -64,6 +67,7 @@ export interface SendParams {
   sql?: string;
 
   attachments?: IChatAttachment[];
+  agentContext?: AgentRunContextRequest;
 }
 
 interface ChatInputProps {
@@ -148,6 +152,26 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setCascaderData: state.setCascaderData,
     clearCascaderData: state.clearCascaderData,
   }));
+
+  const activeWorkspaceTab = useWorkspaceStore((state) =>
+    state.workspaceTabList?.find((tab) => tab.id === state.activeConsoleId));
+  const activeTable = activeWorkspaceTab?.uniqueData;
+
+  useEffect(() => {
+    if (runtimeChoice !== 'PI' || mainPageActiveTab !== 'workspace' || !activeTable?.dataSourceId
+        || !(activeTable.tableName || activeTable.viewName)) return;
+    const selected = {
+      dataSourceId: activeTable.dataSourceId,
+      dataSourceName: activeTable.dataSourceName,
+      databaseType: activeTable.databaseType,
+      databaseName: activeTable.databaseName,
+      schemaName: activeTable.schemaName,
+    };
+    if (!isSameContextInfo(useAIStore.getState().cascaderDataMap.workspace, selected)) {
+      setCascaderData('workspace', selected);
+    }
+  }, [runtimeChoice, mainPageActiveTab, activeWorkspaceTab?.id, activeTable?.dataSourceId, activeTable?.databaseName,
+    activeTable?.schemaName, activeTable?.tableName, activeTable?.viewName]);
 
   const focusInput = useCallback(() => {
     const textarea = textareaRef.current?.resizableTextArea?.textArea;
@@ -335,6 +359,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         }
       : null;
 
+    const workspace = useWorkspaceStore.getState();
+    const currentWorkspaceTable = mainPageActiveTab === 'workspace'
+      ? workspace.workspaceTabList?.find((tab) => tab.id === workspace.activeConsoleId)?.uniqueData : undefined;
+    const selectedScope = params?.dataSourceId !== undefined
+      ? params : contextInfo && 'dataSourceId' in contextInfo ? contextInfo : null;
+    const mentions = selectedMentions.flatMap((mention) => mention.contextObject ? [mention.contextObject] : []);
+    const currentTable = params?.tableName ? params : currentWorkspaceTable;
+    const agentContext = captureAgentContext(selectedScope, currentTable, mentions);
     const _params = {
       ..._contextInfo,
       ...params,
@@ -342,6 +374,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       input: finalInput,
       source,
       model: useAIStore.getState().selectedModel?.value,
+      agentContext,
       tableList: selectedMentions
         .map((mention) => ({ tableName: mention.tableName, tableType: mention.tableType })) as any,
       attachments: finalAttachments,
@@ -511,12 +544,16 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const getMentionList = (info?: MentionTrigger) => {
+    const selected = cascaderDataMap[mainPageActiveTab];
+    const scope = contextScope(selected && 'dataSourceId' in selected ? selected : null);
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
       label: table.name,
-      value: `table:${table.tableType}:${table.name}`,
+      value: JSON.stringify([scope?.dataSourceId, scope?.database, scope?.schema, table.tableType, table.name]),
       kind: 'table',
       tableName: table.name,
       tableType: table.tableType,
+      contextObject: scope ? { ...scope, type: table.tableType === 'VIEW' ? 'VIEW' : 'TABLE',
+        name: table.name, source: 'MENTION' } : undefined,
       extra: table.tableType === 'VIEW' ? '视图' : '表',
     }));
     if (!info?.query) return tables;
@@ -580,6 +617,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             kind: item.kind,
             tableName: item.tableName!,
             tableType: item.tableType,
+            contextObject: item.contextObject,
           };
           return upsertSelectedMention(previous, nextMention);
         });

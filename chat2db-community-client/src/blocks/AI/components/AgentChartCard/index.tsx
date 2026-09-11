@@ -1,42 +1,55 @@
-import { memo, useMemo } from 'react';
-import { Alert } from 'antd';
+import { memo, useMemo, useState } from 'react';
+import { Alert, Button } from 'antd';
 import { createStyles } from 'antd-style';
 import ChartCard from '@/blocks/BI/ChartCard';
+import ScrollableTable from '@/components/ScrollableTable';
 import i18n from '@/i18n';
 import { AgentChart, agentChartDetail, isPartialChart } from '../../agentCharts';
 
 const useStyles = createStyles(({ css, token }) => ({
   figure: css`margin: 10px 0; width: 100%; max-width: 720px;`,
-  card: css`height: 340px; border: 1px solid ${token.colorBorder}; border-radius: 12px; overflow: hidden;`,
-  details: css`
-    margin-top: 8px; color: ${token.colorTextSecondary};
-    summary { cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid ${token.colorBorderSecondary}; }
+  card: css`border: 1px solid ${token.colorBorder}; border-radius: 12px; overflow: hidden;`,
+  switcher: css`
+    display: inline-flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding: 2px;
+    border-radius: 7px;
+    background: ${token.colorFillTertiary};
   `,
-  rows: css`max-height: 240px; overflow: auto;`,
 }));
 
 export default memo(({ chart }: { chart: AgentChart }) => {
   const { styles } = useStyles();
+  const [view, setView] = useState<'chart' | 'table'>('chart');
   const detail = useMemo(() => agentChartDetail(chart), [chart]);
-  const fields = Object.keys(chart.data[0] || {});
+  const fields = [...new Set(chart.data.flatMap((row) => Object.keys(row)))];
   return (
     <figure className={styles.figure} aria-label={chart.title} data-agent-chart-id={chart.id}>
-      <ChartCard chartDetail={detail} className={styles.card} isEditPermission={false} />
-      {isPartialChart(chart) && <Alert type="warning" showIcon message={i18n('stream.chart.partialResult')} />}
-      {chart.warnings.map((warning) => <Alert key={warning} type="warning" message={warning} />)}
-      <details className={styles.details}>
-        <summary>{i18n('stream.chart.viewQueryData')} ({chart.data.length})</summary>
-        <div className={styles.rows}>
-          <table aria-label={i18n('stream.chart.queryData')}>
+      <div className={styles.switcher} role="tablist" aria-label={chart.title}>
+        <Button size="small" type={view === 'chart' ? 'primary' : 'text'}
+          role="tab" aria-selected={view === 'chart'} onClick={() => setView('chart')}
+        >
+          {i18n('stream.chart.chartView')}
+        </Button>
+        <Button size="small" type={view === 'table' ? 'primary' : 'text'}
+          role="tab" aria-selected={view === 'table'} onClick={() => setView('table')}
+        >
+          {i18n('stream.chart.tableView')}
+        </Button>
+      </div>
+      {view === 'chart' ? <ChartCard chartDetail={detail} className={styles.card}
+        style={{ height: 340 }} isEditPermission={false}
+                          /> : (
+        <ScrollableTable aria-label={i18n('stream.chart.queryData')}>
             <thead><tr>{fields.map((field) => <th key={field}>{field}</th>)}</tr></thead>
             <tbody>{chart.data.map((row, index) => (
-              <tr key={index}>{fields.map((field) => <td key={field}>{row[field] === null ? 'NULL' : row[field]}</td>)}</tr>
+              <tr key={index}>{fields.map((field) => <td key={field}>{row[field] == null ? 'NULL' : row[field]}</td>)}</tr>
             ))}</tbody>
-          </table>
-        </div>
-      </details>
+        </ScrollableTable>
+      )}
+      {isPartialChart(chart) && <Alert type="warning" showIcon message={i18n('stream.chart.partialResult')} />}
+      {chart.warnings.map((warning) => <Alert key={warning} type="warning" message={warning} />)}
     </figure>
   );
 });

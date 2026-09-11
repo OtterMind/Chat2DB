@@ -5,16 +5,15 @@ import ai.chat2db.community.domain.api.model.agent.AgentRun;
 import ai.chat2db.community.domain.api.model.agent.AgentSession;
 import ai.chat2db.community.domain.api.model.ai.AiSessionSummary;
 import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
-import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.ai.AiSessionFacadeService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
-import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.tools.wrapper.result.ActionResult;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
 import ai.chat2db.community.web.api.adapter.agent.AgentHostEnvironmentProvider;
+import ai.chat2db.community.web.api.converter.agent.AgentPromptRequestConverter;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunCancelRequest;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunStartRequest;
 import ai.chat2db.community.web.api.model.request.agent.AgentSessionCreateRequest;
@@ -79,10 +78,8 @@ public class AgentController {
     public CompletionStage<DataResult<AgentRun>> startRun(
             @PathVariable String sessionId,
             @RequestBody @Valid AgentRunStartRequest request) {
-        return agentService.startRun(new AgentRunStartCommand(
-                        identityService.currentUserId(), sessionId,
-                        request.modelConfigId(), new AgentRuntimeInput(request.message(), List.of()),
-                        request.idempotencyKey()))
+        return agentService.startRun(AgentPromptRequestConverter.INSTANCE.request2command(
+                        identityService.currentUserId(), sessionId, request))
                 .thenApply(DataResult::of);
     }
 

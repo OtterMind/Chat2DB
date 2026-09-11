@@ -8,7 +8,13 @@ public record AgentRunStartCommand(
         String sessionId,
         String modelConfigId,
         AgentRuntimeInput input,
-        String idempotencyKey) {
+        String idempotencyKey,
+        AiAgentRunContextRequest context) {
+
+    public AgentRunStartCommand(Long userId, String sessionId, String modelConfigId,
+            AgentRuntimeInput input, String idempotencyKey) {
+        this(userId, sessionId, modelConfigId, input, idempotencyKey, null);
+    }
 
     public AgentRunStartCommand {
         Objects.requireNonNull(userId, "userId");

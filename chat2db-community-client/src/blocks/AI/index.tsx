@@ -13,8 +13,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChartCardBox from '@/blocks/BI/ChartCardBox';
-import AgentChartCard from './components/AgentChartCard';
 import { AgentChart, updateAgentCharts } from './agentCharts';
+import { captureAgentContext, agentContextDatabaseType, agentContextSummary } from './agentContext';
 import { IChartItem } from '@/typings/dashboard';
 import { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { ChartType, LineType, OrderByType, OrderByRule } from '@/blocks/BI/Chart/constants';
@@ -27,7 +27,6 @@ import aiStreamService, {
   IChatSession,
   IModelOptionItem,
 } from '@/service/aiStream';
-import { IChatAttachment } from '@/service/aiAttachment';
 import { useAIStore } from '@/store/ai';
 import { useTreeStore } from '@/store/tree';
 import { useGlobalStore } from '@/store/global';
@@ -37,6 +36,7 @@ import { OperationColumn } from '@/constants/tree';
 import { compatibleDataBaseName } from '@/utils/database';
 import { DatabaseTypeCode } from '@/constants';
 import SQLPreview from '@/components/SQLPreview';
+import ScrollableTable from '@/components/ScrollableTable';
 import { useStyles } from './style';
 import i18n from '@/i18n';
 import { keyboardKey } from '@/utils';
@@ -55,17 +55,16 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
-import AgentApprovalCard from './components/AgentApprovalCard';
-import QuestionCard from '@/components/QuestionCard';
 import type { QuestionResponse } from '@/types/question';
 import { AgentQuestionItem, updateAgentQuestions } from './agentQuestions';
 import agentService, { AgentEvent } from '@/service/agent';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
-import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, buildAgentTranscript, isTerminalAgentEvent } from './agentEvents';
+import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, isTerminalAgentEvent, AgentTimelineEntry } from './agentEvents';
 import { followAgentRun, readAgentHistory, traceAgentStage } from './agentEventStream';
 import { getChatSessionId, getChatSessionUrl } from './chatSessionRoute';
+import AgentV2Session, { AgentV2Message } from './components/AgentV2Session';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -357,14 +356,11 @@ const createAgentOperation = (sessionId?: string): AgentOperation => ({
 
 type ChatRole = 'user' | 'assistant';
 
-interface IChatItem {
-  id: string;
-  runId?: string;
-  role: ChatRole;
-  content: string;
-  attachments?: IChatAttachment[];
-  traceEntries?: ITraceEntry[];
-}
+type IChatItem = AgentV2Message;
+
+const MarkdownTable = ({ children }: React.PropsWithChildren) => (
+  <ScrollableTable aria-label={i18n('stream.chart.queryData')}>{children}</ScrollableTable>
+);
 
 interface IChatRound {
   key: string;
@@ -389,6 +385,7 @@ interface IInProgressSessionSnapshot {
   messages: IChatItem[];
   streamingText: string;
   traceEntries: ITraceEntry[];
+  timeline: AgentTimelineEntry[];
   currentRoundUserMessageId: string | null;
 }
 
@@ -519,6 +516,23 @@ function truncateCollapsedThoughtPreview(text?: string, maxLength = COLLAPSED_TH
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function formatTraceValue(value?: string) {
+  if (!value) return '';
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === 'string') {
+      try {
+        return JSON.stringify(JSON.parse(parsed), null, 2);
+      } catch {
+        return parsed;
+      }
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+}
+
 function isLikelySameSessionFromPrefix(serverMessages: IChatItem[], snapshotMessages: IChatItem[]) {
   if (!serverMessages.length || !snapshotMessages.length) {
     return false;
@@ -553,6 +567,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [messages, setMessages] = useState<IChatItem[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamTraceEntries, setStreamTraceEntries] = useState<ITraceEntry[]>([]);
+  const [streamTimelineEntries, setStreamTimelineEntries] = useState<AgentTimelineEntry[]>([]);
   const [expandedTraceMap, setExpandedTraceMap] = useState<Record<string, boolean>>({});
   const [streamThoughtPulse, setStreamThoughtPulse] = useState(false);
   const [prefillInputState, setPrefillInputState] = useState<{
@@ -580,10 +595,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
-  const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
+  const isEmptyState = !messages.length && !streamingText
+    && !streamTraceEntries.length && !streamTimelineEntries.length;
 
   const streamingRef = useRef('');
   const streamTraceEntriesRef = useRef<ITraceEntry[]>([]);
+  const streamTimelineEntriesRef = useRef<AgentTimelineEntry[]>([]);
   const previousStatusRef = useRef<SSERequestStatus>(SSERequestStatus.IDLE);
   const previousStreamThoughtPreviewRef = useRef('');
   const streamThoughtPulseTimerRef = useRef<number | null>(null);
@@ -1007,9 +1024,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setAgentApprovals((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     const content = streamingRef.current;
     const traceEntries = [...streamTraceEntriesRef.current];
+    const timeline = [...streamTimelineEntriesRef.current];
     if (error) traceEntries.push({ type: 'error', content: agentErrorText(error) || i18n('stream.agent.sendFailed') });
-    if (content.trim() || traceEntries.length || agentOperationRef.current?.runId) {
-      const message: IChatItem = { id: agentRequestId(), runId: agentOperationRef.current?.runId, role: 'assistant', content, traceEntries };
+    if (content.trim() || traceEntries.length || timeline.length || agentOperationRef.current?.runId) {
+      const message: IChatItem = { id: agentRequestId(), runId: agentOperationRef.current?.runId, role: 'assistant', content, traceEntries,
+        ...(timeline.length ? { timeline } : {}),
+        ...(error ? { error: agentErrorText(error) || i18n('stream.agent.sendFailed') } : {}) };
       setMessages((previous) => {
         const next = [...previous, message];
         messagesRef.current = next;
@@ -1020,6 +1040,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setStreamingText('');
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
     setCurrentRoundUserMessageId(null);
     currentRoundUserMessageIdRef.current = null;
   }, []);
@@ -1057,11 +1079,21 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     const session = agentSessionRef.current;
     if (!session || !events.length) return;
     session.sequence = Math.max(session.sequence, ...events.map((event) => event.sequence));
+    const accepted = events.find((event) => event.type === 'RUN_ACCEPTED');
+    if (accepted) {
+      const summary = agentContextSummary(accepted.payload.context);
+      const contextDatabaseType = agentContextDatabaseType(accepted.payload.context);
+      setMessages((current) => current.map((message) => message.id === currentRoundUserMessageIdRef.current
+        ? { ...message, contextSummary: summary, contextDatabaseType } : message));
+    }
     const text = appendAgentText(streamingRef.current, events);
     if (text !== streamingRef.current) {
       streamingRef.current = text;
       setStreamingText(streamingRef.current);
     }
+    const timeline = appendAgentTimeline(streamTimelineEntriesRef.current, events);
+    streamTimelineEntriesRef.current = timeline;
+    setStreamTimelineEntries(timeline);
     const traces = events.map(agentEventTrace).filter((trace): trace is ITraceEntry => !!trace);
     if (traces.length) {
       streamTraceEntriesRef.current = [...streamTraceEntriesRef.current, ...traces];
@@ -1300,6 +1332,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setStreamingText('');
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setCurrentRoundUserMessageId(null);
@@ -1403,6 +1437,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     streamingRef.current = '';
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setExpandedTraceMap({});
@@ -1506,6 +1542,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             messages: [...messagesRef.current],
             streamingText: streamingRef.current,
             traceEntries: [...streamTraceEntriesRef.current],
+            timeline: [...streamTimelineEntriesRef.current],
             currentRoundUserMessageId: currentRoundUserMessageIdRef.current,
           };
         }
@@ -1539,6 +1576,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       streamingRef.current = '';
       streamTraceEntriesRef.current = [];
       setStreamTraceEntries([]);
+      streamTimelineEntriesRef.current = [];
+      setStreamTimelineEntries([]);
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1563,6 +1602,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         streamingRef.current = inProgressSession.streamingText;
         setStreamTraceEntries(inProgressSession.traceEntries);
         streamTraceEntriesRef.current = [...inProgressSession.traceEntries];
+        setStreamTimelineEntries(inProgressSession.timeline);
+        streamTimelineEntriesRef.current = [...inProgressSession.timeline];
         setCurrentRoundUserMessageId(inProgressSession.currentRoundUserMessageId);
         currentRoundUserMessageIdRef.current = inProgressSession.currentRoundUserMessageId;
         if (!title && inProgressSession.title) {
@@ -1655,7 +1696,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         const charts = updateAgentCharts([], events);
         setAgentCharts(charts);
         const transcript = buildAgentTranscript(events)
-          .filter((message) => message.content || message.traceEntries.length
+          .filter((message) => message.content || message.traceEntries.length || message.timeline?.length
             || charts.some((chart) => chart.runId === message.runId));
         setAgentApprovals(updateAgentApprovals([], events).map((item) =>
           item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
@@ -1673,6 +1714,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setStreamingText(streamingRef.current);
         streamTraceEntriesRef.current = activeReply?.traceEntries || [];
         setStreamTraceEntries(streamTraceEntriesRef.current);
+        streamTimelineEntriesRef.current = activeReply?.timeline || [];
+        setStreamTimelineEntries(streamTimelineEntriesRef.current);
         setRuntimeChoice('PI');
         localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'PI');
         sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, sessionId);
@@ -1693,6 +1736,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           setAgentRunning(true);
           void pollAgentRun(operation, sessionId, activeRunId);
         } else {
+          setCurrentRoundUserMessageId(null);
+          currentRoundUserMessageIdRef.current = null;
           agentOperationRef.current = undefined;
         }
       } catch (error) {
@@ -1786,6 +1831,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const handleSend = useCallback(
     async (params: SendParams) => {
       const content = (params.input || '').trim();
+      const context = params.agentContext || captureAgentContext(params, params, []);
       if (!content || (runtimeChoice === 'PI' && agentOperationRef.current)) return;
 
       const selectedValue = params.model || selectedModel?.value;
@@ -1801,6 +1847,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
       setStreamTraceEntries([]);
       streamTraceEntriesRef.current = [];
+      setStreamTimelineEntries([]);
+      streamTimelineEntriesRef.current = [];
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1834,6 +1882,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             role: 'user' as const,
             content,
             attachments: params.attachments,
+            contextSummary: runtimeChoice === 'PI' ? agentContextSummary(context) : undefined,
+            contextDatabaseType: runtimeChoice === 'PI' ? agentContextDatabaseType(context) : undefined,
           },
         ];
         messagesRef.current = next;
@@ -1866,7 +1916,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           operation.sessionId = session.id;
           if (!isPanel) setChatIdInPath(session.id);
           const run = await agentService.startRun({ sessionId: session.id, modelConfigId,
-            message: content, idempotencyKey: userMessageId });
+            message: content, idempotencyKey: userMessageId, context });
           operation.runId = run.id;
           traceAgentStage('run.accepted', { sessionId: session.id, runId: run.id, status: run.status });
           if (operation.cancelRequested && ['ACCEPTED', 'RUNNING'].includes(run.status)) {
@@ -2116,7 +2166,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       <PinSqlContext.Provider value={handlePinSql}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          components={{ code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>> }}
+          components={{
+            code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>, table: MarkdownTable,
+          }}
         >
           {normalizeAiMarkdown(preprocessTableRefs(content))}
         </ReactMarkdown>
@@ -2162,7 +2214,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         <div key={`${entry.type}-${entry.id || index}`} className={styles.traceEntry}>
           <div className={styles.traceEntryTag}>{i18n('stream.trace.toolCall')}</div>
           <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.unknownTool')}</div>
-          {entry.arguments && <pre className={styles.traceCodeBlock}>{entry.arguments}</pre>}
+          {entry.arguments && <pre className={styles.traceCodeBlock}>{formatTraceValue(entry.arguments)}</pre>}
         </div>
       );
     }
@@ -2172,7 +2224,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         <div key={`${entry.type}-${index}`} className={styles.traceEntry}>
           <div className={styles.traceEntryTag}>{i18n('stream.trace.toolResult')}</div>
           <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.defaultToolResult')}</div>
-          <pre className={styles.traceCodeBlock}>{entry.content}</pre>
+          <pre className={styles.traceCodeBlock}>{formatTraceValue(entry.content)}</pre>
         </div>
       );
     }
@@ -2217,18 +2269,26 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     );
   };
 
-  const renderQuestions = (runId?: string) => agentQuestions
-    .filter((item) => item.runId === runId).map((item) => (
-      <QuestionCard key={item.id} question={item.question} options={item.options}
-        status={item.status} answer={item.answer}
-        onAnswer={(answer) => respondToAgentQuestion(item, answer)} onCancel={() => respondToAgentQuestion(item)}
-      />
-    ));
-
-  const renderApprovals = (runId?: string) => agentApprovals.filter((item) => item.runId === runId).map((item) =>
-    <AgentApprovalCard key={item.id} approval={item} onDecide={(approved) => decideAgentApproval(item, approved)} />);
-
   const renderMessages = () => {
+    if (runtimeChoice === 'PI') {
+      return <AgentV2Session
+        messages={messages}
+        currentRoundUserMessageId={currentRoundUserMessageId}
+        streamingText={streamingText}
+        streamTimelineEntries={streamTimelineEntries}
+        activeRunId={agentOperationRef.current?.runId}
+        charts={agentCharts}
+        approvals={agentApprovals}
+        questions={agentQuestions}
+        running={agentRunning}
+        highlightedUserMessageId={highlightedUserMessageId}
+        renderMarkdown={renderMarkdown}
+        onDecideApproval={decideAgentApproval}
+        onAnswerQuestion={respondToAgentQuestion}
+        onUserMessageRef={setMessageElement}
+        onLastRoundRef={(node) => { currentRoundBlockRef.current = node; }}
+             />;
+    }
     const rounds: IChatRound[] = [];
     let pendingRound: IChatRound | null = null;
 
@@ -2306,10 +2366,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   <div className={styles.assistantContent}>
                     {renderThoughtStrip(round.assistant.traceEntries || [], `trace-${round.assistant.id}`)}
                     {renderMarkdown(round.assistant.content)}
-                    {agentCharts.filter((chart) => chart.runId === round.assistant?.runId)
-                      .map((chart) => <AgentChartCard key={chart.id} chart={chart} />)}
-                    {renderApprovals(round.assistant.runId)}
-                    {renderQuestions(round.assistant.runId)}
                   </div>
                 </div>
               )}
@@ -2321,9 +2377,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   streamThoughtPulse,
                 )}
               {isCurrentRound &&
-                (streamingText || agentCharts.some((chart) => chart.runId === agentOperationRef.current?.runId)
-                  || agentApprovals.some((item) => item.runId === agentOperationRef.current?.runId)
-                  || agentQuestions.some((item) => item.runId === agentOperationRef.current?.runId)) &&
+                streamingText &&
                 (() => {
                   const { textBeforeChart, hasIncompleteChart } = splitIncompleteChartBlock(streamingText);
                   return (
@@ -2345,10 +2399,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                         ) : (
                           renderMarkdown(streamingText)
                         )}
-                        {agentCharts.filter((chart) => chart.runId === agentOperationRef.current?.runId)
-                          .map((chart) => <AgentChartCard key={chart.id} chart={chart} />)}
-                        {renderApprovals(agentOperationRef.current?.runId)}
-                        {renderQuestions(agentOperationRef.current?.runId)}
+
                       </div>
                     </div>
                   );
@@ -2591,7 +2642,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 loading={status === SSERequestStatus.LOADING || agentRunning}
                 sendDisabled={runtimeSwitching}
                 onContextChange={() => {
-                  handleNewChat();
+                  if (runtimeChoice !== 'PI') handleNewChat();
                 }}
                 onChatSend={handleSend}
                 onStop={handleStop}

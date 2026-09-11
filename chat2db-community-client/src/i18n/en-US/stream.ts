@@ -1,7 +1,13 @@
 export default {
+  "stream.question.prompt": "Question",
+  "stream.question.answer": "Your answer",
+  "stream.directory.clear": "Clear working directory",
+
   "stream.chart.partialResult": "This chart shows one page of query results. Check the scope before interpreting totals.",
   "stream.chart.viewQueryData": "View query data",
   "stream.chart.queryData": "Chart query data",
+  "stream.chart.chartView": "Chart",
+  "stream.chart.tableView": "Table",
 
   "stream.question.title": "Your input is needed",
   "stream.question.pending": "Awaiting answer",

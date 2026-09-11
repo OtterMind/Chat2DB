@@ -1,6 +1,6 @@
 import useTrimTreeData from '@/blocks/NewTree/hooks/useTrimTreeData';
 import { ILoadDataOptions, switchIcon, treeConfig } from '@/blocks/NewTree/treeConfig';
-import { TreeNodeType, databaseMap } from '@/constants';
+import { TreeNodeType, databaseMap, normalizeDatabaseType } from '@/constants';
 import i18n from '@/i18n';
 import { useTreeStore } from '@/store/tree';
 import { IDBContextInfo } from '@/typings/database';
@@ -164,6 +164,15 @@ const AICascaderSource = (props: IProps) => {
     return null;
   };
 
+  const renderDataSourceIcon = (option?: IAICascaderOption) => {
+    const databaseType = contextInfo && 'databaseType' in contextInfo ? contextInfo.databaseType : undefined;
+    const database = databaseMap[normalizeDatabaseType(databaseType) || ''];
+    if (database?.icon) {
+      return <IconfontSvg size={14} existDark={database.iconExistDark} appearance={appearance} code={database.icon} />;
+    }
+    return renderIcon(option) || <IconfontSvg size={14} appearance={appearance} code="icon-database" />;
+  };
+
   const optionRender = (option) => {
     return (
       <div className={styles.dropdownRender}>
@@ -210,7 +219,7 @@ const AICascaderSource = (props: IProps) => {
     };
     return (
       <Tooltip title={renderValue()} className={styles.displayRender} mouseEnterDelay={0.8}>
-        <div className={styles.dropdownRenderIcon}>{selectedOptions?.[1] && renderIcon(selectedOptions[1])}</div>
+        <div className={styles.dropdownRenderIcon}>{renderDataSourceIcon(selectedOptions?.[1])}</div>
         <div className={styles.dropdownRenderTitle}>{renderValue()}</div>
       </Tooltip>
     );

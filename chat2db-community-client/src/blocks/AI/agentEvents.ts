@@ -1,4 +1,5 @@
 import type { AgentEvent } from '@/service/agent';
+import { agentContextDatabaseType, agentContextSummary } from './agentContext';
 
 export interface AgentApprovalItem {
   id: string;
@@ -52,12 +53,15 @@ export const updateAgentApprovals = (
 };
 
 export interface AgentTranscriptMessage {
+  contextSummary?: string;
+  contextDatabaseType?: string;
   id: string;
   runId: string;
   role: 'user' | 'assistant';
   content: string;
   status?: 'failed' | 'unknown' | 'cancelled';
   traceEntries: AgentTraceEntry[];
+  timeline?: AgentTimelineEntry[];
 }
 
 export interface AgentTraceEntry {
@@ -66,7 +70,15 @@ export interface AgentTraceEntry {
   name?: string;
   arguments?: string;
   id?: string;
+  chartId?: string;
+  failed?: boolean;
 }
+
+export type AgentTimelineEntry = { sequence: number; endSequence?: number } & (
+  | { kind: 'text'; text: string }
+  | { kind: 'trace'; trace: AgentTraceEntry }
+  | { kind: 'question' | 'approval' | 'chart'; id: string }
+);
 
 export const agentEventText = (payload: Record<string, unknown>) => {
   for (const key of ['content', 'text', 'delta']) {
@@ -98,14 +110,62 @@ export const appendAgentText = (current: string, events: AgentEvent[]) =>
     return event.type === 'ASSISTANT_TEXT_DELTA' ? text + agentEventText(event.payload) : text;
   }, current);
 
+export const appendAgentTimeline = (current: AgentTimelineEntry[], events: AgentEvent[]) => {
+  const timeline = [...current];
+  mergeAgentEvents([], events).forEach((event) => {
+    const last = timeline[timeline.length - 1];
+    if (last && event.sequence <= (last.endSequence || last.sequence)) return;
+    if (event.type === 'ASSISTANT_MESSAGE_STARTED') {
+      if (last?.kind === 'text' && !last.text.endsWith('\n\n')) {
+        timeline[timeline.length - 1] = { ...last, text: last.text + '\n\n', endSequence: event.sequence };
+      }
+      return;
+    }
+    if (event.type === 'ASSISTANT_TEXT_DELTA') {
+      const text = agentEventText(event.payload);
+      if (!text) return;
+      if (last?.kind === 'text') {
+        timeline[timeline.length - 1] = { ...last, text: last.text + text, endSequence: event.sequence };
+      } else {
+        timeline.push({ kind: 'text', sequence: event.sequence, text });
+      }
+      return;
+    }
+    if (event.type === 'QUESTION_REQUESTED' && typeof event.payload.questionId === 'string') {
+      timeline.push({ kind: 'question', sequence: event.sequence, id: event.payload.questionId });
+      return;
+    }
+    if (event.type === 'APPROVAL_REQUESTED' && typeof event.payload.approvalId === 'string') {
+      timeline.push({ kind: 'approval', sequence: event.sequence, id: event.payload.approvalId });
+      return;
+    }
+    if (event.type === 'CHART_CREATED' && event.payload.chart && typeof event.payload.chart === 'object'
+        && typeof (event.payload.chart as Record<string, unknown>).id === 'string') {
+      timeline.push({ kind: 'chart', sequence: event.sequence, id: (event.payload.chart as Record<string, unknown>).id as string });
+      return;
+    }
+    const trace = agentEventTrace(event);
+    if (trace?.type === 'reasoning' && last?.kind === 'trace' && last.trace.type === 'reasoning') {
+      timeline[timeline.length - 1] = { ...last, endSequence: event.sequence,
+        trace: { ...last.trace, content: (last.trace.content || '') + (trace.content || '') } };
+    } else if (trace) timeline.push({ kind: 'trace', sequence: event.sequence, trace });
+  });
+  return timeline;
+};
+
 export const buildAgentTranscript = (events: AgentEvent[]): AgentTranscriptMessage[] => {
   const messages: AgentTranscriptMessage[] = [];
   const assistants = new Map<string, AgentTranscriptMessage>();
   mergeAgentEvents([], events).forEach((event) => {
-    const runId = event.runId || event.id;
+    const runId = event.runId;
+    if (!runId) return;
     if (event.type === 'RUN_ACCEPTED') {
       const text = typeof event.payload.text === 'string' ? event.payload.text : '';
-      if (text) messages.push({ id: `user-${event.id}`, runId, role: 'user', content: text, traceEntries: [] });
+      const contextSummary = agentContextSummary(event.payload.context);
+      const contextDatabaseType = agentContextDatabaseType(event.payload.context);
+      if (text) messages.push({ id: `user-${event.id}`, runId, role: 'user', content: text, traceEntries: [],
+        ...(contextSummary ? { contextSummary } : {}),
+        ...(contextDatabaseType ? { contextDatabaseType } : {}) });
       return;
     }
     {
@@ -118,6 +178,8 @@ export const buildAgentTranscript = (events: AgentEvent[]): AgentTranscriptMessa
       assistant.content = appendAgentText(assistant.content, [event]);
       const trace = agentEventTrace(event);
       if (trace) assistant.traceEntries.push(trace);
+      const timeline = appendAgentTimeline(assistant.timeline || [], [event]);
+      if (timeline.length) assistant.timeline = timeline;
     }
     const assistant = assistants.get(runId);
     if (!assistant) return;
@@ -156,12 +218,16 @@ export const agentEventTrace = (event: AgentEvent): AgentTraceEntry | undefined 
     return { type: 'tool_call', id, name, arguments: JSON.stringify(payload.args || {}) };
   }
   if (event.type === 'TOOL_CALL_COMPLETED' || event.type === 'TOOL_CALL_FAILED') {
-    const result = payload.result as { content?: { type: string; text?: string }[] } | undefined;
+    const result = payload.result as { content?: { type: string; text?: string }[];
+      details?: { data?: { chartId?: unknown } } } | undefined;
     const content = Array.isArray(result?.content)
       ? result.content.filter((item) => item.type === 'text').map((item) => item.text || '')
 .join('\n')
       : JSON.stringify(payload.result || payload);
-    return { type: 'tool_result', id, name, content };
+    const chartId = result?.details?.data?.chartId;
+    return { type: 'tool_result', id, name, content,
+      ...(event.type === 'TOOL_CALL_FAILED' ? { failed: true } : {}),
+      ...(name === 'render_chart' && typeof chartId === 'string' ? { chartId } : {}) };
   }
   return undefined;
 };

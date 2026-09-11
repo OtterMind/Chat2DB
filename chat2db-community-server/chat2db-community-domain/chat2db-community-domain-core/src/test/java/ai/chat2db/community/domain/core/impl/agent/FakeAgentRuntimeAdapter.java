@@ -37,6 +37,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
     private RuntimeException openFailure;
     private RuntimeException startFailure;
     private AgentEventType terminalEventOnStart;
+    private AgentRuntimeRunRequest lastRequest;
 
     FakeAgentRuntimeAdapter(AgentRuntimeType runtimeType) {
         this(runtimeType, AgentRuntimeEnvironmentStatus.READY);
@@ -113,6 +114,8 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         return openSessionCount;
     }
 
+    AgentRuntimeRunRequest lastRequest() { return lastRequest; }
+
     void failOpenWith(RuntimeException failure) {
         openFailure = failure;
     }
@@ -125,7 +128,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         terminalEventOnStart = type;
     }
 
-    private static final class FakeSessionHandle implements IAgentRuntimeSessionHandle {
+    private final class FakeSessionHandle implements IAgentRuntimeSessionHandle {
 
         private final String sessionId;
         private final AgentRuntimeSessionRef session;
@@ -156,6 +159,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
 
         @Override
         public CompletionStage<AgentRuntimeRunRef> startRun(AgentRuntimeRunRequest request) {
+            lastRequest = request;
             if (!sessionId.equals(request.sessionId())) {
                 return CompletableFuture.failedFuture(
                         new IllegalArgumentException("Run belongs to another session"));

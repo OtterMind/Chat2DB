@@ -1,7 +1,13 @@
 export default {
+  "stream.question.prompt": "질문",
+  "stream.question.answer": "내 답변",
+  "stream.directory.clear": "작업 디렉터리 지우기",
+
   "stream.chart.partialResult": "이 차트는 쿼리 결과의 한 페이지를 보여줍니다. 합계를 해석하기 전에 범위를 확인하세요.",
   "stream.chart.viewQueryData": "쿼리 데이터 보기",
   "stream.chart.queryData": "차트 쿼리 데이터",
+  "stream.chart.chartView": "차트",
+  "stream.chart.tableView": "테이블",
 
   "stream.question.title": "답변이 필요합니다",
   "stream.question.pending": "답변 대기 중",

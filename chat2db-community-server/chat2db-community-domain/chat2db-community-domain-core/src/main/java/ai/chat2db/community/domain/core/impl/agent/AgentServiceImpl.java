@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCom
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentService;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentPromptService;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
@@ -39,6 +40,7 @@ public class AgentServiceImpl implements AgentService {
     private final AgentRuntimeHandleRegistry handleRegistry;
     private final Supplier<String> idGenerator;
     private final Clock clock;
+    private final IAiAgentPromptService prompts;
 
     @Autowired
     public AgentServiceImpl(
@@ -46,8 +48,8 @@ public class AgentServiceImpl implements AgentService {
             AgentSessionStorage sessionStorage,
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
-            AgentRuntimeHandleRegistry handleRegistry) {
-        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry,
+            AgentRuntimeHandleRegistry handleRegistry, IAiAgentPromptService prompts) {
+        this(runtimeRegistry, sessionStorage, runCoordinator, eventStorage, handleRegistry, prompts,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -57,6 +59,7 @@ public class AgentServiceImpl implements AgentService {
             AgentRunCoordinator runCoordinator,
             AgentEventStorage eventStorage,
             AgentRuntimeHandleRegistry handleRegistry,
+            IAiAgentPromptService prompts,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -66,24 +69,14 @@ public class AgentServiceImpl implements AgentService {
         this.handleRegistry = Objects.requireNonNull(handleRegistry, "handleRegistry");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.prompts = Objects.requireNonNull(prompts, "prompts");
     }
 
     @Override
     public AgentSession createSession(AgentSessionCreateCommand command) {
         Objects.requireNonNull(command, "command");
         AgentDefinition definition = new AgentDefinition(
-                "DEFAULT", "Chat2DB Agent", null, """
-                你是 Chat2DB Agent，帮助用户完成数据库、文件和命令行任务。
-                根据用户请求使用已启用的工具，基于实际结果简洁回答。
-                用户明确限定范围时遵守该范围；范围未明确时，名称相似只是检索线索，不是范围限制。
-                优先通过工具获取证据并逐步定位对象。局部检索无结果只对已检查的范围和条件有效，应继续探索其他合理候选，避免重复无效检索。
-                找到足够证据能继续完成任务时直接执行；存在影响结果的歧义、缺少必要信息或需要用户选择下一步时，调用 askUserQuestion。
-                提问时尽量给出基于实际发现的可选方向及简短理由，保留自由回答；让用户做选择，不要求用户替你定位答案。一次只问一个问题并等待真实回答。
-                区分已验证的事实、推测和未检查的范围，不将局部结果表述为全局结论。
-                需要审批时等待用户确认；工具不可用或执行失败时如实说明。
-                用户请求图表时，先用 db_query 查询真实数据，再用返回的 resultId 调用 render_chart。聚合和计算在 SQL 中完成。
-                render_chart 成功后图表已展示并保存，只需解释结论，不重复输出 chart 代码块或重写查询数据；查询结果不完整时说明展示范围。
-                """,
+                "DEFAULT", "Chat2DB Agent", null, prompts.systemPrompt(),
                 command.runtimeType(), command.modelConfigId(), 1);
         IAgentRuntimeAdapter adapter = runtimeRegistry.require(definition.runtimeType());
         AgentRuntimeEnvironmentReport environment = adapter.inspectEnvironment(command.environment());

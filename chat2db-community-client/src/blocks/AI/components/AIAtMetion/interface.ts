@@ -1,4 +1,5 @@
 import React from 'react';
+import type { AgentContextObject } from '@/types/agentContext';
 
 export interface SuggestionItem {
   label: string;
@@ -6,6 +7,7 @@ export interface SuggestionItem {
   kind: 'table';
   tableType?: string;
   tableName?: string;
+  contextObject?: AgentContextObject;
   children?: SuggestionItem[];
   extra?: React.ReactNode;
 }

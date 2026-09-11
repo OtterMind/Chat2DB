@@ -35,10 +35,18 @@ export const useStyles = createStyles(({ css, token }) => ({
     color: ${token.colorTextSecondary};
     font-size: 12px;
   `,
-  actions: css`
+  directoryLabel: css`
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
+  `,
+  help: css`
+    display: inline-flex;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: ${token.colorTextSecondary};
+    cursor: help;
   `,
   tools: css`
     max-height: min(48vh, 390px);

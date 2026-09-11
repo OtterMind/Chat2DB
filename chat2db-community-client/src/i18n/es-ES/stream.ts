@@ -1,7 +1,13 @@
 export default {
+  "stream.question.prompt": "Pregunta",
+  "stream.question.answer": "Tu respuesta",
+  "stream.directory.clear": "Borrar el directorio de trabajo",
+
   "stream.chart.partialResult": "Este gráfico muestra una página de los resultados. Comprueba el alcance antes de interpretar los totales.",
   "stream.chart.viewQueryData": "Ver datos de la consulta",
   "stream.chart.queryData": "Datos de la consulta del gráfico",
+  "stream.chart.chartView": "Gráfico",
+  "stream.chart.tableView": "Tabla",
 
   "stream.question.title": "Necesitamos tu respuesta",
   "stream.question.pending": "Esperando respuesta",

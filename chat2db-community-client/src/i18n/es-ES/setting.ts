@@ -10,7 +10,7 @@ export default {
   "setting.agent.toolStatus.UNAVAILABLE": "No disponible",
   "setting.agent.workingDirectory": "Directorio de trabajo de las herramientas",
   "setting.agent.workingDirectory.default": "Predeterminado: un directorio por conversación",
-  "setting.agent.workingDirectory.hint": "Todas las herramientas de Pi usan este directorio. Déjalo vacío para usar un directorio independiente por conversación. Los cambios se aplican a las nuevas llamadas.",
+  "setting.agent.workingDirectory.hint": "Configura el directorio de trabajo de las herramientas siguientes.",
   "setting.agent.tool.bash": "Ejecuta comandos Bash en el directorio seleccionado tras la confirmación.",
   "setting.agent.tool.read": "Lee el contenido de archivos.",
   "setting.agent.tool.edit": "Reemplaza el contenido indicado de un archivo.",

@@ -1,6 +1,7 @@
-import React, { useEffect, useId, useState } from 'react';
-import { Button, Checkbox, Input, Popover, Spin, Tag } from 'antd';
-import { Settings2 } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { Checkbox, Popover, Spin, Tag, Tooltip } from 'antd';
+import { HelpCircle, Settings2 } from 'lucide-react';
+import DirectoryPicker from '@/components/DirectoryPicker';
 import agentService, { AgentToolState } from '@/service/agent';
 import { useGlobalStore } from '@/store/global';
 import i18n from '@/i18n';
@@ -17,7 +18,6 @@ export default function PiToolSettings() {
   const [open, setOpen] = useState(false);
   const [tools, setTools] = useState<AgentToolState[]>([]);
   const [directory, setDirectory] = useState('');
-  const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<'directory' | 'tool' | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -34,7 +34,6 @@ export default function PiToolSettings() {
       if (controller.signal.aborted) return;
       setTools(catalog);
       setDirectory(settings.workingDirectory);
-      setDraft(settings.workingDirectory);
     })
       .catch((error) => {
       if (!controller.signal.aborted) setLoadError(agentErrorText(error) || i18n('setting.agent.enableFailed'));
@@ -45,14 +44,12 @@ export default function PiToolSettings() {
     return () => controller.abort();
   }, [open]);
 
-  const saveDirectory = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (pending || picking || draft === directory) return;
+  const saveDirectory = async (workingDirectory: string) => {
+    if (pending || workingDirectory === directory) return;
     setPending('directory');
     try {
-      const settings = await agentService.saveWorkspaceSettings({ workingDirectory: draft });
+      const settings = await agentService.saveWorkspaceSettings({ workingDirectory });
       setDirectory(settings.workingDirectory);
-      setDraft(settings.workingDirectory);
       feedback.success(i18n('common.message.modifySuccessfully'));
     } catch (error) {
       feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
@@ -66,7 +63,7 @@ export default function PiToolSettings() {
     setPicking(true);
     try {
       const selected = await agentService.selectDirectory();
-      if (selected) setDraft(selected);
+      if (selected) await saveDirectory(selected);
     } catch (error) {
       feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
     } finally {
@@ -98,25 +95,21 @@ export default function PiToolSettings() {
         >
           <div className={styles.title}>{i18n('setting.agent.tools.title')}</div>
           {loading ? <Spin size="small" /> : loadError ? <span role="alert">{loadError}</span> : <>
-            <form className={styles.directory} onSubmit={saveDirectory}>
-              <label htmlFor={directoryInputId}>{i18n('setting.agent.workingDirectory')}</label>
-              <Input id={directoryInputId} value={draft} allowClear disabled={!!pending || picking}
-                placeholder={i18n('setting.agent.workingDirectory.default')}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              <Button size="small" disabled={!!pending || picking} onClick={() => void chooseDirectory()}>
-                {i18n('setting.agent.workingDirectory.choose')}
-              </Button>
-              <div className={styles.hint}>{i18n('setting.agent.workingDirectory.hint')}</div>
-              <div className={styles.actions}>
-                <Button size="small" disabled={!!pending || picking || draft === directory}
-                  onClick={() => setDraft(directory)}
-                >{i18n('common.button.cancel')}</Button>
-                <Button size="small" type="primary" htmlType="submit" loading={pending === 'directory'}
-                  disabled={picking || draft === directory}
-                >{i18n('common.button.save')}</Button>
+            <div className={styles.directory}>
+              <div className={styles.directoryLabel}>
+                <label htmlFor={directoryInputId}>{i18n('setting.agent.workingDirectory')}</label>
+                <Tooltip title={i18n('setting.agent.workingDirectory.hint')}>
+                  <button type="button" className={styles.help} aria-label={i18n('setting.agent.workingDirectory.hint')}>
+                    <HelpCircle size={14} />
+                  </button>
+                </Tooltip>
               </div>
-            </form>
+              <DirectoryPicker id={directoryInputId} value={directory} disabled={!!pending || picking}
+                emptyLabel={i18n('setting.agent.workingDirectory.choose')}
+                clearLabel={i18n('stream.directory.clear')}
+                onSelect={() => void chooseDirectory()} onClear={() => void saveDirectory('')}
+              />
+            </div>
             <div className={styles.tools}>
               {tools.filter((tool) => tool.category === 'BUILTIN').map((tool) =>
                   <div className={styles.row} key={tool.name}>

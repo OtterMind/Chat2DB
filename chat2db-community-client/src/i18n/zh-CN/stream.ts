@@ -1,7 +1,13 @@
 export default {
+  "stream.question.prompt": "问题",
+  "stream.question.answer": "你的回答",
+  "stream.directory.clear": "清除工作目录",
+
   "stream.chart.partialResult": "仅展示本次查询返回的一页数据，请注意统计范围。",
   "stream.chart.viewQueryData": "查看查询数据",
   "stream.chart.queryData": "图表查询数据",
+  "stream.chart.chartView": "图表",
+  "stream.chart.tableView": "表格",
 
   "stream.question.title": "需要你的选择",
   "stream.question.pending": "等待回答",

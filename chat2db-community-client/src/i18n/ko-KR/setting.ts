@@ -10,7 +10,7 @@ export default {
   "setting.agent.toolStatus.UNAVAILABLE": "사용 불가",
   "setting.agent.workingDirectory": "도구 작업 디렉터리",
   "setting.agent.workingDirectory.default": "기본값: 대화별 개별 디렉터리",
-  "setting.agent.workingDirectory.hint": "모든 Pi 도구가 이 디렉터리를 사용합니다. 비워 두면 대화별 독립 디렉터리를 사용합니다. 저장 후 새 도구 호출에 적용됩니다.",
+  "setting.agent.workingDirectory.hint": "아래 도구의 작업 디렉터리를 설정합니다.",
   "setting.agent.tool.bash": "확인 후 선택한 디렉터리에서 Bash 명령을 실행합니다.",
   "setting.agent.tool.read": "파일 내용을 읽습니다.",
   "setting.agent.tool.edit": "파일의 지정된 내용을 바꿉니다.",

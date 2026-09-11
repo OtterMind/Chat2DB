@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -46,7 +45,7 @@ class AgentRunCoordinatorTest {
             }
         };
         coordinator = new AgentRunCoordinator(
-                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver, new AiAgentQuestionServiceImpl(),
+                new AgentRuntimeRegistry(List.of(adapter)), handles, storage, storage, storage, resolver, new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(), new AiAgentContextServiceImpl(null),
                 () -> "generated-" + ids.incrementAndGet(),
                 Clock.fixed(Instant.parse("2026-09-08T16:00:00Z"), ZoneOffset.UTC));
     }
@@ -67,6 +66,8 @@ class AgentRunCoordinatorTest {
                 storage.events.stream().map(AgentEvent::type).toList());
         assertEquals(List.of(1L, 2L), storage.events.stream().map(AgentEvent::sequence).toList());
         assertEquals("hello", storage.events.get(0).payload().get("text"));
+        assertEquals(storage.events.get(0).payload().get("renderedPrompt"), adapter.lastRequest().input().text());
+        assertEquals(true, adapter.lastRequest().input().text().contains("<chat2db_context>"));
         assertEquals(running.requestMessageId(), storage.events.get(0).payload().get("requestMessageId"));
 
         AgentRun cancelled = coordinator.cancel(

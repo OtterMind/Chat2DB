@@ -13,6 +13,8 @@ import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
 import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentContextService;
+import ai.chat2db.community.domain.api.service.agent.IAiAgentPromptService;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentQuestionService;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
@@ -20,6 +22,7 @@ import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import ai.chat2db.community.tools.model.agent.runtime.AgentModelSnapshot;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeCancelRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEvent;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
@@ -46,6 +49,8 @@ public class AgentRunCoordinator {
     private final AgentEventStorage eventStorage;
     private final AgentModelResolver modelResolver;
     private final IAiAgentQuestionService questions;
+    private final IAiAgentPromptService prompts;
+    private final IAiAgentContextService contexts;
     private final Supplier<String> idGenerator;
     private final Clock clock;
 
@@ -57,8 +62,8 @@ public class AgentRunCoordinator {
             AgentRunStorage runStorage,
             AgentEventStorage eventStorage,
             AgentModelResolver modelResolver,
-            IAiAgentQuestionService questions) {
-        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver, questions,
+            IAiAgentQuestionService questions, IAiAgentPromptService prompts, IAiAgentContextService contexts) {
+        this(runtimeRegistry, handleRegistry, sessionStorage, runStorage, eventStorage, modelResolver, questions, prompts, contexts,
                 () -> UUID.randomUUID().toString(), Clock.systemDefaultZone());
     }
 
@@ -70,6 +75,7 @@ public class AgentRunCoordinator {
             AgentEventStorage eventStorage,
             AgentModelResolver modelResolver,
             IAiAgentQuestionService questions,
+            IAiAgentPromptService prompts, IAiAgentContextService contexts,
             Supplier<String> idGenerator,
             Clock clock) {
         this.runtimeRegistry = Objects.requireNonNull(runtimeRegistry, "runtimeRegistry");
@@ -79,6 +85,8 @@ public class AgentRunCoordinator {
         this.eventStorage = Objects.requireNonNull(eventStorage, "eventStorage");
         this.modelResolver = Objects.requireNonNull(modelResolver, "modelResolver");
         this.questions = Objects.requireNonNull(questions, "questions");
+        this.prompts = Objects.requireNonNull(prompts, "prompts");
+        this.contexts = Objects.requireNonNull(contexts, "contexts");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -99,6 +107,8 @@ public class AgentRunCoordinator {
         AgentModelSnapshot model = modelResolver.resolve(command.modelConfigId());
         AgentTrace.record("run.model.resolved", session.id(), null,
                 Map.of("modelConfigId", model.modelConfigId(), "provider", model.provider(), "model", model.modelId()));
+        var context = contexts.resolve(command.context());
+        String renderedPrompt = prompts.userPrompt(command.input().text(), context);
         long sequence = session.lastEventSequence() + 1;
         String runId = nextId();
         AgentRun run = new AgentRun(
@@ -111,14 +121,15 @@ public class AgentRunCoordinator {
                                 "text", Objects.toString(command.input().text(), ""),
                                 "artifactIds", command.input().artifactIds(),
                                 "modelConfigId", model.modelConfigId(),
-                                "requestMessageId", run.requestMessageId())),
+                                "requestMessageId", run.requestMessageId(),
+                                "context", context, "renderedPrompt", renderedPrompt, "promptTemplate", "agent-v1")),
                 command.userId());
         updateSession(session, session.status(), AgentSessionStatus.RUNNING, sequence, command.modelConfigId());
         AgentTrace.record("run.accepted", session.id(), run.id(),
                 Map.of("sequence", sequence, "idempotencyKey", command.idempotencyKey()));
 
         AgentRuntimeRunRequest runtimeRequest = new AgentRuntimeRunRequest(
-                session.id(), runId, model, command.input(), command.idempotencyKey());
+                session.id(), runId, model, new AgentRuntimeInput(renderedPrompt, command.input().artifactIds()), command.idempotencyKey());
         try {
             IAgentRuntimeSessionHandle handle = handle(session, command, model);
             return handle.startRun(runtimeRequest).handle((reference, error) -> {

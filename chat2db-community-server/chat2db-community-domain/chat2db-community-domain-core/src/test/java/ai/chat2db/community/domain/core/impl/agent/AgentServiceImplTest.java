@@ -40,7 +40,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
                 () -> "session-one", CLOCK);
 
         AgentSession session = service.createSession(command());
@@ -51,7 +51,7 @@ class AgentServiceImplTest {
         assertEquals("Session", session.title());
         assertEquals("DEFAULT", session.definition().id());
         assertEquals("Chat2DB Agent", session.definition().name());
-        assertTrue(session.definition().systemPrompt().contains("数据库、文件和命令行任务"));
+        assertTrue(session.definition().systemPrompt().contains("You are Chat2DB Agent."));
         assertEquals("model-config", session.definition().modelConfigId());
         assertEquals(LocalDateTime.of(2026, 9, 8, 14, 0), session.gmtCreate());
         assertEquals(0, adapter.openSessionCount());
@@ -67,7 +67,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -82,7 +82,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of());
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
                 () -> "session-one", CLOCK);
 
         assertThrows(AgentRuntimeUnavailableException.class, () -> service.createSession(command()));
@@ -100,7 +100,7 @@ class AgentServiceImplTest {
                 storage,
                 unusedCoordinator(registry, storage),
                 new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
                 () -> "session-one",
                 CLOCK);
         service.createSession(command());
@@ -116,7 +116,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
                 () -> "session-one", CLOCK);
         service.createSession(command());
 
@@ -136,7 +136,7 @@ class AgentServiceImplTest {
         AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
-                new AgentRuntimeHandleRegistry(), () -> "session-one", CLOCK);
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(), () -> "session-one", CLOCK);
         service.createSession(command());
 
         assertEquals("Renamed", service.renameSession("session-one", 1L, " Renamed ").title());
@@ -164,7 +164,7 @@ class AgentServiceImplTest {
                 new UnusedAgentRunStorage(),
                 new UnusedAgentEventStorage(),
                 new AgentModelResolver(null),
-                new AiAgentQuestionServiceImpl(),
+                new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(), new AiAgentContextServiceImpl(null, CLOCK),
                 () -> "unused",
                 CLOCK);
     }

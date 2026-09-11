@@ -5,9 +5,10 @@ export const useStyles = createStyles(({ css, token }) => ({
     min-width: 0;
     max-width: 100%;
     margin: 12px 0;
-    border: 1px solid ${token.colorBorderSecondary};
+    border: 1px solid ${token.colorPrimaryBorder};
     border-radius: 10px;
-    background: ${token.colorBgContainer};
+    background: ${token.colorBgElevated};
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     overflow: hidden;
   `,
   header: css`
@@ -17,21 +18,35 @@ export const useStyles = createStyles(({ css, token }) => ({
     gap: 8px;
     padding: 12px 14px;
     font-size: 13px;
+    color: ${token.colorText};
+    background: ${token.colorPrimaryBg};
   `,
   status: css`
     margin-left: auto;
-    color: ${token.colorTextSecondary};
+    color: ${token.colorPrimary};
     font-size: 12px;
+    font-weight: 600;
   `,
   question: css`
-    padding: 0 14px 12px;
+    padding: 14px;
+    color: ${token.colorText};
+    font-size: 14px;
+    line-height: 1.75;
+    font-weight: 500;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   `,
   options: css`
     display: grid;
     gap: 8px;
-    padding: 0 14px 12px;
+    margin: 0 14px 14px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid ${token.colorBorderSecondary};
+    background: ${token.colorFillTertiary};
+    color: ${token.colorText};
+    font-size: 14px;
+    line-height: 1.7;
   `,
   option: css`
     width: 100%;
@@ -64,9 +79,19 @@ export const useStyles = createStyles(({ css, token }) => ({
   answer: css`
     display: grid;
     gap: 6px;
-    padding: 0 14px 12px;
+    margin: 0 14px 14px;
+    padding: 12px;
+    border-radius: 6px;
+    background: ${token.colorPrimaryBg};
+    color: ${token.colorText};
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  `,
+  label: css`
+    margin-bottom: 4px;
+    color: ${token.colorTextSecondary};
+    font-size: 12px;
+    font-weight: 600;
   `,
   error: css`
     padding: 0 14px 12px;

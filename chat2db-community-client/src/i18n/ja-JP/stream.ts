@@ -1,7 +1,13 @@
 export default {
+  "stream.question.prompt": "質問",
+  "stream.question.answer": "あなたの回答",
+  "stream.directory.clear": "作業ディレクトリをクリア",
+
   "stream.chart.partialResult": "このグラフはクエリ結果の1ページ分です。集計範囲を確認してください。",
   "stream.chart.viewQueryData": "クエリデータを表示",
   "stream.chart.queryData": "グラフのクエリデータ",
+  "stream.chart.chartView": "グラフ",
+  "stream.chart.tableView": "テーブル",
 
   "stream.question.title": "回答をお願いします",
   "stream.question.pending": "回答待ち",

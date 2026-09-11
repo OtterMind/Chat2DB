@@ -1,6 +1,7 @@
 import createRequest from './base';
 import type { QuestionAnswer, QuestionResponse } from '@/types/question';
 import type { IChatSession } from './aiStream';
+import type { AgentRunContextRequest } from '@/types/agentContext';
 
 export type AgentRuntimeType = 'PI' | 'CODEX' | 'DSH';
 export type AgentEventType =
@@ -136,6 +137,7 @@ const startRun = createRequest<
     modelConfigId: string;
     message: string;
     idempotencyKey: string;
+    context?: AgentRunContextRequest;
   },
   AgentRun
 >('/api/v3/ai/sessions/:sessionId/runs', { method: 'post', errorLevel: false });

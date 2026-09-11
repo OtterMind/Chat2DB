@@ -10,7 +10,7 @@ export default {
   "setting.agent.toolStatus.UNAVAILABLE": "暂不可用",
   "setting.agent.workingDirectory": "工具工作目录",
   "setting.agent.workingDirectory.default": "默认：各会话独立目录",
-  "setting.agent.workingDirectory.hint": "所有 Pi 工具共用此目录；留空使用各会话独立目录。保存后对新工具调用生效。",
+  "setting.agent.workingDirectory.hint": "设置下方工具的工作目录",
   "setting.agent.tool.bash": "在指定工作目录中执行 Bash 命令，执行前需要确认。",
   "setting.agent.tool.read": "读取文件内容。",
   "setting.agent.tool.edit": "替换文件中的指定内容。",
