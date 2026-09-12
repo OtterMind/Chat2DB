@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { useMergedState } from 'rc-util';
 import { Checkbox, Popover, Spin, Tag, Tooltip } from 'antd';
 import { HelpCircle, Settings2 } from 'lucide-react';
 import DirectoryPicker from '@/components/DirectoryPicker';
@@ -10,12 +11,12 @@ import { agentErrorText } from '../../agentEvents';
 import { toolDescription } from './model';
 import { useStyles } from './style';
 
-export default function PiToolSettings() {
+export default function PiToolSettings(props: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const { styles } = useStyles();
   const directoryInputId = useId();
   useGlobalStore((state) => state.baseSetting.language);
   const [picking, setPicking] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useMergedState(false, { value: props.open, onChange: props.onOpenChange });
   const [tools, setTools] = useState<AgentToolState[]>([]);
   const [directory, setDirectory] = useState('');
   const [loading, setLoading] = useState(false);

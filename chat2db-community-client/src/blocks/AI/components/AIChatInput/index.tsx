@@ -8,7 +8,7 @@ import React, {
   useRef,
   useCallback,
 } from 'react';
-import { Input, Select, Tag } from 'antd';
+import { Input, Modal, Select, Tag } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { ChatSourceType, QuestionType } from '@/constants/chat';
 import { PromptTableVO } from '@/typings/chat';
@@ -31,6 +31,8 @@ import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
 import agentService from '@/service/agent';
 import { commandSuggestions, detectInputSuggestion, replaceSkillTrigger, skillSuggestions, type InputSuggestionTrigger } from './inputSuggestions';
+
+import { CHAT_COMMANDS, parseChatCommand, isUnsupportedChatCommand, type ConversationCommand } from '../../chatCommands';
 
 import { TextAreaRef } from 'antd/es/input/TextArea';
 import { PageType } from '@/store/ai/slices/cascader/initialState';
@@ -90,6 +92,7 @@ interface ChatInputProps {
   onRuntimeChange?: (value: 'DEFAULT' | 'PI') => void;
   prefillInputState?: { text: string; token: number; questionType?: QuestionType } | null;
   onChatSend?: (param: SendParams) => void;
+  onCommand?: (command: ConversationCommand) => void | Promise<void>;
   onStop?: () => void;
   autoSize?: boolean | { minRows?: number; maxRows?: number };
   autoFocus?: boolean;
@@ -121,6 +124,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     onRuntimeChange,
     prefillInputState,
     onChatSend,
+    onCommand,
     onContextChange,
     onStop,
     clearAfterSend = true,
@@ -134,6 +138,9 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
   const [suggestionTrigger, setSuggestionTrigger] = useState<InputSuggestionTrigger | null>(null);
   const [skills, setSkills] = useState<string[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
+  const [commandHelpOpen, setCommandHelpOpen] = useState(false);
   const [attachments, setAttachments] = useState<IChatAttachment[]>([]);
   const [attachmentLoading, setAttachmentLoading] = useState(false);
   const textareaRef = useRef<TextAreaRef>(null);
@@ -359,6 +366,29 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         : '');
 
     if (!finalInput) return;
+
+    if (runtimeChoice === 'PI') {
+      const command = parseChatCommand(finalInput);
+      if (command) {
+        try {
+          if (command === 'model') {
+            if (!modelOptions?.length) onCustomModelClick?.();
+            else setModelMenuOpen(true);
+          } else if (command === 'tools') setToolsMenuOpen(true);
+          else if (command === 'help') setCommandHelpOpen(true);
+          else await onCommand?.(command);
+          setInputValue('');
+          setSuggestionTrigger(null);
+        } catch (error) {
+          feedback.error(error instanceof Error ? error.message : i18n('stream.command.failed'));
+        }
+        return;
+      }
+      if (isUnsupportedChatCommand(finalInput)) {
+        feedback.warning(i18n('stream.command.unsupported'));
+        return;
+      }
+    }
 
     const contextInfo = cascaderDataMap[mainPageActiveTab];
     const _contextInfo = contextInfo
@@ -641,6 +671,18 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     >
       {({ onTrigger, onKeyDown, isOpen }) => (
         <div className={`${styles.chatInputArea}${chatInputAreaClassName ? ` ${chatInputAreaClassName}` : ''}`}>
+          <Modal title={i18n('stream.command.help')} open={commandHelpOpen}
+            onCancel={() => setCommandHelpOpen(false)} footer={null}
+          >
+            <dl>
+              {CHAT_COMMANDS.map((command) => <div key={command}>
+                <dt><code>/{command}</code></dt><dd>{i18n(`stream.command.${command}`)}</dd>
+              </div>)}
+              {skills.map((skill) => <div key={skill}>
+                <dt><code>/skill:{skill}</code></dt><dd>{i18n('stream.command.skill')}</dd>
+              </div>)}
+            </dl>
+          </Modal>
           <input
             ref={fileInputRef}
             type="file"
@@ -750,8 +792,10 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                   onChange={onRuntimeChange}
                 />
               ) : null}
-              {runtimeChoice === 'PI' ? <PiToolSettings /> : null}
+              {runtimeChoice === 'PI' ? <PiToolSettings open={toolsMenuOpen} onOpenChange={setToolsMenuOpen} /> : null}
               <AIModelSelect
+                open={modelMenuOpen}
+                onOpenChange={setModelMenuOpen}
                 options={modelOptions}
                 showCustomModelEntry={showCustomModelEntry}
                 onCustomModelClick={onCustomModelClick}
@@ -764,6 +808,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                     iconSize: 22,
                   }}
                   code="icon-chat-stop"
+                  title={i18n('stream.question.cancel')}
                   className={styles.stopButton}
                   onClick={onStop}
                 />
@@ -774,6 +819,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                     iconSize: 22,
                   }}
                   code="icon-chat-send"
+                  title={i18n('stream.agent.send')}
                   className={styles.sendButton}
                   disabled={sendDisabled || (!inputValue.trim() && !attachments.length)}
                   onClick={() => handleSend()}

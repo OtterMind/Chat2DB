@@ -16,7 +16,7 @@ assert.deepEqual(skillSuggestions(['chart', 'chart', 'query'], 'skill:q').map((i
 assert.deepEqual(skillSuggestions(['chart'], 'missing'), []);
 assert.deepEqual(commandSuggestions('mo').map((item) => item.label), ['/model']);
 assert.deepEqual(commandSuggestions('').map((item) => item.label), [
-  '/compact', '/copy', '/export', '/hotkeys', '/model', '/reload', '/session', '/settings', '/thinking', '/tree',
+  '/new', '/model', '/tools', '/copy', '/export', '/help',
 ]);
 const text = '  /skill:old 保留这个问题';
 const trigger = detectInputSuggestion(text, 7, 'PI')!;
@@ -35,3 +35,10 @@ const multiline = '/skill:old\n\n保留段落';
 assert.deepEqual(replaceSkillTrigger(multiline, detectInputSuggestion(multiline, 5, 'PI')!, '/skill:chart'), {
   value: '/skill:chart\n\n保留段落', cursor: 14,
 });
+
+assert.deepEqual(commandSuggestions('compact'), []);
+
+import { CHAT_COMMANDS, parseChatCommand, isUnsupportedChatCommand } from '../../chatCommands';
+for (const command of CHAT_COMMANDS) assert.equal(parseChatCommand(` /${command} `), command);
+for (const input of ['/compact', '/tree', '/model name', '/new extra']) assert.equal(isUnsupportedChatCommand(input), true);
+for (const input of ['/skill:chart task', '/Users/test/file', 'explain /model', '/help']) assert.equal(isUnsupportedChatCommand(input), false);

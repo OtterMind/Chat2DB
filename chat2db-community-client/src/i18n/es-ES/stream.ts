@@ -1,4 +1,15 @@
 export default {
+  "stream.command.new": "Iniciar una conversación conservando el historial",
+  "stream.command.model": "Cambiar el modelo actual",
+  "stream.command.tools": "Abrir ajustes de herramientas y directorio de trabajo",
+  "stream.command.copy": "Copiar la última respuesta del asistente",
+  "stream.command.export": "Descargar la conversación en Markdown",
+  "stream.command.help": "Ayuda de comandos",
+  "stream.command.skill": "Selecciona una habilidad y escribe la tarea",
+  "stream.command.unsupported": "Comando no compatible. Escribe /help para ver los comandos disponibles.",
+  "stream.command.failed": "La operación falló. Inténtalo de nuevo.",
+  "stream.command.noReply": "No hay respuestas para copiar.",
+  "stream.command.noMessages": "No hay conversación para exportar.",
   "stream.activity.tool": "Ejecutando herramientas",
   "stream.activity.responding": "Respondiendo",
 

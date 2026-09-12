@@ -15,6 +15,8 @@ import {
 } from './modelSelectOptions';
 
 interface AIModelSelectProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onChange?: (value: SelectedModelOption | null) => void;
   options?: ModelSelectOption[];
   showCustomModelEntry?: boolean;
@@ -23,6 +25,8 @@ interface AIModelSelectProps {
 }
 
 const AIModelSelect = ({
+  open: menuOpen,
+  onOpenChange,
   onChange,
   options,
   showCustomModelEntry = false,
@@ -52,6 +56,7 @@ const AIModelSelect = ({
 
   // Handle select change
   const handleChange = (selectedValue: { value: string; label: React.ReactNode }) => {
+    onOpenChange?.(false);
     if (isCustomModelEntryOption(selectedValue.value)) {
       onCustomModelClick?.();
       return;
@@ -69,6 +74,7 @@ const AIModelSelect = ({
 
   // handles the drop-down box opening event
   const handleDropdownVisibleChange = (open: boolean) => {
+    onOpenChange?.(open);
     if (open && openCustomModelDirectly) {
       return;
     }
@@ -127,7 +133,7 @@ const AIModelSelect = ({
       popupMatchSelectWidth={false}
       className={styles.modelSelect}
       popupClassName={styles.popupSelect}
-      open={openCustomModelDirectly ? false : undefined}
+      open={openCustomModelDirectly ? false : menuOpen}
       onMouseDown={handleDirectCustomModelMouseDown}
       onKeyDown={handleDirectCustomModelKeyDown}
       variant="borderless"

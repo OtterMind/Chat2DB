@@ -1,4 +1,15 @@
 export default {
+  "stream.command.new": "新建对话（保留历史）",
+  "stream.command.model": "切换当前模型",
+  "stream.command.tools": "打开工具和工作目录设置",
+  "stream.command.copy": "复制上一条助手回复",
+  "stream.command.export": "下载当前对话为 Markdown",
+  "stream.command.help": "命令帮助",
+  "stream.command.skill": "选择技能后输入任务",
+  "stream.command.unsupported": "暂不支持此命令，请输入 /help 查看可用命令。",
+  "stream.command.failed": "操作失败，请重试。",
+  "stream.command.noReply": "当前没有可复制的助手回复。",
+  "stream.command.noMessages": "当前没有可导出的对话。",
   "stream.activity.tool": "正在调用工具",
   "stream.activity.responding": "正在回复",
 

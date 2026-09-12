@@ -1,4 +1,15 @@
 export default {
+  "stream.command.new": "기록을 유지하고 새 대화 시작",
+  "stream.command.model": "현재 모델 변경",
+  "stream.command.tools": "도구 및 작업 디렉터리 설정 열기",
+  "stream.command.copy": "마지막 답변 복사",
+  "stream.command.export": "대화를 Markdown으로 다운로드",
+  "stream.command.help": "명령 도움말",
+  "stream.command.skill": "스킬 선택 후 작업 입력",
+  "stream.command.unsupported": "지원하지 않는 명령입니다. /help로 사용 가능한 명령을 확인하세요.",
+  "stream.command.failed": "작업에 실패했습니다. 다시 시도하세요.",
+  "stream.command.noReply": "복사할 답변이 없습니다.",
+  "stream.command.noMessages": "내보낼 대화가 없습니다.",
   "stream.activity.tool": "도구 실행 중",
   "stream.activity.responding": "답변 중",
 

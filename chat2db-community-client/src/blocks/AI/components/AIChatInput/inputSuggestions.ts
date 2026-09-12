@@ -1,4 +1,5 @@
 import type { SuggestionItem } from '../AIAtMetion/interface';
+import { CHAT_COMMANDS } from '../../chatCommands';
 import { detectMentionTrigger, type MentionTrigger, type MentionReplacement } from './mentionSelection';
 
 export type InputSuggestionTrigger = MentionTrigger & { kind: 'table' | 'slash' };
@@ -26,11 +27,9 @@ export const skillSuggestions = (names: readonly string[], query: string): Sugge
     .map((name) => ({ kind: 'skill', value: `skill:${name}`, label: `/skill:${name}` }));
 };
 
-const PI_COMMANDS = ['compact', 'copy', 'export', 'hotkeys', 'model', 'reload', 'session', 'settings', 'thinking', 'tree'];
-
 export const commandSuggestions = (query: string): SuggestionItem[] => {
   const prefix = query.toLowerCase();
-  return PI_COMMANDS.filter((name) => name.startsWith(prefix))
+  return CHAT_COMMANDS.filter((name) => name.startsWith(prefix))
     .map((name) => ({ kind: 'command' as const, value: name, label: `/${name}` }));
 };
 

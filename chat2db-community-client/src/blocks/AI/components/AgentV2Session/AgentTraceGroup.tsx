@@ -1,7 +1,7 @@
 import { createStyles } from 'antd-style';
 import i18n from '@/i18n';
 import type { AgentTraceEntry } from '../../agentEvents';
-import { Brain, ChevronRight, Wrench } from 'lucide-react';
+import { ChevronRight, Wrench } from 'lucide-react';
 import AgentActivityIndicator from './AgentActivityIndicator';
 import { toolSummary, type AgentActivity } from './presentation';
 
@@ -42,7 +42,6 @@ const useStyles = createStyles(({ css, token }) => ({
     font: 12px/1.6 monospace;
     white-space: pre;
   `,
-  reasoning: css`white-space: pre-wrap; overflow-wrap: anywhere;`,
   failed: css`color: ${token.colorError};`,
 }));
 
@@ -57,31 +56,27 @@ export default function AgentTraceGroup({ entries, activity }: {
   const { styles } = useStyles();
   const failed = entries.some((entry) => entry.failed);
   const summary = toolSummary(entries);
-  if (!summary && !entries.some((entry) => entry.type === 'error')) return null;
-  const title = summary ? i18n('stream.trace.toolsSummary', summary.count,
-    summary.durationMs === undefined ? '--' : summary.durationMs) : i18n('stream.thought.toggle');
+  if (!summary) return activity ? <AgentActivityIndicator activity={activity} /> : null;
+  const title = i18n('stream.trace.toolsSummary', summary.count,
+    summary.durationMs === undefined ? '--' : summary.durationMs);
   return (
     <details className={styles.group}>
-      <summary className={failed ? styles.failed : undefined} title={i18n('stream.thought.toggle')}>
-        {activity ? <AgentActivityIndicator activity={activity} /> : summary ? <>
+      <summary className={failed ? styles.failed : undefined} title={title}>
+        {activity ? <AgentActivityIndicator activity={activity} /> : <>
           <Wrench size={14} aria-hidden="true" />{title}
-        </> : <><Brain size={14} aria-hidden="true" />{title}</>}
+        </>}
         {failed && <span className={styles.failed}> · {i18n('stream.trace.error')}</span>}
         <ChevronRight size={13} className="agent-trace-chevron" aria-hidden="true" />
       </summary>
-      {entries.map((entry, index) => (
+      {entries.filter((entry) => entry.type !== 'reasoning').map((entry, index) => (
         <div key={`${entry.id || entry.type}-${index}`} className={styles.trace}>
-          {entry.type === 'reasoning'
-            ? <div className={styles.reasoning}>{entry.content}</div>
-            : <>
-              <div className={entry.failed ? styles.failed : styles.label}>
-                {i18n(entry.type === 'tool_call' ? 'stream.trace.toolCall' : 'stream.trace.toolResult')}
-                {entry.name && ` · ${entry.name}`}
-                {entry.type === 'tool_result' && entry.durationMs !== undefined
-                  && ` · ${i18n('stream.trace.duration', entry.durationMs)}`}
-              </div>
-              <pre className={styles.code} tabIndex={0}>{formatJson(entry.arguments || entry.content || '')}</pre>
-            </>}
+          <div className={entry.failed ? styles.failed : styles.label}>
+            {i18n(entry.type === 'tool_call' ? 'stream.trace.toolCall' : 'stream.trace.toolResult')}
+            {entry.name && ` · ${entry.name}`}
+            {entry.type === 'tool_result' && entry.durationMs !== undefined
+              && ` · ${i18n('stream.trace.duration', entry.durationMs)}`}
+          </div>
+          <pre className={styles.code} tabIndex={0}>{formatJson(entry.arguments || entry.content || '')}</pre>
         </div>
       ))}
     </details>

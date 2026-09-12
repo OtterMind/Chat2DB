@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentRuntimeSessionHandleImplTest {
 
@@ -61,6 +62,29 @@ class AgentRuntimeSessionHandleImplTest {
         assertEquals(List.of(AgentEventType.RUN_STARTED, AgentEventType.RUN_COMPLETED),
                 events.stream().map(AgentRuntimeEvent::type).toList());
         assertEquals(AgentRuntimeHealth.READY, handle.snapshot().toCompletableFuture().join().health());
+    }
+
+    @Test
+    void recordsDurationForSuccessfulAndFailedToolCalls() throws Exception {
+        handle.startRun(runRequest());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        for (String id : List.of("read", "query")) {
+            handle.accept(objectMapper.readTree(
+                    "{\"type\":\"tool_execution_start\",\"toolCallId\":\"" + id + "\"}"));
+        }
+        handle.accept(objectMapper.readTree(
+                "{\"type\":\"tool_execution_end\",\"toolCallId\":\"query\",\"isError\":true,\"result\":{}}"));
+        handle.accept(objectMapper.readTree(
+                "{\"type\":\"tool_execution_end\",\"toolCallId\":\"read\",\"result\":{}}"));
+        assertEquals(AgentEventType.TOOL_CALL_FAILED, events.get(2).type());
+        assertEquals(AgentEventType.TOOL_CALL_COMPLETED, events.get(3).type());
+        for (var event : events.subList(2, 4)) {
+            long duration = ((Number) event.payload().get("durationMs")).longValue();
+            assertTrue(duration >= 0);
+            assertEquals(duration, objectMapper.valueToTree(event.payload()).path("result").path("durationMs").asLong());
+        }
     }
 
     @Test

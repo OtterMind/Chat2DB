@@ -1,4 +1,15 @@
 export default {
+  "stream.command.new": "Start a new conversation and keep history",
+  "stream.command.model": "Switch the current model",
+  "stream.command.tools": "Open tool and working directory settings",
+  "stream.command.copy": "Copy the last assistant reply",
+  "stream.command.export": "Download this conversation as Markdown",
+  "stream.command.help": "Command help",
+  "stream.command.skill": "Select a skill, then enter your task",
+  "stream.command.unsupported": "Unsupported command. Enter /help for available commands.",
+  "stream.command.failed": "Operation failed. Please try again.",
+  "stream.command.noReply": "No assistant reply to copy.",
+  "stream.command.noMessages": "No conversation to export.",
   "stream.activity.tool": "Running tools",
   "stream.activity.responding": "Responding",
 

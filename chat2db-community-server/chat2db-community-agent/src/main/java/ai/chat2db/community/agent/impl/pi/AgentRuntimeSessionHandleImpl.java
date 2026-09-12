@@ -20,11 +20,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
 public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle {
 
@@ -43,6 +45,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
     private String activeExternalRunId;
     private boolean cancelling;
     private JsonNode lastAssistantMessage;
+    private final Map<String, Long> toolStartedAt = new HashMap<>();
 
     public AgentRuntimeSessionHandleImpl(
             String sessionId,
@@ -83,6 +86,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
         modelConfigurationError = null;
         activeRunId = request.runId();
         lastAssistantMessage = null;
+        toolStartedAt.clear();
         activeExternalRunId = request.runId();
         health = AgentRuntimeHealth.BUSY;
         ObjectNode payload = objectMapper.createObjectNode();
@@ -150,6 +154,20 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
                 settled.put("cancelled", true);
             }
             rawEvent = settled;
+        }
+        String type = rawEvent.path("type").asText();
+        String toolCallId = rawEvent.path("toolCallId").asText();
+        if ("tool_execution_start".equals(type)) {
+            toolStartedAt.putIfAbsent(toolCallId, System.nanoTime());
+        } else if ("tool_execution_end".equals(type)) {
+            Long started = toolStartedAt.remove(toolCallId);
+            if (started != null) {
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+                ObjectNode timed = rawEvent.deepCopy();
+                timed.put("durationMs", durationMs);
+                if (timed.get("result") instanceof ObjectNode result) result.put("durationMs", durationMs);
+                rawEvent = timed;
+            }
         }
         AgentRuntimeEvent event = eventConverter.toRuntimeEvent(sessionId, activeRunId, rawEvent);
         if (event == null) {
@@ -237,6 +255,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
     }
 
     private void finish(AgentRuntimeHealth targetHealth) {
+        toolStartedAt.clear();
         health = targetHealth;
         activeRunId = null;
         activeExternalRunId = null;

@@ -34,6 +34,14 @@ export default function AgentTimeline(props: AgentTimelineProps) {
       receipts.set(id, [...(receipts.get(id) || []), entry.trace]);
     }
   });
+  const chartCalls = new Map([...receipts].flatMap(([chartId, traces]) =>
+    traces.flatMap((trace) => trace.id ? [[trace.id, chartId] as const] : [])));
+  entries.forEach((entry) => {
+    if (entry.kind === 'trace' && entry.trace.type === 'tool_call' && entry.trace.id) {
+      const chartId = chartCalls.get(entry.trace.id);
+      if (chartId) receipts.get(chartId)?.unshift(entry.trace);
+    }
+  });
   const nodes: ReactNode[] = [];
   let traces: AgentTraceEntry[] = [];
   let firstSequence = 0;
@@ -45,8 +53,9 @@ export default function AgentTimeline(props: AgentTimelineProps) {
     traces = [];
   };
   entries.forEach((entry) => {
+    if (entry.kind === 'trace' && entry.trace.type === 'reasoning') return;
     if (entry.kind === 'trace' && entry.trace.type !== 'error') {
-      if (entry.trace.chartId && charts.has(entry.trace.chartId)) return;
+      if (entry.trace.id && chartCalls.has(entry.trace.id)) return;
       if (!traces.length) firstSequence = entry.sequence;
       traces.push(entry.trace);
       return;
@@ -90,7 +99,8 @@ export default function AgentTimeline(props: AgentTimelineProps) {
     }
     if (content) nodes.push(<div key={entry.sequence} data-agent-sequence={entry.sequence}>{content}</div>);
   });
-  if (traces.length) flush(activity);
-  else if (activity) nodes.push(<div key="activity"><AgentActivityIndicator activity={activity} /></div>);
+  const activityInTrace = traces.length > 0 && activity?.kind === 'tool';
+  if (traces.length) flush(activityInTrace ? activity : undefined);
+  if (activity && !activityInTrace) nodes.push(<div key="activity"><AgentActivityIndicator activity={activity} /></div>);
   return <>{nodes}</>;
 }

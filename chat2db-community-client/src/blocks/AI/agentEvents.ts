@@ -74,6 +74,7 @@ export interface AgentTraceEntry {
   failed?: boolean;
   description?: string;
   durationMs?: number;
+  occurredAtMs?: number;
 }
 
 export type AgentTimelineEntry = { sequence: number; endSequence?: number } & (
@@ -147,6 +148,13 @@ export const appendAgentTimeline = (current: AgentTimelineEntry[], events: Agent
       return;
     }
     const trace = agentEventTrace(event);
+    if (trace?.type === 'tool_result' && trace.durationMs === undefined && trace.occurredAtMs !== undefined) {
+      const start = timeline.find((entry) => entry.kind === 'trace' && entry.trace.type === 'tool_call'
+        && entry.trace.id === trace.id);
+      if (start?.kind === 'trace' && start.trace.occurredAtMs !== undefined) {
+        trace.durationMs = Math.max(0, Math.round(trace.occurredAtMs - start.trace.occurredAtMs));
+      }
+    }
     if (trace?.type === 'reasoning' && last?.kind === 'trace' && last.trace.type === 'reasoning') {
       timeline[timeline.length - 1] = { ...last, endSequence: event.sequence,
         trace: { ...last.trace, content: (last.trace.content || '') + (trace.content || '') } };
@@ -207,6 +215,14 @@ export const agentErrorText = (error: unknown): string => {
   return '';
 };
 
+const eventTime = (value: unknown): number | undefined => {
+  // Jackson can encode LocalDateTime as an array on older servers.
+  const time = Array.isArray(value) && value.length >= 6 && value.every((part) => typeof part === 'number')
+    ? Date.UTC(value[0], value[1] - 1, value[2], value[3], value[4], value[5], (value[6] || 0) / 1e6)
+    : typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : undefined;
+};
+
 export const agentEventTrace = (event: AgentEvent): AgentTraceEntry | undefined => {
   const payload = event.payload;
   if (event.type === 'ASSISTANT_REASONING_DELTA') {
@@ -215,29 +231,29 @@ export const agentEventTrace = (event: AgentEvent): AgentTraceEntry | undefined 
   if (event.type === 'RUN_FAILED' || event.type === 'RUN_OUTCOME_UNKNOWN') {
     return { type: 'error', content: agentErrorText(payload) || event.type };
   }
+  const occurredAtMs = eventTime(event.occurredAt);
   const name = typeof payload.toolName === 'string' ? payload.toolName : undefined;
   const id = typeof payload.toolCallId === 'string' ? payload.toolCallId : event.id;
   const description = typeof payload.description === 'string' ? payload.description
     : payload.args && typeof payload.args === 'object' && typeof (payload.args as Record<string, unknown>).description === 'string'
       ? (payload.args as Record<string, unknown>).description as string : undefined;
   if (event.type === 'TOOL_CALL_RUNNING') {
-    return { type: 'tool_call', id, name, description,
+    return { type: 'tool_call', id, name, description, ...(occurredAtMs === undefined ? {} : { occurredAtMs }),
       arguments: JSON.stringify(payload.args || {}) };
   }
   if (event.type === 'TOOL_CALL_COMPLETED' || event.type === 'TOOL_CALL_FAILED') {
     const result = payload.result as { content?: { type: string; text?: string }[];
-      details?: { data?: { chartId?: unknown; durationMs?: unknown }; durationMs?: unknown };
+      details?: { data?: { chartId?: unknown }; durationMs?: unknown };
       durationMs?: unknown } | undefined;
     const content = Array.isArray(result?.content)
       ? result.content.filter((item) => item.type === 'text').map((item) => item.text || '')
 .join('\n')
       : JSON.stringify(payload.result || payload);
     const chartId = result?.details?.data?.chartId;
-    const durationCandidates = [payload.durationMs, result?.durationMs, result?.details?.durationMs,
-      result?.details?.data?.durationMs];
+    const durationCandidates = [payload.durationMs, result?.durationMs, result?.details?.durationMs];
     const durationMs = durationCandidates.find((value): value is number => typeof value === 'number'
       && Number.isFinite(value) && value >= 0);
-    return { type: 'tool_result', id, name, content,
+    return { type: 'tool_result', id, name, content, ...(occurredAtMs === undefined ? {} : { occurredAtMs }),
       ...(durationMs === undefined ? {} : { durationMs }),
       ...(event.type === 'TOOL_CALL_FAILED' ? { failed: true } : {}),
       ...(name === 'render_chart' && typeof chartId === 'string' ? { chartId } : {}) };

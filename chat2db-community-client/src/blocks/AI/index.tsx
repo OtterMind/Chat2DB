@@ -39,7 +39,8 @@ import SQLPreview from '@/components/SQLPreview';
 import ScrollableTable from '@/components/ScrollableTable';
 import { useStyles } from './style';
 import i18n from '@/i18n';
-import { keyboardKey } from '@/utils';
+import { copyToClipboard, keyboardKey } from '@/utils';
+import type { ConversationCommand } from './chatCommands';
 import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
@@ -1826,6 +1827,26 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return () => window.removeEventListener('stream:sessionRenamed', handleSessionRenamed);
   }, []);
 
+  const handleConversationCommand = (command: ConversationCommand) => {
+    if (command === 'new') { handleNewChat(); return; }
+    if (command === 'copy') {
+      const reply = [...messagesRef.current].reverse().find((message) => message.role === 'assistant' && message.content);
+      if (!reply) throw new Error(i18n('stream.command.noReply'));
+      if (!copyToClipboard(reply.content)) throw new Error(i18n('stream.command.failed'));
+      feedback.success(i18n('stream.codeBlock.copied'));
+      return;
+    }
+    if (!messagesRef.current.length) throw new Error(i18n('stream.command.noMessages'));
+    const text = messagesRef.current.map((message) =>
+      `## ${message.role}\n\n${message.content}`).join('\n\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `conversation-${currentSessionIdRef.current || 'chat'}.md`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   // Send a message.
 
   const handleSend = useCallback(
@@ -2645,6 +2666,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   if (runtimeChoice !== 'PI') handleNewChat();
                 }}
                 onChatSend={handleSend}
+                onCommand={handleConversationCommand}
                 onStop={handleStop}
                 autoSize={
                   isPanel

@@ -41,7 +41,7 @@ const requested = event(4, 'APPROVAL_REQUESTED', {
   approvalId: 'approval-1', toolName: 'bash', command: "printf 'line 1\\nline 2'", workingDirectory: '/folder with spaces',
 });
 const toolResultTrace = agentEventTrace(event(6, 'TOOL_CALL_COMPLETED', {
-  toolCallId: 'duration-call', toolName: 'db_query', result: { details: { data: { durationMs: 17 } } },
+  toolCallId: 'duration-call', toolName: 'db_query', durationMs: 17, result: { details: { data: { durationMs: 999 } } },
 }));
 assert.equal(toolResultTrace?.durationMs, 17);
 const requestedAgain = event(5, 'APPROVAL_REQUESTED', requested.payload);
@@ -123,3 +123,9 @@ assert.deepEqual(buildAgentTranscript([{ ...event(1, 'ASSISTANT_MESSAGE_STARTED'
 for (const locale of [zhApprovals, enApprovals, esApprovals, jaApprovals, koApprovals]) {
   for (const key of ['stream.question.prompt', 'stream.question.answer', 'stream.directory.clear']) assert.ok(locale[key]);
 }
+
+const timedHistory = appendAgentTimeline([], [
+  { ...event(1, 'TOOL_CALL_RUNNING', { toolCallId: 'timed', toolName: 'db_query' }), occurredAt: '2026-09-12T00:00:00.010Z' },
+  { ...event(2, 'TOOL_CALL_COMPLETED', { toolCallId: 'timed', result: {} }), occurredAt: '2026-09-12T00:00:00.035Z' },
+]);
+assert.equal(timedHistory[1].kind === 'trace' && timedHistory[1].trace.durationMs, 25);

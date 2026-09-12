@@ -1,4 +1,15 @@
 export default {
+  "stream.command.new": "履歴を残して新しい会話を開始",
+  "stream.command.model": "モデルを切り替え",
+  "stream.command.tools": "ツールと作業ディレクトリの設定",
+  "stream.command.copy": "最後のアシスタントの返信をコピー",
+  "stream.command.export": "会話を Markdown でダウンロード",
+  "stream.command.help": "コマンドのヘルプ",
+  "stream.command.skill": "スキルを選び、タスクを入力",
+  "stream.command.unsupported": "未対応のコマンドです。/help で利用可能なコマンドを確認してください。",
+  "stream.command.failed": "操作に失敗しました。再試行してください。",
+  "stream.command.noReply": "コピーできる返信がありません。",
+  "stream.command.noMessages": "エクスポートできる会話がありません。",
   "stream.activity.tool": "ツールを実行中",
   "stream.activity.responding": "回答中",
 

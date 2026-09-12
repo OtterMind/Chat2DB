@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendAgentTimeline, type AgentTimelineEntry } from '../../agentEvents';
+import { appendAgentTimeline, type AgentTimelineEntry, type AgentTraceEntry } from '../../agentEvents';
 import { getAgentActivity, splitSkillMessage, toolSummary } from './presentation';
 import type { AgentQuestionItem } from '../../agentQuestions';
 import zh from '@/i18n/zh-CN/stream';
@@ -26,10 +26,10 @@ assert.deepEqual(activity([]), { kind: 'thinking' });
 const calls = [tool(1, 'first', 'db_query'), tool(2, 'second', 'read')];
 const described = [{ sequence: 1, kind: 'trace' as const, trace: { type: 'tool_call' as const, id: 'described', name: 'db_query', description: '查询数据库中的数据' } }];
 assert.deepEqual(getAgentActivity(true, described, 'run', [], []), { kind: 'tool', tool: { name: 'db_query', description: '查询数据库中的数据' } });
-assert.deepEqual(toolSummary(described), { count: 1, durationMs: undefined });
-const completedTool: AgentTimelineEntry[] = [
-  described[0],
-  { sequence: 2, kind: 'trace', trace: { type: 'tool_result', id: 'described', name: 'db_query', durationMs: 12 } },
+assert.deepEqual(toolSummary(described.map((entry) => entry.trace)), { count: 1, durationMs: undefined });
+const completedTool: AgentTraceEntry[] = [
+  described[0].trace,
+  { type: 'tool_result', id: 'described', name: 'db_query', durationMs: 12 },
 ];
 assert.deepEqual(toolSummary(completedTool), { count: 1, durationMs: 12 });
 assert.deepEqual(activity(calls), { kind: 'tool', tool: { name: 'read' } });
@@ -58,3 +58,19 @@ for (const locale of [zh, en, ja, ko, es]) {
 }
 assert.notEqual(zh['stream.activity.tool'], en['stream.activity.tool']);
 console.log('Skill message preservation and active/waiting/completed timeline states passed');
+
+assert.deepEqual(toolSummary([...completedTool, completedTool[1]]), { count: 1, durationMs: 12 });
+assert.deepEqual(toolSummary([completedTool[1]]), { count: 1, durationMs: 12 });
+assert.deepEqual(toolSummary([...completedTool, { type: 'tool_result', id: 'failed', failed: true, durationMs: 5 }]), { count: 2, durationMs: 17 });
+assert.equal(toolSummary([{ type: 'reasoning', content: 'Thinking' }]), undefined);
+
+for (const locale of [zh, en, ja, ko, es]) {
+  for (const command of ['new', 'model', 'tools', 'copy', 'export', 'help'] as const) {
+    assert.ok(locale[`stream.command.${command}`]);
+  }
+  assert.ok(locale['stream.trace.toolsSummary'].includes('{1}'));
+  assert.ok(locale['stream.trace.toolsSummary'].includes('{2}'));
+}
+const summaryText = (locale: typeof zh | typeof en) => locale['stream.trace.toolsSummary'].replace('{1}', '2').replace('{2}', '17');
+assert.equal(summaryText(zh), '调用了 2 个工具 · 耗时 17ms');
+assert.equal(summaryText(en), 'Called 2 tool(s) · 17ms');
