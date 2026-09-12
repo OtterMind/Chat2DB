@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { appendAgentTimeline, type AgentTimelineEntry } from '../../agentEvents';
-import { getAgentActivity, splitSkillMessage } from './presentation';
+import { getAgentActivity, splitSkillMessage, traceToolDescription } from './presentation';
 import type { AgentQuestionItem } from '../../agentQuestions';
 import zh from '@/i18n/zh-CN/stream';
 import en from '@/i18n/en-US/stream';
@@ -26,6 +26,7 @@ assert.deepEqual(activity([]), { kind: 'thinking' });
 const calls = [tool(1, 'first', 'db_query'), tool(2, 'second', 'read')];
 const described = [{ sequence: 1, kind: 'trace' as const, trace: { type: 'tool_call' as const, id: 'described', name: 'db_query', description: '查询数据库中的数据' } }];
 assert.deepEqual(getAgentActivity(true, described, 'run', [], []), { kind: 'tool', tool: { name: 'db_query', description: '查询数据库中的数据' } });
+assert.equal(traceToolDescription(described), '查询数据库中的数据');
 assert.deepEqual(activity(calls), { kind: 'tool', tool: { name: 'read' } });
 assert.deepEqual(activity([...calls, done(3, 'second')]), { kind: 'tool', tool: { name: 'db_query' } });
 assert.deepEqual(activity([...calls, done(3, 'second'), done(4, 'first', true)]), { kind: 'thinking' });

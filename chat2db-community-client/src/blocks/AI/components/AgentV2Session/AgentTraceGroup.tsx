@@ -1,9 +1,9 @@
 import { createStyles } from 'antd-style';
 import i18n from '@/i18n';
 import type { AgentTraceEntry } from '../../agentEvents';
-import { Brain, ChevronRight } from 'lucide-react';
+import { Brain, ChevronRight, Wrench } from 'lucide-react';
 import AgentActivityIndicator from './AgentActivityIndicator';
-import type { AgentActivity } from './presentation';
+import { traceToolDescription, type AgentActivity } from './presentation';
 
 const useStyles = createStyles(({ css, token }) => ({
   group: css`
@@ -56,10 +56,13 @@ export default function AgentTraceGroup({ entries, activity }: {
 }) {
   const { styles } = useStyles();
   const failed = entries.some((entry) => entry.failed);
+  const description = traceToolDescription(entries);
   return (
     <details className={styles.group}>
       <summary className={failed ? styles.failed : undefined} title={i18n('stream.thought.toggle')}>
-        {activity ? <AgentActivityIndicator activity={activity} /> : <>
+        {activity ? <AgentActivityIndicator activity={activity} /> : description ? <>
+          <Wrench size={14} aria-hidden="true" />{description}
+        </> : <>
           <Brain size={14} aria-hidden="true" />{i18n('stream.thought.toggle')}
         </>}
         {failed && <span className={styles.failed}> · {i18n('stream.trace.error')}</span>}

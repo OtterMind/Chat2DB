@@ -5,6 +5,10 @@ export type AgentActivity =
   | { kind: 'thinking' | 'responding' | 'question' | 'approval' }
   | { kind: 'tool'; tool: { name: string; description?: string } };
 
+export const traceToolDescription = (entries: AgentTimelineEntry[]) => [...entries].reverse()
+  .find((entry) => entry.kind === 'trace' && entry.trace.type === 'tool_call' && entry.trace.description)
+  ?.trace.description;
+
 export const getAgentActivity = (
   active: boolean, entries: AgentTimelineEntry[], runId: string | undefined,
   questions: AgentQuestionItem[], approvals: AgentApprovalItem[],
