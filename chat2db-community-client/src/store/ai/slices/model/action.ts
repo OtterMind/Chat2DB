@@ -22,7 +22,7 @@ export const createModelAction: StateCreator<AIStore, [['zustand/devtools', neve
 
     // Set default model if exists
     if (!get().selectedModel) {
-      const defaultModel = modelList.find((i) => i.isDefault);
+      const defaultModel = modelList.find((i) => i.isDefault) || modelList[0];
       if (defaultModel) {
         set({
           selectedModel: {

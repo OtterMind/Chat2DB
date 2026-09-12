@@ -10,6 +10,6 @@ interface SuggestionBase {
 
 export type SuggestionItem = SuggestionBase & (
   | { kind: 'table'; tableName: string; tableType?: string; contextObject?: AgentContextObject }
-  | { kind: 'skill' }
+  | { kind: 'skill' | 'command' }
 );
 export type SuggestionItems = SuggestionItem[];

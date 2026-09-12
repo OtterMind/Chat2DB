@@ -30,7 +30,7 @@ import { captureAgentContext, contextScope } from '../../agentContext';
 import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
 import agentService from '@/service/agent';
-import { detectInputSuggestion, replaceSkillTrigger, skillSuggestions, type InputSuggestionTrigger } from './inputSuggestions';
+import { commandSuggestions, detectInputSuggestion, replaceSkillTrigger, skillSuggestions, type InputSuggestionTrigger } from './inputSuggestions';
 
 import { TextAreaRef } from 'antd/es/input/TextArea';
 import { PageType } from '@/store/ai/slices/cascader/initialState';
@@ -557,7 +557,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   };
 
   const getSuggestionList = (info?: InputSuggestionTrigger) => {
-    if (info?.kind === 'skill') return runtimeChoice === 'PI' ? skillSuggestions(skills, info.query) : [];
+    if (info?.kind === 'slash') return runtimeChoice === 'PI' ? [...commandSuggestions(info.query), ...skillSuggestions(skills, info.query)] : [];
     const selected = cascaderDataMap[mainPageActiveTab];
     const scope = contextScope(selected && 'dataSourceId' in selected ? selected : null);
     const tables: SuggestionItem[] = (tableList || []).map((table) => ({
@@ -614,8 +614,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         const textarea = textareaRef.current?.resizableTextArea?.textArea;
         const cursor = textarea?.selectionStart ?? inputValue.length;
         const activeTrigger = suggestionTrigger || detectInputSuggestion(inputValue, cursor, runtimeChoice);
-        if (!activeTrigger || activeTrigger.kind !== item.kind) return;
-        const replacement = item.kind === 'skill'
+        if (!activeTrigger || (activeTrigger.kind === 'table') !== (item.kind === 'table')) return;
+        const replacement = item.kind !== 'table'
           ? replaceSkillTrigger(inputValue, activeTrigger, item.label)
           : replaceMentionTrigger(inputValue, activeTrigger, item.label);
 
