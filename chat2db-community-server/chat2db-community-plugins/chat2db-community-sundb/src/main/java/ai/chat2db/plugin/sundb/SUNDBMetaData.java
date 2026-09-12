@@ -258,8 +258,8 @@ public class SUNDBMetaData extends DefaultMetaService implements IDbMetaData {
         String sql = String.format(ALL_PROCEDURES_SQL, getSQLIdentifierProcessor().escapeString(userName), getSQLIdentifierProcessor().escapeString(schemaName), SUNDBObjectTypeEnum.PROCEDURE.getObjectType());
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             ArrayList<Procedure> procedures = new ArrayList<>();
-            Procedure procedure = new Procedure();
             while (resultSet.next()) {
+                Procedure procedure = new Procedure();
                 procedure.setProcedureName(resultSet.getString("OBJECT_NAME"));
                 procedures.add(procedure);
             }
