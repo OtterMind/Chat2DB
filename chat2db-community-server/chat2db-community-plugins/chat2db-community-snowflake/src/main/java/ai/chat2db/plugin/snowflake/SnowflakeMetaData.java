@@ -54,7 +54,8 @@ public class SnowflakeMetaData extends DefaultMetaService implements IDbMetaData
             table.setSchemaName(schemaName);
             table.setName(viewName);
             if (resultSet.next()) {
-                table.setDdl(resultSet.getString("DEFINITION").substring(resultSet.getString("DEFINITION").indexOf("as") + 3));
+                // INFORMATION_SCHEMA.VIEWS already returns the view query definition.
+                table.setDdl(resultSet.getString("DEFINITION"));
             }
             return table;
         });
