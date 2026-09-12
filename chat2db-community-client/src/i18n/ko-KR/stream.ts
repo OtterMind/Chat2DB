@@ -1,4 +1,12 @@
 export default {
+  "stream.activity.starting": "작업 시작 중…",
+  "stream.activity.cancelling": "중지 중…",
+  "stream.trace.toolsCount": "{1}개 도구 호출",
+  "stream.tool.running": "실행 중",
+  "stream.tool.completed": "완료",
+  "stream.tool.failed": "실패",
+  "stream.tool.stopped": "중지됨",
+  "stream.command.skillPrompt": "스킬 명령 뒤에 구체적인 작업을 입력하세요.",
   "stream.command.new": "기록을 유지하고 새 대화 시작",
   "stream.command.model": "현재 모델 변경",
   "stream.command.tools": "도구 및 작업 디렉터리 설정 열기",

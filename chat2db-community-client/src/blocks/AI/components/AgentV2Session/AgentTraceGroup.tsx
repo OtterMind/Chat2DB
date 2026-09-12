@@ -1,9 +1,9 @@
 import { createStyles } from 'antd-style';
 import i18n from '@/i18n';
 import type { AgentTraceEntry } from '../../agentEvents';
-import { ChevronRight, Wrench } from 'lucide-react';
+import { Check, ChevronRight, CircleX, Clock3, LoaderCircle, Wrench } from 'lucide-react';
 import AgentActivityIndicator from './AgentActivityIndicator';
-import { toolSummary, type AgentActivity } from './presentation';
+import { toolExecutions, toolSummary, type AgentActivity } from './presentation';
 
 const useStyles = createStyles(({ css, token }) => ({
   group: css`
@@ -43,6 +43,17 @@ const useStyles = createStyles(({ css, token }) => ({
     white-space: pre;
   `,
   failed: css`color: ${token.colorError};`,
+  tool: css`
+    margin: 6px 0;
+    > summary { width: 100%; margin: 0; padding: 6px 0; }
+  `,
+  toolText: css`flex: 1; min-width: 0; overflow-wrap: anywhere;`,
+  duration: css`flex-shrink: 0; font-variant-numeric: tabular-nums;`,
+  spinner: css`
+    animation: toolSpin 1s linear infinite;
+    @keyframes toolSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { animation: none; }
+  `,
 }));
 
 const formatJson = (value: string) => {
@@ -50,35 +61,59 @@ const formatJson = (value: string) => {
   catch { return value; }
 };
 
-export default function AgentTraceGroup({ entries, activity }: {
-  entries: AgentTraceEntry[]; activity?: AgentActivity;
+export default function AgentTraceGroup({ entries, activity, status, onInspect }: {
+  entries: AgentTraceEntry[]; activity?: AgentActivity; status?: 'failed' | 'cancelled' | 'unknown';
+  onInspect?: () => void;
 }) {
   const { styles } = useStyles();
-  const failed = entries.some((entry) => entry.failed);
+  const tools = toolExecutions(entries);
+  const failed = tools.some((tool) => tool.failed) || status === 'failed' || status === 'unknown';
   const summary = toolSummary(entries);
-  if (!summary) return activity ? <AgentActivityIndicator activity={activity} /> : null;
-  const title = i18n('stream.trace.toolsSummary', summary.count,
-    summary.durationMs === undefined ? '--' : summary.durationMs);
+  const outcome = status ? i18n(`stream.agent.status.${status}`) : '';
+  if (!summary) return <div data-agent-progress>
+    {activity ? <AgentActivityIndicator activity={activity} /> : outcome && <span role="status">{outcome}</span>}
+  </div>;
+  const title = summary.durationMs === undefined
+    ? i18n('stream.trace.toolsCount', summary.count)
+    : i18n('stream.trace.toolsSummary', summary.count, summary.durationMs);
   return (
-    <details className={styles.group}>
-      <summary className={failed ? styles.failed : undefined} title={title}>
+    <details className={styles.group} data-agent-progress onClickCapture={(event) => {
+      if (event.target instanceof Element && event.target.closest('summary')) onInspect?.();
+    }}
+    >
+      <summary className={failed ? styles.failed : undefined}>
         {activity ? <AgentActivityIndicator activity={activity} /> : <>
           <Wrench size={14} aria-hidden="true" />{title}
+          {outcome && ` · ${outcome}`}
+          {!outcome && failed && ` · ${i18n('stream.trace.error')}`}
         </>}
-        {failed && <span className={styles.failed}> · {i18n('stream.trace.error')}</span>}
         <ChevronRight size={13} className="agent-trace-chevron" aria-hidden="true" />
       </summary>
-      {entries.filter((entry) => entry.type !== 'reasoning').map((entry, index) => (
-        <div key={`${entry.id || entry.type}-${index}`} className={styles.trace}>
-          <div className={entry.failed ? styles.failed : styles.label}>
-            {i18n(entry.type === 'tool_call' ? 'stream.trace.toolCall' : 'stream.trace.toolResult')}
-            {entry.name && ` · ${entry.name}`}
-            {entry.type === 'tool_result' && entry.durationMs !== undefined
-              && ` · ${i18n('stream.trace.duration', entry.durationMs)}`}
+      {tools.map((tool) => {
+        const state = tool.failed ? 'failed' : tool.completed ? 'completed' : activity ? 'running' : 'stopped';
+        return <details key={tool.id} className={styles.tool} data-agent-tool={tool.id}>
+          <summary className={tool.failed ? styles.failed : undefined}>
+            {state === 'failed' ? <CircleX size={14} aria-hidden="true" />
+              : state === 'completed' ? <Check size={14} aria-hidden="true" />
+              : state === 'running' ? <LoaderCircle size={14} className={styles.spinner} aria-hidden="true" />
+              : <Clock3 size={14} aria-hidden="true" />}
+            <span className={styles.toolText}>{tool.description || tool.name || i18n('stream.trace.unknownTool')}</span>
+            <span className={styles.duration}>{i18n(`stream.tool.${state}`)}
+              {tool.durationMs !== undefined && ` · ${tool.durationMs}ms`}
+            </span>
+          </summary>
+          <div className={styles.trace}>
+            <div className={styles.label}>{tool.name} · {i18n('stream.trace.toolCall')}</div>
+            <pre className={styles.code} tabIndex={0}>{formatJson(tool.arguments || '{}')}</pre>
+            {tool.completed && <>
+              <div className={styles.label}>{i18n('stream.trace.toolResult')}
+                {tool.durationMs !== undefined && ` · ${i18n('stream.trace.duration', tool.durationMs)}`}
+              </div>
+              <pre className={styles.code} tabIndex={0}>{formatJson(tool.content || '')}</pre>
+            </>}
           </div>
-          <pre className={styles.code} tabIndex={0}>{formatJson(entry.arguments || entry.content || '')}</pre>
-        </div>
-      ))}
+        </details>;
+      })}
     </details>
   );
 }

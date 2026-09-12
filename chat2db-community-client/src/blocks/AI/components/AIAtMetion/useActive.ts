@@ -1,17 +1,19 @@
 import { useEvent } from 'rc-util';
 import React, { useState } from 'react';
 
-import { SuggestionItem } from './interface';
+import { SuggestionItem, SuggestionSelectionIntent } from './interface';
 
 export default function useActive(
   items: SuggestionItem[],
   open: boolean,
-  onSelect: (value: string[]) => void,
+  onSelect: (value: string[], intent: SuggestionSelectionIntent) => void,
   onCancel: () => void,
 ) {
   const [activePaths, setActivePaths] = useState<string[]>([]);
 
-  const activeValue = activePaths[0];
+  // Resolve against the current list during render; effects run too late for a
+  // keystroke immediately after filtering the suggestions.
+  const activeValue = items.find((item) => item.value === activePaths[0])?.value ?? items[0]?.value;
 
   const offsetRow = (offset: number) => {
     if (!items.length) return;
@@ -52,9 +54,9 @@ export default function useActive(
       case 'Tab':
       case 'Enter': {
         if (activeValue) {
-          onSelect([activeValue]);
+          onSelect([activeValue], e.key === 'Tab' ? 'complete' : 'execute');
+          e.preventDefault();
         }
-        e.preventDefault();
         break;
       }
 
@@ -73,9 +75,9 @@ export default function useActive(
     if (open && items?.[0]?.value) {
       setActivePaths((previous) => (items.some((item) => item.value === previous[0]) ? previous : [items[0].value]));
     } else if (!open) {
-      setActivePaths([]);
+      setActivePaths((previous) => previous.length ? [] : previous);
     }
   }, [open, items]);
 
-  return [activePaths, onKeyDown] as const;
+  return [activeValue ? [activeValue] : [], onKeyDown] as const;
 }

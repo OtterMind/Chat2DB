@@ -1,4 +1,12 @@
 export default {
+  "stream.activity.starting": "正在开始任务…",
+  "stream.activity.cancelling": "正在停止…",
+  "stream.trace.toolsCount": "调用了 {1} 个工具",
+  "stream.tool.running": "执行中",
+  "stream.tool.completed": "已完成",
+  "stream.tool.failed": "失败",
+  "stream.tool.stopped": "已停止",
+  "stream.command.skillPrompt": "请在技能命令后输入具体需求。",
   "stream.command.new": "新建对话（保留历史）",
   "stream.command.model": "切换当前模型",
   "stream.command.tools": "打开工具和工作目录设置",

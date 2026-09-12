@@ -1,4 +1,12 @@
 export default {
+  "stream.activity.starting": "Iniciando tarea…",
+  "stream.activity.cancelling": "Deteniendo…",
+  "stream.trace.toolsCount": "Se llamaron {1} herramientas",
+  "stream.tool.running": "En ejecución",
+  "stream.tool.completed": "Completado",
+  "stream.tool.failed": "Falló",
+  "stream.tool.stopped": "Detenido",
+  "stream.command.skillPrompt": "Escribe tu tarea después del comando de habilidad.",
   "stream.command.new": "Iniciar una conversación conservando el historial",
   "stream.command.model": "Cambiar el modelo actual",
   "stream.command.tools": "Abrir ajustes de herramientas y directorio de trabajo",

@@ -1,6 +1,8 @@
 import type React from 'react';
 import type { AgentContextObject } from '@/types/agentContext';
 
+export type SuggestionSelectionIntent = 'execute' | 'complete';
+
 interface SuggestionBase {
   label: string;
   value: string;

@@ -8,13 +8,15 @@ import type { AgentChart } from '../../agentCharts';
 import AgentApprovalCard from '../AgentApprovalCard';
 import AgentChartCard from '../AgentChartCard';
 import AgentTraceGroup from './AgentTraceGroup';
-import AgentActivityIndicator from './AgentActivityIndicator';
-import { getAgentActivity, type AgentActivity } from './presentation';
+import { getAgentActivity } from './presentation';
 
 export interface AgentTimelineProps {
   entries: AgentTimelineEntry[];
   runId?: string;
   active?: boolean;
+  cancelling?: boolean;
+  status?: 'failed' | 'cancelled' | 'unknown';
+  onInspectTools?: () => void;
   charts: AgentChart[];
   approvals: AgentApprovalItem[];
   questions: AgentQuestionItem[];
@@ -25,42 +27,13 @@ export interface AgentTimelineProps {
 
 export default function AgentTimeline(props: AgentTimelineProps) {
   const { entries, runId } = props;
-  const activity = getAgentActivity(!!props.active, entries, runId, props.questions, props.approvals);
+  const activity = getAgentActivity(!!props.active, entries, runId, props.questions, props.approvals, props.cancelling);
   const charts = new Map(props.charts.filter((chart) => chart.runId === runId).map((chart) => [chart.id, chart]));
-  const receipts = new Map<string, AgentTraceEntry[]>();
-  entries.forEach((entry) => {
-    if (entry.kind === 'trace' && entry.trace.chartId && charts.has(entry.trace.chartId)) {
-      const id = entry.trace.chartId;
-      receipts.set(id, [...(receipts.get(id) || []), entry.trace]);
-    }
-  });
-  const chartCalls = new Map([...receipts].flatMap(([chartId, traces]) =>
-    traces.flatMap((trace) => trace.id ? [[trace.id, chartId] as const] : [])));
-  entries.forEach((entry) => {
-    if (entry.kind === 'trace' && entry.trace.type === 'tool_call' && entry.trace.id) {
-      const chartId = chartCalls.get(entry.trace.id);
-      if (chartId) receipts.get(chartId)?.unshift(entry.trace);
-    }
-  });
+  const traces: AgentTraceEntry[] = entries.flatMap((entry) => entry.kind === 'trace'
+    && (entry.trace.type === 'tool_call' || entry.trace.type === 'tool_result') ? [entry.trace] : []);
   const nodes: ReactNode[] = [];
-  let traces: AgentTraceEntry[] = [];
-  let firstSequence = 0;
-  const flush = (currentActivity?: AgentActivity) => {
-    if (!traces.length) return;
-    nodes.push(<div key={firstSequence} data-agent-sequence={firstSequence}>
-      <AgentTraceGroup entries={traces} activity={currentActivity} />
-    </div>);
-    traces = [];
-  };
   entries.forEach((entry) => {
-    if (entry.kind === 'trace' && entry.trace.type === 'reasoning') return;
-    if (entry.kind === 'trace' && entry.trace.type !== 'error') {
-      if (entry.trace.id && chartCalls.has(entry.trace.id)) return;
-      if (!traces.length) firstSequence = entry.sequence;
-      traces.push(entry.trace);
-      return;
-    }
-    flush();
+    if (entry.kind === 'trace' && entry.trace.type !== 'error') return;
     let content: ReactNode;
     // The discriminated union covers every event kind.
     switch (entry.kind) {
@@ -72,11 +45,7 @@ export default function AgentTimeline(props: AgentTimelineProps) {
         break;
       case 'chart': {
         const chart = charts.get(entry.id);
-        const receipt = receipts.get(entry.id);
-        content = chart && <>
-          <AgentChartCard chart={chart} />
-          {receipt && <AgentTraceGroup entries={receipt} />}
-        </>;
+        content = chart && <AgentChartCard chart={chart} />;
         break;
       }
       case 'question': {
@@ -99,8 +68,7 @@ export default function AgentTimeline(props: AgentTimelineProps) {
     }
     if (content) nodes.push(<div key={entry.sequence} data-agent-sequence={entry.sequence}>{content}</div>);
   });
-  const activityInTrace = traces.length > 0 && activity?.kind === 'tool';
-  if (traces.length) flush(activityInTrace ? activity : undefined);
-  if (activity && !activityInTrace) nodes.push(<div key="activity"><AgentActivityIndicator activity={activity} /></div>);
-  return <>{nodes}</>;
+  return <>{nodes}<AgentTraceGroup key="progress" entries={traces} activity={activity}
+    status={props.status} onInspect={props.onInspectTools}
+                  /></>;
 }

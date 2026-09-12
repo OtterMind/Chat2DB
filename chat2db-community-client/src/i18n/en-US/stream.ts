@@ -1,4 +1,12 @@
 export default {
+  "stream.activity.starting": "Starting task…",
+  "stream.activity.cancelling": "Stopping…",
+  "stream.trace.toolsCount": "Called {1} tool(s)",
+  "stream.tool.running": "Running",
+  "stream.tool.completed": "Completed",
+  "stream.tool.failed": "Failed",
+  "stream.tool.stopped": "Stopped",
+  "stream.command.skillPrompt": "Enter your task after the skill command.",
   "stream.command.new": "Start a new conversation and keep history",
   "stream.command.model": "Switch the current model",
   "stream.command.tools": "Open tool and working directory settings",

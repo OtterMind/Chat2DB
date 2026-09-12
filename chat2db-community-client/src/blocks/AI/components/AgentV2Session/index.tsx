@@ -20,6 +20,7 @@ export interface AgentV2Message {
   traceEntries?: AgentTraceEntry[];
   timeline?: AgentTimelineEntry[];
   error?: string;
+  status?: 'failed' | 'cancelled' | 'unknown';
 }
 
 interface AgentV2SessionProps extends Omit<AgentTimelineProps, 'entries' | 'runId'> {
@@ -47,15 +48,17 @@ export default function AgentV2Session(props: AgentV2SessionProps) {
   }, [props.messages]);
 
   const renderReply = (
-    content: string, timeline: AgentTimelineEntry[] = [], runId?: string, active = false, error?: string,
+    content: string, timeline: AgentTimelineEntry[] = [], runId?: string, active = false, error?: string, status?: AgentV2Message['status'],
   ) => (
     <div className={styles.assistantRow}>
       <div className={cx(styles.assistantBadge, active && styles.assistantBadgeLoading)} aria-hidden="true">
         <div className={styles.aiIconWrap}><span className={styles.aiSpark}>✦</span></div>
       </div>
       <div className={styles.assistantContent} aria-busy={active}>
-        {timeline.length || active
-          ? <AgentTimeline {...props} entries={timeline} runId={runId} active={active} />
+        {timeline.length || active || status
+          ? <AgentTimeline {...props} entries={timeline} runId={runId} active={active}
+              status={status} cancelling={active && props.cancelling}
+            />
           : props.renderMarkdown(content)}
         {error && <Alert type="error" showIcon message={error} />}
       </div>
@@ -88,8 +91,12 @@ export default function AgentV2Session(props: AgentV2SessionProps) {
             <div className={styles.userBubble}><AgentUserMessage content={user.content} /></div>
           </div>
         </div>}
-        {assistant && renderReply(assistant.content, assistant.timeline, assistant.runId, false, assistant.error)}
-        {current && renderReply(props.streamingText, props.streamTimelineEntries, props.activeRunId, props.running)}
+        {(assistant || current) && renderReply(
+          assistant?.content ?? props.streamingText,
+          assistant ? assistant.timeline || [] : props.streamTimelineEntries,
+          assistant ? assistant.runId : props.activeRunId,
+          !assistant && current && props.running, assistant?.error, assistant?.status,
+        )}
       </div>
     );
   })}</div>;

@@ -27,9 +27,9 @@ export default function AgentActivityIndicator({ activity }: { activity: AgentAc
   const { styles } = useStyles();
   const label = activity.kind === 'question' ? i18n('stream.question.pending')
     : activity.kind === 'approval' ? i18n('stream.approval.pending')
-    : activity.kind === 'responding' ? i18n('stream.activity.responding')
+    : activity.kind === 'cancelling' ? i18n('stream.activity.cancelling')
     : activity.kind === 'tool' ? (activity.tool.description || activity.tool.name)
-    : i18n('stream.loading.thinking');
+    : i18n('stream.activity.starting');
   return (
     <span className={styles.activity} role="status" data-agent-activity={activity.kind}>
       {activity.kind === 'question' ? <CircleHelp size={14} aria-hidden="true" />

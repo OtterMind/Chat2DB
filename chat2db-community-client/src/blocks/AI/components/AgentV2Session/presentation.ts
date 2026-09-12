@@ -2,39 +2,60 @@ import type { AgentApprovalItem, AgentTimelineEntry, AgentTraceEntry } from '../
 import type { AgentQuestionItem } from '../../agentQuestions';
 
 export type AgentActivity =
-  | { kind: 'thinking' | 'responding' | 'question' | 'approval' }
+  | { kind: 'starting' | 'cancelling' | 'question' | 'approval' }
   | { kind: 'tool'; tool: { name: string; description?: string } };
 
-export const toolSummary = (entries: AgentTraceEntry[]) => {
-  const calls = new Map<string, AgentTraceEntry>();
+export interface ToolExecution {
+  id: string;
+  name: string;
+  description?: string;
+  arguments?: string;
+  content?: string;
+  durationMs?: number;
+  completed: boolean;
+  failed: boolean;
+}
+
+export const toolExecutions = (entries: AgentTraceEntry[]): ToolExecution[] => {
+  const calls = new Map<string, ToolExecution>();
   for (const entry of entries) {
-    if ((entry.type === 'tool_call' || entry.type === 'tool_result') && entry.id) {
-      if (entry.type === 'tool_result' || !calls.has(entry.id)) calls.set(entry.id, entry);
-    }
+    if ((entry.type !== 'tool_call' && entry.type !== 'tool_result') || !entry.id) continue;
+    const previous = calls.get(entry.id);
+    const result = entry.type === 'tool_result';
+    calls.set(entry.id, {
+      id: entry.id, name: entry.name || previous?.name || '',
+      description: entry.description || previous?.description,
+      arguments: entry.arguments || previous?.arguments,
+      content: result ? entry.content : previous?.content,
+      durationMs: entry.durationMs ?? previous?.durationMs,
+      completed: result || !!previous?.completed,
+      failed: result ? !!entry.failed : !!previous?.failed,
+    });
   }
-  if (!calls.size) return undefined;
-  const durations = [...calls.values()].map((entry) => entry.durationMs);
-  return { count: calls.size, durationMs: durations.every((duration): duration is number => duration !== undefined)
+  return [...calls.values()];
+};
+
+export const toolSummary = (entries: AgentTraceEntry[]) => {
+  const calls = toolExecutions(entries);
+  if (!calls.length) return undefined;
+  const durations = calls.map((entry) => entry.durationMs);
+  return { count: calls.length, durationMs: durations.every((duration): duration is number => duration !== undefined)
     ? durations.reduce((total, duration) => total + duration, 0) : undefined };
 };
 
 export const getAgentActivity = (
   active: boolean, entries: AgentTimelineEntry[], runId: string | undefined,
-  questions: AgentQuestionItem[], approvals: AgentApprovalItem[],
+  questions: AgentQuestionItem[], approvals: AgentApprovalItem[], cancelling = false,
 ): AgentActivity | undefined => {
   if (!active) return undefined;
+  if (cancelling) return { kind: 'cancelling' };
   if (questions.some((item) => item.runId === runId && item.status === 'pending')) return { kind: 'question' };
   if (approvals.some((item) => item.runId === runId && item.status === 'pending')) return { kind: 'approval' };
-  const pending = new Map<string, { name: string; description?: string }>();
-  entries.forEach((entry) => {
-    if (entry.kind !== 'trace' || !entry.trace.id) return;
-    const { id, type, name } = entry.trace;
-    if (type === 'tool_call') pending.set(id, { name: name || '', description: entry.trace.description });
-    if (type === 'tool_result') pending.delete(id);
-  });
-  const current = [...pending.values()].filter((tool) => tool.name).at(-1);
-  if (current) return { kind: 'tool', tool: current.description ? current : { name: current.name } };
-  return { kind: entries.at(-1)?.kind === 'text' ? 'responding' : 'thinking' };
+  const current = [...entries].reverse().find((entry) => entry.kind === 'trace' && entry.trace.type === 'tool_call');
+  if (current?.kind === 'trace') return { kind: 'tool', tool: {
+    name: current.trace.name || '', ...(current.trace.description ? { description: current.trace.description } : {}),
+  } };
+  return { kind: 'starting' };
 };
 
 export const splitSkillMessage = (content: string) => {

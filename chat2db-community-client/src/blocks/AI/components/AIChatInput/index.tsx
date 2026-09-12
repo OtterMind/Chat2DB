@@ -5,6 +5,7 @@ import React, {
   ForwardedRef,
   useImperativeHandle,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
 } from 'react';
@@ -76,6 +77,7 @@ interface ChatInputProps {
   className?: string;
   chatInputAreaClassName?: string;
   loading?: boolean;
+  stopping?: boolean;
   sendDisabled?: boolean;
   contextInfo?: IAICascaderData;
   onContextChange?: (contextInfo: IAICascaderData) => void;
@@ -114,6 +116,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     className,
     chatInputAreaClassName,
     loading,
+    stopping = false,
     sendDisabled = false,
     hideDatabaseSelect,
     modelOptions,
@@ -147,6 +150,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef<boolean>(false); // IME input method combination status
   const tableRequestSequenceRef = useRef(0);
+  const completionCursorRef = useRef<number>();
 
   // caches tables without search conditions
   const tableListWithoutSearchKey = useRef<ITable[]>([]);
@@ -199,6 +203,14 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     const length = textarea.value.length;
     textarea.setSelectionRange(length, length);
   }, []);
+
+  useLayoutEffect(() => {
+    if (completionCursorRef.current === undefined) return;
+    const textarea = textareaRef.current?.resizableTextArea?.textArea;
+    textarea?.focus();
+    textarea?.setSelectionRange(completionCursorRef.current, completionCursorRef.current);
+    completionCursorRef.current = undefined;
+  }, [inputValue, suggestionTrigger]);
 
   useImperativeHandle(ref, () => ({
     triggerSend,
@@ -327,8 +339,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     return () => fetchTableList.cancel();
   }, []);
 
-  const handleSend = async (params?: SendParams) => {
-    if (loading || attachmentLoading || sendDisabled) return;
+  const handleSend = async (params?: SendParams, value = inputValue) => {
+    if (loading || attachmentLoading) return;
 
     /**
      * source parameter
@@ -355,7 +367,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     const questionType = params?.questionType || prefillQuestionType || QuestionType.ORDINARY_CHAT;
 
     const finalAttachments = params?.attachments ?? attachments;
-    const rawInput = params?.input ?? inputValue;
+    const rawInput = params?.input ?? value;
     const trimmedInput = (rawInput || '').trim();
     const finalInput =
       trimmedInput ||
@@ -388,7 +400,13 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         feedback.warning(i18n('stream.command.unsupported'));
         return;
       }
+      if (/^\/skill:[^\s]+$/.test(finalInput)) {
+        feedback.info(i18n('stream.command.skillPrompt'));
+        return;
+      }
     }
+
+    if (sendDisabled) return;
 
     const contextInfo = cascaderDataMap[mainPageActiveTab];
     const _contextInfo = contextInfo
@@ -640,33 +658,38 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       items={getSuggestionList}
       open={!!suggestionTrigger}
       onOpenChange={(open) => { if (!open) setSuggestionTrigger(null); }}
-      onSelect={(item) => {
+      onSelect={(item, intent) => {
         const textarea = textareaRef.current?.resizableTextArea?.textArea;
-        const cursor = textarea?.selectionStart ?? inputValue.length;
-        const activeTrigger = suggestionTrigger || detectInputSuggestion(inputValue, cursor, runtimeChoice);
+        const value = textarea?.value ?? inputValue;
+        const cursor = textarea?.selectionStart ?? value.length;
+        const activeTrigger = detectInputSuggestion(value, cursor, runtimeChoice);
         if (!activeTrigger || (activeTrigger.kind === 'table') !== (item.kind === 'table')) return;
-        const replacement = item.kind !== 'table'
-          ? replaceSkillTrigger(inputValue, activeTrigger, item.label)
-          : replaceMentionTrigger(inputValue, activeTrigger, item.label);
+        const currentItems = getSuggestionList(activeTrigger);
+        const selectedItem = currentItems.find((candidate) => candidate.value === item.value) ?? currentItems[0];
+        if (!selectedItem) return;
+        const replacement = selectedItem.kind !== 'table'
+          ? replaceSkillTrigger(value, activeTrigger, selectedItem.label)
+          : replaceMentionTrigger(value, activeTrigger, selectedItem.label);
 
         setInputValue(replacement.value);
-        if (item.kind === 'table') setSelectedMentions((previous) => {
+        if (selectedItem.kind === 'table') setSelectedMentions((previous) => {
           const nextMention: SelectedMention = {
-            value: item.value,
-            label: item.label,
-            kind: item.kind,
-            tableName: item.tableName,
-            tableType: item.tableType,
-            contextObject: item.contextObject,
+            value: selectedItem.value,
+            label: selectedItem.label,
+            kind: selectedItem.kind,
+            tableName: selectedItem.tableName,
+            tableType: selectedItem.tableType,
+            contextObject: selectedItem.contextObject,
           };
           return upsertSelectedMention(previous, nextMention);
         });
         tableRequestSequenceRef.current += 1;
         setSuggestionTrigger(null);
-        window.setTimeout(() => {
-          textarea?.focus();
-          textarea?.setSelectionRange(replacement.cursor, replacement.cursor);
-        }, 0);
+        if (selectedItem.kind === 'command' && intent === 'execute') {
+          handleSend(undefined, replacement.value);
+          return;
+        }
+        completionCursorRef.current = replacement.cursor;
       }}
     >
       {({ onTrigger, onKeyDown, isOpen }) => (
@@ -735,6 +758,21 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             }}
             onKeyDown={(e) => {
               if (isComposingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
+              const submit = e.key === 'Enter' && !e.shiftKey;
+              const value = e.currentTarget.value;
+              // Exact commands and rejected arguments must use the input the
+              // user sees, regardless of the menu's previous active option.
+              if (submit && runtimeChoice === 'PI' && (parseChatCommand(value) || isUnsupportedChatCommand(value))) {
+                // A partial command with an open menu still selects its match.
+                const query = value.trim().slice(1);
+                const matches = [...commandSuggestions(query), ...skillSuggestions(skills, query)];
+                if (parseChatCommand(value) || !isOpen || !matches.length) {
+                  e.preventDefault();
+                  onTrigger(false);
+                  handleSend(undefined, value);
+                  return;
+                }
+              }
               if (isOpen && ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
                 onKeyDown(e);
                 if (e.defaultPrevented) return;
@@ -743,7 +781,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
               // Enter sends, Shift+Enter inserts a newline, and IME composition does not send.
               if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current && !loading) {
                 e.preventDefault();
-                handleSend();
+                handleSend(undefined, value);
               }
             }}
             onKeyUp={(e) => {
@@ -808,7 +846,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                     iconSize: 22,
                   }}
                   code="icon-chat-stop"
-                  title={i18n('stream.question.cancel')}
+                  disabled={stopping}
+                  title={i18n(stopping ? 'stream.activity.cancelling' : 'stream.question.cancel')}
                   className={styles.stopButton}
                   onClick={onStop}
                 />
@@ -821,7 +860,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
                   code="icon-chat-send"
                   title={i18n('stream.agent.send')}
                   className={styles.sendButton}
-                  disabled={sendDisabled || (!inputValue.trim() && !attachments.length)}
+                  disabled={(sendDisabled && !(runtimeChoice === 'PI' && parseChatCommand(inputValue)))
+                    || (!inputValue.trim() && !attachments.length)}
                   onClick={() => handleSend()}
                 />
                 // <Button

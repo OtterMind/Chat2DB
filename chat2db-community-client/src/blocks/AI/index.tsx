@@ -586,6 +586,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const agentSessionRef = useRef<{ id: string; sequence: number }>();
   const agentOperationRef = useRef<AgentOperation>();
   const [agentRunning, setAgentRunning] = useState(false);
+  const [agentCancelling, setAgentCancelling] = useState(false);
   const [agentCharts, setAgentCharts] = useState<AgentChart[]>([]);
   const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
   const [agentQuestions, setAgentQuestions] = useState<AgentQuestionItem[]>([]);
@@ -1013,6 +1014,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     operation.controller.abort();
     agentOperationRef.current = undefined;
     setAgentRunning(false);
+    setAgentCancelling(false);
     if (cancelRun && operation.runId && operation.sessionId) {
       void agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId }).catch((error) => {
         feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
@@ -1020,16 +1022,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
   }, []);
 
-  const finishAgentReply = useCallback((error?: unknown) => {
+  const finishAgentReply = useCallback((error?: unknown, runStatus?: AgentV2Message['status']) => {
     setAgentQuestions((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     setAgentApprovals((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
     const content = streamingRef.current;
     const traceEntries = [...streamTraceEntriesRef.current];
     const timeline = [...streamTimelineEntriesRef.current];
     if (error) traceEntries.push({ type: 'error', content: agentErrorText(error) || i18n('stream.agent.sendFailed') });
-    if (content.trim() || traceEntries.length || timeline.length || agentOperationRef.current?.runId) {
+    if (runStatus || content.trim() || traceEntries.length || timeline.length || agentOperationRef.current?.runId) {
       const message: IChatItem = { id: agentRequestId(), runId: agentOperationRef.current?.runId, role: 'assistant', content, traceEntries,
         ...(timeline.length ? { timeline } : {}),
+        status: runStatus || (error ? 'failed' : undefined),
         ...(error ? { error: agentErrorText(error) || i18n('stream.agent.sendFailed') } : {}) };
       setMessages((previous) => {
         const next = [...previous, message];
@@ -1110,7 +1113,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       const terminal = await followAgentRun(agentService.listEvents, sessionId, runId,
         agentSessionRef.current?.sequence || 0, operation.controller.signal, applyAgentEvents);
       if (!operation.controller.signal.aborted && terminal) {
-        finishAgentReply();
+        finishAgentReply(undefined, terminal.type === 'RUN_CANCELLED' ? 'cancelled'
+          : terminal.type === 'RUN_FAILED' ? 'failed' : terminal.type === 'RUN_OUTCOME_UNKNOWN' ? 'unknown' : undefined);
         if (terminal.type === 'RUN_FAILED' || terminal.type === 'RUN_OUTCOME_UNKNOWN') {
           feedback.error(agentErrorText(terminal.payload) || i18n('stream.agent.sendFailed'));
         }
@@ -1126,6 +1130,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         operation.controller.abort();
         agentOperationRef.current = undefined;
         setAgentRunning(false);
+        setAgentCancelling(false);
       }
     }
   }, [applyAgentEvents, finishAgentReply]);
@@ -1697,7 +1702,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         const charts = updateAgentCharts([], events);
         setAgentCharts(charts);
         const transcript = buildAgentTranscript(events)
-          .filter((message) => message.content || message.traceEntries.length || message.timeline?.length
+          .filter((message) => message.status || message.content || message.traceEntries.length
+            || message.timeline?.length
             || charts.some((chart) => chart.runId === message.runId));
         setAgentApprovals(updateAgentApprovals([], events).map((item) =>
           item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
@@ -1918,12 +1924,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setAgentRunning(true);
         try {
           const model = await prepareAgentModelOption(selectedOption);
-          if (operation.controller.signal.aborted || operation.cancelRequested) return;
+          if (operation.controller.signal.aborted) return;
+          if (operation.cancelRequested) { finishAgentReply(undefined, 'cancelled'); return; }
           const modelConfigId = model.modelConfigId || model.value;
           let session = agentSessionRef.current;
           if (!session) {
             const created = await agentService.createSession({ message: content, runtimeType: 'PI', modelConfigId });
-            if (operation.controller.signal.aborted || operation.cancelRequested) return;
+            if (operation.controller.signal.aborted) return;
+            if (operation.cancelRequested) { finishAgentReply(undefined, 'cancelled'); return; }
             session = { id: created.id, sequence: 0 };
             traceAgentStage('session.created', { sessionId: created.id, modelConfigId });
             agentSessionRef.current = session;
@@ -1950,6 +1958,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           if (agentOperationRef.current === operation) {
             agentOperationRef.current = undefined;
             setAgentRunning(false);
+            setAgentCancelling(false);
             setCurrentRoundUserMessageId(null);
             currentRoundUserMessageIdRef.current = null;
           }
@@ -2302,6 +2311,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         approvals={agentApprovals}
         questions={agentQuestions}
         running={agentRunning}
+        cancelling={agentCancelling}
+        onInspectTools={() => setAutoFollow(false)}
         highlightedUserMessageId={highlightedUserMessageId}
         renderMarkdown={renderMarkdown}
         onDecideApproval={decideAgentApproval}
@@ -2489,12 +2500,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       stop();
       return;
     }
+    if (operation.cancelRequested) return;
     operation.cancelRequested = true;
+    setAgentCancelling(true);
     traceAgentStage('run.cancel.requested', { sessionId: operation.sessionId, runId: operation.runId });
     if (!operation.runId || !operation.sessionId) return;
     try {
       await agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId });
     } catch (error) {
+      operation.cancelRequested = false;
+      setAgentCancelling(false);
       feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
     }
   };
@@ -2668,6 +2683,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 onChatSend={handleSend}
                 onCommand={handleConversationCommand}
                 onStop={handleStop}
+                stopping={agentCancelling}
                 autoSize={
                   isPanel
                     ? { minRows: 2, maxRows: 4 }

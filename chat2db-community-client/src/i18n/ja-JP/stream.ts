@@ -1,4 +1,12 @@
 export default {
+  "stream.activity.starting": "タスクを開始しています…",
+  "stream.activity.cancelling": "停止しています…",
+  "stream.trace.toolsCount": "{1} 個のツールを呼び出し",
+  "stream.tool.running": "実行中",
+  "stream.tool.completed": "完了",
+  "stream.tool.failed": "失敗",
+  "stream.tool.stopped": "停止済み",
+  "stream.command.skillPrompt": "スキルコマンドの後に具体的なタスクを入力してください。",
   "stream.command.new": "履歴を残して新しい会話を開始",
   "stream.command.model": "モデルを切り替え",
   "stream.command.tools": "ツールと作業ディレクトリの設定",
