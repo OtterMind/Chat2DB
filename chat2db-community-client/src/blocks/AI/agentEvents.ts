@@ -73,6 +73,7 @@ export interface AgentTraceEntry {
   chartId?: string;
   failed?: boolean;
   description?: string;
+  durationMs?: number;
 }
 
 export type AgentTimelineEntry = { sequence: number; endSequence?: number } & (
@@ -225,13 +226,19 @@ export const agentEventTrace = (event: AgentEvent): AgentTraceEntry | undefined 
   }
   if (event.type === 'TOOL_CALL_COMPLETED' || event.type === 'TOOL_CALL_FAILED') {
     const result = payload.result as { content?: { type: string; text?: string }[];
-      details?: { data?: { chartId?: unknown } } } | undefined;
+      details?: { data?: { chartId?: unknown; durationMs?: unknown }; durationMs?: unknown };
+      durationMs?: unknown } | undefined;
     const content = Array.isArray(result?.content)
       ? result.content.filter((item) => item.type === 'text').map((item) => item.text || '')
 .join('\n')
       : JSON.stringify(payload.result || payload);
     const chartId = result?.details?.data?.chartId;
+    const durationCandidates = [payload.durationMs, result?.durationMs, result?.details?.durationMs,
+      result?.details?.data?.durationMs];
+    const durationMs = durationCandidates.find((value): value is number => typeof value === 'number'
+      && Number.isFinite(value) && value >= 0);
     return { type: 'tool_result', id, name, content,
+      ...(durationMs === undefined ? {} : { durationMs }),
       ...(event.type === 'TOOL_CALL_FAILED' ? { failed: true } : {}),
       ...(name === 'render_chart' && typeof chartId === 'string' ? { chartId } : {}) };
   }

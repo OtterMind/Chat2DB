@@ -4,7 +4,7 @@ import esApprovals from '@/i18n/es-ES/stream';
 import enApprovals from '@/i18n/en-US/stream';
 import zhApprovals from '@/i18n/zh-CN/stream';
 import assert from 'node:assert/strict';
-import { appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, updateAgentApprovals } from './agentEvents';
+import { appendAgentTimeline, agentEventTrace, buildAgentTranscript, mergeAgentEvents, updateAgentApprovals } from './agentEvents';
 import type { AgentEvent } from '@/service/agent';
 
 const event = (sequence: number, type: AgentEvent['type'], payload: Record<string, unknown> = {}): AgentEvent => ({
@@ -40,6 +40,10 @@ assert.equal(recoveredTranscript[1].status, undefined);
 const requested = event(4, 'APPROVAL_REQUESTED', {
   approvalId: 'approval-1', toolName: 'bash', command: "printf 'line 1\\nline 2'", workingDirectory: '/folder with spaces',
 });
+const toolResultTrace = agentEventTrace(event(6, 'TOOL_CALL_COMPLETED', {
+  toolCallId: 'duration-call', toolName: 'db_query', result: { details: { data: { durationMs: 17 } } },
+}));
+assert.equal(toolResultTrace?.durationMs, 17);
 const requestedAgain = event(5, 'APPROVAL_REQUESTED', requested.payload);
 const sqlApproval = event(5, 'APPROVAL_REQUESTED', {
   approvalId: 'sql-approval', toolName: 'db_query', command: 'SELECT 1; UPDATE sales SET amount=2;',

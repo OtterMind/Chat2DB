@@ -80,6 +80,8 @@ export default {
   'stream.trace.defaultToolResult': 'ツール結果',
   'stream.trace.unknownError': '不明なエラー',
   'stream.trace.returned': '結果',
+  'stream.trace.toolsSummary': '{1} 個のツールを呼び出し · {2}ms',
+  'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': 'ファイルを解析中...',
   'stream.attachment.parseFailed': 'ファイル解析に失敗しました。形式または内容を確認してください。',
   'stream.attachment.partialFailed': '一部のファイル解析に失敗しました。{1} 件のファイルを解析しました。',

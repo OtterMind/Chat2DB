@@ -5,9 +5,16 @@ export type AgentActivity =
   | { kind: 'thinking' | 'responding' | 'question' | 'approval' }
   | { kind: 'tool'; tool: { name: string; description?: string } };
 
-export const traceToolDescription = (entries: AgentTimelineEntry[]) => [...entries].reverse()
-  .find((entry) => entry.kind === 'trace' && entry.trace.type === 'tool_call' && entry.trace.description)
-  ?.trace.description;
+export const toolSummary = (entries: AgentTimelineEntry[]) => {
+  const traces = entries.filter((entry): entry is Extract<AgentTimelineEntry, { kind: 'trace' }> => entry.kind === 'trace');
+  const calls = traces.filter((entry) => entry.trace.type === 'tool_call');
+  if (!calls.length) return undefined;
+  const results = new Map(traces.filter((entry) => entry.trace.type === 'tool_result' && entry.trace.id)
+    .map((entry) => [entry.trace.id as string, entry.trace]));
+  const durations = calls.map((entry) => results.get(entry.trace.id as string)?.durationMs);
+  return { count: calls.length, durationMs: durations.every((duration): duration is number => duration !== undefined)
+    ? durations.reduce((total, duration) => total + duration, 0) : undefined };
+};
 
 export const getAgentActivity = (
   active: boolean, entries: AgentTimelineEntry[], runId: string | undefined,

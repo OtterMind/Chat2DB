@@ -80,6 +80,8 @@ export default {
   'stream.trace.defaultToolResult': '工具结果',
   'stream.trace.unknownError': '未知异常',
   'stream.trace.returned': '返回',
+  'stream.trace.toolsSummary': '调用了 {1} 个工具 · 耗时 {2}ms',
+  'stream.trace.duration': '耗时 {1}ms',
   'stream.attachment.parsing': '正在解析文件...',
   'stream.attachment.parseFailed': '文件解析失败，请检查文件格式或内容',
   'stream.attachment.partialFailed': '部分文件解析失败，成功解析 {1} 个文件',

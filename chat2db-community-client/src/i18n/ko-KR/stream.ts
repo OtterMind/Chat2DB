@@ -80,6 +80,8 @@ export default {
   'stream.trace.defaultToolResult': '도구 결과',
   'stream.trace.unknownError': '알 수 없는 오류',
   'stream.trace.returned': '반환됨',
+  'stream.trace.toolsSummary': '{1}개 도구 호출 · {2}ms',
+  'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': '파일 분석 중...',
   'stream.attachment.parseFailed': '파일을 분석하지 못했습니다. 파일 형식이나 내용을 확인해 주세요.',
   'stream.attachment.partialFailed': '일부 파일을 분석하지 못했습니다. {1}개 파일을 분석했습니다.',

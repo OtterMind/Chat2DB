@@ -80,6 +80,8 @@ export default {
   'stream.trace.defaultToolResult': 'Tool result',
   'stream.trace.unknownError': 'Unknown error',
   'stream.trace.returned': 'returned',
+  'stream.trace.toolsSummary': 'Called {1} tool(s) · {2}ms',
+  'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': 'Parsing files...',
   'stream.attachment.parseFailed': 'Failed to parse file. Please check the file format or content.',
   'stream.attachment.partialFailed': 'Some files failed to parse. Successfully parsed {1} file(s).',

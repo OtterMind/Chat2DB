@@ -3,7 +3,7 @@ import i18n from '@/i18n';
 import type { AgentTraceEntry } from '../../agentEvents';
 import { Brain, ChevronRight, Wrench } from 'lucide-react';
 import AgentActivityIndicator from './AgentActivityIndicator';
-import { traceToolDescription, type AgentActivity } from './presentation';
+import { toolSummary, type AgentActivity } from './presentation';
 
 const useStyles = createStyles(({ css, token }) => ({
   group: css`
@@ -56,15 +56,16 @@ export default function AgentTraceGroup({ entries, activity }: {
 }) {
   const { styles } = useStyles();
   const failed = entries.some((entry) => entry.failed);
-  const description = traceToolDescription(entries);
+  const summary = toolSummary(entries);
+  if (!summary && !entries.some((entry) => entry.type === 'error')) return null;
+  const title = summary ? i18n('stream.trace.toolsSummary', summary.count,
+    summary.durationMs === undefined ? '--' : summary.durationMs) : i18n('stream.thought.toggle');
   return (
     <details className={styles.group}>
       <summary className={failed ? styles.failed : undefined} title={i18n('stream.thought.toggle')}>
-        {activity ? <AgentActivityIndicator activity={activity} /> : description ? <>
-          <Wrench size={14} aria-hidden="true" />{description}
-        </> : <>
-          <Brain size={14} aria-hidden="true" />{i18n('stream.thought.toggle')}
-        </>}
+        {activity ? <AgentActivityIndicator activity={activity} /> : summary ? <>
+          <Wrench size={14} aria-hidden="true" />{title}
+        </> : <><Brain size={14} aria-hidden="true" />{title}</>}
         {failed && <span className={styles.failed}> · {i18n('stream.trace.error')}</span>}
         <ChevronRight size={13} className="agent-trace-chevron" aria-hidden="true" />
       </summary>
@@ -76,6 +77,8 @@ export default function AgentTraceGroup({ entries, activity }: {
               <div className={entry.failed ? styles.failed : styles.label}>
                 {i18n(entry.type === 'tool_call' ? 'stream.trace.toolCall' : 'stream.trace.toolResult')}
                 {entry.name && ` · ${entry.name}`}
+                {entry.type === 'tool_result' && entry.durationMs !== undefined
+                  && ` · ${i18n('stream.trace.duration', entry.durationMs)}`}
               </div>
               <pre className={styles.code} tabIndex={0}>{formatJson(entry.arguments || entry.content || '')}</pre>
             </>}
