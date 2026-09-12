@@ -2,8 +2,40 @@ import assert from 'node:assert/strict';
 import {
   areWorkspacePaneContentBoundsEqual,
   resolveActiveWorkspaceTabPaneIds,
+  resolveWorkspaceTabContentActivation,
   resolveWorkspacePaneContentBounds,
 } from './workspaceTabContentLayout';
+
+assert.deepEqual(
+  resolveWorkspaceTabContentActivation({
+    paneId: 'pane-right',
+    tabId: 'tab-b',
+    activePaneId: 'main',
+    activeConsoleId: 'tab-a',
+  }),
+  { paneId: 'pane-right', tabId: 'tab-b' },
+  'pressing a sibling pane body should activate its visible tab before shortcuts run',
+);
+assert.equal(
+  resolveWorkspaceTabContentActivation({
+    paneId: 'main',
+    tabId: 'tab-a',
+    activePaneId: 'main',
+    activeConsoleId: 'tab-a',
+  }),
+  null,
+  'pressing the already active pane body should not repeat the selection update',
+);
+assert.equal(
+  resolveWorkspaceTabContentActivation({
+    paneId: undefined,
+    tabId: 'tab-hidden',
+    activePaneId: 'main',
+    activeConsoleId: 'tab-a',
+  }),
+  null,
+  'a hidden tab body cannot change the active pane',
+);
 
 assert.deepEqual(
   Array.from(
