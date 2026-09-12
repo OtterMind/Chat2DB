@@ -117,7 +117,7 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
     public Function function(Connection connection, @NotEmpty String databaseName, String schemaName,
         String functionName) {
 
-        String sql = String.format(ROUTINES_SQL, "FUNCTION", getSQLIdentifierProcessor().escapeString(databaseName),
+        String sql = String.format(ROUTINES_SQL, "FUNCTION", getSQLIdentifierProcessor().escapeString(schemaName),
             getSQLIdentifierProcessor().escapeString(functionName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Function function = new Function();
@@ -159,7 +159,7 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
     public Trigger trigger(Connection connection, @NotEmpty String databaseName, String schemaName,
         String triggerName) {
 
-        String sql = String.format(TRIGGER_SQL, getSQLIdentifierProcessor().escapeString(databaseName),
+        String sql = String.format(TRIGGER_SQL, getSQLIdentifierProcessor().escapeString(schemaName),
             getSQLIdentifierProcessor().escapeString(triggerName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Trigger trigger = new Trigger();
@@ -176,7 +176,7 @@ public class H2Meta extends DefaultMetaService implements IDbMetaData {
     @Override
     public Procedure procedure(Connection connection, @NotEmpty String databaseName, String schemaName,
         String procedureName) {
-        String sql = String.format(ROUTINES_SQL, "PROCEDURE", getSQLIdentifierProcessor().escapeString(databaseName),
+        String sql = String.format(ROUTINES_SQL, "PROCEDURE", getSQLIdentifierProcessor().escapeString(schemaName),
             getSQLIdentifierProcessor().escapeString(procedureName));
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             Procedure procedure = new Procedure();
