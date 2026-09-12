@@ -30,6 +30,12 @@ assert.deepEqual(buildAgentTranscript(merged), [
   { id: 'assistant-run', runId: 'run', role: 'assistant', content: 'hi', traceEntries: [],
     timeline: [{ kind: 'text', sequence: 3, text: 'hi' }] },
 ]);
+const recoveredTranscript = buildAgentTranscript([
+  event(1, 'RUN_ACCEPTED', { text: 'old run' }),
+  event(2, 'RUN_OUTCOME_UNKNOWN'),
+  event(3, 'RUN_COMPLETED'),
+]);
+assert.equal(recoveredTranscript[1].status, undefined);
 
 const requested = event(4, 'APPROVAL_REQUESTED', {
   approvalId: 'approval-1', toolName: 'bash', command: "printf 'line 1\\nline 2'", workingDirectory: '/folder with spaces',

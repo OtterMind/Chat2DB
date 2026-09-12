@@ -187,6 +187,7 @@ export const buildAgentTranscript = (events: AgentEvent[]): AgentTranscriptMessa
     if (event.type === 'RUN_FAILED') assistant.status = 'failed';
     if (event.type === 'RUN_OUTCOME_UNKNOWN') assistant.status = 'unknown';
     if (event.type === 'RUN_CANCELLED') assistant.status = 'cancelled';
+    if (event.type === 'RUN_COMPLETED' || event.type === 'RUN_SUSPENDED') delete assistant.status;
   });
   return messages;
 };
