@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import '../../blocks/Setting/McpSetting/mcpLifecycle.test';
 import { readFileSync } from 'node:fs';
 import { Layers, LayoutDashboard, MessageSquarePlus } from 'lucide-react';
 

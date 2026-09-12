@@ -9,7 +9,6 @@ import { copyToClipboard } from '@/utils/copy';
 import feedback from '@/utils/feedback';
 import SettingSubsection from '../SettingSubsection';
 import { useStyles } from '../BaseSetting/style';
-import { beginLatestRequest, invalidateLatestRequest, isLatestRequest } from '@/utils/latestRequest';
 import {
   canStartMcpOperation,
   createMcpOperationId,
@@ -19,14 +18,16 @@ import {
   type McpOperation,
 } from './mcpLifecycle';
 import { useMcpStyles } from './style';
+import { McpTokenRequestCoordinator } from './mcpTokenRequestCoordinator';
 
 export default function McpSetting() {
   const { styles } = useStyles();
   const { styles: mcpStyles } = useMcpStyles();
   const [token, setToken] = useState('');
+  const [resetTokenLoading, setResetTokenLoading] = useState(false);
   const [lifecycle, dispatch] = useReducer(reduceMcpLifecycleState, initialMcpLifecycleState);
   const activeOperationIdRef = useRef<string | null>(null);
-  const requestGenerationRef = useRef(0);
+  const tokenRequestCoordinatorRef = useRef(new McpTokenRequestCoordinator());
   const setBaseSetting = useGlobalStore((state) => state.setBaseSetting);
 
   const startOperation = useCallback((operation: McpOperation) => {
@@ -62,10 +63,10 @@ export default function McpSetting() {
   }, []);
 
   useEffect(() => {
-    const requestGeneration = beginLatestRequest(requestGenerationRef);
+    const tokenOwner = tokenRequestCoordinatorRef.current.beginMount();
     const operationId = startOperation('loading');
     if (!operationId) {
-      return () => invalidateLatestRequest(requestGenerationRef);
+      return () => tokenRequestCoordinatorRef.current.invalidate();
     }
     jcefApi.getMcpStatus({ operationId })
       .then(applyStatus)
@@ -74,17 +75,17 @@ export default function McpSetting() {
       });
     jcefApi.getMcpToken()
       .then((t) => {
-        if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+        if (tokenRequestCoordinatorRef.current.isCurrent(tokenOwner)) {
           setToken(t);
         }
       })
       .catch(() => {
-        if (isLatestRequest(requestGenerationRef, requestGeneration)) {
+        if (tokenRequestCoordinatorRef.current.isCurrent(tokenOwner)) {
           feedback.error(i18n('setting.mcp.tokenLoadFailed'));
         }
       });
     return () => {
-      invalidateLatestRequest(requestGenerationRef);
+      tokenRequestCoordinatorRef.current.invalidate();
       if (activeOperationIdRef.current === operationId) {
         activeOperationIdRef.current = null;
       }
@@ -130,11 +131,28 @@ export default function McpSetting() {
     feedback.success(i18n('common.button.copySuccessfully'));
   }
 
-  function resetToken() {
-    jcefApi.resetMcpToken().then((nextToken) => {
+  async function resetToken() {
+    const owner = tokenRequestCoordinatorRef.current.beginReset();
+    if (!owner) {
+      return;
+    }
+    setResetTokenLoading(true);
+    try {
+      const nextToken = await jcefApi.resetMcpToken();
+      if (!tokenRequestCoordinatorRef.current.isCurrent(owner)) {
+        return;
+      }
       setToken(nextToken);
       feedback.success(i18n('setting.text.mcpTokenResetSuccess'));
-    });
+    } catch {
+      if (tokenRequestCoordinatorRef.current.isCurrent(owner)) {
+        feedback.error(i18n('setting.mcp.operationFailed'));
+      }
+    } finally {
+      if (tokenRequestCoordinatorRef.current.finishReset(owner)) {
+        setResetTokenLoading(false);
+      }
+    }
   }
 
   const status = lifecycle.status;
@@ -182,7 +200,11 @@ export default function McpSetting() {
             okText={i18n('common.button.confirm')}
             cancelText={i18n('common.button.cancel')}
           >
-            <Button danger disabled={lifecycle.pendingOperation === 'restarting'}>
+            <Button
+              danger
+              disabled={resetTokenLoading || lifecycle.pendingOperation === 'restarting'}
+              loading={resetTokenLoading}
+            >
               {i18n('setting.button.resetMcpToken')}
             </Button>
           </Popconfirm>
