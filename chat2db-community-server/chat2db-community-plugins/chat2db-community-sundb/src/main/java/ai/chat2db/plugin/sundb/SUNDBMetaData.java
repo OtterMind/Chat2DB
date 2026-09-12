@@ -239,8 +239,12 @@ public class SUNDBMetaData extends DefaultMetaService implements IDbMetaData {
             function.setDatabaseName(databaseName);
             function.setSchemaName(schemaName);
             function.setFunctionName(functionName);
-            if (resultSet.next()) {
-                function.setFunctionBody(resultSet.getString("text") + "\n");
+            StringBuilder body = new StringBuilder();
+            while (resultSet.next()) {
+                body.append(resultSet.getString("TEXT")).append("\n");
+            }
+            if (body.length() > 0) {
+                function.setFunctionBody(body.toString());
             }
             return function;
         });
