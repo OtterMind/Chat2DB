@@ -5,9 +5,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Regression test for {@link ERPositionStorage#savePosition}.
@@ -72,5 +79,44 @@ class ERPositionStorageTest {
     void getPositionReturnsNullForMissingKey() throws Exception {
         ERPositionStorage storage = createStorage();
         assertNull(storage.getPosition(99L, "missing", "missing"));
+    }
+
+    @Test
+    void failedPositionReplacementKeepsMemoryFileAndReloadState() throws Exception {
+        File storageFile = storageFile();
+        FailingERPositionStorage storage = new FailingERPositionStorage(storageFile);
+        storage.savePosition(pos(1L, "db1", "schema1", "old"));
+        ERPosition before = storage.getDataList().get(0);
+        String persisted = Files.readString(storageFile.toPath(), StandardCharsets.UTF_8);
+        storage.failWrites = true;
+
+        assertThrows(RuntimeException.class,
+                () -> storage.savePosition(pos(1L, "db1", "schema1", "new")));
+
+        ERPositionStorage reloaded = new ERPositionStorage(storageFile);
+        assertAll(
+                () -> assertSame(before, storage.getDataList().get(0)),
+                () -> assertEquals("old", storage.getPosition(1L, "db1", "schema1")),
+                () -> assertEquals(persisted,
+                        Files.readString(storageFile.toPath(), StandardCharsets.UTF_8)),
+                () -> assertEquals("old", reloaded.getPosition(1L, "db1", "schema1"))
+        );
+    }
+
+    private static final class FailingERPositionStorage extends ERPositionStorage {
+
+        private boolean failWrites;
+
+        private FailingERPositionStorage(File storageFile) {
+            super(storageFile);
+        }
+
+        @Override
+        protected void replaceStorageFile(Path temp, Path target) throws IOException {
+            if (failWrites) {
+                throw new IOException("forced replace failure");
+            }
+            super.replaceStorageFile(temp, target);
+        }
     }
 }
