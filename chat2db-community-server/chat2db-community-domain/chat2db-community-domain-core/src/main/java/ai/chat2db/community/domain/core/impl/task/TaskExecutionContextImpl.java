@@ -139,13 +139,6 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
         TaskCancelable cancelable = statement::cancel;
         activeStatement.set(new StatementRegistration(statement, cancelable));
         runningTask.registerCancelable(cancelable);
-        if (runningTask.cancellationToken().isCancelled()) {
-            try {
-                statement.cancel();
-            } catch (Exception ignored) {
-                // The runner will still observe the cancellation token.
-            }
-        }
     }
 
     @Override
