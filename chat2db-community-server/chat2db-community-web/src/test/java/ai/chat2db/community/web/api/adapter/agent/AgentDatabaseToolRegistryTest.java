@@ -18,11 +18,12 @@ class AgentDatabaseToolRegistryTest {
         var registry = registry(input, DbAgentDatabaseResponse.success(null, List.of(), null, null, List.of()));
         assertEquals(Set.of("db_search_datasources", "db_search_databases", "db_search_schemas", "db_search_tables", "db_search_columns", "db_describe_objects", "db_query"), registry.names());
         var query = registry.definitions().stream().filter(t -> t.name().equals("db_query")).findFirst().orElseThrow();
-        assertEquals(List.of("dataSourceId", "sql"), query.parameters().get("required"));
+        assertEquals(List.of("description", "dataSourceId", "sql"), query.parameters().get("required"));
         assertEquals(false, query.parameters().get("additionalProperties"));
         assertFalse(query.promptGuidelines().isEmpty());
         assertFalse(query.promptSnippet().isBlank());
         var fields = (Map<?, ?>) query.parameters().get("properties");
+        assertTrue(((Map<?, ?>) fields.get("description")).get("description").toString().contains("what you are doing"));
         assertTrue(((Map<?, ?>) fields.get("sql")).get("description").toString().contains("complete SQL batch"));
         assertFalse(((Map<?, ?>) fields.get("sql")).get("description").toString().contains("no writes"));
         assertTrue(((Map<?, ?>) fields.get("database")).containsKey("anyOf"));
@@ -77,7 +78,7 @@ class AgentDatabaseToolRegistryTest {
         nestedUnknown.put("objects", List.of(Map.of("type", "VIEW", "name", "active_users", "database", "other")));
         assertEquals("INVALID_ARGUMENT", registry.execute("db_describe_objects", nestedUnknown).error().code());
         var definition = registry.definitions().stream().filter(t -> t.name().equals("db_describe_objects")).findFirst().orElseThrow();
-        assertEquals(List.of("dataSourceId", "objects"), definition.parameters().get("required"));
+        assertEquals(List.of("description", "dataSourceId", "objects"), definition.parameters().get("required"));
     }
 
     private AgentDatabaseToolRegistry registry(AtomicReference<Object> input, DbAgentDatabaseResponse<?> result) {

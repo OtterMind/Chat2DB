@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -36,6 +37,14 @@ public class PiEventConverter {
         String externalEventId = event.hasNonNull("id") ? event.get("id").asText() : idGenerator.get();
         Map<String, Object> payload = objectMapper.convertValue(event, new TypeReference<>() {
         });
+        if (type == AgentEventType.TOOL_CALL_RUNNING) {
+            JsonNode args = event.path("args");
+            String description = args.path("description").isTextual() ? args.path("description").asText() : null;
+            if (description != null && !description.isBlank()) {
+                payload = new HashMap<>(payload);
+                payload.put("description", description);
+            }
+        }
         return new AgentRuntimeEvent(
                 externalEventId, sessionId, runId, type, payload, LocalDateTime.now(clock));
     }

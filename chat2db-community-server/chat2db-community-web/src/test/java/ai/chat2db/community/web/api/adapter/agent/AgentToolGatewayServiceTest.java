@@ -63,7 +63,8 @@ class AgentToolGatewayServiceTest {
             assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains("bash"));
             assertThrows(SecurityException.class, () -> gateway.activeTools(access.ticket(), "192.0.2.1"));
             assertEquals(List.of("database-list"), gateway.execute(
-                    access.ticket(), "127.0.0.1", "call", "db_search_datasources", Map.of()).data());
+                    access.ticket(), "127.0.0.1", "call", "db_search_datasources",
+                    Map.of("description", "查找可用数据源")).data());
             assertEquals(List.of("database-list"), gateway.execute(
                     access.ticket(), "127.0.0.1", "call", "db_search_datasources", Map.of()).data());
             assertEquals(1, executions.get());

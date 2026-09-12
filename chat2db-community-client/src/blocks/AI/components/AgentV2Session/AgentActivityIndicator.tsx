@@ -28,7 +28,7 @@ export default function AgentActivityIndicator({ activity }: { activity: AgentAc
   const label = activity.kind === 'question' ? i18n('stream.question.pending')
     : activity.kind === 'approval' ? i18n('stream.approval.pending')
     : activity.kind === 'responding' ? i18n('stream.activity.responding')
-    : activity.kind === 'tool' ? `${i18n('stream.activity.tool')}${activity.names.length ? ` · ${activity.names.join(', ')}` : ''}`
+    : activity.kind === 'tool' ? (activity.tool.description || activity.tool.name)
     : i18n('stream.loading.thinking');
   return (
     <span className={styles.activity} role="status" data-agent-activity={activity.kind}>

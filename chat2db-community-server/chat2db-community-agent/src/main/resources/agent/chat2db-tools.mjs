@@ -5,6 +5,20 @@ import { join } from "node:path";
 import { request as httpRequest } from "node:http";
 
 export default function (pi) {
+  const callDescription = {
+    type: "string", minLength: 1, maxLength: 240,
+    description: "Briefly explain what you are doing with this tool and what the result will provide to the user.",
+  };
+  const withCallDescription = parameters => parameters?.type !== "object" ? parameters : ({
+    ...parameters,
+    properties: { ...parameters.properties, description: callDescription },
+    required: [...new Set([...(parameters.required || []), "description"])],
+  });
+  const toolArguments = args => {
+    const toolArgs = { ...(args || {}) };
+    delete toolArgs.description;
+    return toolArgs;
+  };
   pi.registerCommand("chat2db-refresh-model", {
     description: "Reload the model configuration selected by Chat2DB for the next message.",
     async handler(_args, ctx) {
@@ -31,6 +45,9 @@ export default function (pi) {
           cleanup();
           try {
             const body = JSON.parse(text);
+            if (response.statusCode === 403 && String(body.errorMessage || "").toLowerCase().includes("ticket")) {
+              setTimeout(() => process.exit(86), 0);
+            }
             if (response.statusCode >= 400 || body.success === false) {
               throw new Error(body.errorMessage || `Tool request failed (${response.statusCode})`);
             }
@@ -52,6 +69,9 @@ export default function (pi) {
   async function request(path, options = {}) {
     const response = await fetch(access.baseUrl + path, { ...options, headers });
     const body = await response.json();
+    if (response.status === 403 && String(body.errorMessage || "").toLowerCase().includes("ticket")) {
+      setTimeout(() => process.exit(86), 0);
+    }
     if (!response.ok || body.success === false) {
       throw new Error(body.errorMessage || `Tool request failed (${response.status})`);
     }
@@ -63,14 +83,14 @@ export default function (pi) {
       name: tool.name,
       label: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
+      parameters: withCallDescription(tool.parameters),
       promptSnippet: tool.promptSnippet,
       promptGuidelines: tool.promptGuidelines,
       async execute(toolCallId, args, signal) {
         const execute = waitForUser;
         const response = await execute("/execute", {
           method: "POST",
-          body: JSON.stringify({ toolCallId, toolName: tool.name, arguments: args }),
+          body: JSON.stringify({ toolCallId, toolName: tool.name, arguments: toolArguments(args) }),
           signal,
         });
         const result = response.data;
@@ -95,8 +115,10 @@ export default function (pi) {
     pi.on("before_agent_start", () => executions.clear());
     pi.registerTool({
       ...definition,
+      parameters: withCallDescription(definition.parameters),
       async execute(toolCallId, args, signal, onUpdate) {
-        const serialized = JSON.stringify(args);
+        const nativeArgs = toolArguments(args);
+        const serialized = JSON.stringify(nativeArgs);
         const previous = executions.get(toolCallId);
         if (previous) {
           if (previous.args !== serialized) throw new Error("Tool call arguments have changed");
@@ -104,14 +126,14 @@ export default function (pi) {
         }
         const result = (async () => {
           const { workingDirectory } = await waitForUser("/prepare-native", {
-            method: "POST", body: JSON.stringify({ toolCallId, toolName: name, arguments: args }), signal,
+            method: "POST", body: JSON.stringify({ toolCallId, toolName: name, arguments: toolArguments(args) }), signal,
           });
           signal?.throwIfAborted();
           if (realpathSync(workingDirectory) !== workingDirectory) {
             throw new Error("The working directory changed after authorization");
           }
           const native = createTool(workingDirectory);
-          const output = await native.execute(toolCallId, args, signal, onUpdate);
+          const output = await native.execute(toolCallId, nativeArgs, signal, onUpdate);
           return { ...output, details: { ...output.details, workingDirectory } };
         })();
         executions.set(toolCallId, { args: serialized, result });

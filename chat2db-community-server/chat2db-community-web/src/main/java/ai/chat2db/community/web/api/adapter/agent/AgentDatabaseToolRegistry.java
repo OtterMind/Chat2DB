@@ -128,11 +128,15 @@ public class AgentDatabaseToolRegistry {
             Map<String, Object> properties, List<String> required, Class<T> type,
             BiFunction<T, AgentToolExecutionContext, DbAgentDatabaseResponse<?>> action) {
         var modelProperties = new LinkedHashMap<String, Object>();
+        modelProperties.put("description", descriptionField());
         properties.forEach((field, definition) -> modelProperties.put(field, required.contains(field) ? definition :
                 Map.of("anyOf", List.of(definition, Map.of("type", "null")),
                         "description", Objects.toString(((Map<?, ?>) definition).get("description"), "")
                                 + " Optional: omit or pass null when unused. Never use a placeholder value.")));
-        Map<String, Object> schema = Map.of("type", "object", "properties", modelProperties, "required", required, "additionalProperties", false);
+        var modelRequired = new ArrayList<String>();
+        modelRequired.add("description");
+        modelRequired.addAll(required);
+        Map<String, Object> schema = Map.of("type", "object", "properties", modelProperties, "required", modelRequired, "additionalProperties", false);
         var definition = new AgentToolAccess.Tool(name, description, schema, snippet, guidelines);
         tools.put(name, new Entry(definition, (arguments, context) -> {
             T request;
@@ -151,6 +155,9 @@ public class AgentDatabaseToolRegistry {
     }
     private static Map<String, Object> text(String description, int maxLength) {
         return Map.of("type", "string", "minLength", 1, "maxLength", maxLength, "description", description);
+    }
+    private static Map<String, Object> descriptionField() {
+        return text("Briefly explain what you are doing with this tool and what the result will provide to the user.", 240);
     }
     private static Map<String, Object> pattern(String description) {
         return text(description + " JDBC patterns use % for any sequence and _ for one character; backslash escapes %, _ or backslash. Matching is case-sensitive; use names as returned by discovery tools. Omit to match all.", 256);

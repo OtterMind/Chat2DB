@@ -33,13 +33,15 @@ public class AgentChartTool {
                 "axisPosition", Map.of("type", "string", "enum", List.of("left", "right"))),
                 "required", List.of("field", "chartType", "axisPosition"), "additionalProperties", false);
         var schema = Map.<String, Object>of("type", "object", "properties", Map.of(
+                "description", Map.of("type", "string", "minLength", 1, "maxLength", 240,
+                        "description", "Briefly explain what this chart will show the user."),
                 "resultId", Map.of("type", "string", "pattern", "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$", "description", "Copy resultId from the desired statement in db_query data.results. The result must belong to this conversation."),
                 "chartType", Map.of("type", "string", "enum", AiAgentChartType.codes()),
                 "xField", Map.of("type", "string", "maxLength", 256, "description", "Exact category or X column. Required except for Statistics. For pie charts this is the category."),
                 "yField", Map.of("type", "string", "maxLength", 256, "description", "Exact numeric metric column. Required except for Combo. Statistics requires a one-row query result."),
                 "title", Map.of("type", "string", "maxLength", 200),
                 "series", Map.of("type", "array", "minItems", 1, "maxItems", 8, "items", series, "description", "Only supported for Combo. Omit for every other chart type. Use distinct numeric metric columns.")),
-                "required", List.of("resultId", "chartType"), "additionalProperties", false);
+                "required", List.of("description", "resultId", "chartType"), "additionalProperties", false);
         return new AgentToolAccess.Tool(NAME,
                 "Render a chart from a saved db_query result. This tool uses the actual query values and never executes SQL. Choose fields and chart type; do not supply or rewrite data. The chart is displayed and saved in the conversation. Partial query pages are labelled as partial. Errors describe how to correct the request.",
                 schema, "Display and save a chart using a db_query resultId.", List.of());

@@ -72,6 +72,7 @@ export interface AgentTraceEntry {
   id?: string;
   chartId?: string;
   failed?: boolean;
+  description?: string;
 }
 
 export type AgentTimelineEntry = { sequence: number; endSequence?: number } & (
@@ -214,8 +215,12 @@ export const agentEventTrace = (event: AgentEvent): AgentTraceEntry | undefined 
   }
   const name = typeof payload.toolName === 'string' ? payload.toolName : undefined;
   const id = typeof payload.toolCallId === 'string' ? payload.toolCallId : event.id;
+  const description = typeof payload.description === 'string' ? payload.description
+    : payload.args && typeof payload.args === 'object' && typeof (payload.args as Record<string, unknown>).description === 'string'
+      ? (payload.args as Record<string, unknown>).description as string : undefined;
   if (event.type === 'TOOL_CALL_RUNNING') {
-    return { type: 'tool_call', id, name, arguments: JSON.stringify(payload.args || {}) };
+    return { type: 'tool_call', id, name, description,
+      arguments: JSON.stringify(payload.args || {}) };
   }
   if (event.type === 'TOOL_CALL_COMPLETED' || event.type === 'TOOL_CALL_FAILED') {
     const result = payload.result as { content?: { type: string; text?: string }[];

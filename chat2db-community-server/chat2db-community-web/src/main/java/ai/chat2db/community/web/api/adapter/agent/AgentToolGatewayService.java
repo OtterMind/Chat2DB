@@ -109,6 +109,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     @Override
     public IAgentToolResult<?> execute(String ticket, String address, String toolCallId, String toolName,
             Map<String, Object> arguments) throws Exception {
+        arguments = toolArguments(arguments);
         Access access = requireAccess(ticket, address);
         AgentRun run = runs.list(access.sessionId, access.userId).stream()
                 .filter(candidate -> candidate.status() == AgentRunStatus.RUNNING
@@ -170,6 +171,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     @Override
     public AgentWorkspaceSettings prepareNative(String ticket, String address, String toolCallId,
             String toolName, Map<String, Object> arguments) throws Exception {
+        arguments = toolArguments(arguments);
         Access access = requireAccess(ticket, address);
         if (!nativeToolEnabled(toolName)) {
             throw new IllegalArgumentException("Native tool is disabled or unavailable");
@@ -226,6 +228,13 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                     Map.of("toolCallId", toolCallId, "tool", toolName, "errorType", error.getClass().getSimpleName()));
             throw error;
         }
+    }
+
+    private static Map<String, Object> toolArguments(Map<String, Object> arguments) {
+        if (!arguments.containsKey("description")) return arguments;
+        var sanitized = new LinkedHashMap<>(arguments);
+        sanitized.remove("description");
+        return sanitized;
     }
 
     private String digest(String value) throws NoSuchAlgorithmException {

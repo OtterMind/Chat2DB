@@ -39,6 +39,13 @@ class PiEventConverterTest {
                 () -> converter.toRuntimeEvent("session", "run", objectMapper.readTree("{}")));
     }
 
+    @Test
+    void carriesTheModelProvidedToolDescriptionOnRunningEvents() throws Exception {
+        var event = converter.toRuntimeEvent("session", "run", objectMapper.readTree(
+                "{\"type\":\"tool_execution_start\",\"toolName\":\"db_query\",\"toolCallId\":\"call\",\"args\":{\"description\":\"查询本月订单\"}}"));
+        assertEquals("查询本月订单", event.payload().get("description"));
+    }
+
     private AgentEventType type(String json) throws Exception {
         return converter.toRuntimeEvent("session", "run", objectMapper.readTree(json)).type();
     }

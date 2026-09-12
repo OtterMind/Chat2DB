@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.stereotype.Component;
+import jakarta.annotation.PreDestroy;
 
 @Component
 public class AgentRuntimeHandleRegistry {
@@ -61,6 +62,11 @@ public class AgentRuntimeHandleRegistry {
         for (Map.Entry<String, IAgentRuntimeSessionHandle> entry : new ArrayList<>(handles.entrySet())) {
             remove(entry.getKey(), entry.getValue());
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        closeAll();
     }
 
     public int size() {

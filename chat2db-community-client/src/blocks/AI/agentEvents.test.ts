@@ -80,7 +80,7 @@ const timelineEvents = [
   event(3, 'ASSISTANT_TEXT_DELTA', { text: 'database?' }),
   event(4, 'QUESTION_REQUESTED', { questionId: 'question-1' }),
   event(5, 'QUESTION_ANSWERED', { questionId: 'question-1', text: 'app' }),
-  event(6, 'TOOL_CALL_RUNNING', { toolCallId: 'query-1', toolName: 'db_query', args: { sql: 'SELECT 1' } }),
+  event(6, 'TOOL_CALL_RUNNING', { toolCallId: 'query-1', toolName: 'db_query', args: { description: '查询订单数据', sql: 'SELECT 1' } }),
   event(7, 'TOOL_CALL_COMPLETED', { toolCallId: 'query-1', toolName: 'db_query', result: { rows: [[1]] } }),
   event(8, 'CHART_CREATED', { chart: { id: 'chart-1' } }),
   event(9, 'TOOL_CALL_COMPLETED', { toolCallId: 'chart-tool', toolName: 'render_chart',

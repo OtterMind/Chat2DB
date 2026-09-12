@@ -14,6 +14,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.domain.api.service.agent.IAiAgentPromptService;
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeAdapter;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeDescriptor;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentReport;
@@ -22,6 +23,7 @@ import ai.chat2db.community.tools.util.AgentTrace;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -120,12 +122,13 @@ public class AgentServiceImpl implements AgentService {
 
     @Override
     public AgentSession getSession(String sessionId, Long userId) {
-        return sessionStorage.get(sessionId, userId);
+        return recoverStaleRuntime(sessionStorage.get(sessionId, userId), userId);
     }
 
     @Override
     public List<AgentSession> listSessions(Long userId) {
-        return sessionStorage.listByUserId(userId);
+        return sessionStorage.listByUserId(userId).stream()
+                .map(session -> recoverStaleRuntime(session, userId)).toList();
     }
 
     @Override
@@ -150,6 +153,51 @@ public class AgentServiceImpl implements AgentService {
             throw new IllegalArgumentException("limit must be between 1 and 1000");
         }
         return eventStorage.list(sessionId, userId, afterSequence, limit);
+    }
+
+    private AgentSession recoverStaleRuntime(AgentSession session, Long userId) {
+        if (session == null || !isRuntimeActive(session.status()) || handleRegistry.get(session.id()) != null) {
+            return session;
+        }
+        List<AgentEvent> events = eventStorage.list(session.id(), userId, 0, 1000);
+        Map<String, Boolean> activeRuns = new HashMap<>();
+        String latestRun = null;
+        for (AgentEvent event : events) {
+            if (event.runId() == null) continue;
+            if (event.type() == AgentEventType.RUN_ACCEPTED) {
+                activeRuns.put(event.runId(), true);
+                latestRun = event.runId();
+            } else if (isTerminal(event.type())) {
+                activeRuns.put(event.runId(), false);
+            }
+        }
+        if (latestRun == null || !Boolean.TRUE.equals(activeRuns.get(latestRun))) {
+            return session;
+        }
+        long sequence = Math.max(session.lastEventSequence(), events.stream()
+                .mapToLong(AgentEvent::sequence).max().orElse(0)) + 1;
+        eventStorage.append(new AgentEvent(UUID.randomUUID().toString(), session.id(), latestRun, sequence,
+                AgentEventType.RUN_OUTCOME_UNKNOWN,
+                Map.of("reason", "The Agent runtime was restarted before this run completed."),
+                LocalDateTime.now(clock)), userId);
+        AgentSession recovered = new AgentSession(session.schemaVersion(), session.id(), session.userId(),
+                session.definition(), session.runtimeBinding(), AgentSessionStatus.UNKNOWN, session.title(), sequence,
+                session.gmtCreate(), LocalDateTime.now(clock));
+        if (!sessionStorage.compareAndSet(recovered, session.status())) return sessionStorage.get(session.id(), userId);
+        AgentTrace.record("runtime.stale.recovered", session.id(), latestRun,
+                Map.of("previousStatus", session.status(), "sequence", sequence));
+        return recovered;
+    }
+
+    private boolean isRuntimeActive(AgentSessionStatus status) {
+        return status == AgentSessionStatus.RUNNING
+                || status == AgentSessionStatus.WAITING_APPROVAL;
+    }
+
+    private boolean isTerminal(AgentEventType type) {
+        return type == AgentEventType.RUN_COMPLETED || type == AgentEventType.RUN_FAILED
+                || type == AgentEventType.RUN_CANCELLED || type == AgentEventType.RUN_SUSPENDED
+                || type == AgentEventType.RUN_OUTCOME_UNKNOWN;
     }
 
     @Override

@@ -25,9 +25,11 @@ public class AgentQuestionTool {
                 "description", Map.of("anyOf", List.of(Map.of("type", "string", "maxLength", 300), Map.of("type", "null")), "description", "Optional short reason or consequence; omit or use null when unnecessary.")),
                 "required", List.of("id", "label"), "additionalProperties", false);
         var schema = Map.<String, Object>of("type", "object", "properties", Map.of(
+                "description", Map.of("type", "string", "minLength", 1, "maxLength", 240,
+                        "description", "Briefly explain why you need this user decision."),
                 "question", Map.of("type", "string", "minLength", 1, "maxLength", 1000, "description", "One self-contained question about the decision or missing information."),
                 "options", Map.of("type", "array", "maxItems", 4, "items", option, "description", "Prefer 2 to 4 evidence-based choices. Use [] if choices cannot be offered. Free-text answers are always available.")),
-                "required", List.of("question", "options"), "additionalProperties", false);
+                "required", List.of("description", "question", "options"), "additionalProperties", false);
         return new AgentToolAccess.Tool(NAME,
                 "Ask the user one question in the conversation and wait for their answer. Use when an unresolved ambiguity, missing information or choice affects the result. Prefer concrete options based on actual findings, explain their implications, and let the user choose a direction instead of locating the answer for you. Continue using the returned answer. Only one question can be pending per session.",
                 schema, "Ask for a necessary user decision with selectable options and free-text input.",
