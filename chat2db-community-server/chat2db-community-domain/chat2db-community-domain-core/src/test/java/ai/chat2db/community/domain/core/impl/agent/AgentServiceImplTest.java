@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.service.agent.AgentEventStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentRunStorage;
 import ai.chat2db.community.domain.api.service.agent.AgentSessionStorage;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeEnvironmentStatus;
+import ai.chat2db.community.tools.enums.agent.AgentEventType;
 import ai.chat2db.community.tools.enums.agent.AgentRuntimeType;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
@@ -57,6 +58,27 @@ class AgentServiceImplTest {
         assertEquals(0, adapter.openSessionCount());
         assertEquals(session, service.getSession(session.id(), 1L));
         assertEquals(List.of(session), service.listSessions(1L));
+    }
+
+    @Test
+    void doesNotRecoverARecentlyAcceptedRunBeforeItsRuntimeHandleIsRegistered() {
+        FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
+        MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
+        MemoryAgentEventStorage events = new MemoryAgentEventStorage(List.of(
+                new AgentEvent("event-one", "session-one", "run-one", 1, AgentEventType.RUN_ACCEPTED,
+                        Map.of(), LocalDateTime.of(2026, 9, 8, 14, 0))));
+        AgentServiceImpl service = new AgentServiceImpl(
+                registry, storage, unusedCoordinator(registry, storage), events,
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(),
+                () -> "session-one", CLOCK);
+        AgentSession created = service.createSession(command());
+        storage.put(new AgentSession(created.schemaVersion(), created.id(), created.userId(), created.definition(),
+                created.runtimeBinding(), AgentSessionStatus.RUNNING, created.title(), 1,
+                created.gmtCreate(), created.gmtModified()));
+
+        assertEquals(AgentSessionStatus.RUNNING, service.getSession("session-one", 1L).status());
+        assertEquals(0, events.appendCount);
     }
 
     @Test
@@ -186,6 +208,24 @@ class AgentServiceImplTest {
         }
     }
 
+    private static final class MemoryAgentEventStorage implements AgentEventStorage {
+        private final List<AgentEvent> events;
+        private int appendCount;
+
+        private MemoryAgentEventStorage(List<AgentEvent> events) {
+            this.events = events;
+        }
+
+        @Override public AgentEvent append(AgentEvent event, Long userId) {
+            appendCount++;
+            return event;
+        }
+
+        @Override public List<AgentEvent> list(String sessionId, Long userId, long afterSequence, int limit) {
+            return events;
+        }
+    }
+
     private static final class MemoryAgentSessionStorage implements AgentSessionStorage {
 
         private final Map<String, AgentSession> sessions = new LinkedHashMap<>();
@@ -198,6 +238,10 @@ class AgentServiceImplTest {
                 throw new IllegalStateException("duplicate session");
             }
             return session;
+        }
+
+        void put(AgentSession session) {
+            sessions.put(session.id(), session);
         }
 
         @Override

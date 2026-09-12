@@ -21,6 +21,7 @@ import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRep
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
 import ai.chat2db.community.tools.util.AgentTrace;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class AgentServiceImpl implements AgentService {
+    private static final Duration RUNTIME_STARTUP_GRACE = Duration.ofSeconds(30);
 
     private final AgentRuntimeRegistry runtimeRegistry;
     private final AgentSessionStorage sessionStorage;
@@ -172,6 +174,13 @@ public class AgentServiceImpl implements AgentService {
             }
         }
         if (latestRun == null || !Boolean.TRUE.equals(activeRuns.get(latestRun))) {
+            return session;
+        }
+        String activeRun = latestRun;
+        AgentEvent accepted = events.stream()
+                .filter(event -> activeRun.equals(event.runId()) && event.type() == AgentEventType.RUN_ACCEPTED)
+                .findFirst().orElse(null);
+        if (accepted != null && accepted.occurredAt().plus(RUNTIME_STARTUP_GRACE).isAfter(LocalDateTime.now(clock))) {
             return session;
         }
         long sequence = Math.max(session.lastEventSequence(), events.stream()
