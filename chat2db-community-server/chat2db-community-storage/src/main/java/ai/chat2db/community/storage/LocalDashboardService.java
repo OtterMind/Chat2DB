@@ -52,9 +52,14 @@ public class LocalDashboardService implements IDashboardService {
         int normalizedPageNo = Math.max(1, pageNo == null ? 1 : pageNo);
         int normalizedPageSize = Math.max(1, pageSize == null ? 20 : pageSize);
         List<Dashboard> dashboards = filterDashboards(DashboardStorage.INSTANCE.getDataList(), searchKey);
-        int fromIndex = Math.min((normalizedPageNo - 1) * normalizedPageSize, dashboards.size());
-        int toIndex = Math.min(fromIndex + normalizedPageSize, dashboards.size());
-        return PageResponse.of(dashboards.subList(fromIndex, toIndex), (long) dashboards.size(),
+        long total = dashboards.size();
+        long offset = ((long) normalizedPageNo - 1L) * normalizedPageSize;
+        if (offset >= total) {
+            return PageResponse.of(List.of(), total, normalizedPageNo, normalizedPageSize);
+        }
+        int fromIndex = (int) offset;
+        int toIndex = (int) Math.min(offset + (long) normalizedPageSize, total);
+        return PageResponse.of(dashboards.subList(fromIndex, toIndex), total,
                 normalizedPageNo, normalizedPageSize);
     }
 

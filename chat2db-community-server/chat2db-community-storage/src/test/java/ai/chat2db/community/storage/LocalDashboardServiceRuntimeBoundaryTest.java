@@ -14,10 +14,26 @@ import java.lang.reflect.Proxy;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LocalDashboardServiceRuntimeBoundaryTest {
+
+    @Test
+    void pageBeyondIntegerOffsetRangeIsEmpty() {
+        LocalDashboardService service = new LocalDashboardService(
+                proxy(IDbConnectionContextService.class),
+                proxy(IDbDlTemplateService.class),
+                proxy(IOpsSqlOperationLogService.class));
+
+        var page = service.listDashboards(Integer.MAX_VALUE, 2, null);
+
+        assertTrue(page.getData().isEmpty());
+        assertEquals(Integer.MAX_VALUE, page.getPageNo());
+        assertEquals(2, page.getPageSize());
+        assertFalse(page.getHasNextPage());
+    }
 
     @Test
     void localDashboardIsAvailableToCommunityAndLocalEditions() {
