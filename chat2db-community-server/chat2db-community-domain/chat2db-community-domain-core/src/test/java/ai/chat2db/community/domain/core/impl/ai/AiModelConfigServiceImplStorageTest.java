@@ -226,6 +226,46 @@ class AiModelConfigServiceImplStorageTest {
         assertEquals(0, randomTempFileCount());
     }
 
+    @Test
+    void failedCreateDoesNotPublishConfigInMemory() {
+        FailingAiModelConfigService failing = new FailingAiModelConfigService();
+
+        assertThrows(IllegalStateException.class,
+                () -> failing.saveCurrentUserConfig(saveRequest("replacement", "sk-replacement-123456")));
+
+        assertTrue(failing.listCurrentUserConfigs().isEmpty());
+    }
+
+    @Test
+    void failedUpdateRestoresConfigInMemory() {
+        AiModelConfigResponse saved = service(KEY).saveCurrentUserConfig(saveRequest("primary", API_KEY));
+        FailingAiModelConfigService failing = new FailingAiModelConfigService();
+        failing.init();
+        AiModelConfigSaveRequest update = saveRequest("replacement", "sk-replacement-123456");
+        update.setId(saved.getId());
+
+        assertThrows(IllegalStateException.class, () -> failing.saveCurrentUserConfig(update));
+
+        List<AiModelConfigResponse> configs = failing.listCurrentUserConfigs();
+        assertEquals(1, configs.size());
+        assertEquals("primary", configs.get(0).getName());
+        assertEquals(API_KEY, resolveApiKey(failing, saved.getId()));
+    }
+
+    @Test
+    void failedDeleteRestoresConfigInMemory() {
+        AiModelConfigResponse saved = service(KEY).saveCurrentUserConfig(saveRequest("primary", API_KEY));
+        FailingAiModelConfigService failing = new FailingAiModelConfigService();
+        failing.init();
+
+        assertThrows(IllegalStateException.class, () -> failing.deleteCurrentUserConfig(saved.getId()));
+
+        List<AiModelConfigResponse> configs = failing.listCurrentUserConfigs();
+        assertEquals(1, configs.size());
+        assertEquals(saved.getId(), configs.get(0).getId());
+        assertEquals(API_KEY, resolveApiKey(failing, saved.getId()));
+    }
+
     private AiModelConfigServiceImpl service(String key) {
         return new AiModelConfigServiceImpl(objectMapper, new AiModelConfigConverter(), () -> USER_ID,
                 storagePath, new AesGcmUtil(key));
