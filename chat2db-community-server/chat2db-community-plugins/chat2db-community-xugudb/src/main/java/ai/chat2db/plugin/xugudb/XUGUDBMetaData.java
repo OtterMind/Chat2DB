@@ -224,10 +224,10 @@ public class XUGUDBMetaData extends DefaultMetaService implements IDbMetaData {
         String sql = String.format(VIEW_SQL_LIST, getSQLIdentifierProcessor().escapeString(databaseName), getSQLIdentifierProcessor().escapeString(schemaName));
         List<Table> tables = new ArrayList<>();
         return DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
-            Table table = new Table();
-            table.setDatabaseName(databaseName);
-            table.setSchemaName(schemaName);
             while (resultSet.next()) {
+                Table table = new Table();
+                table.setDatabaseName(databaseName);
+                table.setSchemaName(schemaName);
                 table.setName(resultSet.getString("VIEW_NAME"));
                 table.setDdl(resultSet.getString("DEFINE"));
                 tables.add(table);
