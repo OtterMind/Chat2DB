@@ -174,8 +174,13 @@ public class CacheManage {
 
         private <T> T get(Cache<String, String> cache, String key, Class<T> clazz) {
             String value = cache.get(key);
-            if (!StringUtils.isEmpty(value)) {
-                return JSON.parseObject(value, clazz);
+            try {
+                if (!StringUtils.isEmpty(value)) {
+                    return JSON.parseObject(value, clazz);
+                }
+            } catch (Exception e) {
+                log.error("get error", e);
+                remove(cache, key);
             }
             return null;
         }
