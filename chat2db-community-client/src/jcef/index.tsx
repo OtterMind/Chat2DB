@@ -129,6 +129,10 @@ const jcefApi = {
   selectFile: (params: { fileTypeList: string[]; fileSize?: number; multiple?: boolean }) => {
     return createJcefApi('select-file', params);
   },
+  // Select and read TLS material without returning a local path
+  selectTlsFileContent: (params: { fileTypeList: string[]; mode: 'text' | 'base64'; fileSize?: number }) => {
+    return createJcefApi<{ fileName: string; content: string; size: number } | null>('select-tls-file-content', params);
+  },
   // maximize
   maximizeWindow: () => {
     return createJcefApi('maximize-window');

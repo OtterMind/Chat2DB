@@ -40,6 +40,7 @@ import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.JdbcDriverManager;
+import ai.chat2db.spi.sql.MySqlTlsTranslator;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.ssh.SSHManager;
 import ai.chat2db.spi.util.JdbcUtils;
@@ -145,8 +146,10 @@ public class DefaultDBManager implements IDbManager {
             if (driverConfig == null) {
                 driverConfig = Chat2DBContext.getDefaultDriverConfig(connectInfo.getDbType());
             }
+            java.util.LinkedHashMap<String, Object> extendMap = connectInfo.getExtendMap();
+            MySqlTlsTranslator.apply(connectInfo.getSsl(), driverConfig, extendMap);
             connection = JdbcDriverManager.getConnection(url, connectInfo.getUser(), connectInfo.getPassword(),
-                    driverConfig, connectInfo.getExtendMap());
+                    driverConfig, extendMap);
 
         } catch (Exception e1) {
             close(connection, session, ssh);
