@@ -5,7 +5,8 @@ import ai.chat2db.community.tools.exception.BusinessException;
 public enum PrivilegeScopeEnum {
     GLOBAL,
     DATABASE,
-    TABLE;
+    TABLE,
+    COLUMN;
 
     public static PrivilegeScopeEnum from(String value) {
         if (value == null) {

@@ -14,6 +14,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -38,6 +39,11 @@ public final class MysqlAccountSqlBuilderConstants {
     public static final String ERROR_KEY_ACCOUNT_ACTION_REQUIRED = "mysql.account.actionRequired";
     public static final String ERROR_KEY_ACCOUNT_PASSWORD_REQUIRED = "mysql.account.passwordRequired";
     public static final String ERROR_KEY_ACCOUNT_INVALID_ACCOUNT_NAME = "mysql.account.invalidAccountName";
+    public static final String ERROR_KEY_ACCOUNT_COLUMNS_REQUIRED = "mysql.account.columnsRequired";
+    public static final String ERROR_KEY_ACCOUNT_COLUMN_PRIVILEGE_UNSUPPORTED = "mysql.account.columnPrivilegeUnsupported";
+    public static final Set<String> COLUMN_SCOPE_PRIVILEGES = Set.of("SELECT", "INSERT", "UPDATE", "REFERENCES");
+    public static final String COLUMN_LIST_PREFIX = " (";
+    public static final String COLUMN_LIST_SUFFIX = ")";
 
     private MysqlAccountSqlBuilderConstants() {
     }
