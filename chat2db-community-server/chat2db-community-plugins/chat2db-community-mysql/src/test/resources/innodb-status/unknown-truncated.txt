@@ -1,0 +1,20 @@
+=====================================
+2026-08-31 11:20:00 0x70002
+INNODB MONITOR OUTPUT
+=====================================
+Per second averages calculated from the last 12 seconds
+------------------------
+LATEST DETECTED DEADLOCK
+------------------------
+2026-08-31 11:19:59 0x70002
+*** (1) TRANSACTION:
+TRANSACTION 20001, ACTIVE 1 sec
+MySQL thread id 77, OS thread handle 1407, query id 707 localhost app updating
+UPDATE api_keys SET token='secret-token' WHERE id=9
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 14 page no 9 index PRIMARY of table `app`.`api_keys` trx id 20001 waiting
+output truncated by fixture
+-----------------------
+NEW FUTURE ENGINE BLOCK
+-----------------------
+This section name is not known to the current parser.

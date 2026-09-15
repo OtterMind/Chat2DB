@@ -365,13 +365,14 @@ public class ConsoleHelper {
     }
 
     static Locale resolveLocale(String language) {
-        if (language.startsWith("zh")) {
-            return Locale.CHINA;
-        }
-        if (language.startsWith("ja")) {
-            return Locale.JAPAN;
-        }
-        return Locale.US;
+        String languageTag = StringUtils.substringBefore(language, ",").trim();
+        return switch (Locale.forLanguageTag(languageTag).getLanguage()) {
+            case "zh" -> Locale.CHINA;
+            case "ja" -> Locale.JAPAN;
+            case "es" -> Locale.forLanguageTag("es-ES");
+            case "ko" -> Locale.KOREA;
+            default -> Locale.US;
+        };
     }
 
 

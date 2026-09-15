@@ -1,0 +1,63 @@
+=====================================
+2026-08-31 10:15:00 0x70000
+INNODB MONITOR OUTPUT
+=====================================
+Per second averages calculated from the last 16 seconds
+-----------------
+BACKGROUND THREAD
+-----------------
+srv_master_thread loops: 1 srv_active, 0 srv_shutdown, 99 srv_idle
+----------
+SEMAPHORES
+----------
+OS WAIT ARRAY INFO: reservation count 2
+------------------------
+LATEST DETECTED DEADLOCK
+------------------------
+2026-08-31 10:14:59 0x70000
+*** (1) TRANSACTION:
+TRANSACTION 12345, ACTIVE 4 sec starting index read
+mysql tables in use 1, locked 1
+LOCK WAIT 3 lock struct(s), heap size 1136, 2 row lock(s)
+MySQL thread id 11, OS thread handle 1400, query id 91 localhost app updating
+UPDATE orders SET status='paid', password='secret-value' WHERE id=1
+*** (1) HOLDS THE LOCK(S):
+RECORD LOCKS space id 11 page no 3 n bits 72 index PRIMARY of table `app`.`orders` trx id 12345 lock_mode X locks rec but not gap
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 12 page no 4 n bits 72 index PRIMARY of table `app`.`customers` trx id 12345 lock_mode X locks rec but not gap waiting
+*** (2) TRANSACTION:
+TRANSACTION 12346, ACTIVE 3 sec starting index read
+mysql tables in use 1, locked 1
+LOCK WAIT 3 lock struct(s), heap size 1136, 2 row lock(s)
+MySQL thread id 12, OS thread handle 1401, query id 92 localhost app updating
+UPDATE customers SET last_order_id=1 WHERE id=1
+*** (2) HOLDS THE LOCK(S):
+RECORD LOCKS space id 12 page no 4 n bits 72 index PRIMARY of table `app`.`customers` trx id 12346 lock_mode X locks rec but not gap
+*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 11 page no 3 n bits 72 index PRIMARY of table `app`.`orders` trx id 12346 lock_mode X locks rec but not gap waiting
+*** WE ROLL BACK TRANSACTION (1)
+------------
+TRANSACTIONS
+------------
+Trx id counter 12347
+LIST OF TRANSACTIONS FOR EACH SESSION:
+---TRANSACTION 421421, not started
+--------
+FILE I/O
+--------
+I/O thread 0 state: waiting for completed aio requests
+---
+LOG
+---
+Log sequence number 123456
+----------------------
+BUFFER POOL AND MEMORY
+----------------------
+Total large memory allocated 137363456
+--------------
+ROW OPERATIONS
+--------------
+0 queries inside InnoDB, 0 queries in queue
+----------------------------
+END OF INNODB MONITOR OUTPUT
+============================

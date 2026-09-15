@@ -117,6 +117,8 @@ export enum OperationColumn {
   GenerateJavaClass = 'generateJavaClass',
   // Structure synchronization
   SchemaSync = 'schemaSync',
+  // MySQL InnoDB status diagnostics
+  InnodbStatus = 'innodbStatus',
   // Dividing line (only used for right-click menu grouping)
   Divider = '__divider__',
 }

@@ -23,6 +23,16 @@ class ConsoleHelperLocaleTest {
     }
 
     @Test
+    void spanishAcceptLanguageResolvesToSpanishLocale() {
+        assertLocaleFor("es-ES,es;q=0.9", Locale.forLanguageTag("es-ES"));
+    }
+
+    @Test
+    void koreanAcceptLanguageResolvesToKoreanLocale() {
+        assertLocaleFor("ko-KR,ko;q=0.9", Locale.KOREA);
+    }
+
+    @Test
     void otherAcceptLanguageFallsBackToUsLocale() {
         assertLocaleFor("en-US,en;q=0.9", Locale.US);
     }

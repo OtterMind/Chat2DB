@@ -1,6 +1,7 @@
 import i18n from '@/i18n';
 import Output from '@/components/Output';
 import GlobalExtendComponents from './GlobalExtendComponents';
+import InnodbStatusPanel from '../InnodbStatusPanel';
 import SaveList from '../SaveList';
 import ViewDDL from '@/components/ViewDDL';
 import TaskCenter from '@/blocks/ImportAndExport/components/TaskCenter';
@@ -17,6 +18,7 @@ export interface IToolbar {
 export enum GlobalComponents {
   view_ddl = 'viewDDL',
   account_grants = 'accountGrants',
+  innodb_status = 'innodbStatus',
   executive_log = 'executiveLog',
   save_list = 'saveList',
   task_center = 'taskCenter',
@@ -26,6 +28,7 @@ export const globalComponents: {
   [key in GlobalComponents]?: any;
 } = {
   [GlobalComponents.view_ddl]: ViewDDL,
+  [GlobalComponents.innodb_status]: InnodbStatusPanel,
   [GlobalComponents.executive_log]: Output,
   [GlobalComponents.save_list]: SaveList,
   [GlobalComponents.task_center]: TaskCenter,
