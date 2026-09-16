@@ -22,7 +22,7 @@ export interface DesktopAbortControllerSignalParams {
 }
 
 export interface DesktopRequestOptions {
-  signal: (params: DesktopAbortControllerSignalParams) => void;
+  signal?: AbortSignal | ((params: DesktopAbortControllerSignalParams) => void) | null;
 }
 
 export interface IOptions {
@@ -42,6 +42,7 @@ export interface ICommandLineRequestListItem {
   resolve: (value: any) => void;
   reject: (reason?: any) => void;
   options: IOptions;
+  abortCleanup?: () => void;
 }
 
 // Interface timeout
@@ -76,8 +77,28 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
     if (__PRINT_LOGS__ || window._PRINT_LOGS) {
       console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(res));
     }
-    // Prepare for a cancellation request
-    options?.restParams?.signal?.({ id, reject });
+    const signal = options?.restParams?.signal;
+    const abortSignal = typeof signal === 'function' ? undefined : signal;
+    let abortCleanup: (() => void) | undefined;
+    const rejectAborted = () => reject(abortSignal?.reason);
+    if (typeof signal === 'function') {
+      signal({ id, reject });
+    } else if (abortSignal) {
+      if (abortSignal.aborted) {
+        rejectAborted();
+        return;
+      }
+      const onAbort = () => {
+        const item = useGlobalStore.getState().commandLineRequestList[id];
+        if (!item) return;
+        if (item.requestTimeoutTimer) clearTimeout(item.requestTimeoutTimer);
+        item.abortCleanup?.();
+        useGlobalStore.getState().removeCommandLineRequestListItem(id);
+        rejectAborted();
+      };
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+      abortCleanup = () => abortSignal.removeEventListener('abort', onAbort);
+    }
     let requestTimeoutTimer: any = null;
 
     if (options.timeout) {
@@ -85,6 +106,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
         const item = useGlobalStore.getState().commandLineRequestList[id];
         if (item) {
           useGlobalStore.getState().removeCommandLineRequestListItem(id);
+          abortCleanup?.();
           reject?.(`timeout_error:${item.requestData.requestUrl}`);
         }
       }, TIMEOUT);
@@ -97,6 +119,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       resolve,
       reject,
       options,
+      abortCleanup,
     };
     useGlobalStore.getState().addCommandLineRequestListItem(commandLineRequestListItem);
     if (typeof window.javaQuery === 'function') {
@@ -138,7 +161,7 @@ export const pushMessageFlow = (_data) => {
 
     const { errorCode, success, errorMessage, errorDetail, solutionLink, eventualUrl } = messageData || {};
 
-    const { resolve, reject, options, requestData, requestTimeoutTimer } = commandLineRequestList[uuid];
+    const { resolve, reject, options, requestData, requestTimeoutTimer, abortCleanup } = commandLineRequestList[uuid];
 
     // Clear timeout timer
     if (requestTimeoutTimer) {
@@ -178,6 +201,7 @@ export const pushMessageFlow = (_data) => {
       }
     }
     // Remove request record
+    abortCleanup?.();
     removeCommandLineRequestListItem(uuid);
   }
 };
