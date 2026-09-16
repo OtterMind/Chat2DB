@@ -198,6 +198,23 @@ class AgentServiceImplTest {
                 new AgentRuntimeEnvironmentRequest("5.3.0", "macos", "arm64"));
     }
 
+    @Test
+    void retainsProductSessionWhenRuntimeCleanupFailsSoDeletionCanBeRetried() {
+        FakeAgentRuntimeAdapter adapter = new FakeAgentRuntimeAdapter(AgentRuntimeType.PI);
+        MemoryAgentSessionStorage storage = new MemoryAgentSessionStorage();
+        AgentRuntimeRegistry registry = new AgentRuntimeRegistry(List.of(adapter));
+        AgentServiceImpl service = new AgentServiceImpl(
+                registry, storage, unusedCoordinator(registry, storage), new UnusedAgentEventStorage(),
+                new AgentRuntimeHandleRegistry(), new AiAgentPromptServiceImpl(), () -> "session-one", CLOCK);
+        AgentSession session = service.createSession(command());
+        adapter.failDeleteWith(new IllegalStateException("Runtime files are still locked"));
+        assertThrows(IllegalStateException.class, () -> service.deleteSession(session.id(), 1L));
+        assertEquals(session, service.getSession(session.id(), 1L));
+        adapter.failDeleteWith(null);
+        service.deleteSession(session.id(), 1L);
+        assertNull(service.getSession(session.id(), 1L));
+    }
+
     private AgentRunCoordinator unusedCoordinator(
             AgentRuntimeRegistry registry,
             AgentSessionStorage sessionStorage) {

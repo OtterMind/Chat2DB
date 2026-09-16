@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -201,6 +204,43 @@ public class PiProcessSupervisor implements AutoCloseable {
 
     private synchronized void remove(String sessionId, PiProcessHandle expected) {
         processes.remove(sessionId, expected);
+    }
+
+    /** Delete only this session's private files after its runtime handle has been closed. */
+    public synchronized void deleteSession(String sessionId) throws IOException {
+        if (sessionId == null || !sessionId.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,127}")) {
+            throw new IllegalArgumentException("Invalid Pi session id");
+        }
+        PiProcessHandle handle = processes.get(sessionId);
+        if (handle != null && handle.process().isAlive()) {
+            throw new IllegalStateException("Pi process must exit before deleting session files");
+        }
+        if (Files.isSymbolicLink(sessionDataRoot)) throw new IOException("Pi data root is a symbolic link");
+        List<Path> parents = List.of(sessionDataRoot.resolve("config"), sessionDataRoot.resolve("sessions"));
+        // Validate both containers before deleting either one. Child links are removed, never followed.
+        for (Path parent : parents) {
+            if (Files.isSymbolicLink(parent)) throw new IOException("Pi session container is a symbolic link");
+        }
+        for (Path parent : parents) deleteSessionFiles(parent.resolve(sessionId));
+        processes.remove(sessionId);
+    }
+
+    private void deleteSessionFiles(Path directory) throws IOException {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        Files.walkFileTree(directory, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path path, IOException error) throws IOException {
+                if (error != null) throw error;
+                Files.delete(path);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     public synchronized int size() {

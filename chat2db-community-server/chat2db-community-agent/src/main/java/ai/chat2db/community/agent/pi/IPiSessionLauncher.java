@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface IPiSessionLauncher {
 
+    void deleteSession(String sessionId);
+
     IAgentRuntimeSessionHandle launch(
             String sessionId,
             String externalSessionId,

@@ -132,6 +132,15 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
         }
     }
 
+    @Override
+    public void deleteSession(String sessionId) {
+        try {
+            supervisor.deleteSession(sessionId);
+        } catch (IOException error) {
+            throw new PiRpcException("Cannot delete Pi session files", error);
+        }
+    }
+
     private void refreshToolAccess(
             String sessionId,
             IAgentRuntimeEventSink eventSink,

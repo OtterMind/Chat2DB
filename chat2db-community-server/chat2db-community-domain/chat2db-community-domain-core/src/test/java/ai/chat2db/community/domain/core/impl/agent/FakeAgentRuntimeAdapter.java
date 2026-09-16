@@ -33,6 +33,7 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
     private final AgentRuntimeDescriptor descriptor;
     private final AgentRuntimeEnvironmentStatus environmentStatus;
     private String deletedSessionId;
+    private RuntimeException deleteFailure;
     private int openSessionCount;
     private RuntimeException openFailure;
     private RuntimeException startFailure;
@@ -111,8 +112,11 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
 
     @Override
     public void deleteSession(AgentRuntimeSessionDeleteRequest request) {
+        if (deleteFailure != null) throw deleteFailure;
         deletedSessionId = request.sessionId();
     }
+
+    void failDeleteWith(RuntimeException failure) { deleteFailure = failure; }
 
     String deletedSessionId() {
         return deletedSessionId;

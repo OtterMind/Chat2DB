@@ -127,6 +127,98 @@ class PiProcessSupervisorTest {
         return layout;
     }
 
+    @Test
+    void deletesOnlyOwnedSessionFilesAndCanRetryAfterPartialCleanup() throws Exception {
+        Path root = temporaryDirectory.resolve("storage/runtime/pi");
+        Path config = Files.createDirectories(root.resolve("config/session-one/nested"));
+        Files.writeString(config.resolve("tools.json"), "ticket fixture");
+        Path history = Files.createDirectories(root.resolve("sessions/session-one"));
+        Files.writeString(history.resolve("history.jsonl"), "history");
+        Path other = Files.createDirectories(root.resolve("sessions/session-two"));
+        Path retained = Files.writeString(other.resolve("history.jsonl"), "other history");
+        Path skill = Files.createDirectories(temporaryDirectory.resolve("storage/resources/skills/hash/chart"));
+        Path entry = Files.writeString(skill.resolve("SKILL.md"), "shared skill");
+        PiRuntimeLayout layout = runtimeLayout();
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(layout, root, 1, builder -> new FakeProcess());
+        PiSessionLauncherImpl launcher = new PiSessionLauncherImpl(supervisor, List.of(), null, null);
+
+        launcher.deleteSession("session-one");
+
+        assertFalse(Files.exists(root.resolve("config/session-one")));
+        assertFalse(Files.exists(history));
+        assertEquals("other history", Files.readString(retained));
+        assertEquals("shared skill", Files.readString(entry));
+        assertTrue(Files.exists(layout.executable(System.getProperty("os.name"), System.getProperty("os.arch"))));
+        launcher.deleteSession("session-one");
+        Files.createDirectories(history);
+        Files.writeString(history.resolve("history.jsonl"), "partial retry");
+        launcher.deleteSession("session-one");
+        assertFalse(Files.exists(history));
+    }
+
+    @Test
+    void refusesLiveProcessDeletionAndAllowsCleanupAfterItExits() throws Exception {
+        Path root = temporaryDirectory.resolve("session-data");
+        FakeProcess process = new FakeProcess();
+        try (PiProcessSupervisor supervisor = new PiProcessSupervisor(runtimeLayout(), root, 1, builder -> process)) {
+            PiProcessHandle handle = supervisor.start("session", "external", List.of());
+            Path config = Files.writeString(root.resolve("config/session/models.json"), "fixture");
+            assertThrows(IllegalStateException.class, () -> supervisor.deleteSession("session"));
+            assertEquals("fixture", Files.readString(config));
+            handle.close();
+            supervisor.deleteSession("session");
+            assertFalse(Files.exists(config.getParent()));
+            assertFalse(Files.exists(root.resolve("sessions/session")));
+        }
+    }
+
+    @Test
+    void invalidIdentifiersCannotDeleteParentOrSiblingDirectories() throws Exception {
+        Path root = Files.createDirectories(temporaryDirectory.resolve("session-data"));
+        Path preserved = Files.writeString(root.resolve("sentinel"), "keep");
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(runtimeLayout(), root, 1, builder -> new FakeProcess());
+        for (String id : List.of("", ".", "..", "../other", "a/../../other", "a\\..\\other", "/tmp", "a/b")) {
+            assertThrows(IllegalArgumentException.class, () -> supervisor.deleteSession(id), id);
+        }
+        assertEquals("keep", Files.readString(preserved));
+    }
+
+    @Test
+    void childSymlinksAreUnlinkedWithoutTouchingTheirTargets() throws Exception {
+        Path root = temporaryDirectory.resolve("session-data");
+        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+        Path preserved = Files.writeString(outside.resolve("sentinel"), "keep");
+        Path config = Files.createDirectories(root.resolve("config/session"));
+        Files.createDirectories(root.resolve("sessions"));
+        try {
+            Files.createSymbolicLink(config.resolve("linked"), outside);
+            Files.createSymbolicLink(root.resolve("sessions/session"), outside);
+        } catch (java.nio.file.FileSystemException | UnsupportedOperationException error) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "Symlinks unavailable: " + error);
+        }
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(runtimeLayout(), root, 1, builder -> new FakeProcess());
+        supervisor.deleteSession("session");
+        assertFalse(Files.exists(config));
+        assertFalse(Files.exists(root.resolve("sessions/session"), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+        assertEquals("keep", Files.readString(preserved));
+    }
+
+    @Test
+    void rejectsSymlinkContainersBeforeDeletingAnySessionFiles() throws Exception {
+        Path root = temporaryDirectory.resolve("session-data");
+        Path outside = Files.createDirectories(temporaryDirectory.resolve("outside"));
+        Path config = Files.createDirectories(root.resolve("config/session"));
+        Path preserved = Files.writeString(config.resolve("models.json"), "keep");
+        try {
+            Files.createSymbolicLink(root.resolve("sessions"), outside);
+        } catch (java.nio.file.FileSystemException | UnsupportedOperationException error) {
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "Symlinks unavailable: " + error);
+        }
+        PiProcessSupervisor supervisor = new PiProcessSupervisor(runtimeLayout(), root, 1, builder -> new FakeProcess());
+        assertThrows(java.io.IOException.class, () -> supervisor.deleteSession("session"));
+        assertEquals("keep", Files.readString(preserved));
+    }
+
     private static final class FakeProcess extends Process {
         private final CompletableFuture<Process> exit = new CompletableFuture<>();
         private boolean alive = true;

@@ -11,6 +11,7 @@ import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeBinding;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeEnvironmentRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionResumeRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
 import java.nio.file.Path;
 import java.util.List;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill;
@@ -69,11 +70,25 @@ class AgentRuntimeAdapterImplTest {
         return new AgentModelSnapshot("model", 1, "openai", "gpt", 1000, 100);
     }
 
+    @Test
+    void deletesThroughTheLauncherEvenWhenPiIsDisabled() {
+        RecordingLauncher launcher = new RecordingLauncher();
+        AgentRuntimeAdapterImpl adapter = new AgentRuntimeAdapterImpl("0.85.1", "rpc-v1",
+                new AgentRuntimeEnvironmentCheckerImpl(new PiRuntimeLayout(temporaryDirectory, "0.85.1")),
+                launcher, () -> false);
+        adapter.deleteSession(new AgentRuntimeSessionDeleteRequest("session",
+                new AgentRuntimeBinding(AgentRuntimeType.PI, "0.85.1", "rpc-v1", "external", null, 1)));
+        assertEquals("session", launcher.deletedSessionId);
+    }
+
     private static final class RecordingLauncher implements IPiSessionLauncher {
         private String sessionId;
         private String resumeReference;
         private String systemPrompt;
         private List<AgentRuntimeSkill> skills;
+        private String deletedSessionId;
+        @Override
+        public void deleteSession(String sessionId) { deletedSessionId = sessionId; }
         @Override
         public IAgentRuntimeSessionHandle launch(
                 String sessionId,

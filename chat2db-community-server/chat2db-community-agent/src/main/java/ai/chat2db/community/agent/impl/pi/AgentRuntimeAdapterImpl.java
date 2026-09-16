@@ -87,7 +87,7 @@ public class AgentRuntimeAdapterImpl implements IAgentRuntimeAdapter {
 
     @Override
     public void deleteSession(AgentRuntimeSessionDeleteRequest request) {
-        // Product storage owns V2 session deletion; closing the registered handle stops Pi first.
+        sessionLauncher.deleteSession(request.sessionId());
     }
 
     private void requireEnabled() {
