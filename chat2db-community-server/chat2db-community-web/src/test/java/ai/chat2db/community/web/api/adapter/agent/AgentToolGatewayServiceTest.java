@@ -52,7 +52,9 @@ class AgentToolGatewayServiceTest {
                         new Class<?>[]{IAiAgentOutputService.class}, (proxy, method, args) -> {
                             assertSame(owner, ContextUtils.queryThreadContext());
                             return args[0];
-                        }), null);
+                        }), (ai.chat2db.community.domain.api.service.agent.IAiAgentFileAccessService) Proxy.newProxyInstance(
+                        getClass().getClassLoader(), new Class<?>[]{ai.chat2db.community.domain.api.service.agent.IAiAgentFileAccessService.class},
+                        (proxy, method, args) -> null));
         try {
             ContextUtils.setContext(owner);
             var access = gateway.issue("session", event -> {});
