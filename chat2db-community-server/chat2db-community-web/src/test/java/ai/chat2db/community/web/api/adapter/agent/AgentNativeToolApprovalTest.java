@@ -32,6 +32,7 @@ class AgentNativeToolApprovalTest {
         AtomicReference<String> directory = new AtomicReference<>("/first");
         AtomicInteger decisions = new AtomicInteger();
         Set<String> enabledTools = new HashSet<>();
+        AtomicReference<String> skillDirectory = new AtomicReference<>();
         var disableWhileWaiting = new AtomicBoolean();
         IAiAgentWorkspaceService workspace = new IAiAgentWorkspaceService() {
             public AgentWorkspaceSettings get() { return new AgentWorkspaceSettings(directory.get()); }
@@ -73,7 +74,16 @@ class AgentNativeToolApprovalTest {
                     case "reference" -> outputReference;
                     default -> throw new AssertionError(method);
                 }),
-                proxy(IAiAgentFileAccessService.class, (method, args) -> null));
+                proxy(IAiAgentFileAccessService.class, (method, args) -> {
+                    if (method.equals("userSkillDirectory")) return skillDirectory.get();
+                    if (method.equals("authorizedDirectory")) {
+                        String target = Objects.toString(((Map<?, ?>) args[3]).get("path"), "");
+                        if (skillDirectory.get() != null && target.startsWith(skillDirectory.get() + "/")) return skillDirectory.get();
+                        if (!enabledTools.contains(args[1])) throw new SecurityException("Workspace tool disabled");
+                        return args[2];
+                    }
+                    return null;
+                }));
         var events = new ArrayList<AgentRuntimeEvent>();
         try {
             ContextUtils.setContext(new Context());
@@ -83,6 +93,15 @@ class AgentNativeToolApprovalTest {
             assertThrows(SecurityException.class, () -> gateway.output(access.ticket(), "127.0.0.1", "not-prepared", shell,
                     Map.of("action", "begin", "format", "text", "preparationId", "not-authorized")));
             assertThrows(IllegalArgumentException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "disabled", "read", Map.of("path", "a.csv")));
+            skillDirectory.set("/skills");
+            assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").containsAll(List.of("ls", "find", "write", "edit")));
+            assertFalse(gateway.activeTools(access.ticket(), "127.0.0.1").contains(shell));
+            var skillWrite = gateway.prepareNative(access.ticket(), "127.0.0.1", "skill-write", "write", Map.of("path", "/skills/new/SKILL.md"));
+            assertEquals("/skills", skillWrite.allowedRoot());
+            assertEquals("/first", skillWrite.workingDirectory());
+            assertEquals(0, decisions.get());
+            assertThrows(SecurityException.class, () -> gateway.prepareNative(access.ticket(), "127.0.0.1", "outside-skill", "write", Map.of("path", "/outside/file")));
+            skillDirectory.set(null);
             enabledTools.addAll(AgentNativeTools.currentPlatform());
             assertTrue(gateway.activeTools(access.ticket(), "127.0.0.1").containsAll(AgentNativeTools.currentPlatform()));
             assertEquals(7, gateway.listTools().stream().filter(t -> t.category() == AgentToolCategory.BUILTIN

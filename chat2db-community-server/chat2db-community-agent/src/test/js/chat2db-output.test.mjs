@@ -105,5 +105,11 @@ try {
   assert.throws(() => checkedMutationPath(workspace, "link/new.txt"), /changed/);
   symlinkSync(join(root, "not-created.txt"), join(workspace, "dangling"));
   assert.throws(() => checkedMutationPath(workspace, "dangling"));
+  const skills = join(root, "用户 skills"); mkdirSync(skills);
+  assert.equal(checkedMutationPath(workspace, join(skills, "my-skill/SKILL.md"), skills), join(skills, "my-skill/SKILL.md"));
+  assert.throws(() => checkedMutationPath(workspace, join(skills, "my-skill/SKILL.md")), /outside/);
+  assert.throws(() => checkedMutationPath(workspace, join(root, "用户 skills-other/file"), skills), /outside/);
+  symlinkSync(workspace, join(skills, "escape"));
+  assert.throws(() => checkedMutationPath(workspace, join(skills, "escape/file"), skills), /changed/);
 } finally { rmSync(directory, { recursive: true, force: true }); }
 console.log("Source output capture, UTF-8 previews, failure/cancellation, quotas and publish failure passed");

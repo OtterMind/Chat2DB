@@ -78,7 +78,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
         var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
         definitions.add(chartTool.definition());
-        return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions));
+        return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions),
+                files.userSkillDirectory());
     }
 
     @Override
@@ -93,7 +94,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         names.add(AgentQuestionTool.NAME);
         names.add(AgentChartTool.NAME);
         AgentNativeTools.currentPlatform().stream()
-                .filter(name -> isFileReader(name) || nativeToolEnabled(name)).forEach(names::add);
+                .filter(name -> isFileReader(name) || skillFileTool(name) || nativeToolEnabled(name)).forEach(names::add);
         return names;
     }
 
@@ -180,7 +181,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
             String toolName, Map<String, Object> arguments) throws Exception {
         arguments = toolArguments(arguments);
         Access access = requireAccess(ticket, address);
-        if (!nativeToolEnabled(toolName)) {
+        if (!nativeToolEnabled(toolName) && !skillFileTool(toolName)) {
             throw new IllegalArgumentException("Native tool is disabled or unavailable");
         }
         AgentRun run = activeRun(access);
@@ -198,7 +199,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         try {
             if (access.nativePreparations.size() > 1000) throw new IllegalStateException("Session tool call limit reached");
             String cwd = workspaces.get(0).resolveWorkingDirectory(access.sessionId);
-            files.authorizeNative(access.sessionId, toolName, cwd, arguments);
+            String allowedRoot = files.authorizedDirectory(access.sessionId, toolName, cwd, arguments);
             AgentTrace.record("tool.native.preparing", access.sessionId, run.id(),
                     Map.of("toolCallId", toolCallId, "tool", toolName, "workingDirectory", cwd,
                             "argumentsSha256", argumentsDigest));
@@ -223,8 +224,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 if (!approved) throw new IllegalStateException("Shell command was not approved");
             }
             if (!isActive(access, run.id())) throw new IllegalStateException("Agent run has stopped");
-            if (!nativeToolEnabled(toolName)) throw new IllegalStateException("Native tool has been disabled");
-            AgentNativePreparation result = new AgentNativePreparation(cwd, preparation.id);
+            if (!allowedRoot.equals(files.authorizedDirectory(access.sessionId, toolName, cwd, arguments))) {
+                throw new IllegalStateException("File authorization changed before execution");
+            }
+            AgentNativePreparation result = new AgentNativePreparation(cwd, preparation.id, allowedRoot);
             preparation.result.complete(result);
             AgentTrace.record("tool.native.authorized", access.sessionId, run.id(),
                     Map.of("toolCallId", toolCallId, "tool", toolName, "workingDirectory", cwd));
@@ -307,6 +310,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     }
 
     private static boolean isFileReader(String name) { return "read".equals(name) || "grep".equals(name); }
+
+    private boolean skillFileTool(String name) {
+        return List.of("read", "grep", "ls", "find", "write", "edit").contains(name)
+                && files.userSkillDirectory() != null;
+    }
     private static boolean isFileTool(String name) { return isFileReader(name) || "ls".equals(name) || "find".equals(name); }
 
     private static Map<String, Object> toolArguments(Map<String, Object> arguments) {

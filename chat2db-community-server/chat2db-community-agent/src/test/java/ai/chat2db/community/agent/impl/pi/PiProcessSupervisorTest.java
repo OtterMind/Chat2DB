@@ -99,7 +99,7 @@ class PiProcessSupervisorTest {
     }
 
     @Test
-    void loadsOnlyExplicitSkillPathsIncludingSpaces() throws Exception {
+    void disablesAutomaticDiscoveryAndDoesNotPinSkillsInCommandLineArguments() throws Exception {
         Path folder = Files.createDirectories(temporaryDirectory.resolve("技能 resources")).toRealPath();
         Path entry = Files.writeString(folder.resolve("SKILL.md"), "skill");
         ProcessBuilder[] captured = new ProcessBuilder[1];
@@ -110,9 +110,7 @@ class PiProcessSupervisorTest {
                 })) {
             supervisor.start("session", "external", List.of(), null, "prompt",
                     List.of(new AgentRuntimeSkill("chart", entry.toString(), "digest")));
-            int flag = captured[0].command().indexOf("--skill");
-            assertTrue(flag > 0);
-            assertEquals(entry.toString(), captured[0].command().get(flag + 1));
+            assertFalse(captured[0].command().contains("--skill"));
             assertTrue(captured[0].command().contains("--no-skills"));
         }
     }

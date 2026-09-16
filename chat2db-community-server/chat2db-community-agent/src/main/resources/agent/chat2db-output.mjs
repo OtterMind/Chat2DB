@@ -23,16 +23,17 @@ export function cleanupOutputSpools(directory = process.env.PI_CODING_AGENT_DIR)
   }
 }
 
-export function checkedMutationPath(cwd, value) {
+export function checkedMutationPath(cwd, value, allowedRoot = cwd) {
   if (typeof value !== "string" || !value) throw new Error("File path is required");
   let path = resolve(cwd, value);
   for (let ancestor = path; ancestor; ancestor = dirname(ancestor)) {
     try {
-      if (realpathSync(ancestor) === cwd) { path = resolve(cwd, relative(ancestor, path)); break; }
+      if (realpathSync(ancestor) === allowedRoot) { path = resolve(allowedRoot, relative(ancestor, path)); break; }
     } catch { /* The requested destination may not exist yet. */ }
     if (dirname(ancestor) === ancestor) break;
   }
-  const within = relative(cwd, path);
+  if (realpathSync(allowedRoot) !== allowedRoot) throw new Error("The authorized root changed after authorization");
+  const within = relative(allowedRoot, path);
   if (within === ".." || within.startsWith("../") || within.startsWith("..\\") || isAbsolute(within)) {
     throw new Error("File path is outside the authorized working directory");
   }

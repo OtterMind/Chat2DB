@@ -1,6 +1,6 @@
 export default {
   'setting.agent.workingDirectory.serverHint': 'Enter a directory path on the server running Pi.',
-  "setting.agent.tools.userFilesHint": "These switches control access to your working directory. System results and skill files are always available as read-only.",
+  "setting.agent.tools.userFilesHint": "These switches control workspace access. User skill files remain readable and editable; system results, bundled skills and runtime snapshots are read-only. Bash/PowerShell commands still require approval.",
   'setting.modelConfig.agentApi': 'Agent API protocol',
   "setting.agent.tool.enable": "Enable",
   "setting.agent.workingDirectory.choose": "Choose folder",

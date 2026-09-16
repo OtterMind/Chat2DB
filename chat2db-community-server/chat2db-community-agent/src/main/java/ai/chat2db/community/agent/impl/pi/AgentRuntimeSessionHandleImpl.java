@@ -40,6 +40,9 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
     private final Runnable closeHook;
     private final Runnable refreshToolAccess;
     private final IPiModelConfiguration modelConfiguration;
+    private final PiSkillConfiguration skillConfiguration;
+    private boolean skillRefreshFailed;
+    private CompletableFuture<Void> resourceRefresh = CompletableFuture.completedFuture(null);
     private String modelConfigurationError;
     private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
     private final CompletableFuture<Void> termination = new CompletableFuture<>();
@@ -76,6 +79,14 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             Runnable closeHook,
             IPiModelConfiguration modelConfiguration,
             Runnable refreshToolAccess) {
+        this(sessionId, session, process, rpc, eventConverter, eventSink, objectMapper,
+                closeHook, modelConfiguration, refreshToolAccess, null);
+    }
+
+    AgentRuntimeSessionHandleImpl(String sessionId, AgentRuntimeSessionRef session, PiProcessHandle process,
+            IPiRpcTransport rpc, PiEventConverter eventConverter, IAgentRuntimeEventSink eventSink,
+            ObjectMapper objectMapper, Runnable closeHook, IPiModelConfiguration modelConfiguration,
+            Runnable refreshToolAccess, PiSkillConfiguration skillConfiguration) {
         this.sessionId = sessionId;
         this.session = session;
         this.process = process;
@@ -86,6 +97,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
         this.closeHook = closeHook;
         this.modelConfiguration = modelConfiguration;
         this.refreshToolAccess = refreshToolAccess;
+        this.skillConfiguration = skillConfiguration;
         rpc.termination().whenComplete((ignored, error) -> runtimeTerminated(error));
     }
 
@@ -109,6 +121,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
         }
         AgentModelAccess modelAccess = modelConfiguration.prepare(request.model());
         modelConfigurationError = null;
+        skillRefreshFailed = false;
         activeRunId = request.runId();
         lastAssistantMessage = null;
         toolStartedAt.clear();
@@ -120,8 +133,10 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
                 : "/skill:" + skillName + " " + request.input().text());
         AgentTrace.record("pi.prompt.sending", sessionId, request.runId(),
                 Map.of("inputCharacters", request.input().text().length()));
-        CompletableFuture<JsonNode> response = rpc.request("prompt", objectMapper.createObjectNode()
-                        .put("message", "/chat2db-refresh-model"))
+        resourceRefresh = refreshSkills(request);
+        CompletableFuture<JsonNode> response = resourceRefresh
+                .thenCompose(ignored -> sendPrompt(request.runId(), objectMapper.createObjectNode()
+                        .put("message", "/chat2db-refresh-model")))
                 .thenCompose(ignored -> selectModel(request.runId(), modelAccess))
                 .thenCompose(ignored -> sendPrompt(request.runId(), payload));
         response.whenComplete((ignored, error) -> {
@@ -130,6 +145,36 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             }
         });
         return response.thenApply(result -> acknowledgeRun(request.runId(), result));
+    }
+
+    private CompletableFuture<Void> refreshSkills(AgentRuntimeRunRequest request) {
+        if (skillConfiguration == null) return CompletableFuture.completedFuture(null);
+        boolean changed = skillConfiguration.requiresReload(request.skills());
+        if (!changed && !skillConfiguration.requiresVerification()) return CompletableFuture.completedFuture(null);
+        CompletableFuture<JsonNode> reloaded;
+        try {
+            if (changed) {
+                skillConfiguration.write(request.skills());
+                reloaded = sendPrompt(request.runId(), objectMapper.createObjectNode().put("message", "/chat2db-reload-skills"));
+            } else reloaded = CompletableFuture.completedFuture(null);
+        } catch (java.io.IOException error) {
+            reloaded = CompletableFuture.failedFuture(error);
+        }
+        return reloaded.thenCompose(ignored -> {
+            synchronized (this) {
+                requireActive(request.runId());
+                return rpc.request("get_commands", objectMapper.createObjectNode());
+            }
+        }).thenAccept(commands -> {
+            synchronized (this) {
+                requireActive(request.runId());
+                skillConfiguration.verify(commands, request.skills());
+                AgentTrace.record("pi.skills.loaded", sessionId, request.runId(),
+                        Map.of("skills", request.skills().stream().map(skill -> skill.name() + "@" + skill.digest()).toList()));
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) synchronized (this) { skillRefreshFailed = true; }
+        });
     }
 
     @Override
@@ -143,7 +188,9 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             }
             cancelling = true;
             ObjectNode payload = objectMapper.createObjectNode();
-            response = rpc.request("abort", payload);
+            CompletableFuture<Void> pendingRefresh = resourceRefresh;
+            response = rpc.request("abort", payload)
+                    .thenCompose(result -> pendingRefresh.handle((ignored, error) -> result));
         }
         response.whenComplete((ignored, error) -> {
             if (error != null) {
@@ -175,7 +222,8 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             return null;
         }
         if ("extension_error".equals(rawEvent.path("type").asText())
-                && "command:chat2db-refresh-model".equals(rawEvent.path("extensionPath").asText())) {
+                && java.util.Set.of("command:chat2db-refresh-model", "command:chat2db-reload-skills")
+                        .contains(rawEvent.path("extensionPath").asText())) {
             modelConfigurationError = rawEvent.path("error").asText("Pi model configuration refresh failed");
             return null;
         }
@@ -215,7 +263,7 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             return null;
         }
         if (isTerminal(event.type())) {
-            finish(AgentRuntimeHealth.READY);
+            finish(skillRefreshFailed ? AgentRuntimeHealth.FAILED : AgentRuntimeHealth.READY);
         }
         return event;
     }
@@ -321,8 +369,8 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
     }
 
     private synchronized void failActiveRun(String runId) {
-        if (runId.equals(activeRunId)) {
-            finish(AgentRuntimeHealth.READY);
+        if (runId.equals(activeRunId) && !cancelling) {
+            finish(skillRefreshFailed ? AgentRuntimeHealth.FAILED : AgentRuntimeHealth.READY);
         }
     }
 

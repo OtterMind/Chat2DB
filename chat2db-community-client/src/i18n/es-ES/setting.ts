@@ -1,6 +1,6 @@
 export default {
   'setting.agent.workingDirectory.serverHint': 'Introduce una ruta de directorio en el servidor que ejecuta Pi.',
-  "setting.agent.tools.userFilesHint": "Estos interruptores controlan el acceso al directorio de trabajo. Los resultados del sistema y los archivos de habilidades siempre están disponibles en modo de solo lectura.",
+  "setting.agent.tools.userFilesHint": "Estos interruptores controlan el acceso al directorio de trabajo. Las habilidades del usuario se pueden leer y editar; los resultados del sistema, las habilidades integradas y las instantáneas son de solo lectura. Los comandos Bash/PowerShell siguen requiriendo aprobación.",
   'setting.modelConfig.agentApi': 'Protocolo API del agente',
   "setting.agent.tool.enable": "Activar",
   "setting.agent.workingDirectory.choose": "Elegir carpeta",

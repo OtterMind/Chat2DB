@@ -130,6 +130,91 @@ class AgentRuntimeSessionHandleImplTest {
         assertEquals(AgentRuntimeHealth.READY, handle.snapshot().toCompletableFuture().join().health());
     }
 
+    @Test
+    void reloadsChangedSkillPathsAndVerifiesThemBeforeSendingTheNextPrompt(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+        var entry = java.nio.file.Files.writeString(directory.resolve("first.md"), "first").toRealPath();
+        var nextEntry = java.nio.file.Files.writeString(directory.resolve("second.md"), "second").toRealPath();
+        var first = new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill("example", entry.toString(), "one");
+        var second = new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill("example", nextEntry.toString(), "two");
+        var config = new PiSkillConfiguration(directory, objectMapper, List.of(first));
+        var runtime = new AgentRuntimeSessionHandleImpl("session", new AgentRuntimeSessionRef("external", "resume"),
+                new PiProcessHandle("session", new FakeProcess()), transport, new PiEventConverter(), events::add,
+                objectMapper, () -> {}, new IPiModelConfiguration() {
+                    public AgentModelAccess prepare(AgentModelSnapshot model) {
+                        return new AgentModelAccess("chat2db", model.modelId(), "openai-responses", "http://127.0.0.1/v1", "ticket");
+                    }
+                    public void close() { }
+                }, () -> {}, config);
+        var request = new AgentRuntimeRunRequest("session", "first-run", runRequest().model(), runRequest().input(), "first", List.of(first));
+        var started = runtime.startRun(request);
+        assertEquals("get_commands", transport.command);
+        transport.complete(skillCommands(first));
+        assertEquals("/chat2db-refresh-model", transport.payload.path("message").asText());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        started.toCompletableFuture().join();
+        runtime.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
+
+        var changed = runtime.startRun(new AgentRuntimeRunRequest("session", "next-run", runRequest().model(),
+                new AgentRuntimeInput("continue", List.of(), "example"), "next", List.of(second)));
+        assertEquals("/chat2db-reload-skills", transport.payload.path("message").asText());
+        assertEquals(nextEntry.toString(), objectMapper.readTree(directory.resolve("skills.json").toFile()).get(0).path("entryPath").asText());
+        transport.complete(objectMapper.createObjectNode());
+        assertEquals("get_commands", transport.command);
+        transport.complete(skillCommands(second));
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(objectMapper.createObjectNode());
+        assertEquals("/skill:example continue", transport.payload.path("message").asText());
+        transport.complete(objectMapper.createObjectNode());
+        changed.toCompletableFuture().join();
+        runtime.accept(objectMapper.readTree("{\"type\":\"agent_settled\"}"));
+
+        var failed = runtime.startRun(new AgentRuntimeRunRequest("session", "bad-run", runRequest().model(),
+                runRequest().input(), "bad", List.of(first)));
+        transport.complete(objectMapper.createObjectNode());
+        transport.complete(skillCommands(second));
+        assertThrows(CompletionException.class, () -> failed.toCompletableFuture().join());
+        assertEquals("get_commands", transport.command);
+        assertEquals(AgentRuntimeHealth.FAILED, runtime.snapshot().toCompletableFuture().join().health());
+    }
+
+    @Test
+    void cancellationWaitsForPendingResourceCommandsBeforeReusingTheProcess(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+        var entry = java.nio.file.Files.writeString(directory.resolve("skill.md"), "skill").toRealPath();
+        var skill = new ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill("example", entry.toString(), "one");
+        var config = new PiSkillConfiguration(directory, objectMapper, List.of());
+        var runtime = new AgentRuntimeSessionHandleImpl("session", new AgentRuntimeSessionRef("external", "resume"),
+                new PiProcessHandle("session", new FakeProcess()), transport, new PiEventConverter(), events::add,
+                objectMapper, () -> {}, new IPiModelConfiguration() {
+                    public AgentModelAccess prepare(AgentModelSnapshot model) {
+                        return new AgentModelAccess("chat2db", model.modelId(), "openai-responses", "http://127.0.0.1/v1", "ticket");
+                    }
+                    public void close() { }
+                }, () -> {}, config);
+        var started = runtime.startRun(new AgentRuntimeRunRequest("session", "run", runRequest().model(),
+                runRequest().input(), "first", List.of(skill)));
+        var pendingReload = transport.response;
+        var cancelled = runtime.cancel(new AgentRuntimeCancelRequest("session", "run", "run")).toCompletableFuture();
+        transport.complete(objectMapper.createObjectNode());
+        assertFalse(cancelled.isDone());
+        assertEquals(AgentRuntimeHealth.BUSY, runtime.snapshot().toCompletableFuture().join().health());
+        pendingReload.complete(objectMapper.createObjectNode());
+        cancelled.join();
+        assertTrue(started.toCompletableFuture().isCompletedExceptionally());
+        assertEquals(List.of(AgentEventType.RUN_CANCELLED), events.stream().map(AgentRuntimeEvent::type).toList());
+        assertEquals(AgentRuntimeHealth.READY, runtime.snapshot().toCompletableFuture().join().health());
+        runtime.startRun(new AgentRuntimeRunRequest("session", "retry", runRequest().model(), runRequest().input(), "retry", List.of(skill)));
+        assertEquals("/chat2db-reload-skills", transport.payload.path("message").asText());
+    }
+
+    private JsonNode skillCommands(ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill skill) {
+        var response = objectMapper.createObjectNode();
+        response.putArray("commands").addObject()
+                .put("source", "skill").put("name", "skill:" + skill.name()).putObject("sourceInfo").put("path", skill.entryPath());
+        return response;
+    }
+
     private AgentRuntimeRunRequest runRequest() {
         return new AgentRuntimeRunRequest(
                 "session", "run",

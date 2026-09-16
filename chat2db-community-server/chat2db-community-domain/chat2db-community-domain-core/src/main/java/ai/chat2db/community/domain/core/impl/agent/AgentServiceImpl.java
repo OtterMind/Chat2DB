@@ -177,6 +177,7 @@ public class AgentServiceImpl implements AgentService {
                 new AgentRuntimeSessionDeleteRequest(
                         session.id(), session.runtimeBinding()));
         sessionStorage.delete(sessionId, userId);
+        runCoordinator.releaseSessionSkills(sessionId);
     }
 
     private String requireGeneratedId(String id) {

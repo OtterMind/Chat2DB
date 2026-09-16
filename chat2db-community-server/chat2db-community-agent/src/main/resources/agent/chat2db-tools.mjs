@@ -32,6 +32,18 @@ export default function (pi) {
   const accessFile = join(process.env.PI_CODING_AGENT_DIR, "tools.json");
   const readAccess = () => JSON.parse(readFileSync(accessFile, "utf8"));
   const access = readAccess();
+  const skillsFile = join(process.env.PI_CODING_AGENT_DIR, "skills.json");
+  pi.on("resources_discover", () => ({
+    skillPaths: JSON.parse(readFileSync(skillsFile, "utf8")).map(skill => skill.entryPath),
+    promptPaths: [], themePaths: [],
+  }));
+  pi.registerCommand("chat2db-reload-skills", {
+    description: "Reload skills between Chat2DB runs.",
+    async handler(_args, ctx) {
+      await ctx.reload();
+      return;
+    },
+  });
 
   // A user decision can outlast fetch's transport timeout. Cancellation still uses the tool signal.
   function waitForUser(path, options) {
@@ -128,14 +140,17 @@ export default function (pi) {
     } : definition.parameters;
     const executions = new Map();
     pi.on("before_agent_start", () => executions.clear());
+    const skillFiles = access.userSkillDirectory && !["bash", "powershell"].includes(name)
+      ? ` User skill source directory: ${access.userSkillDirectory}. File tools may read and edit user skills there without enabling workspace access. Hidden runtime resources remain read-only. Other user paths require workspace permission.` : "";
     pi.registerTool({
       ...definition,
+      description: definition.description + skillFiles,
       ...(fileReader ? {
-        description: "Read or search a UTF-8 file in bounded pages. System tool-result and loaded skill files are always readable; user files require the corresponding tool permission. Use the exact output.path and nextCursor from results.",
+        description: "Read or search a UTF-8 file in bounded pages. System tool-result and loaded skill files are always readable; other user files require the corresponding tool permission. Use the exact output.path and nextCursor from results." + skillFiles,
         promptSnippet: name === "read" ? "Read a file in bounded pages" : "Search file contents in bounded pages",
         promptGuidelines: ["Read/search output.path when a result is previewTruncated. Reuse nextCursor to continue; do not rerun a command merely to recover its full output."],
       } : fileListing ? {
-        description: `${name === "ls" ? "List directory entries" : "Find entries by glob pattern"} within the permitted user directory, without following symlinks. Explicit limit bounds entries and returns hasMore; otherwise large listings are saved as JSONL with a preview and output.path.`,
+        description: `${name === "ls" ? "List directory entries" : "Find entries by glob pattern"} within the permitted user directory, without following symlinks. Explicit limit bounds entries and returns hasMore; otherwise large listings are saved as JSONL with a preview and output.path.` + skillFiles,
         promptSnippet: name === "ls" ? "List directory entries" : "Find entries by glob pattern",
       } : name === "bash" || name === "powershell" ? {
         description: `Execute a ${name} command in the configured working directory after user approval. Large stdout/stderr is saved with output.path and a bounded preview, including failed commands. Read or grep the saved file for more output.`,
@@ -190,7 +205,7 @@ export default function (pi) {
               command: nativeArgs.command, timeout: nativeArgs.timeout, cwd: workingDirectory, signal, onUpdate, publish,
             });
           } else {
-            nativeArgs.path = checkedMutationPath(workingDirectory, nativeArgs.path);
+            nativeArgs.path = checkedMutationPath(workingDirectory, nativeArgs.path, prepared.allowedRoot || workingDirectory);
             const native = createTool(workingDirectory);
             let nativeOutput;
             let ok = true;

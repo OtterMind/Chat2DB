@@ -43,10 +43,15 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         String path = string(arguments, "path", "read".equals(toolName) ? null : ".");
         if (path == null || path.isBlank()) throw new IllegalArgumentException("File path is required");
         String cwd = Path.of(path).isAbsolute() || workspaces.isEmpty() ? null : workspaces.get(0).resolveWorkingDirectory(sessionId);
-        Path target = normalizeAliases(resolve(path, cwd), cwd);
+        Path target = normalizeAliases(skills.resolveLegacyPath(resolve(path, cwd)), cwd);
         String cursor = string(arguments, "cursor", null);
         Integer limit = integer(arguments, "limit");
-        boolean skill = skillRoots().stream().anyMatch(target::startsWith);
+        boolean skill = skillRoots(sessionId).stream().anyMatch(target::startsWith);
+        Path resources = skills.resourceDirectory();
+        if (!skill && resources != null && target.startsWith(resources)) {
+            throw new SecurityException("Skill snapshot path is not loaded. Resolve references from the exact loaded entry: "
+                    + skills.selected(sessionId).stream().map(item -> item.entryPath()).toList());
+        }
         if ("ls".equals(toolName) || "find".equals(toolName)) {
             if (cwd == null && !workspaces.isEmpty()) cwd = workspaces.get(0).resolveWorkingDirectory(sessionId);
             authorizeNative(sessionId, toolName, cwd, arguments);
@@ -168,14 +173,27 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
 
     @Override
     public void authorizeNative(String sessionId, String toolName, String cwd, Map<String, Object> arguments) {
-        if (workspaces.isEmpty() || !workspaces.get(0).isToolEnabled(toolName)) {
+        authorizedDirectory(sessionId, toolName, cwd, arguments);
+    }
+
+    @Override public String userSkillDirectory() {
+        Path directory = skills.userDirectory();
+        return directory == null ? null : directory.toString();
+    }
+
+    @Override
+    public String authorizedDirectory(String sessionId, String toolName, String cwd, Map<String, Object> arguments) {
+        boolean shell = "bash".equals(toolName) || "powershell".equals(toolName);
+        Path target = shell ? null : normalizeAliases(resolve(string(arguments, "path", "."), cwd), cwd);
+        Path userSkills = skills.userDirectory();
+        boolean userSkill = target != null && userSkills != null && target.startsWith(userSkills);
+        if (!userSkill && (workspaces.isEmpty() || !workspaces.get(0).isToolEnabled(toolName))) {
             throw new SecurityException("Access to user files is disabled for this tool");
         }
-        if ("bash".equals(toolName) || "powershell".equals(toolName)) return;
+        if (shell) return cwd;
         Path root;
-        try { root = Path.of(cwd).toRealPath(); }
+        try { root = userSkill ? userSkills : Path.of(cwd).toRealPath(); }
         catch (IOException error) { throw new IllegalArgumentException("Working directory does not exist", error); }
-        Path target = normalizeAliases(resolve(string(arguments, "path", "."), cwd), cwd);
         if (!target.startsWith(root) || protectedPath(sessionId, target)) {
             throw new SecurityException("File path is outside the permitted user directory");
         }
@@ -185,6 +203,7 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         if (ancestor == null || !existing(ancestor).startsWith(root)) {
             throw new SecurityException("File path is outside the permitted user directory");
         }
+        return root.toString();
     }
 
     private Object searchDirectory(String sessionId, Path directory, Map<String, Object> arguments, boolean skill) {
@@ -247,17 +266,22 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         // User-selected parents never grant access to private run/ticket data or system output writes.
         Path managed = outputs.managedRoot().getParent();
         Path ownWorkspace = managed.resolve("workspaces").resolve(sessionId);
-        return (path.startsWith(managed) && !path.startsWith(ownWorkspace)) || skillRoots().stream().anyMatch(path::startsWith);
+        Path resources = skills.resourceDirectory();
+        return (path.startsWith(managed) && !path.startsWith(ownWorkspace))
+                || (resources != null && path.startsWith(resources))
+                || skillRoots(sessionId).stream().anyMatch(path::startsWith);
     }
 
-    private List<Path> skillRoots() {
-        return skills.prepare().stream().map(skill -> Path.of(skill.entryPath()).getParent().toAbsolutePath().normalize()).toList();
+    private List<Path> skillRoots(String sessionId) {
+        return skills.selected(sessionId).stream().map(skill -> Path.of(skill.entryPath()).getParent().toAbsolutePath().normalize()).toList();
     }
 
     private Path normalizeAliases(Path target, String cwd) {
         // Normalize aliases of a scope root (for example /var -> /private/var on macOS),
         // while keeping the path below that root intact so existing() still rejects inner symlinks.
-        List<Path> roots = new ArrayList<>(skillRoots());
+        List<Path> roots = new ArrayList<>();
+        if (skills.resourceDirectory() != null) roots.add(skills.resourceDirectory());
+        if (skills.userDirectory() != null) roots.add(skills.userDirectory());
         roots.add(outputs.managedRoot().getParent());
         if (cwd != null) roots.add(Path.of(cwd));
         for (Path root : roots) {
