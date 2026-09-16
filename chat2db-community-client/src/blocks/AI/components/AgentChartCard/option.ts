@@ -75,6 +75,7 @@ export const buildAgentChartOption = (
   const names = uniqueNames(descriptors.map((descriptor) => descriptor.label));
   const scatter = chart.chartType === 'Scatter';
   const horizontal = chart.chartType === 'Bar';
+  const individualBars = horizontal && !groupBy.length && !chart.stack;
   const series: Series[] = descriptors.map(({ key, group, byCategory, metric }, index) => {
     const base = {
       id: JSON.stringify([key, metric.field, metric.chartType, metric.axisPosition]),
@@ -88,7 +89,9 @@ export const buildAgentChartOption = (
         data: group.rows.map((row) => [numberValue(row[xField]), numberValue(row[metric.field])]),
       };
     }
-    const data = [...categories.keys()].map((category) => numberValue(byCategory.get(category)?.[metric.field]));
+    const data = individualBars
+      ? group.rows.map((row) => numberValue(row[metric.field]))
+      : [...categories.keys()].map((category) => numberValue(byCategory.get(category)?.[metric.field]));
     const stack = chart.stack && ['Column', 'Bar', 'AreaLine'].includes(metric.chartType)
       ? JSON.stringify([metric.chartType, metric.axisPosition, groupBy.length ? metric.field : null]) : undefined;
     if (metric.chartType === 'Column' || metric.chartType === 'Bar') {
@@ -102,7 +105,8 @@ export const buildAgentChartOption = (
   });
   const categoryAxis = {
     type: 'category' as const,
-    data: uniqueNames([...categories.values()].map(displayValue)),
+    data: individualBars ? chart.data.map((row) => displayValue(row[xField] ?? null))
+      : uniqueNames([...categories.values()].map(displayValue)),
     inverse: horizontal,
     axisLabel: { color: colors.text },
     axisLine: { lineStyle: { color: colors.border } },

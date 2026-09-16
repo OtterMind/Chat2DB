@@ -119,3 +119,30 @@ assert.ok(!svg.includes('<img src=x') && !svg.includes('<script>'));
 assert.ok(svg.includes('&lt;img') && svg.includes('&lt;script&gt;'));
 instance.dispose();
 console.log('V2 grouped/stacked chart matrix, SQL ordering, gaps, tuple identity, dual axes and SVG safety passed.');
+
+// The tool contract always uses xField for categories and yField for metrics,
+// including a plain horizontal Bar. Repeated categories must keep every row.
+const plainBar: AgentChart = {
+  ...chart, chartType: 'Bar', groupBy: [], stack: false, xField: 'category', yField: 'rate',
+  data: [
+    { category: 'Alpha', rate: 50 }, { category: 'Beta', rate: 66.67 },
+    { category: 'Beta', rate: 0 }, { category: 'Gamma', rate: null },
+    { category: 'Delta', rate: -5 },
+  ],
+};
+const plainOption = buildAgentChartOption(plainBar, colors);
+assert.ok(plainOption.yAxis && !Array.isArray(plainOption.yAxis) && 'data' in plainOption.yAxis);
+assert.deepEqual(plainOption.yAxis.data, ['Alpha', 'Beta', 'Beta', 'Gamma', 'Delta']);
+assert.equal(plainOption.yAxis.inverse, true, 'Horizontal rankings keep SQL row order from top to bottom');
+assert.ok(plainOption.xAxis && !Array.isArray(plainOption.xAxis));
+assert.equal(plainOption.xAxis.type, 'value');
+assert.equal(plainOption.series[0].name, 'rate', 'Legend names the numeric metric');
+assert.deepEqual(plainOption.series[0].data, [50, 66.67, 0, null, -5]);
+const plainInstance = init(null, undefined, { renderer: 'svg', ssr: true, width: 720, height: 340 });
+plainInstance.setOption({ ...plainOption, animation: false });
+const plainSvg = plainInstance.renderToSVGString();
+assert.match(plainSvg, />Alpha<\/text>/);
+assert.match(plainSvg, />rate<\/text>/);
+assert.ok(plainSvg.includes('<path'), 'Produces actual SVG graphics');
+plainInstance.dispose();
+console.log('Plain V2 Bar: category/value axes, metric legend, repeated rows, zero, null and negatives passed.');

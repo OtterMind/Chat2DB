@@ -5,7 +5,7 @@ import ChartCard from '@/blocks/BI/ChartCard';
 import ScrollableTable from '@/components/ScrollableTable';
 import i18n from '@/i18n';
 import { AgentChart, agentChartDetail, isPartialChart, usesGroupedAgentChart } from '../../agentCharts';
-import AgentGroupedChart from './AgentGroupedChart';
+import AgentCartesianChart from './AgentCartesianChart';
 
 const useStyles = createStyles(({ css, token }) => ({
   figure: css`margin: 10px 0; width: 100%; max-width: 720px;`,
@@ -39,8 +39,8 @@ export default memo(({ chart }: { chart: AgentChart }) => {
           {i18n('stream.chart.tableView')}
         </Button>
       </div>
-      {view === 'chart' ? (usesGroupedAgentChart(chart)
-        ? <AgentGroupedChart chart={chart} className={styles.card} />
+      {view === 'chart' ? (chart.chartType === 'Bar' || usesGroupedAgentChart(chart)
+        ? <AgentCartesianChart chart={chart} className={styles.card} />
         : <ChartCard chartDetail={detail} className={styles.card}
             style={{ height: 340 }} isEditPermission={false}
           />) : (
