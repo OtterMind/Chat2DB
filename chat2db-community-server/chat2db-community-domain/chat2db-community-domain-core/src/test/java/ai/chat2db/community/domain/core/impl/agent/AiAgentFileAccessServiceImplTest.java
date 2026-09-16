@@ -173,19 +173,58 @@ class AiAgentFileAccessServiceImplTest {
                 Map.of("path", skill.resolve("SKILL.md").toString())));
     }
 
+    @Test
+    void fixedSkillDirectoryAllowsFilesWithoutWorkspaceAccessButNeverShellOrResources() throws Exception {
+        Path root = temporary.toRealPath();
+        Path sources = Files.createDirectories(root.resolve("用户 skills"));
+        Path skill = Files.createDirectories(sources.resolve(".resources/hash/chart"));
+        Files.writeString(skill.resolve("SKILL.md"), "bundled");
+        Path managed = Files.createDirectories(root.resolve("history/sessions"));
+        Path workspace = Files.createDirectory(root.resolve("workspace"));
+        Path source = Files.createDirectories(sources.resolve("my-skill"));
+        Path entry = Files.writeString(source.resolve("SKILL.md"), "user skill");
+        var access = service(managed, skill, new AtomicReference<>(workspace.toString()), Set.of(), new ByteArrayOutputStream(), sources);
+        assertEquals("user skill", ((AgentOutputRead) access.execute(context(), "read", Map.of("path", entry.toString())).data()).content());
+        var wrongSnapshot = assertThrows(SecurityException.class, () -> access.execute(context(), "read",
+                Map.of("path", sources.resolve(".resources/unknown/chart/SKILL.md").toString())));
+        assertTrue(wrongSnapshot.getMessage().contains(skill.resolve("SKILL.md").toString()));
+        assertEquals(sources.toString(), access.authorizedDirectory("session", "write", workspace.toString(),
+                Map.of("path", source.resolve("references/新文件.md").toString())));
+        assertDoesNotThrow(() -> access.authorizeNative("session", "edit", workspace.toString(), Map.of("path", entry.toString())));
+        var listing = (Map<?, ?>) access.execute(context(), "ls", Map.of("path", sources.toString())).data();
+        assertEquals(1L, listing.get("count"));
+        assertEquals(1L, ((Map<?, ?>) access.execute(context(), "find", Map.of("path", sources.toString(), "pattern", "**/SKILL.md")).data()).get("count"));
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "write", workspace.toString(), Map.of("path", "normal.txt")));
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "edit", workspace.toString(), Map.of("path", skill.resolve("SKILL.md").toString())));
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "write", workspace.toString(), Map.of("path", sources.resolveSibling("用户 skills-outside/x").toString())));
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "bash", workspace.toString(), Map.of("command", "pwd")));
+        Files.createSymbolicLink(sources.resolve("escape"), workspace);
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "write", workspace.toString(), Map.of("path", sources.resolve("escape/out.txt").toString())));
+    }
+
     private AiAgentFileAccessServiceImpl service(Path managed, Path skill, AtomicReference<String> cwd, Set<String> enabled) {
         return service(managed, skill, cwd, enabled, new ByteArrayOutputStream());
     }
 
     private AiAgentFileAccessServiceImpl service(Path managed, Path skill, AtomicReference<String> cwd, Set<String> enabled,
             ByteArrayOutputStream captured) {
+        return service(managed, skill, cwd, enabled, captured, null);
+    }
+
+    private AiAgentFileAccessServiceImpl service(Path managed, Path skill, AtomicReference<String> cwd, Set<String> enabled,
+            ByteArrayOutputStream captured, Path userRoot) {
         IAiAgentWorkspaceService workspace = proxy(IAiAgentWorkspaceService.class, (method, args) -> switch (method) {
             case "isToolEnabled" -> enabled.contains(args[0]);
             case "resolveWorkingDirectory" -> cwd.get();
             default -> null;
         });
-        IAiAgentSkillService skills = proxy(IAiAgentSkillService.class, (method, args) ->
-                List.of(new AiAgentSkill("chart", skill.resolve("SKILL.md").toString(), "fixture")));
+        IAiAgentSkillService skills = proxy(IAiAgentSkillService.class, (method, args) -> switch (method) {
+            case "prepare", "selected" -> List.of(new AiAgentSkill("chart", skill.resolve("SKILL.md").toString(), "fixture"));
+            case "resolveLegacyPath" -> args[0];
+            case "userDirectory" -> userRoot;
+            case "resourceDirectory" -> userRoot == null ? null : userRoot.resolve(".resources");
+            default -> null;
+        });
         IAiAgentOutputService outputs = proxy(IAiAgentOutputService.class, (method, args) -> switch (method) {
             case "managedRoot" -> managed;
             case "begin" -> { captured.reset(); assertEquals("jsonl", args[1]); yield new AgentOutputUpload("upload"); }

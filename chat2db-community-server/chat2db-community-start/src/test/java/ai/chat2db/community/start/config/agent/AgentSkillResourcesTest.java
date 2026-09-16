@@ -24,11 +24,12 @@ class AgentSkillResourcesTest {
             System.setProperty("user.home", temporaryDirectory.toString());
             thread.setContextClassLoader(desktopLoader);
             assertFalse(new ClassPathResource("skills/catalog.json").exists());
-            var skills = new AgentSkillConfiguration().agentSkillService().prepare();
-            assertEquals(java.util.List.of("chart"), skills.stream().map(skill -> skill.name()).toList());
+            var skills = new AgentSkillConfiguration().agentSkillService(temporaryDirectory.resolve(".chat2db-skills").toString()).prepare();
+            assertEquals(java.util.List.of("chart", "skill-manager"), skills.stream().map(skill -> skill.name()).toList());
             for (var skill : skills) {
-                assertTrue(java.nio.file.Files.readString(Path.of(skill.entryPath())).contains("name: chart"));
-                assertTrue(java.nio.file.Files.isRegularFile(Path.of(skill.entryPath()).resolveSibling("references/combo.md")));
+                assertTrue(java.nio.file.Files.readString(Path.of(skill.entryPath())).contains("name: " + skill.name()));
+                assertTrue(Path.of(skill.entryPath()).startsWith(temporaryDirectory.toRealPath().resolve(".chat2db-skills/.resources")));
+                if (skill.name().equals("chart")) assertTrue(java.nio.file.Files.isRegularFile(Path.of(skill.entryPath()).resolveSibling("references/combo.md")));
             }
         } finally {
             thread.setContextClassLoader(previous);

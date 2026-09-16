@@ -76,6 +76,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             modelConfiguration = new PiModelConfigurationImpl(sessionId, configuration, modelAccessService, objectMapper);
             AgentModelAccess modelAccess = modelConfiguration.prepare(model);
             writeToolAccess(configuration, objectMapper, toolAccess);
+            PiSkillConfiguration skillConfiguration = new PiSkillConfiguration(configuration, objectMapper, skills);
             Path extension = copyBundledExtensions(configuration);
             List<Path> loadedExtensions = new ArrayList<>(extensions);
             loadedExtensions.add(extension);
@@ -108,7 +109,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
                     () -> toolAccessService.revoke(toolAccessRef.get().ticket()),
                     modelConfiguration,
                     () -> refreshToolAccess(sessionId, eventSink, configuration, toolAccessService,
-                            objectMapper, toolAccessRef));
+                            objectMapper, toolAccessRef), skillConfiguration);
             synchronized (eventLock) {
                 handleReference.set(handle);
                 for (JsonNode event : earlyEvents) {

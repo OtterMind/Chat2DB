@@ -8,4 +8,11 @@ import ai.chat2db.community.tools.agent.tool.IAgentToolResult;
 public interface IAiAgentFileAccessService {
     IAgentToolResult<?> execute(AgentToolExecutionContext context, String toolName, Map<String, Object> arguments);
     void authorizeNative(String sessionId, String toolName, String workingDirectory, Map<String, Object> arguments);
+
+    default String authorizedDirectory(String sessionId, String toolName, String workingDirectory, Map<String, Object> arguments) {
+        authorizeNative(sessionId, toolName, workingDirectory, arguments);
+        return workingDirectory;
+    }
+
+    default String userSkillDirectory() { return null; }
 }

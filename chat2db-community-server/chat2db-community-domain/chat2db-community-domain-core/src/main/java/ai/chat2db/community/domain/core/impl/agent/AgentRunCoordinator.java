@@ -143,6 +143,10 @@ public class AgentRunCoordinator {
             throw new IllegalStateException("Agent session is not ready: " + session.id());
         }
         var skillInput = skills.resolve(new AiAgentSkillResolveRequest(command.input().text()));
+        var selectedSkills = skills.select(session.id()).stream().map(AgentSkillConverter::skill2runtime).toList();
+        if (skillInput.skillName() != null && selectedSkills.stream().noneMatch(skill -> skill.name().equals(skillInput.skillName()))) {
+            throw new IllegalArgumentException("Skill changed before the run could start: " + skillInput.skillName());
+        }
         AgentModelSnapshot model = modelResolver.resolve(command.modelConfigId());
         AgentTrace.record("run.model.resolved", session.id(), null,
                 Map.of("modelConfigId", model.modelConfigId(), "provider", model.provider(), "model", model.modelId()));
@@ -162,16 +166,16 @@ public class AgentRunCoordinator {
                                 "modelConfigId", model.modelConfigId(),
                                 "requestMessageId", run.requestMessageId(),
                                 "context", context, "renderedPrompt", renderedPrompt, "promptTemplate", "agent-v1",
-                                "requestedSkill", Objects.toString(skillInput.skillName(), ""))),
+                                "requestedSkill", Objects.toString(skillInput.skillName(), ""), "skills", selectedSkills)),
                 command.userId());
         updateSession(session, session.status(), AgentSessionStatus.RUNNING, sequence, command.modelConfigId());
         AgentTrace.record("run.accepted", session.id(), run.id(),
                 Map.of("sequence", sequence, "idempotencyKey", command.idempotencyKey()));
 
         AgentRuntimeRunRequest runtimeRequest = new AgentRuntimeRunRequest(
-                session.id(), runId, model, new AgentRuntimeInput(renderedPrompt, command.input().artifactIds(), skillInput.skillName()), command.idempotencyKey());
+                session.id(), runId, model, new AgentRuntimeInput(renderedPrompt, command.input().artifactIds(), skillInput.skillName()), command.idempotencyKey(), selectedSkills);
         try {
-            IAgentRuntimeSessionHandle handle = handle(session, command, model);
+            IAgentRuntimeSessionHandle handle = handle(session, command, model, selectedSkills);
             return handle.startRun(runtimeRequest).handle((reference, error) -> {
                 synchronized (this) {
                     if (error != null) {
@@ -290,7 +294,8 @@ public class AgentRunCoordinator {
     }
 
     private IAgentRuntimeSessionHandle handle(
-            AgentSession session, AgentRunStartCommand command, AgentModelSnapshot model) {
+            AgentSession session, AgentRunStartCommand command, AgentModelSnapshot model,
+            List<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill> selectedSkills) {
         IAgentRuntimeSessionHandle existing = handleRegistry.get(session.id());
         if (existing != null) {
             return existing;
@@ -305,12 +310,14 @@ public class AgentRunCoordinator {
                 new AgentRuntimeSessionOpenRequest(
                         session.id(), session.runtimeBinding().externalSessionId(),
                         session.definition().systemPrompt(), model,
-                        skills.prepare().stream().map(AgentSkillConverter::skill2runtime).toList()),
+                        selectedSkills),
                 event -> recordRuntimeEvent(command.userId(), event));
         handleRegistry.register(session.id(), opened);
         AgentTrace.record("runtime.opened", session.id(), null, Map.of("runtime", session.runtimeBinding().runtimeType()));
         return opened;
     }
+
+    void releaseSessionSkills(String sessionId) { skills.release(sessionId); }
 
     private synchronized void recordRuntimeEvent(Long userId, AgentRuntimeEvent runtimeEvent) {
         AgentSession session = sessionStorage.get(runtimeEvent.sessionId(), userId);

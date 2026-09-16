@@ -19,6 +19,15 @@
         "references/scatter.md",
         "references/statistics.md"
       ]
+    },
+    {
+      "name": "skill-manager",
+      "files": [
+        "SKILL.md",
+        "references/creation.md",
+        "references/installation.md",
+        "LICENSE.txt"
+      ]
     }
   ]
 }

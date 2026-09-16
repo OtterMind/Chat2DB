@@ -168,13 +168,17 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   useEffect(() => {
     setSuggestionTrigger(null);
     setSkills([]);
-    if (runtimeChoice !== 'PI') return;
+  }, [runtimeChoice]);
+
+  const suggestingSkills = suggestionTrigger?.kind === 'slash';
+  useEffect(() => {
+    if (runtimeChoice !== 'PI' || loading) return;
     const controller = new AbortController();
     pi.skills.list(undefined, { signal: controller.signal })
       .then((names) => { if (!controller.signal.aborted) setSkills(names); })
       .catch(() => { if (!controller.signal.aborted) feedback.error(i18n('stream.skill.loadFailed')); });
     return () => controller.abort();
-  }, [runtimeChoice]);
+  }, [runtimeChoice, loading, suggestingSkills]);
 
   const activeWorkspaceTab = useWorkspaceStore((state) =>
     state.workspaceTabList?.find((tab) => tab.id === state.activeConsoleId));

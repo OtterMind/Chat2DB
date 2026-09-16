@@ -169,15 +169,8 @@ public class PiProcessSupervisor implements AutoCloseable {
             command.add("--extension");
             command.add(file.toString());
         }
-        for (AgentRuntimeSkill skill : skills) {
-            Path entry = Path.of(skill.entryPath());
-            if (!entry.isAbsolute() || !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
-                    || !entry.toRealPath().equals(entry)) {
-                throw new IOException("Pi skill resource is unavailable: " + skill.name());
-            }
-            command.add("--skill");
-            command.add(entry.toString());
-        }
+        // Skills come from the launcher's manifest via resources_discover. Fixed CLI paths
+        // would remain after reload and keep a removed or older skill version active.
         command.addAll(List.of(
                 "--no-skills", "--no-prompt-templates", "--no-themes",
                 "--no-context-files", "--no-approve", "--offline"));
