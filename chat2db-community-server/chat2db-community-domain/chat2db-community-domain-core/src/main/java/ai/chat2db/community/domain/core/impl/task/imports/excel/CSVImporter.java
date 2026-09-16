@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.task.imports.excel;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.core.impl.db.CsvParser;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
@@ -17,6 +18,10 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
 
     @Override
     protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
+        if (TaskExecutionMode.isFast(spec.getMode())) {
+            new ParallelCSVImporter().doImportData(spec, context, columns);
+            return;
+        }
         CsvOptions options = (spec.getCsvOptions() == null ? CsvOptions.defaults() : spec.getCsvOptions()).validate();
         NoModelDataListener listener = new NoModelDataListener(spec, context, columns);
         boolean[] initialized = {false};
@@ -43,7 +48,7 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
         }
     }
 
-    private static Map<Integer, String> syntheticHeader(int columnCount) {
+    static Map<Integer, String> syntheticHeader(int columnCount) {
         Map<Integer, String> header = new LinkedHashMap<>();
         for (int index = 0; index < columnCount; index++) {
             header.put(index, "column_" + (index + 1));
@@ -51,7 +56,7 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
         return header;
     }
 
-    private static int mappedSourceColumnCount(ImportTaskSpec spec) {
+    static int mappedSourceColumnCount(ImportTaskSpec spec) {
         if (spec.getColumnMappings() == null) {
             return 0;
         }

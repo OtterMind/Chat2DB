@@ -36,4 +36,10 @@ public class ImportTaskSpec implements TaskSpec {
     private List<ImportColumnMapping> columnMappings;
 
     private UnmappedTargetStrategy unmappedTarget;
+
+    /**
+     * Execution mode; {@code null} resolves to {@code STANDARD}.
+     */
+    private String mode;
+
 }

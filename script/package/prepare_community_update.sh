@@ -10,14 +10,18 @@ BUILD_SHA="$3"
 PLATFORM="$4"
 ARCH="$5"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
+ROOT_DIR=$(cd "${COMMUNITY_SOURCE_DIR:-${SCRIPT_DIR}/../..}" && pwd)
+source "${SCRIPT_DIR}/community-version.sh"
+NATIVE_VERSION=$(community_native_version "${VERSION}")
+CHANNEL=STABLE
+if [[ "${VERSION}" == *-beta.* ]]; then CHANNEL=BETA; fi
 PACKAGE_DIR="${ROOT_DIR}/jpackage/output"
 OUTPUT_DIR="${PACKAGE_DIR}/updates"
 BASE_URL="https://github.com/OtterMind/Chat2DB/releases/download/v${VERSION}"
 mkdir -p "${OUTPUT_DIR}"
 generate() {
   bash "${SCRIPT_DIR}/generate_update_v2.sh" \
-    "${VERSION}" "${VERSION}" COMMUNITY STABLE "${PLATFORM}" "${ARCH}" \
+    "${VERSION}" "${NATIVE_VERSION}" COMMUNITY "${CHANNEL}" "${PLATFORM}" "${ARCH}" \
     "$1" "$2" "$3" "${OUTPUT_DIR}" "${BASE_URL}" "${RELEASE_EPOCH}" "${BUILD_SHA}" \
     "https://github.com/OtterMind/Chat2DB/releases/tag/v${VERSION}"
 }
@@ -29,8 +33,11 @@ esac
 case "${PLATFORM}" in
   MACOS)
     archive="${PACKAGE_DIR}/community-update-${mac_arch}.tar.gz"
+    capture_dir=$(mktemp -d)
+    trap 'rm -rf "${capture_dir}"' EXIT
     bash "${SCRIPT_DIR}/capture_macos_update_package.sh" \
-      "${PACKAGE_DIR}/Chat2DB-Community-${VERSION}-${mac_arch}.dmg" "${archive}"
+      "${PACKAGE_DIR}/Chat2DB-Community-${VERSION}-${mac_arch}.dmg" "${capture_dir}/package" "${ROOT_DIR}"
+    tar -czf "${archive}" -C "${capture_dir}" package
     generate MACOS_APP_ARCHIVE "${archive}" "Contents/MacOS/Chat2DB Community"
     ;;
   WINDOWS)

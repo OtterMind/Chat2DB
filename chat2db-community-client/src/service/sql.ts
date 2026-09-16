@@ -493,6 +493,7 @@ const executeImportWithMapping = createRequest<
     mappings: { sourceColumn: string | null; targetColumn: string }[];
     unmappedTarget: ImportUnmappedTarget;
     csvOptions?: ICsvOptions;
+    mode?: import('@/typings/importExport').ImportExecutionMode;
   },
   IImportTaskSubmitResult
 >('/api/rdb/import_preview/execute', { method: 'post' });

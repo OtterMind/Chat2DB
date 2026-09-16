@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="desktop-layout" default="stage">
+    <target name="stage">
+        <mkdir dir="${desktop.root}/jpackage/input/sourceFile"/>
+        <echo file="${desktop.root}/jpackage/build-layout.properties">CHAT2DB_DESKTOP_LAYOUT=versioned-thin${line.separator}</echo>
+        <macrodef name="stage-thin-platform">
+            <attribute name="platform"/>
+            <sequential>
+                <delete dir="${desktop.root}/jpackage/input/@{platform}/lib"/>
+                <delete dir="${desktop.root}/jpackage/input/@{platform}/dist"/>
+                <delete dir="${desktop.root}/jpackage/input/@{platform}/runtime"/>
+                <delete dir="${desktop.root}/jpackage/input/@{platform}/tools"/>
+                <delete file="${desktop.root}/jpackage/input/@{platform}/${desktop.jarName}"/>
+                <mkdir dir="${desktop.root}/jpackage/input/@{platform}/runtime/lib"/>
+                <mkdir dir="${desktop.root}/jpackage/input/@{platform}/tools"/>
+                <copy file="${desktop.mainJar}"
+                      tofile="${desktop.root}/jpackage/input/@{platform}/runtime/${desktop.jarName}"/>
+                <copy todir="${desktop.root}/jpackage/input/@{platform}/runtime/lib">
+                    <fileset dir="${desktop.lib}"/>
+                </copy>
+                <copy file="${desktop.bootstrap}"
+                      tofile="${desktop.root}/jpackage/input/@{platform}/tools/chat2db-bootstrap.jar"/>
+                <copy file="${desktop.helper}"
+                      tofile="${desktop.root}/jpackage/input/@{platform}/tools/chat2db-updater.jar"/>
+                <copy file="${desktop.launch}"
+                      tofile="${desktop.root}/jpackage/input/@{platform}/runtime/launch.json"/>
+            </sequential>
+        </macrodef>
+        <stage-thin-platform platform="mac"/>
+        <stage-thin-platform platform="win"/>
+        <stage-thin-platform platform="linux"/>
+    </target>
+</project>

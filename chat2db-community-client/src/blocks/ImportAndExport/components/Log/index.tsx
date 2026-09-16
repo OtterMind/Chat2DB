@@ -309,7 +309,7 @@ const Log = (props: IProps) => {
                   className={styles.virtualListItem}
                   timestamp={event.createdAt}
                   level={event.level}
-                  message={formatTaskEventMessage(event, i18n)}
+                  message={formatTaskEventMessage(event, i18n, taskDetails.type)}
                 />
               )}
             </VirtualList>

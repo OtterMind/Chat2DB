@@ -10,21 +10,26 @@ fi
 APP_VERSION="$1"
 APP_NAME="Chat2DB Community"
 VENDOR_NAME="Aita Technology (Hangzhou) Co., Ltd."
-MAIN_JAR="chat2db-community.jar"
-MAIN_CLASS="org.springframework.boot.loader.launch.PropertiesLauncher"
 ARTIFACT_BASE="Chat2DB-Community"
 WIN_UPGRADE_UUID="4D7C78BC-B42F-4F81-9F5F-56E3F5E4E9B2"
 
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd "${COMMUNITY_SOURCE_DIR:-${SCRIPT_DIR}/../..}" && pwd)
+source "${SCRIPT_DIR}/desktop_layout.sh"
+chat2db_load_desktop_layout "${PROJECT_ROOT}"
+source "${SCRIPT_DIR}/community-version.sh"
+NATIVE_VERSION=$(community_native_version "${APP_VERSION}")
 LICENSE_FILE="${PROJECT_ROOT}/LICENSE"
 INPUT_DIR="${PROJECT_ROOT}/jpackage/input/win"
 MAIN_JAR_PATH="${INPUT_DIR}/${MAIN_JAR}"
-LIB_DIR="${INPUT_DIR}/lib"
+LIB_DIR="${INPUT_DIR}/runtime/lib"
 COMMUNITY_ICON_FILE="${PROJECT_ROOT}/jpackage/input/icons/community/logo.ico"
 ICON_FILE="${COMMUNITY_ICON_FILE}"
 RUNTIME_IMAGE_PATH="${PROJECT_ROOT}/jpackage/input/runtime/win/Home"
 OUTPUT_DIR="${PROJECT_ROOT}/jpackage/output"
 ASSOCIATIONS_FILE="${OUTPUT_DIR}/sql-association-community.properties"
+
+chat2db_validate_desktop_input "${INPUT_DIR}"
 
 echo "[info] project root: ${PROJECT_ROOT}"
 echo "[info] app version : ${APP_VERSION}"
@@ -62,17 +67,11 @@ java -version
 which jpackage
 jpackage --version
 
+chat2db_jpackage_arguments "${NATIVE_VERSION}" "${OUTPUT_DIR}" "${RUNTIME_IMAGE_PATH}"
 JPACKAGE_ARGS=(
+    "${CHAT2DB_JPACKAGE_ARGS[@]}"
     --verbose
     --type msi
-    --dest "${OUTPUT_DIR}"
-    --input "${INPUT_DIR}"
-    --name "${APP_NAME}"
-    --app-version "${APP_VERSION}"
-    --vendor "${VENDOR_NAME}"
-    --runtime-image "${RUNTIME_IMAGE_PATH}"
-    --main-jar "${MAIN_JAR}"
-    --main-class "${MAIN_CLASS}"
     --license-file "${LICENSE_FILE}"
     --file-associations "${ASSOCIATIONS_FILE}"
     --win-shortcut
@@ -93,7 +92,6 @@ JAVA_OPTS=(
     "-Dsun.java2d.d3d=false"
     "-Ddeploy.local=false"
     "-Dspring.profiles.active=release"
-    "-Dloader.path=lib"
     "-Dfile.encoding=UTF-8"
     "-Dchat2db.mode=DESKTOP"
     "-Dchat2db.runtime.mode=community"
@@ -110,7 +108,7 @@ done
 echo "[run] jpackage ${JPACKAGE_ARGS[*]}"
 jpackage "${JPACKAGE_ARGS[@]}"
 
-SRC_MSI="${OUTPUT_DIR}/${APP_NAME}-${APP_VERSION}.msi"
+SRC_MSI="${OUTPUT_DIR}/${APP_NAME}-${NATIVE_VERSION}.msi"
 DST_MSI="${OUTPUT_DIR}/${ARTIFACT_BASE}-${APP_VERSION}.msi"
 if [ ! -f "${SRC_MSI}" ]; then
     echo "[error] jpackage did not produce ${SRC_MSI}" >&2

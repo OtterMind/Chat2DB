@@ -72,6 +72,23 @@ class DbMappedImportServiceImplTest {
 
     }
 
+    @Test
+    void forwardsFastModeAlongsideExistingMappingAndCsvOptions(@TempDir Path directory) throws Exception {
+        RecordingStagingService stagingService = stagingService(directory);
+        AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
+        DbMappedImportServiceImpl service = service(stagingService, preview("Orders", target("name")), submitted);
+        MappedImportExecution execution = execution(mapping("Name", "name"));
+        var options = ai.chat2db.community.domain.api.model.task.CsvOptions.defaults();
+        options.setDelimiter(";");
+        execution.setCsvOptions(options);
+        execution.setMode("FAST");
+
+        assertEquals(42L, service.submit(execution));
+        assertEquals("FAST", submitted.get().getMode());
+        assertEquals(";", submitted.get().getCsvOptions().getDelimiter());
+        assertEquals("name", submitted.get().getColumnMappings().get(0).getTargetColumn());
+    }
+
     private static DbMappedImportServiceImpl service(RecordingStagingService stagingService,
             IDbImportPreviewService previewService, AtomicReference<ImportTaskSpec> submitted) {
         IImportTaskSubmissionService submissionService = (spec, stagedFileId) -> {

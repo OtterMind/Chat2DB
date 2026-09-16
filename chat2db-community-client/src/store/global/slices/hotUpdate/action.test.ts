@@ -56,6 +56,8 @@ async function run() {
     import('@/jcef'),
     import('@/constants/settings'),
   ]);
+  const { clientRuntime } = await import('@/client-runtime');
+  assert.equal(clientRuntime.supportsBetaUpdates, true);
   const originalApi = {
     appCheckUpdate: jcefApi.appCheckUpdate,
     triggerInstallation: jcefApi.triggerInstallation,

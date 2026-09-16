@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CSVImporterColumnMappingTest {
 
@@ -169,6 +170,24 @@ class CSVImporterColumnMappingTest {
     }
 
     @Test
+    void csvExplicitMappingSkipsAnUnselectedSameNameColumn(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("orders.csv"), "Full Name,status\nAlice,OVERRIDE\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .columnMappings(List.of(new ImportColumnMapping("Full Name", "name")))
+                .unmappedTarget(UnmappedTargetStrategy.DEFAULT).build();
+
+        new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns());
+
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT name, status FROM orders")) {
+            result.next();
+            assertEquals("Alice", result.getString("name"));
+            assertEquals("NEW", result.getString("status"));
+        }
+    }
+
+    @Test
     void csvRowRangeAndFormatsDriveThePersistedValues(@TempDir Path directory) throws Exception {
         Path input = directory.resolve("formatted.csv");
         Files.writeString(input, "Generated report\n"
@@ -215,12 +234,145 @@ class CSVImporterColumnMappingTest {
         }
     }
 
+    @Test
+    void bothModesKeepTheLastMappingForADuplicateTarget(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("duplicates.csv"), "Full Name,status\nAlice,OVERRIDE\n");
+        for (String mode : List.of("STANDARD", "FAST")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("DELETE FROM orders");
+            }
+            ImportTaskSpec spec = ImportTaskSpec.builder().mode(mode).sourceFile(input.toString())
+                    .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                    .columnMappings(List.of(new ImportColumnMapping("Full Name", "name"),
+                            new ImportColumnMapping("status", "name"))).build();
+
+            new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns());
+
+            try (Statement statement = connection.createStatement();
+                 ResultSet rows = statement.executeQuery("SELECT name FROM orders")) {
+                org.junit.jupiter.api.Assertions.assertTrue(rows.next());
+                assertEquals("OVERRIDE", rows.getString(1), mode);
+                assertEquals(false, rows.next());
+            }
+        }
+    }
+
+    @Test
+    void malformedCsvDoesNotFlushBufferedRowsAfterParseFailure(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("malformed.csv"), "name\nAlice\n\"unfinished\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build()).build();
+
+        assertThrows(RuntimeException.class,
+                () -> new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns()));
+        assertRowCount(0);
+    }
+
+    @Test
+    void fastModeDoesNotFlushBufferedRowsAfterConversionError(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("conversion-error.csv"), "name\nAlice\nBob\n");
+        OutOfMemoryError failure = new OutOfMemoryError("simulated row conversion error");
+        TableColumn nameColumn = new TableColumn() {
+            private int conversions;
+
+            @Override
+            public Integer getColumnSize() {
+                if (++conversions == 2) throw failure;
+                return 64;
+            }
+        };
+        nameColumn.setName("name");
+        nameColumn.setColumnType("VARCHAR");
+        ImportTaskSpec spec = ImportTaskSpec.builder().mode("FAST").sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build()).build();
+
+        org.junit.jupiter.api.Assertions.assertSame(failure, assertThrows(OutOfMemoryError.class,
+                () -> new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), List.of(nameColumn))));
+        assertRowCount(0);
+    }
+
+    @Test
+    void preservesQuotedEmptyTextAndUnquotedNull(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("empty.csv"), "name,note\nAlice,\"\"\nBob,\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .csvOptions(ai.chat2db.community.domain.api.model.task.CsvOptions.defaults()).build();
+        new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns());
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT note FROM orders ORDER BY name")) {
+            org.junit.jupiter.api.Assertions.assertTrue(result.next());
+            assertEquals("", result.getString(1));
+            org.junit.jupiter.api.Assertions.assertTrue(result.next());
+            org.junit.jupiter.api.Assertions.assertNull(result.getString(1));
+        }
+    }
+
+    @Test
+    void fastAndStandardModesPreserveWhitespaceInSourceNames(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("spaces.csv"), "Name, Name\nplain,spaced\n");
+        for (String mode : List.of("STANDARD", "FAST")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("DELETE FROM orders");
+            }
+            ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString()).mode(mode)
+                    .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                    .columnMappings(List.of(new ImportColumnMapping(" Name", "name"),
+                            new ImportColumnMapping("Name", "note"))).build();
+
+            new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns());
+
+            try (Statement statement = connection.createStatement();
+                 ResultSet rows = statement.executeQuery("SELECT name, note FROM orders")) {
+                org.junit.jupiter.api.Assertions.assertTrue(rows.next());
+                assertEquals("spaced", rows.getString(1), mode);
+                assertEquals("plain", rows.getString(2), mode);
+            }
+        }
+    }
+
+    private void assertRowCount(int expected) throws Exception {
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM orders")) {
+            result.next();
+            assertEquals(expected, result.getInt(1));
+        }
+    }
+
+    @Test
+    void unmappedRequiredColumnFailsBeforeWriting(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("required.csv"), "status\nREADY\n");
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build())
+                .columnMappings(List.of(ImportColumnMapping.builder()
+                        .sourceColumn("status").targetColumn("status").build())).build();
+        assertThrows(RuntimeException.class,
+                () -> new CSVImporter().doImportData(spec, new RecordingTaskExecutionContext(), columns()));
+        assertRowCount(0);
+    }
+
+    @Test
+    void failedImportReleasesStagedSource(@TempDir Path directory) throws Exception {
+        Path input = Files.writeString(directory.resolve("staged.csv"), "name\nAlice\n");
+        var executor = new ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor();
+        var released = new ArrayList<String>();
+        var staging = (ai.chat2db.community.domain.api.service.file.IImportFileStagingService)
+                java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                        new Class<?>[] {ai.chat2db.community.domain.api.service.file.IImportFileStagingService.class},
+                        (proxy, method, args) -> { released.add((String) args[0]); return null; });
+        var field = executor.getClass().getDeclaredField("importFileStagingService");
+        field.setAccessible(true);
+        field.set(executor, staging);
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .importFileId("staged-id").format("SQL").build();
+        assertThrows(RuntimeException.class, () -> executor.execute(spec, new RecordingTaskExecutionContext()));
+        assertEquals(List.of("staged-id"), released);
+    }
     private static List<TableColumn> columns() {
         return List.of(
                 TableColumn.builder().name("id").columnType("INTEGER").dataType(Types.INTEGER)
                         .autoIncrement(true).build(),
                 TableColumn.builder().name("name").columnType("VARCHAR").dataType(Types.VARCHAR)
-                        .build(),
+                        .nullable(0).build(),
                 TableColumn.builder().name("status").columnType("VARCHAR").dataType(Types.VARCHAR)
                         .defaultValue("'NEW'").build(),
                 TableColumn.builder().name("note").columnType("VARCHAR").dataType(Types.VARCHAR)

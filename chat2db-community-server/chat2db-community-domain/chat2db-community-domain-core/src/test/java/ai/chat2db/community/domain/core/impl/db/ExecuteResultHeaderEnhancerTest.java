@@ -18,6 +18,8 @@ import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.spi.util.SqlUtils;
+import com.alibaba.druid.DbType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,12 +27,14 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +61,53 @@ class ExecuteResultHeaderEnhancerTest {
         }
         if (connection != null && !connection.isClosed()) {
             connection.close();
+        }
+    }
+
+    @Test
+    void resolvesPrimaryKeyThroughOracleRownumSubqueryUsingJdbcMetadata() throws Exception {
+        try (var statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA IF NOT EXISTS APP");
+            statement.execute("CREATE TABLE APP.EVENT_LOG (EVENT_ID VARCHAR(50) PRIMARY KEY, CREATE_TIME DATE)");
+            statement.execute("INSERT INTO APP.EVENT_LOG VALUES ('event-1', DATE '2026-01-01')");
+            try {
+                putContext(new DefaultMetaService());
+                Chat2DBContext.getConnectInfo().setDatabaseName(connection.getCatalog());
+                Chat2DBContext.getConnectInfo().setSchemaName("PUBLIC");
+                String sql = """
+                        SELECT * FROM (
+                            SELECT * FROM APP.EVENT_LOG ORDER BY CREATE_TIME DESC
+                        ) WHERE ROWNUM <= 100
+                        """;
+                List<Header> headers = new ArrayList<>();
+                try (var resultSet = statement.executeQuery(sql)) {
+                    assertTrue(resultSet.next());
+                    assertEquals("event-1", resultSet.getString("EVENT_ID"));
+                    var metadata = resultSet.getMetaData();
+                    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                        headers.add(Header.builder().name(metadata.getColumnLabel(i))
+                                .columnName(metadata.getColumnName(i)).primaryKey(false).build());
+                    }
+                }
+                ExecuteResponse response = ExecuteResponse.builder().success(true).headerList(headers).build();
+                SqlUtils.buildCanEditResult(sql, DbType.oracle, response);
+                assertTrue(response.isCanEdit());
+                assertEquals("APP.EVENT_LOG", response.getTableName());
+
+                AtomicReference<DbTableQueryRequest> capturedRequest = new AtomicReference<>();
+                IDbTableService tableService = tableService(List.of(
+                        TableColumn.builder().name("EVENT_ID").columnType("VARCHAR").primaryKey(false).build(),
+                        TableColumn.builder().name("CREATE_TIME").columnType("DATE").primaryKey(false).build()),
+                        new AtomicInteger(), capturedRequest);
+                enhance(tableService, response);
+
+                assertEquals("APP", capturedRequest.get().getSchemaName());
+                assertEquals("EVENT_LOG", capturedRequest.get().getTableName());
+                assertTrue(headers.get(0).getPrimaryKey());
+                assertFalse(headers.get(1).getPrimaryKey());
+            } finally {
+                statement.execute("DROP TABLE APP.EVENT_LOG");
+            }
         }
     }
 
@@ -248,6 +299,8 @@ class ExecuteResultHeaderEnhancerTest {
         public DBConfig getDBConfig() {
             DBConfig dbConfig = new DBConfig();
             dbConfig.setDbType(TEST_DB_TYPE);
+            dbConfig.setSupportDatabase(true);
+            dbConfig.setSupportSchema(true);
             return dbConfig;
         }
 

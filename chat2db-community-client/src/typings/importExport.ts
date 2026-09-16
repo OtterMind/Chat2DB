@@ -29,6 +29,9 @@ export interface ImportExportTaskDetails {
   updatedAt?: number | string;
 }
 
+/** CSV import execution mode; absent resolves to STANDARD on the backend. */
+export type ImportExecutionMode = 'FAST' | 'STANDARD';
+
 export interface ImportExportTaskEvent {
   eventId: number;
   taskId: number;

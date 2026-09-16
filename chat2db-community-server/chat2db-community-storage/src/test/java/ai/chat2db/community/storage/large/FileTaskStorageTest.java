@@ -11,9 +11,11 @@ import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
+import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -39,6 +41,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileTaskStorageTest {
+
+    @Test
+    void componentScanProvidesFileTaskStorage() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.scan(FileTaskStorage.class.getPackageName());
+            context.refresh();
+
+            assertEquals(1, context.getBeansOfType(TaskStorage.class).size());
+            assertEquals(FileTaskStorage.class, context.getBean(TaskStorage.class).getClass());
+        }
+    }
 
     @TempDir
     File baseDir;

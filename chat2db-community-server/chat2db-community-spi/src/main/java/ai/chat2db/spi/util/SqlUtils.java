@@ -21,10 +21,17 @@ import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
+import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
 import com.alibaba.druid.sql.ast.statement.SQLJoinTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLSelect;
+import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
+import com.alibaba.druid.sql.ast.statement.SQLSelectQueryBlock;
 import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
+import com.alibaba.druid.sql.ast.statement.SQLSubqueryTableSource;
 import com.alibaba.druid.sql.ast.statement.SQLTableSource;
 import com.alibaba.druid.sql.parser.SQLParserUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -76,15 +83,11 @@ public class SqlUtils {
                     executeResult.setCanEdit(true);
                     SQLStatement sqlStatement = SQLUtils.parseSingleStatement(sql, dbType);
                     if ((sqlStatement instanceof SQLSelectStatement sqlSelectStatement)) {
-                        SQLExprTableSource sqlExprTableSource = (SQLExprTableSource) getSQLExprTableSource(
-                                sqlSelectStatement.getSelect().getFirstQueryBlock().getFrom());
-                        // A derived table (subquery in FROM) or other non-expr/non-join table
-                        // source cannot be mapped to a single physical table; without this guard
-                        // tableName stays null and the edit flow would emit invalid SQL such as
-                        // "UPDATE null SET ...". getSQLExprTableSource returns null for those
-                        // cases (see below), so keep the result set non-editable, mirroring the
-                        // null-check already present in getTableName(). Follows the same
-                        // setCanEdit(false)+return pattern used above for aliased/COUNT columns.
+                        SQLSelect sqlSelect = sqlSelectStatement.getSelect();
+                        SQLTableSource from = sqlSelect.getFirstQueryBlock().getFrom();
+                        SQLExprTableSource sqlExprTableSource = from instanceof SQLSubqueryTableSource
+                                ? resolvePassthroughTable(sqlSelect)
+                                : (SQLExprTableSource) getSQLExprTableSource(from);
                         if (sqlExprTableSource == null) {
                             executeResult.setCanEdit(false);
                             return;
@@ -99,6 +102,36 @@ public class SqlUtils {
             log.error("buildCanEditResult error", e);
             executeResult.setCanEdit(false);
         }
+    }
+
+    private static SQLExprTableSource resolvePassthroughTable(SQLSelect select) {
+        if (select.getWithSubQuery() != null
+                || !(select.getQuery() instanceof SQLSelectQueryBlock query)
+                || query.isDistinct() || query.getGroupBy() != null
+                || query.getInto() != null || query.getConnectBy() != null
+                || query.getSelectList().size() != 1) {
+            return null;
+        }
+        SQLTableSource from = query.getFrom();
+        if (from == null || from.getPivot() != null || from.getUnpivot() != null || from.getFlashback() != null) {
+            return null;
+        }
+        // Only an unchanged wildcard projection can reuse the physical table's column metadata.
+        SQLSelectItem item = query.getSelectList().get(0);
+        boolean wildcard = item.getExpr() instanceof SQLAllColumnExpr all && CollectionUtils.isEmpty(all.getExcept())
+                || item.getExpr() instanceof SQLPropertyExpr property && "*".equals(property.getName())
+                && SQLUtils.nameEquals(property.getOwner().toString(), from.computeAlias());
+        if (!wildcard || item.getAlias() != null) {
+            return null;
+        }
+        if (from instanceof SQLSubqueryTableSource subquery) {
+            return CollectionUtils.isEmpty(subquery.getColumns()) ? resolvePassthroughTable(subquery.getSelect()) : null;
+        }
+        if (from instanceof SQLExprTableSource table && table.getExpr() instanceof SQLName
+                && CollectionUtils.isEmpty(table.getColumns())) {
+            return table;
+        }
+        return null;
     }
 
     public static String extractTableName(String sql) {

@@ -1836,4 +1836,33 @@ public class DefaultSQLExecutor implements ICommandExecutor {
             throw new RuntimeException(e);
         }
     }
+
+    /** Executes a JDBC batch using the connection's existing transaction settings. */
+    public void executeJdbcBatchInsert(Connection connection, List<String> sqls,
+                                      ISqlExecutionStatementListener statementListener,
+                                      Runnable cancellationChecker) {
+        if (sqls == null || sqls.isEmpty()) {
+            return;
+        }
+        checkTaskCancellation(cancellationChecker);
+        try {
+            Statement statement = connection.createStatement();
+            try {
+                try (statement) {
+                    notifyStatementCreated(statementListener, statement);
+                    checkTaskCancellation(cancellationChecker);
+                    for (String sql : sqls) {
+                        statement.addBatch(sql);
+                    }
+                    statement.executeBatch();
+                    checkTaskCancellation(cancellationChecker);
+                }
+            } finally {
+                notifyStatementClosed(statementListener, statement);
+            }
+        } catch (SQLException e) {
+            checkTaskCancellation(cancellationChecker);
+            throw new RuntimeException(e);
+        }
+    }
 }

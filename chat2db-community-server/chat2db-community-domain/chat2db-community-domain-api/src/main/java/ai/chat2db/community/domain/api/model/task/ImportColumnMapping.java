@@ -5,6 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * One explicit file-column to table-column mapping of an import.
+ */
 @Data
 @Builder
 @NoArgsConstructor

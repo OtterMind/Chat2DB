@@ -160,9 +160,9 @@ jobs:
       - name: Test updater and desktop integration
         shell: bash
         run: |
-          mvn -B -f chat2db-community-server/pom.xml -pl :chat2db-community-jcef -am \
+          mvn -B -f chat2db-community-server/pom.xml -pl :chat2db-community-jcef,:chat2db-community-bootstrap -am \
             -Dmaven.test.skip=false -DskipTests=false \
-            '-Dtest=FullPackage*Test,Update*Test,NativePackageInstallerTest,SemanticVersionTest,InstalledAppVersionReaderTest,TrustedUpdateKeysTest,GitHubReleaseDesktopUpdaterTest,DesktopUpdaterRegistryTest,RestartAppHandlerTest' \
+            '-Dtest=Chat2DBBootstrapTest,FullPackage*Test,Update*Test,NativePackageInstallerTest,SemanticVersionTest,InstalledAppVersionReaderTest,TrustedUpdateKeysTest,GitHubReleaseDesktopUpdaterTest,DesktopUpdaterRegistryTest,RestartAppHandlerTest' \
             -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.test.failure.ignore=false test
 
   repository:
@@ -171,6 +171,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Test desktop layout and Beta publication
+        run: |
+          bash script/package/tests/desktop-layout-test.sh
+          python3 script/package/tests/beta-index-publication-test.py
+          ruby script/package/tests/community-beta-workflow-test.rb
 
       - name: Validate required repository files
         run: |

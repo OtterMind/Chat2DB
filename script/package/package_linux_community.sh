@@ -13,16 +13,19 @@ APP_ARTIFACT_PREFIX="Chat2DB-Community"
 PACKAGE_NAME="chat2db-community"
 VENDOR_NAME="AiTa Technology (Hangzhou) Co., Ltd."
 MAINTAINER_EMAIL="support@chat2db.ai"
-MAIN_JAR="chat2db-community.jar"
-MAIN_CLASS="org.springframework.boot.loader.launch.PropertiesLauncher"
 PROTOCOL_NAME="chat2db-community"
 PROTOCOL_DESCRIPTION="Chat2DB Community Protocol Handler"
 
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd "${COMMUNITY_SOURCE_DIR:-${SCRIPT_DIR}/../..}" && pwd)
+source "${SCRIPT_DIR}/desktop_layout.sh"
+chat2db_load_desktop_layout "${PROJECT_ROOT}"
+source "${SCRIPT_DIR}/community-version.sh"
+NATIVE_VERSION=$(community_native_version "${APP_VERSION}")
 LICENSE_FILE="${PROJECT_ROOT}/LICENSE"
 INPUT_DIR="${PROJECT_ROOT}/jpackage/input/linux"
 MAIN_JAR_PATH="${INPUT_DIR}/${MAIN_JAR}"
-LIB_DIR="${INPUT_DIR}/lib"
+LIB_DIR="${INPUT_DIR}/runtime/lib"
 COMMUNITY_ICON_FILE="${PROJECT_ROOT}/jpackage/input/icons/community/logo.png"
 ICON_FILE="${COMMUNITY_ICON_FILE}"
 OUTPUT_DIR="${PROJECT_ROOT}/jpackage/output"
@@ -33,6 +36,7 @@ DESCRIPTION="${PROTOCOL_DESCRIPTION}"
 APP_EXECUTABLE_ESCAPED="${APP_NAME// /\\ }"
 
 validate_resources() {
+    chat2db_validate_desktop_input "${INPUT_DIR}"
     if [ ! -f "${MAIN_JAR_PATH}" ]; then
         echo "Error: Community application jar not found: ${MAIN_JAR_PATH}" >&2
         exit 1
@@ -88,7 +92,6 @@ java_options() {
     cat <<'EOF'
 -Ddeploy.local=false
 -Dspring.profiles.active=release
--Dloader.path=lib
 -Dchat2db.mode=DESKTOP
 -Dchat2db.runtime.mode=community
 -Dchat2db.network.status=OFFLINE
@@ -135,15 +138,9 @@ EOF
 
 build_base_args() {
     local dest_dir="$1"
+    chat2db_jpackage_arguments "${NATIVE_VERSION}" "${dest_dir}" "${PROJECT_ROOT}/jpackage/input/runtime/linux/Home"
     BASE_ARGS=(
-        "--name" "${APP_NAME}"
-        "--app-version" "${APP_VERSION}"
-        "--vendor" "${VENDOR_NAME}"
-        "--input" "${INPUT_DIR}"
-        "--main-jar" "${MAIN_JAR}"
-        "--main-class" "${MAIN_CLASS}"
-        "--dest" "${dest_dir}"
-        "--runtime-image" "${PROJECT_ROOT}/jpackage/input/runtime/linux/Home"
+        "${CHAT2DB_JPACKAGE_ARGS[@]}"
         "--icon" "${ICON_FILE}"
     )
 

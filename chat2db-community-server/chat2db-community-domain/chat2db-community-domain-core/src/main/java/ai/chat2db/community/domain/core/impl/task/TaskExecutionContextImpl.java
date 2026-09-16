@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.Statement;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -33,7 +34,7 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     private final AtomicReference<String> stage = new AtomicReference<>();
 
-    private final AtomicReference<StatementRegistration> activeStatement = new AtomicReference<>();
+    private final Map<Statement, TaskCancelable> activeStatements = new IdentityHashMap<>();
 
     private ArtifactDraft artifactDraft;
 
@@ -45,6 +46,11 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
         this.runningTask = runningTask;
         this.taskStorage = taskStorage;
         this.artifactService = artifactService;
+    }
+
+    @Override
+    public Long taskId() {
+        return taskId;
     }
 
     @Override
@@ -87,8 +93,12 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void registerCancelable(TaskCancelable resource) {
-        activeStatement.set(null);
         runningTask.registerCancelable(resource);
+    }
+
+    @Override
+    public void cancelResources() {
+        runningTask.cancelResources();
     }
 
     @Override
@@ -132,21 +142,20 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
     }
 
     @Override
-    public void onStatementCreated(Statement statement) {
-        if (statement == null) {
+    public synchronized void onStatementCreated(Statement statement) {
+        if (statement == null || activeStatements.containsKey(statement)) {
             return;
         }
         TaskCancelable cancelable = statement::cancel;
-        activeStatement.set(new StatementRegistration(statement, cancelable));
+        activeStatements.put(statement, cancelable);
         runningTask.registerCancelable(cancelable);
     }
 
     @Override
-    public void onStatementClosed(Statement statement) {
-        StatementRegistration registration = activeStatement.get();
-        if (registration != null && registration.statement() == statement
-                && activeStatement.compareAndSet(registration, null)) {
-            runningTask.clearCancelable(registration.cancelable());
+    public synchronized void onStatementClosed(Statement statement) {
+        TaskCancelable cancelable = activeStatements.remove(statement);
+        if (cancelable != null) {
+            runningTask.clearCancelable(cancelable);
         }
     }
 
@@ -192,6 +201,4 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
                 .build());
     }
 
-    private record StatementRegistration(Statement statement, TaskCancelable cancelable) {
-    }
 }

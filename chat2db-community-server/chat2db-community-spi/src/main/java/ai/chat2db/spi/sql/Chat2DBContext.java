@@ -139,6 +139,11 @@ public class Chat2DBContext {
         return StatementGuardConnection.wrap(connection, STATEMENT_GUARD_THREAD_LOCAL.get());
     }
 
+    /** Returns the guard bound to the current task for propagation to its workers. */
+    public static Consumer<String> captureStatementGuard() {
+        return STATEMENT_GUARD_THREAD_LOCAL.get();
+    }
+
     public static StatementGuardScope bindStatementGuard(Consumer<String> statementGuard) {
         Consumer<String> previous = STATEMENT_GUARD_THREAD_LOCAL.get();
         if (statementGuard == null) {

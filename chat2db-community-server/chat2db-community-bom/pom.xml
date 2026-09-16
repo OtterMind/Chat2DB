@@ -101,6 +101,11 @@
         <dependencies>
             <dependency>
                 <groupId>ai.chat2db</groupId>
+                <artifactId>chat2db-community-bootstrap</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.chat2db</groupId>
                 <artifactId>chat2db-community-updater</artifactId>
                 <version>${revision}</version>
             </dependency>

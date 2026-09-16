@@ -230,6 +230,10 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
   actions: css`
     z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
     flex: none;
     padding-top: 6px;
     background: ${token.colorBgElevated};

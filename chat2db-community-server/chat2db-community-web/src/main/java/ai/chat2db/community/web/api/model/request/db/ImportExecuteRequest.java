@@ -23,4 +23,7 @@ public class ImportExecuteRequest extends DataSourceBaseRequest {
     private List<ImportColumnMapping> mappings;
 
     private UnmappedTargetStrategy unmappedTarget;
+
+    private String mode;
+
 }

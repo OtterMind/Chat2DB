@@ -3,6 +3,9 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -32,7 +35,7 @@ final class RunningTask {
 
     private final Object cancellationLock = new Object();
 
-    private TaskCancelable cancelable;
+    private final Set<TaskCancelable> cancelables = new HashSet<>();
 
     private final ReentrantLock completionLock = new ReentrantLock();
 
@@ -41,6 +44,8 @@ final class RunningTask {
     private volatile Future<?> future;
 
     private volatile boolean closed;
+
+    private boolean resourcesCancelled;
 
     RunningTask(Long taskId) {
         this(taskId, CANCELLATION_EXECUTOR);
@@ -69,7 +74,7 @@ final class RunningTask {
 
     boolean requestCancellation(boolean mayInterruptIfRunning) {
         Future<?> currentFuture;
-        TaskCancelable currentCancelable;
+        List<TaskCancelable> currentCancelables;
         synchronized (cancellationLock) {
             if (closed) {
                 return false;
@@ -78,20 +83,38 @@ final class RunningTask {
                 return false;
             }
             currentFuture = future;
-            currentCancelable = cancelable;
+            currentCancelables = cancelResourcesLocked();
         }
         if (currentFuture != null) {
             currentFuture.cancel(mayInterruptIfRunning);
         }
-        cancelRegisteredResourceAsync(currentCancelable);
+        currentCancelables.forEach(this::cancelRegisteredResourceAsync);
         return true;
     }
 
+    void cancelResources() {
+        List<TaskCancelable> resources;
+        synchronized (cancellationLock) {
+            resources = cancelResourcesLocked();
+        }
+        resources.forEach(this::cancelRegisteredResourceAsync);
+    }
+
+    private List<TaskCancelable> cancelResourcesLocked() {
+        if (resourcesCancelled) {
+            return List.of();
+        }
+        resourcesCancelled = true;
+        return List.copyOf(cancelables);
+    }
+
     void registerCancelable(TaskCancelable resource) {
+        if (resource == null) {
+            return;
+        }
         boolean cancelImmediately;
         synchronized (cancellationLock) {
-            cancelable = resource;
-            cancelImmediately = resource != null && cancellationToken.isCancelled();
+            cancelImmediately = cancelables.add(resource) && resourcesCancelled;
         }
         if (cancelImmediately) {
             cancelRegisteredResourceAsync(resource);
@@ -100,9 +123,7 @@ final class RunningTask {
 
     void clearCancelable(TaskCancelable resource) {
         synchronized (cancellationLock) {
-            if (cancelable == resource) {
-                cancelable = null;
-            }
+            cancelables.remove(resource);
         }
     }
 
@@ -113,7 +134,7 @@ final class RunningTask {
     void close() {
         synchronized (cancellationLock) {
             closed = true;
-            cancelable = null;
+            cancelables.clear();
         }
     }
 

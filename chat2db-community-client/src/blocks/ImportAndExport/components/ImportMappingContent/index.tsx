@@ -9,7 +9,7 @@ import {
 } from '@/constants/importExport';
 import i18n from '@/i18n';
 import sqlService, { IImportPreview } from '@/service/sql';
-import type { ICsvOptions } from '@/typings/importExport';
+import type { ICsvOptions, ImportExecutionMode } from '@/typings/importExport';
 import {
   buildInitialImportMapping,
   getDuplicateImportMappings,
@@ -19,6 +19,7 @@ import { useStyles } from './style';
 import type { FileUrl } from '@/components/UploadLocalFile';
 import { stageSelectedImportFile } from './fileStaging';
 import CsvOptionsSections from './CsvOptionsSections';
+import ImportModeControl from '../ImportModeControl';
 import useImportDataSections from './ImportDataSections';
 import {
   buildCsvOptionsForTaskSubmit,
@@ -51,6 +52,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [unmappedTarget, setUnmappedTarget] = useState(ImportUnmappedTarget.DEFAULT);
   const [executing, setExecuting] = useState(false);
+  const [mode, setMode] = useState<ImportExecutionMode>('STANDARD');
   const [activeSections, setActiveSections] = useState<string[]>(['mapping', 'preview']);
   const [csvOptions, setCsvOptions] = useState<ICsvOptions>(DEFAULT_CSV_OPTIONS);
   const selectedFileName = file.fileName || file.file?.name || file.filePath || '';
@@ -76,6 +78,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
   useEffect(() => {
     let active = true;
     setFileId(undefined);
+    setMode('STANDARD');
     setLoading(true);
     setError(null);
     stageSelectedImportFile(file, sqlService.uploadImportFile, sqlService.stageDesktopImportFile)
@@ -227,6 +230,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
           .map(([source, target]) => ({ sourceColumn: source, targetColumn: target })),
         unmappedTarget,
         csvOptions: taskCsvOptions,
+        mode,
       })
       .then((result) => onSubmitted(result.taskId))
       .catch((e) => setError(resolveErrorMessage(e)))
@@ -275,6 +279,13 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
       </div>
       {preview && (
         <div className={styles.actions}>
+          {isCsv && (
+            <ImportModeControl
+              value={mode}
+              onChange={setMode}
+              disabled={executing || loading || loadedPreviewKey !== currentPreviewKey}
+            />
+          )}
           <Button
             type="primary"
             loading={executing}

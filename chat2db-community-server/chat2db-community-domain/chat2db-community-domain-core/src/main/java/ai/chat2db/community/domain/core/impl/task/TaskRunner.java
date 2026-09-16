@@ -67,7 +67,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
             bindExecutionContext();
             taskExtensionManager.runGuarded(submission.extensionContext(), () -> {
                 try (Chat2DBContext.StatementGuardScope ignored =
-                        Chat2DBContext.bindStatementGuard(taskExtensionManager::beforeStatement)) {
+                        Chat2DBContext.bindStatementGuard(taskExtensionManager.captureStatementGuard())) {
                     taskExecutor.execute(submission.spec(), executionContext);
                 }
             });

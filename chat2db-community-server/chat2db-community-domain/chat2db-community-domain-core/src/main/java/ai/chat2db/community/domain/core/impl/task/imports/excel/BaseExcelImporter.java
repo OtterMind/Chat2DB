@@ -2,21 +2,14 @@ package ai.chat2db.community.domain.core.impl.task.imports.excel;
 
 import ai.chat2db.community.domain.core.impl.task.imports.BaseImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportSqlExecutor;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportRowSqlBuilder;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
-import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
-import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
-import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
-import ai.chat2db.spi.ISqlBuilder;
-import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.spi.sql.Chat2DBContext;
-import ai.chat2db.spi.model.datasource.ConnectInfo;
-import ai.chat2db.spi.model.request.SingleInsertSqlRequest;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
@@ -50,20 +43,7 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
     public class NoModelDataListener extends AnalysisEventListener<Map<Integer, String>> {
 
-
-        private final ImportTaskSpec spec;
-
         private final TaskExecutionContext taskContext;
-
-        private final List<TableColumn> columns;
-
-        private Map<String, Integer> headMap;
-
-        private Map<String, Integer> mappedHeadMap;
-
-        private List<TableColumn> tableColumns;
-
-        private List<String> tableColumnList;
 
         private List<String> sqlList;
 
@@ -73,28 +53,15 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         private static final int BATCH_SIZE = 1000;
 
-        private final IValueProcessor valueProcessor;
-
-        private final ConnectInfo connectInfo;
-
-        private final ISqlBuilder sqlBuilder;
-
         private final ImportSqlExecutor sqlExecutor;
 
-        private final CsvOptions csvOptions;
-
-        private long sourceRowNumber;
+        private final ImportRowSqlBuilder rowSqlBuilder;
 
         public NoModelDataListener(ImportTaskSpec spec, TaskExecutionContext taskContext,
                 List<TableColumn> columns) {
-            this.spec = spec;
-            this.columns = columns;
             this.taskContext = taskContext;
-            this.valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-            this.connectInfo = Chat2DBContext.getConnectInfo();
-            this.sqlBuilder = Chat2DBContext.getSqlBuilder();
             this.sqlExecutor = new ImportSqlExecutor(taskContext);
-            this.csvOptions = spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
+            this.rowSqlBuilder = new ImportRowSqlBuilder(spec, columns);
         }
 
 
@@ -105,35 +72,8 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         void acceptHead(Map<Integer, String> map) {
             this.taskContext.checkCancelled();
-            this.headMap = invertMap(map);
-            this.mappedHeadMap = mappedHeadMap();
-            this.tableColumns = getTableColumns(columns, this.headMap);
+            rowSqlBuilder.acceptHead(map);
         }
-
-        private List<TableColumn> getTableColumns(List<TableColumn> columns, Map<String, Integer> headMap) {
-            List<TableColumn> tableColumns = new ArrayList<>();
-            this.tableColumnList = new ArrayList<>();
-            for (TableColumn column : columns) {
-                if (shouldInclude(column)) {
-                    tableColumns.add(column);
-                    this.tableColumnList.add(column.getName());
-                }
-            }
-            return tableColumns;
-        }
-
-        private Map<String, Integer> invertMap(Map<Integer, String> map) {
-            Map<String, Integer> out = new HashMap(map.size());
-            Iterator it = map.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<Integer, String> entry = (Map.Entry) it.next();
-                if (entry.getValue() != null) {
-                    out.put(entry.getValue().toUpperCase(Locale.ROOT), entry.getKey());
-                }
-            }
-            return out;
-        }
-
 
         @Override
         public void invoke(Map<Integer, String> data, AnalysisContext context) {
@@ -146,14 +86,11 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
         void acceptRow(Map<Integer, String> data, long sourceRowNumber) {
             this.taskContext.checkCancelled();
-            this.sourceRowNumber = sourceRowNumber;
             if (data == null || data.isEmpty()) {
                 skippedCount++;
                 return;
             }
-            List<String> values = getValueList(data);
-
-            String sql = getInsertSql(values);
+            String sql = rowSqlBuilder.build(data, sourceRowNumber);
 
             if (StringUtils.isBlank(sql)) {
                 skippedCount++;
@@ -168,73 +105,6 @@ public abstract class BaseExcelImporter extends BaseImporter {
             } else {
 
             }
-        }
-
-        private List<String> getValueList(Map<Integer, String> data) {
-            List<String> values = new ArrayList<>();
-            for (TableColumn column : tableColumns) {
-                Integer index = sourceIndex(column.getName());
-                if (index == null) {
-                    values.add(null);
-                    continue;
-                }
-                String value = data.get(index);
-                if (value == null) {
-                    values.add(null);
-                } else {
-                    if (csvOptions != null) {
-                        value = CsvImportValueNormalizer.normalize(value, column, csvOptions, sourceRowNumber);
-                    }
-                    String stringValue = valueProcessor.getSqlValueString(getSQLDataValue(value, column));
-                    values.add(stringValue);
-                }
-            }
-            return values;
-        }
-
-        private Map<String, Integer> mappedHeadMap() {
-            Map<String, Integer> mapped = new HashMap<>();
-            if (spec.getColumnMappings() == null) {
-                return mapped;
-            }
-            for (ImportColumnMapping mapping : spec.getColumnMappings()) {
-                String source = mapping.getSourceColumn();
-                String target = mapping.getTargetColumn();
-                Integer sourceIndex = headMap.get(source == null ? null : source.toUpperCase(Locale.ROOT));
-                if (sourceIndex != null && StringUtils.isNotBlank(target)) {
-                    mapped.put(target.toUpperCase(Locale.ROOT), sourceIndex);
-                }
-            }
-            return mapped;
-        }
-
-        private Integer sourceIndex(String targetColumn) {
-            String target = targetColumn.toUpperCase(Locale.ROOT);
-            if (spec.getColumnMappings() != null) {
-                return mappedHeadMap.get(target);
-            }
-            return headMap.get(target);
-        }
-
-        private boolean shouldInclude(TableColumn column) {
-            if (spec.getColumnMappings() == null) {
-                return sourceIndex(column.getName()) != null;
-            }
-            if (sourceIndex(column.getName()) != null) {
-                return true;
-            }
-            return spec.getUnmappedTarget() == UnmappedTargetStrategy.NULL
-                    && !Boolean.TRUE.equals(column.getAutoIncrement());
-        }
-
-        private String getInsertSql(List<String> values) {
-            return sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
-                    .databaseName(connectInfo.getDatabaseName())
-                    .schemaName(connectInfo.getSchemaName())
-                    .tableName(spec.getTarget().getTableName())
-                    .columnList(this.tableColumnList)
-                    .valueList(values)
-                    .build());
         }
 
         @Override

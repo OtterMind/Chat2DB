@@ -1,3 +1,4 @@
+import { ImportExportTaskType } from '@/constants/importExport';
 import type { ImportExportTaskEvent } from '@/typings/importExport';
 
 const LEGACY_EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}:?\s*/;
@@ -24,16 +25,43 @@ const fixedMessageKeys = {
 export type TaskEventMessageKey =
   | (typeof lifecycleMessageKeys)[keyof typeof lifecycleMessageKeys]
   | (typeof fixedMessageKeys)[keyof typeof fixedMessageKeys]
+  | 'workspace.task.event.csvImportFinished'
+  | 'workspace.task.event.csvImportSummary'
+  | 'workspace.task.event.batchCompletedTotal'
+  | 'workspace.task.event.batchCompletedRows'
   | 'workspace.task.event.batchExecuted'
   | 'workspace.task.event.importingRecords';
 
 type Translate = (key: TaskEventMessageKey, ...args: Array<string | number>) => string;
 
-export const formatTaskEventMessage = (event: ImportExportTaskEvent, translate: Translate) => {
+export const formatTaskEventMessage = (
+  event: ImportExportTaskEvent,
+  translate: Translate,
+  taskType?: ImportExportTaskType,
+) => {
   const message = event.message?.replace(LEGACY_EVENT_TIMESTAMP, '').trim() || '-';
+  const importedRows = event.details?.importedRows;
+  const elapsedMillis = event.details?.elapsedMillis;
+  if (event.code === 'IMPORT_SUMMARY') {
+    if (typeof importedRows === 'number' && Number.isSafeInteger(importedRows) && importedRows >= 0 &&
+        typeof elapsedMillis === 'number' && Number.isFinite(elapsedMillis) && elapsedMillis >= 0) {
+      return translate('workspace.task.event.csvImportSummary', importedRows, (elapsedMillis / 1000).toFixed(2));
+    }
+    return translate('workspace.task.event.csvImportFinished');
+  }
   const lifecycleKey = lifecycleMessageKeys[event.code as keyof typeof lifecycleMessageKeys];
   if (lifecycleKey) {
     return translate(lifecycleKey);
+  }
+
+  const statementCount = event.details?.statementCount;
+  if (taskType === ImportExportTaskType.DATA_FILE_IMPORT &&
+      event.code === 'BATCH_EXECUTED' && message === 'SQL batch executed' &&
+      typeof statementCount === 'number' && Number.isSafeInteger(statementCount) && statementCount >= 0) {
+    if (typeof importedRows === 'number' && Number.isSafeInteger(importedRows) && importedRows >= statementCount) {
+      return translate('workspace.task.event.batchCompletedTotal', statementCount, importedRows);
+    }
+    return translate('workspace.task.event.batchCompletedRows', statementCount);
   }
 
   const fixedMessageKey = fixedMessageKeys[message as keyof typeof fixedMessageKeys];

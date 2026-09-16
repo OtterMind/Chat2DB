@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.service.task.extension.ITaskSubmissionHoo
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 @Component
 public class TaskExtensionManager {
@@ -41,11 +42,20 @@ public class TaskExtensionManager {
         }
     }
 
+    /** Captures the task so worker threads run the same statement guards. */
+    public Consumer<String> captureStatementGuard() {
+        TaskExecutionContext context = currentTask.get();
+        return sql -> beforeStatement(context, sql);
+    }
+
     public void beforeStatement(String sql) {
+        beforeStatement(currentTask.get(), sql);
+    }
+
+    private void beforeStatement(TaskExecutionContext context, String sql) {
         if (executionGuards.isEmpty()) {
             return;
         }
-        TaskExecutionContext context = currentTask.get();
         if (context == null) {
             throw new IllegalStateException("Task statement guard requires an active task context");
         }

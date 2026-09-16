@@ -23,7 +23,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-final class CsvImportValueNormalizer {
+public final class CsvImportValueNormalizer {
 
     private static final Map<String, Integer> MONTHS = monthNames();
     private static final Set<String> NUMERIC_TYPES = Set.of(
@@ -33,7 +33,7 @@ final class CsvImportValueNormalizer {
     private CsvImportValueNormalizer() {
     }
 
-    static String normalize(String value, TableColumn column, CsvOptions options, long sourceRow) {
+    public static String normalize(String value, TableColumn column, CsvOptions options, long sourceRow) {
         if (value == null || column == null) {
             return value;
         }

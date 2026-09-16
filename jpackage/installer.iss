@@ -44,6 +44,9 @@
 AppId={{BE2D7C86-0852-42CC-AC7E-522B840F958A}
 AppName={#AppName}
 AppVersion={#AppVersion}
+#ifdef AppNativeVersion
+VersionInfoVersion={#AppNativeVersion}
+#endif
 AppPublisher=Aita Technology (Hangzhou) Co., Ltd.
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseName}

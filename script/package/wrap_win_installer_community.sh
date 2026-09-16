@@ -11,11 +11,14 @@ APP_VERSION="$1"
 APP_NAME="Chat2DB Community"
 ARTIFACT_BASE="Chat2DB-Community"
 
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+PACKAGING_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+PROJECT_ROOT=$(cd "${COMMUNITY_SOURCE_DIR:-${PACKAGING_ROOT}}" && pwd)
+source "${PACKAGING_ROOT}/script/package/community-version.sh"
+NATIVE_VERSION=$(community_native_version "${APP_VERSION}")
 OUTPUT_DIR="${PROJECT_ROOT}/jpackage/output"
-ISS_TEMPLATE="${PROJECT_ROOT}/jpackage/installer.iss"
+ISS_TEMPLATE="${PACKAGING_ROOT}/jpackage/installer.iss"
 ICON_FILE="${PROJECT_ROOT}/jpackage/input/icons/community/logo.ico"
-REPO_CHINESE_ISL="${PROJECT_ROOT}/jpackage/lang/ChineseSimplified.isl"
+REPO_CHINESE_ISL="${PACKAGING_ROOT}/jpackage/lang/ChineseSimplified.isl"
 
 SIGNED_MSI="${OUTPUT_DIR}/${ARTIFACT_BASE}-${APP_VERSION}.msi"
 OUTPUT_BASE="${ARTIFACT_BASE}-${APP_VERSION}"
@@ -138,6 +141,7 @@ GENERATED_ISS="${OUTPUT_DIR}/installer.community.generated.iss"
 {
     echo "#define AppName \"${APP_NAME}\""
     echo "#define AppVersion \"${APP_VERSION}\""
+    echo "#define AppNativeVersion \"${NATIVE_VERSION}\""
     echo "#define MsiFile \"${MSI_WIN}\""
     echo "#define OutputDir \"${OUTPUT_DIR_WIN}\""
     echo "#define OutputBaseName \"${OUTPUT_BASE}\""

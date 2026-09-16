@@ -79,7 +79,7 @@ export const clientRuntime: ClientRuntime = {
   showUpgradeEntry: false,
   showDownloadEntry: false,
   enableAutoUpdate: isDesktop,
-  supportsBetaUpdates: false,
+  supportsBetaUpdates: true,
   showMcpSetting: isDesktop,
   showNetworkProxySetting: isDesktop,
   showLicenseSetting: false,

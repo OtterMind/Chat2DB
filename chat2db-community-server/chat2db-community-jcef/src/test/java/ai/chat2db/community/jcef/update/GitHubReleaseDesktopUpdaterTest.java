@@ -1,11 +1,23 @@
 package ai.chat2db.community.jcef.update;
 
 import org.junit.jupiter.api.Test;
+import ai.chat2db.community.updater.v2.enums.UpdateChannelEnum;
 import java.net.URI;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GitHubReleaseDesktopUpdaterTest {
+    @Test
+    void resolvesIndependentStableAndBetaIndexes() {
+        assertEquals("https://github.com/OtterMind/Chat2DB/releases/latest/download/release-index.json",
+            GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.STABLE));
+        assertEquals("https://github.com/OtterMind/Chat2DB/releases/download/community-beta/release-index.json",
+            GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.BETA));
+        assertTrue(GitHubReleaseDesktopUpdater.isAllowedUrl(
+            URI.create(GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.BETA))));
+    }
+
     @Test
     void permitsOfficialReleaseAndAssetRedirects() {
         assertTrue(GitHubReleaseDesktopUpdater.isAllowedUrl(URI.create(GitHubReleaseDesktopUpdater.INDEX_URL)));

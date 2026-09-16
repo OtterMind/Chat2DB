@@ -35,7 +35,7 @@ export default memo<IProps>(
     const { styles, cx, theme } = useStyles();
     const { styles: tableStyles } = useTableStyles();
     const [tableData, setTableData] = useState<any[] | null>(null);
-    const [columnResize, setColumnResize] = useState<number[]>([200, 100, 150, 150, 150, 150, 150]);
+    const [columnResize, setColumnResize] = useState<number[]>([200, 100, 150, 150, 150, 150, 150, 150]);
     const tableBoxRef = useRef<HTMLDivElement>(null);
     const [searchValue, setSearchValue] = useState<string>('');
     const [boundInfo, setBoundInfo] = useState<any>(uniqueData);
@@ -147,6 +147,14 @@ export default memo<IProps>(
           name: i18n('workspace.tableTitle.createTime'),
           key: 'createTime',
           code: 'createTime',
+          render: (value, rowData) => {
+            return renderTableCell(value, rowData);
+          },
+        },
+        {
+          name: i18n('workspace.tableTitle.updateTime'),
+          key: 'updateTime',
+          code: 'updateTime',
           render: (value, rowData) => {
             return renderTableCell(value, rowData);
           },

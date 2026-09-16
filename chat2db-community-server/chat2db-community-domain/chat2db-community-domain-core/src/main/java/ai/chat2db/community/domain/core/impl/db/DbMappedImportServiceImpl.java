@@ -70,6 +70,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .csvOptions(execution.getCsvOptions())
                 .columnMappings(mappings)
                 .unmappedTarget(strategy)
+                .mode(execution.getMode())
                 .build();
         return importTaskSubmissionService.submit(spec, execution.getFileId());
     }

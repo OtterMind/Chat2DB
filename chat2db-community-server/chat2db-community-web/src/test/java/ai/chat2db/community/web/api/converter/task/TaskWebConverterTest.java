@@ -19,6 +19,35 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TaskWebConverterTest {
 
+    @Test
+    void importPreservesStagedSourceAndExecutionMode() {
+        var request = new ai.chat2db.community.web.api.model.request.task.TaskImportRequest();
+        request.setFileId("staged-source");
+        request.setFormat("CSV");
+        request.setMode("FAST");
+        var result = new TaskWebConverter().importRequest2spec(request);
+        assertEquals("staged-source", result.getImportFileId());
+        assertEquals("FAST", result.getMode());
+    }
+
+    @Test
+    void modeStaysAStringAndOnlyUppercaseFastEnablesParallelExecution() throws Exception {
+        assertEquals(String.class, TaskImportRequest.class.getDeclaredField("mode").getType());
+        assertEquals(String.class, ai.chat2db.community.web.api.model.request.db.ImportExecuteRequest.class
+                .getDeclaredField("mode").getType());
+        assertEquals(List.of("STANDARD", "FAST"), java.util.Arrays.stream(
+                ai.chat2db.community.domain.api.model.task.TaskExecutionMode.values()).map(Enum::name).toList());
+        for (String mode : java.util.Arrays.asList(null, "STANDARD", "FAST", "fast", " FAST ", "unknown")) {
+            TaskImportRequest request = new TaskImportRequest();
+            request.setFormat("CSV");
+            request.setMode(mode);
+            ImportTaskSpec spec = new TaskWebConverter().importRequest2spec(request);
+            assertEquals(mode, spec.getMode());
+            assertEquals("FAST".equals(mode),
+                    ai.chat2db.community.domain.api.model.task.TaskExecutionMode.isFast(spec.getMode()));
+        }
+    }
+
     private final TaskWebConverter converter = new TaskWebConverter();
 
     @Test

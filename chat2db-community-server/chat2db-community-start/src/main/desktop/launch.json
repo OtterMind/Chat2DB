@@ -1,0 +1,12 @@
+{
+  "mainJar": "runtime/chat2db-community.jar",
+  "mainClass": "org.springframework.boot.loader.launch.PropertiesLauncher",
+  "loaderPath": [
+    "runtime/lib"
+  ],
+  "requiredPaths": [
+    "runtime/dist/index.html",
+    "tools/chat2db-updater.jar"
+  ],
+  "systemProperties": {}
+}
