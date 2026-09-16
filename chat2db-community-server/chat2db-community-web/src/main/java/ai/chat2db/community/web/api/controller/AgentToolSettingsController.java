@@ -7,10 +7,13 @@ import ai.chat2db.community.domain.api.service.agent.IAiAgentWorkspaceService;
 import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.tools.wrapper.result.ListResult;
+import ai.chat2db.community.web.api.config.console.DesktopBridgeRequestContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @RestController
 @RequestMapping("/api/v3/ai/features")
@@ -39,10 +42,14 @@ public class AgentToolSettingsController {
     }
 
     @PostMapping("/tools/select-directory")
-    public DataResult<String> selectDirectory(jakarta.servlet.http.HttpServletRequest request) {
-        if (!("127.0.0.1".equals(request.getRemoteAddr()) || "::1".equals(request.getRemoteAddr())
-                || "0:0:0:0:0:0:0:1".equals(request.getRemoteAddr()))) {
-            throw new SecurityException("Directory selection is available only on the local computer");
+    public DataResult<String> selectDirectory() {
+        if (!DesktopBridgeRequestContext.isActive()) {
+            var attributes = RequestContextHolder.getRequestAttributes();
+            String remote = attributes instanceof ServletRequestAttributes servlet
+                    ? servlet.getRequest().getRemoteAddr() : null;
+            if (!("127.0.0.1".equals(remote) || "::1".equals(remote) || "0:0:0:0:0:0:0:1".equals(remote))) {
+                throw new SecurityException("Directory selection is available only on the local computer");
+            }
         }
         return DataResult.of(settings().selectDirectory());
     }

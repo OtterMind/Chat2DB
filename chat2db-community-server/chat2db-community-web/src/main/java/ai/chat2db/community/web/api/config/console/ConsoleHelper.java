@@ -269,11 +269,7 @@ public class ConsoleHelper {
                 return result;
             }
             Object c = ApplicationContextUtil.getBeanOfType(iRequestMappingInfo.getController());
-            Object[] o = getValues(message.getMessage(), iRequestMappingInfo.getParams(),result);
-            Class controllerClass = iRequestMappingInfo.getController();
-            String method = iRequestMappingInfo.getMethod();
-            Class[] params = iRequestMappingInfo.getParams();
-            Object object = controllerClass.getMethod(method, params).invoke(c, o);
+            Object object = DesktopControllerInvocation.invoke(c, iRequestMappingInfo, message, result);
             result.setMessage(ConsoleObjectConverter.object2map(object));
             if("/api/v3/ai/chat/stream".equals(message.getRequestUrl())){
                 return null;

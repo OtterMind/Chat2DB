@@ -110,7 +110,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
           permissionError,
           timeout,
           fullResponse,
-          restParams: restParams as DesktopRequestOptions,
+          restParams,
         },
       );
     } else {

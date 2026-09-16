@@ -29,7 +29,7 @@ public final class DesktopBridgeRequestContext {
         }
     }
 
-    static boolean isActive() {
+    public static boolean isActive() {
         return Boolean.TRUE.equals(ACTIVE.get());
     }
 }

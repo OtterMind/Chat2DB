@@ -130,6 +130,10 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
           pushMessageFlow(_data);
         },
         onFailure: function (error_code, error_message) {
+          if (!useGlobalStore.getState().commandLineRequestList[id]) return;
+          if (requestTimeoutTimer) clearTimeout(requestTimeoutTimer);
+          abortCleanup?.();
+          useGlobalStore.getState().removeCommandLineRequestListItem(id);
           alert(error_message);
           console.log('error', error_message);
           reject(error_message);
@@ -167,6 +171,8 @@ export const pushMessageFlow = (_data) => {
     if (requestTimeoutTimer) {
       clearTimeout(requestTimeoutTimer);
     }
+    abortCleanup?.();
+    removeCommandLineRequestListItem(uuid);
 
     // response interception
     responseInterceptor(messageData, requestData, options);
@@ -200,9 +206,6 @@ export const pushMessageFlow = (_data) => {
           break;
       }
     }
-    // Remove request record
-    abortCleanup?.();
-    removeCommandLineRequestListItem(uuid);
   }
 };
 

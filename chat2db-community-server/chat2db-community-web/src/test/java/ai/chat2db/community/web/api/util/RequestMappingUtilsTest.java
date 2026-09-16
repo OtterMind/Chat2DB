@@ -16,6 +16,7 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RequestMappingUtilsTest {
@@ -84,6 +85,29 @@ class RequestMappingUtilsTest {
             assertEquals(BareController.class, mapping.getController());
             assertEquals("bare", mapping.getMethod());
         }
+    }
+
+    @Test
+    void resolvesBareMappingsAndDynamicPathsWithLiteralPrecedenceAndVerbs() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(AgentRoutes.class);
+            context.refresh();
+            new ApplicationContextUtil().setApplicationContext(context);
+            assertEquals("skills", RequestMappingUtils.getRequestMappingInfo("/agent", "get").getMethod());
+            assertEquals("fixed", RequestMappingUtils.getRequestMappingInfo("/agent/sessions/special/events", "GET").getMethod());
+            var mapping = RequestMappingUtils.getRequestMappingInfo("/agent/sessions/test%20id/events", "GET");
+            assertEquals("events", mapping.getMethod());
+            assertEquals("test id", RequestMappingUtils.pathVariables(mapping, "/agent/sessions/test%20id/events").get("id"));
+            assertNull(RequestMappingUtils.getRequestMappingInfo("/agent/sessions/id/events", "POST"));
+        }
+    }
+
+    @RestController
+    @RequestMapping(path = "/agent")
+    public static class AgentRoutes {
+        @GetMapping public String skills() { return "skills"; }
+        @GetMapping(path = "/sessions/{id}/events") public String events() { return "events"; }
+        @GetMapping("/sessions/special/events") public String fixed() { return "fixed"; }
     }
 
     private void resetRequestMappings() throws Exception {
