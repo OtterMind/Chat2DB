@@ -30,7 +30,7 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { captureAgentContext, contextScope } from '../../agentContext';
 import type { AgentRunContextRequest } from '@/types/agentContext';
 import { ErrorCode } from '@/constants/request';
-import agentService from '@/service/agent';
+import pi from '@/service/pi';
 import { commandSuggestions, detectInputSuggestion, replaceSkillTrigger, skillSuggestions, type InputSuggestionTrigger } from './inputSuggestions';
 
 import { CHAT_COMMANDS, parseChatCommand, isUnsupportedChatCommand, type ConversationCommand } from '../../chatCommands';
@@ -170,7 +170,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     setSkills([]);
     if (runtimeChoice !== 'PI') return;
     const controller = new AbortController();
-    agentService.listSkills(undefined, { signal: controller.signal })
+    pi.skills.list(undefined, { signal: controller.signal })
       .then((names) => { if (!controller.signal.aborted) setSkills(names); })
       .catch(() => { if (!controller.signal.aborted) feedback.error(i18n('stream.skill.loadFailed')); });
     return () => controller.abort();
@@ -493,7 +493,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
       try {
         const results = await Promise.allSettled(
           selectedFiles.map((item) =>
-            aiAttachmentService.parseAttachment({
+            (runtimeChoice === 'PI' ? pi.host.parseAttachment : aiAttachmentService.parseAttachment)({
               file: item.file,
               filePath: item.filePath,
               fileName: item.fileName,
@@ -560,11 +560,19 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         setAttachmentLoading(false);
       }
     },
-    [],
+    [runtimeChoice],
   );
 
   const handleAttachmentTrigger = useCallback(() => {
     if (attachmentLoading || loading) {
+      return;
+    }
+
+    if (runtimeChoice === 'PI') {
+      void pi.host.selectFiles(ATTACHMENT_FILE_TYPES).then(parseSelectedFiles)
+        .catch(() => {
+          feedback.error(i18n('stream.attachment.parseFailed'));
+        });
       return;
     }
 
@@ -589,7 +597,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     }
 
     fileInputRef.current?.click();
-  }, [attachmentLoading, loading, parseSelectedFiles]);
+  }, [attachmentLoading, loading, parseSelectedFiles, runtimeChoice]);
 
   const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []).map((file) => ({

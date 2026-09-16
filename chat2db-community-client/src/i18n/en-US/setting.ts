@@ -1,4 +1,5 @@
 export default {
+  'setting.agent.workingDirectory.serverHint': 'Enter a directory path on the server running Pi.',
   "setting.agent.tools.userFilesHint": "These switches control access to your working directory. System results and skill files are always available as read-only.",
   'setting.modelConfig.agentApi': 'Agent API protocol',
   "setting.agent.tool.enable": "Enable",

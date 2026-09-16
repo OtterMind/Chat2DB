@@ -3,7 +3,7 @@ import { useMergedState } from 'rc-util';
 import { Checkbox, Popover, Spin, Tag, Tooltip } from 'antd';
 import { HelpCircle, Settings2 } from 'lucide-react';
 import DirectoryPicker from '@/components/DirectoryPicker';
-import agentService, { AgentToolState } from '@/service/agent';
+import pi, { AgentToolState } from '@/service/pi';
 import { useGlobalStore } from '@/store/global';
 import i18n from '@/i18n';
 import feedback from '@/utils/feedback';
@@ -29,8 +29,8 @@ export default function PiToolSettings(props: { open?: boolean; onOpenChange?: (
     setLoading(true);
     setLoadError('');
     void Promise.all([
-      agentService.listTools(undefined, { signal: controller.signal }),
-      agentService.getWorkspaceSettings(undefined, { signal: controller.signal }),
+      pi.tools.list(undefined, { signal: controller.signal }),
+      pi.workspace.get(undefined, { signal: controller.signal }),
     ]).then(([catalog, settings]) => {
       if (controller.signal.aborted) return;
       setTools(catalog);
@@ -49,7 +49,7 @@ export default function PiToolSettings(props: { open?: boolean; onOpenChange?: (
     if (pending || workingDirectory === directory) return;
     setPending('directory');
     try {
-      const settings = await agentService.saveWorkspaceSettings({ workingDirectory });
+      const settings = await pi.workspace.set({ workingDirectory });
       setDirectory(settings.workingDirectory);
       feedback.success(i18n('common.message.modifySuccessfully'));
     } catch (error) {
@@ -63,8 +63,8 @@ export default function PiToolSettings(props: { open?: boolean; onOpenChange?: (
     if (pending || picking) return;
     setPicking(true);
     try {
-      const selected = await agentService.selectDirectory();
-      if (selected) await saveDirectory(selected);
+      const selected = await pi.host.selectDirectory(directory);
+      if (selected !== null) await saveDirectory(selected);
     } catch (error) {
       feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
     } finally {
@@ -76,7 +76,7 @@ export default function PiToolSettings(props: { open?: boolean; onOpenChange?: (
     if (pending || picking) return;
     setPending('tool');
     try {
-      const updated = await agentService.setToolEnabled({ toolName, enabled });
+      const updated = await pi.tools.setEnabled({ toolName, enabled });
       setTools((current) => current.map((tool) => tool.name === toolName ? updated : tool));
     } catch (error) {
       feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));

@@ -1,6 +1,7 @@
 import { clientRuntime } from '@client-runtime';
 import aiStreamService, { IModelOptionItem } from './aiStream';
 import createRequest from './base';
+import pi from './pi';
 
 export type AIProvider = 'OPENAI' | 'CLAUDE' | 'GEMINI' | 'MINIMAX';
 export type AgentModelApi = 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai';
@@ -228,7 +229,7 @@ export const prepareAgentModelOption = async (option: IModelOptionItem): Promise
   if (!config) {
     throw new Error('Agent model configuration is unavailable');
   }
-  const saved = await saveRemoteModelConfig({
+  const saved = await pi.models.prepare({
     id: config.id,
     name: config.name,
     provider: config.provider,

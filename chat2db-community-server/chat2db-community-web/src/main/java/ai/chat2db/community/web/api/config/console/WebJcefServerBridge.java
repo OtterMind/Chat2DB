@@ -16,6 +16,11 @@ import ai.chat2db.community.web.api.model.http.CookieUtil;
 import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
 import ai.chat2db.community.web.api.util.ApplicationContextUtil;
 import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import ai.chat2db.community.web.api.adapter.pi.PiOperationRegistry;
+import ai.chat2db.community.web.api.controller.PiController;
+import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.math3.util.Pair;
 
@@ -33,7 +38,25 @@ public class WebJcefServerBridge implements IJcefServerBridge {
 
     @Override
     public ConsoleResult doController(ConsoleMessage message) {
-        return DesktopBridgeRequestContext.invoke(() -> ConsoleHelper.doController(message));
+        return DesktopBridgeRequestContext.invoke(() -> {
+            if (!PiOperationRegistry.ENDPOINT.equals(message.getRequestUrl())
+                    || !"post".equalsIgnoreCase(message.getMethod())) return ConsoleHelper.doController(message);
+            // Pi has one explicit entry, shared with HTTP; no MVC route or argument reflection.
+            try {
+                ConsoleHelper.setHeaders(message);
+                ObjectMapper json = ApplicationContextUtil.getBean(ObjectMapper.class);
+                var response = ApplicationContextUtil.getBean(PiController.class)
+                        .invoke(json.readTree(message.getMessage())).toCompletableFuture().get();
+                return ConsoleResult.builder().uuid(message.getUuid()).actionType(message.getActionType())
+                        .requestUrl(message.getRequestUrl()).method(message.getMethod())
+                        .message(json.convertValue(response, new TypeReference<Map<String, Object>>() { })).build();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return ConsoleHelper.error(interrupted, message);
+            } catch (Exception failure) {
+                return ConsoleHelper.error(failure, message);
+            }
+        });
     }
 
     @Override

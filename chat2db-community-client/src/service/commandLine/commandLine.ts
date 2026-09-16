@@ -31,6 +31,8 @@ export interface IOptions {
   // Whether a timeout is required, the default is true, currently only needs to be set to false when executing sql
   timeout?: boolean;
   fullResponse?: boolean;
+  // Typed clients own response validation and business errors in this mode.
+  rawResponse?: boolean;
   // The second parameter of the request
   restParams?: DesktopRequestOptions;
 }
@@ -122,7 +124,18 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       abortCleanup,
     };
     useGlobalStore.getState().addCommandLineRequestListItem(commandLineRequestListItem);
-    if (typeof window.javaQuery === 'function') {
+    const fail = (error: unknown) => {
+      if (!useGlobalStore.getState().commandLineRequestList[id]) return;
+      if (requestTimeoutTimer) clearTimeout(requestTimeoutTimer);
+      abortCleanup?.();
+      useGlobalStore.getState().removeCommandLineRequestListItem(id);
+      reject(error);
+    };
+    try {
+      if (typeof window.javaQuery !== 'function') {
+        fail(new Error("JCEF's javaQuery is not available!"));
+        return;
+      }
       window.javaQuery({
         request: JSON.stringify(res),
         onSuccess: function (_data) {
@@ -131,16 +144,13 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
         },
         onFailure: function (error_code, error_message) {
           if (!useGlobalStore.getState().commandLineRequestList[id]) return;
-          if (requestTimeoutTimer) clearTimeout(requestTimeoutTimer);
-          abortCleanup?.();
-          useGlobalStore.getState().removeCommandLineRequestListItem(id);
-          alert(error_message);
+          fail(error_message);
+          if (!options.rawResponse) alert(error_message);
           console.log('error', error_message);
-          reject(error_message);
         },
       });
-    } else {
-      console.error("JCEF's javaQuery is not available!");
+    } catch (error) {
+      fail(error);
     }
   });
 };
@@ -173,6 +183,11 @@ export const pushMessageFlow = (_data) => {
     }
     abortCleanup?.();
     removeCommandLineRequestListItem(uuid);
+
+    if (options.rawResponse) {
+      resolve(messageData);
+      return;
+    }
 
     // response interception
     responseInterceptor(messageData, requestData, options);

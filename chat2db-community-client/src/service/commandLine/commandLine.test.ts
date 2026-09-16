@@ -9,7 +9,7 @@ const code = ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
 } }).outputText;
 
-function setup() {
+function setup(bridge: 'ready' | 'missing' | 'throws' = 'ready') {
   const pending: Record<string, ICommandLineRequestListItem> = {};
   type Query = { request: string; onSuccess: (value: string) => void;
     onFailure: (code: number, message: string) => void };
@@ -32,14 +32,17 @@ function setup() {
   const exports = {} as typeof import('./commandLine');
   new Function('require', 'exports', 'window', '__PRINT_LOGS__', 'alert', 'setTimeout', 'clearTimeout', code)(
     (name: string) => { assert.ok(name in modules, name); return modules[name]; }, exports,
-    { javaQuery: (query: typeof requests[number]) => { requests.push(query); return requests.length; } },
+    { javaQuery: bridge === 'missing' ? undefined : (query: typeof requests[number]) => {
+      if (bridge === 'throws') throw new Error('Bridge disconnected');
+      requests.push(query); return requests.length;
+    } },
     false, () => {},
     (fn: () => void) => { timers.set(++next, fn); return next; },
     (id: number) => timers.delete(id),
   );
-  const call = (requestOptions?: IOptions['restParams']) => exports.commandLineRequest({
+  const call = (requestOptions?: IOptions['restParams'], rawResponse = false) => exports.commandLineRequest({
     requestUrl: '/api/v3/ai/skills', method: 'get', message: undefined,
-  }, { errorLevel: false, permissionError: false, timeout: true, restParams: requestOptions });
+  }, { errorLevel: false, permissionError: false, timeout: true, restParams: requestOptions, rawResponse });
   const respond = (success = true, errorCode = '') => {
     const last = requests.at(-1)!;
     last.onSuccess(JSON.stringify({ uuid: JSON.parse(last.request).uuid,
@@ -95,4 +98,22 @@ test('legacy callback and requests without a signal still work', async () => {
   assert.equal(registered, JSON.parse(app.requests[0].request).uuid);
   app.respond(); assert.deepEqual(await request, ['chart']);
   const ordinary = app.call(); app.respond(); assert.deepEqual(await ordinary, ['chart']);
+});
+
+test('raw response mode preserves failed envelopes for the typed client and still cleans up', async () => {
+  const app = setup(); const s = signal();
+  const request = app.call({ signal: s.controller.signal }, true);
+  app.respond(false, 'permissionDenied');
+  assert.deepEqual(await request, {
+    success: false, data: ['chart'], errorCode: 'permissionDenied', errorMessage: 'test failure',
+  });
+  assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
+});
+
+test('missing or disconnected native bridge rejects immediately without leaving a pending request', async () => {
+  for (const bridge of ['missing', 'throws'] as const) {
+    const app = setup(bridge); const s = signal();
+    await assert.rejects(app.call({ signal: s.controller.signal }, true));
+    assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
+  }
 });

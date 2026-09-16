@@ -1,4 +1,5 @@
 import createRequest from './base';
+import pi from './pi';
 import { IChatAttachment } from './aiAttachment';
 
 export interface IModelCatalogItem {
@@ -47,22 +48,15 @@ const deleteV1ChatSession = createRequest<{ id: string }, void>('/api/v3/ai/chat
 const renameV1ChatSession = createRequest<{ id: string; title: string }, void>('/api/v3/ai/chat/history/session/rename', {
   method: 'post',
 });
-const deleteV2ChatSession = createRequest<{ id: string }, void>('/api/v3/ai/sessions/:id/delete', {
-  method: 'post',
-});
-const renameV2ChatSession = createRequest<{ id: string; title: string }, IChatSession>('/api/v3/ai/sessions/:id/rename', {
-  method: 'post',
-});
-
 const deleteChatSession = ({ id, sessionVersion }: Pick<IChatSession, 'id' | 'sessionVersion'>) =>
-  sessionVersion === 2 ? deleteV2ChatSession({ id }) : deleteV1ChatSession({ id });
+  sessionVersion === 2 ? pi.sessions.delete({ sessionId: id }) : deleteV1ChatSession({ id });
 
 const renameChatSession = ({
   id,
   title,
   sessionVersion,
 }: Pick<IChatSession, 'id' | 'title' | 'sessionVersion'>) =>
-  sessionVersion === 2 ? renameV2ChatSession({ id, title }) : renameV1ChatSession({ id, title });
+  sessionVersion === 2 ? pi.sessions.rename({ sessionId: id, title }) : renameV1ChatSession({ id, title });
 
 export default {
   getModelCatalog,

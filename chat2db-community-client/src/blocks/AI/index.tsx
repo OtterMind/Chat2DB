@@ -58,7 +58,7 @@ import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
 import type { QuestionResponse } from '@/types/question';
 import { AgentQuestionItem, updateAgentQuestions } from './agentQuestions';
-import agentService, { AgentEvent } from '@/service/agent';
+import pi, { AgentEvent } from '@/service/pi';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
@@ -1023,7 +1023,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setAgentRunning(false);
     setAgentCancelling(false);
     if (cancelRun && operation.runId && operation.sessionId) {
-      void agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId }).catch((error) => {
+      void pi.runs.cancel({ runId: operation.runId, sessionId: operation.sessionId }).catch((error) => {
         feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
       });
     }
@@ -1061,7 +1061,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     const operation = agentOperationRef.current;
     if (!operation || operation.controller.signal.aborted || operation.sessionId !== approval.sessionId
         || operation.runId !== approval.runId) throw new Error(i18n('stream.approval.closed'));
-    await agentService.decideApproval({ sessionId: approval.sessionId, approvalId: approval.id, approved },
+    await pi.approvals.decide({ sessionId: approval.sessionId, approvalId: approval.id, approved },
       { signal: operation.controller.signal });
     if (!operation.controller.signal.aborted) {
       setAgentApprovals((current) => current.map((item) => item.id === approval.id && item.status === 'pending'
@@ -1074,10 +1074,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!operation || operation.controller.signal.aborted || operation.sessionId !== question.sessionId
         || operation.runId !== question.runId) throw new Error(i18n('stream.question.closed'));
     if (!response) {
-      await agentService.cancelRun({ sessionId: question.sessionId, runId: question.runId });
+      await pi.runs.cancel({ sessionId: question.sessionId, runId: question.runId });
       return;
     }
-    const answer = await agentService.answerQuestion(
+    const answer = await pi.questions.answer(
       { sessionId: question.sessionId, questionId: question.id, ...response },
       { signal: operation.controller.signal });
     if (!operation.controller.signal.aborted) {
@@ -1117,7 +1117,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const pollAgentRun = useCallback(async (operation: AgentOperation, sessionId: string, runId: string) => {
     try {
-      const terminal = await followAgentRun(agentService.listEvents, sessionId, runId,
+      const terminal = await followAgentRun(pi.events.list, sessionId, runId,
         agentSessionRef.current?.sequence || 0, operation.controller.signal, applyAgentEvents);
       if (!operation.controller.signal.aborted && terminal) {
         finishAgentReply(undefined, terminal.type === 'RUN_CANCELLED' ? 'cancelled'
@@ -1679,10 +1679,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       setSessionLoading(true);
       try {
         const [session, events, approvals, questions, availableModels] = await Promise.all([
-          agentService.getSession({ sessionId, sessionVersion: 2 }, { signal: operation.controller.signal }),
-          readAgentHistory(agentService.listEvents, sessionId, operation.controller.signal),
-          agentService.listApprovals({ sessionId }, { signal: operation.controller.signal }),
-          agentService.listQuestions({ sessionId }, { signal: operation.controller.signal }),
+          pi.sessions.get({ sessionId, sessionVersion: 2 }, { signal: operation.controller.signal }),
+          readAgentHistory(pi.events.list, sessionId, operation.controller.signal),
+          pi.approvals.list({ sessionId }, { signal: operation.controller.signal }),
+          pi.questions.list({ sessionId }, { signal: operation.controller.signal }),
           listAvailableModelOptions(),
         ]);
         if (operation.controller.signal.aborted) return;
@@ -1755,7 +1755,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (chatId) {
         const resolveAndLoad = async (sessions?: IChatSession[]) => {
           const session = await resolveChatSessionVersion(chatId, sessions,
-            () => agentService.getSession(
+            () => pi.sessions.get(
               { sessionId: chatId, sessionVersion: 2 }, { signal: probeController.signal }));
           if (!active || probeController.signal.aborted) return;
           if (session.sessionVersion === 2) {
@@ -1920,7 +1920,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           const modelConfigId = model.modelConfigId || model.value;
           let session = agentSessionRef.current;
           if (!session) {
-            const created = await agentService.createSession({ message: content, runtimeType: 'PI', modelConfigId });
+            const created = await pi.sessions.create({ message: content, runtimeType: 'PI', modelConfigId });
             if (operation.controller.signal.aborted) return;
             if (operation.cancelRequested) { finishAgentReply(undefined, 'cancelled'); return; }
             session = { id: created.id, sequence: 0 };
@@ -1935,12 +1935,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           }
           operation.sessionId = session.id;
           if (!isPanel) setChatIdInPath(session.id);
-          const run = await agentService.startRun({ sessionId: session.id, modelConfigId,
+          const run = await pi.runs.start({ sessionId: session.id, modelConfigId,
             message: content, idempotencyKey: userMessageId, context });
           operation.runId = run.id;
           traceAgentStage('run.accepted', { sessionId: session.id, runId: run.id, status: run.status });
           if (operation.cancelRequested && ['ACCEPTED', 'RUNNING'].includes(run.status)) {
-            await agentService.cancelRun({ runId: run.id, sessionId: session.id });
+            await pi.runs.cancel({ runId: run.id, sessionId: session.id });
           }
           if (!operation.controller.signal.aborted) await pollAgentRun(operation, session.id, run.id);
         } catch (error) {
@@ -2447,7 +2447,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     setRuntimeSwitching(true);
     try {
-      let state = await agentService.checkPi();
+      let state = await pi.runtime.check();
       if (!state.enabled) {
         const confirmed = await confirmBetaFeature(modal, {
           title: i18n('setting.agent.pi.confirmTitle'),
@@ -2456,7 +2456,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
           cancelText: i18n('common.button.cancel'),
         });
         if (!confirmed) return;
-        const result = await agentService.enablePi({ confirmed: true });
+        const result = await pi.runtime.enable({ confirmed: true });
         state = result.state;
         if (result.taskId) {
           void useImportExportStore.getState().getTaskList();
@@ -2469,7 +2469,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));
             return;
           }
-          state = (await agentService.enablePi({ confirmed: true })).state;
+          state = (await pi.runtime.enable({ confirmed: true })).state;
         }
         if (!state.enabled) {
           feedback.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
@@ -2498,7 +2498,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     traceAgentStage('run.cancel.requested', { sessionId: operation.sessionId, runId: operation.runId });
     if (!operation.runId || !operation.sessionId) return;
     try {
-      await agentService.cancelRun({ runId: operation.runId, sessionId: operation.sessionId });
+      await pi.runs.cancel({ runId: operation.runId, sessionId: operation.sessionId });
     } catch (error) {
       operation.cancelRequested = false;
       setAgentCancelling(false);

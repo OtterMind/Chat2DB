@@ -1,4 +1,5 @@
 export default {
+  'setting.agent.workingDirectory.serverHint': 'Pi가 실행되는 서버의 디렉터리 경로를 입력하세요.',
   "setting.agent.tools.userFilesHint": "아래 스위치는 작업 디렉터리 접근을 제어합니다. 시스템 결과와 스킬 파일은 항상 읽기 전용으로 사용할 수 있습니다.",
   'setting.modelConfig.agentApi': 'Agent API 프로토콜',
   "setting.agent.tool.enable": "활성화",

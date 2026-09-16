@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Input, Spin } from 'antd';
 import { createStyles } from 'antd-style';
 import type { AgentOutputQuery, AgentOutputReference } from '@/types/agentOutput';
-import { agentOutputUrl, downloadAgentOutputToDesktop, readAgentOutput } from '@/service/agentOutput';
+import { readAgentOutput } from '@/service/agentOutput';
+import pi from '@/service/pi';
 import { formatFileSize } from '@/utils/file';
-import { isDesktop } from '@/utils/env';
-import jcefApi from '@/jcef';
 import i18n from '@/i18n';
 import { useGlobalStore } from '@/store/global';
 import { agentErrorText } from '../../agentEvents';
@@ -90,19 +89,7 @@ export default function AgentToolOutput({ output, sessionId, resultIndex }: {
     setDownloading(true);
     setDownloadError('');
     try {
-      if (isDesktop) {
-        const path = await downloadAgentOutputToDesktop(sessionId, output.artifactId, controller.signal);
-        if (path && !controller.signal.aborted) await jcefApi.revealInExplorer(path);
-      } else {
-        // Check availability through the authenticated API so missing files
-        // produce an inline error instead of downloading an error response.
-        await readAgentOutput(sessionId, output.artifactId, {}, controller.signal);
-        if (controller.signal.aborted) return;
-        const link = document.createElement('a');
-        link.href = `${agentOutputUrl(sessionId, output.artifactId)}/download`;
-        link.download = '';
-        link.click();
-      }
+      await pi.host.downloadOutput({ sessionId, artifactId: output.artifactId }, { signal: controller.signal });
     } catch (error) {
       if (!controller.signal.aborted) setDownloadError(agentErrorText(error) || i18n('stream.output.downloadFailed'));
     } finally {
