@@ -85,7 +85,7 @@ class AgentServiceImplTest {
         AgentRuntimeHandleRegistry handles = new AgentRuntimeHandleRegistry();
         AgentRunCoordinator coordinator = new AgentRunCoordinator(registry, handles, storage, runs, events,
                 new AgentModelResolver(null), new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(),
-                new AiAgentContextServiceImpl(null, CLOCK), new AiAgentSkillServiceImpl(null, null), () -> "recovered", CLOCK);
+                new AiAgentContextServiceImpl(null, CLOCK), new AiAgentSkillServiceImpl(null, java.nio.file.Path.of("unused-skill-resources")), () -> "recovered", CLOCK);
         AgentServiceImpl service = new AgentServiceImpl(
                 registry, storage, coordinator, events, handles, new AiAgentPromptServiceImpl(),
                 () -> "session-one", CLOCK);
@@ -226,7 +226,7 @@ class AgentServiceImplTest {
                 new UnusedAgentEventStorage(),
                 new AgentModelResolver(null),
                 new AiAgentQuestionServiceImpl(), new AiAgentPromptServiceImpl(), new AiAgentContextServiceImpl(null, CLOCK),
-                new AiAgentSkillServiceImpl(null, null),
+                new AiAgentSkillServiceImpl(null, java.nio.file.Path.of("unused-skill-resources")),
                 () -> "unused",
                 CLOCK);
     }
