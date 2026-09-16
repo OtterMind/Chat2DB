@@ -76,13 +76,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             modelConfiguration = new PiModelConfigurationImpl(sessionId, configuration, modelAccessService, objectMapper);
             AgentModelAccess modelAccess = modelConfiguration.prepare(model);
             writeToolAccess(configuration, objectMapper, toolAccess);
-            Path extension = configuration.resolve("chat2db-tools.mjs");
-            try (var resource = new ClassPathResource("agent/chat2db-tools.mjs").getInputStream()) {
-                Files.copy(resource, extension, StandardCopyOption.REPLACE_EXISTING);
-            }
-            try (var resource = new ClassPathResource("agent/chat2db-output.mjs").getInputStream()) {
-                Files.copy(resource, configuration.resolve("chat2db-output.mjs"), StandardCopyOption.REPLACE_EXISTING);
-            }
+            Path extension = copyBundledExtensions(configuration);
             List<Path> loadedExtensions = new ArrayList<>(extensions);
             loadedExtensions.add(extension);
             process = supervisor.start(
@@ -156,6 +150,15 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             throw error instanceof RuntimeException runtime
                     ? runtime : new PiRpcException("Cannot refresh Pi tool access", error);
         }
+    }
+
+    static Path copyBundledExtensions(Path configuration) throws IOException {
+        for (String file : List.of("chat2db-tools.mjs", "chat2db-output.mjs")) {
+            try (var resource = new ClassPathResource("/agent/" + file, PiSessionLauncherImpl.class).getInputStream()) {
+                Files.copy(resource, configuration.resolve(file), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        return configuration.resolve("chat2db-tools.mjs");
     }
 
     static void writeToolAccess(Path configuration, ObjectMapper mapper, AgentToolAccess access) throws IOException {

@@ -13,6 +13,29 @@ import org.springframework.core.io.ClassPathResource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentSkillResourcesTest {
+    @org.junit.jupiter.api.io.TempDir Path temporaryDirectory;
+
+    @Test
+    void lazyDesktopInitializationUsesTheApplicationResourceLoader() throws Exception {
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        String userHome = System.getProperty("user.home");
+        try (var desktopLoader = new java.net.URLClassLoader(new java.net.URL[0], null)) {
+            System.setProperty("user.home", temporaryDirectory.toString());
+            thread.setContextClassLoader(desktopLoader);
+            assertFalse(new ClassPathResource("skills/catalog.json").exists());
+            var skills = new AgentSkillConfiguration().agentSkillService().prepare();
+            assertEquals(java.util.List.of("chart"), skills.stream().map(skill -> skill.name()).toList());
+            for (var skill : skills) {
+                assertTrue(java.nio.file.Files.readString(Path.of(skill.entryPath())).contains("name: chart"));
+                assertTrue(java.nio.file.Files.isRegularFile(Path.of(skill.entryPath()).resolveSibling("references/combo.md")));
+            }
+        } finally {
+            thread.setContextClassLoader(previous);
+            System.setProperty("user.home", userHome);
+        }
+    }
+
     @Test
     void packagedCatalogContainsEntriesReferencesAndEverySupportedChartType() throws Exception {
         var catalog = new ClassPathResource("skills/catalog.json");

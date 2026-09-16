@@ -16,6 +16,21 @@ class PiSessionLauncherImplTest {
     @TempDir Path directory;
 
     @Test
+    void loadsBundledExtensionsWithoutTheDesktopThreadsContextLoader() throws Exception {
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        try (var desktopLoader = new java.net.URLClassLoader(new java.net.URL[0], null)) {
+            thread.setContextClassLoader(desktopLoader);
+            Path entry = PiSessionLauncherImpl.copyBundledExtensions(directory);
+            assertEquals(directory.resolve("chat2db-tools.mjs"), entry);
+            assertTrue(Files.readString(entry).contains("registerTool"));
+            assertFalse(Files.readString(directory.resolve("chat2db-output.mjs")).isBlank());
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
+    @Test
     void readersKeepThePreviousTicketUntilTheReplacementIsComplete() throws Exception {
         ObjectMapper json = new ObjectMapper();
         PiSessionLauncherImpl.writeToolAccess(directory, json, access("previous"));

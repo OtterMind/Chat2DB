@@ -12,7 +12,7 @@ import org.springframework.core.io.ClassPathResource;
 public class AgentSkillConfiguration {
     @Bean
     public IAiAgentSkillService agentSkillService() {
-        return new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
+        return new AiAgentSkillServiceImpl(new ClassPathResource("/skills/catalog.json", AgentSkillConfiguration.class),
                 Path.of(ConfigUtils.getEnvBasePath()).resolve("storage/ai-chat-history-v2/resources/skills"));
     }
 }
