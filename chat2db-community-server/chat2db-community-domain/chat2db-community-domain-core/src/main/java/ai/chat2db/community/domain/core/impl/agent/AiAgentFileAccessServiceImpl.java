@@ -263,13 +263,13 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
     }
 
     private boolean protectedPath(String sessionId, Path path) {
-        // User-selected parents never grant access to private run/ticket data or system output writes.
+        // User-selected parents never grant access to private run/ticket data or system output writes, and a loaded
+        // bundled skill stays read-only. A loaded user skill remains editable: its own directory is the running source.
         Path managed = outputs.managedRoot().getParent();
         Path ownWorkspace = managed.resolve("workspaces").resolve(sessionId);
         Path resources = skills.resourceDirectory();
         return (path.startsWith(managed) && !path.startsWith(ownWorkspace))
-                || (resources != null && path.startsWith(resources))
-                || skillRoots(sessionId).stream().anyMatch(path::startsWith);
+                || (resources != null && path.startsWith(resources));
     }
 
     private List<Path> skillRoots(String sessionId) {
