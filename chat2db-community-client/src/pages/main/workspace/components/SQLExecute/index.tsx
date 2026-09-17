@@ -55,6 +55,7 @@ import {
 } from '@/components/SQLEditor/editor/SQLEditorWithOperation';
 import { createLiveSqlEditorHandle } from './liveEditorHandle';
 import { mergeLatestLocalFileBoundInfo } from './liveEditorBoundInfo';
+import { reportLoadSqlError } from './loadSqlError';
 import SplitPaneUnpack from '@/components/SplitPaneUnpack';
 import useSqlExecutor from '@/hooks/useSqlExecutor';
 import i18n from '@/i18n';
@@ -780,14 +781,19 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
   useEffect(() => {
     const requestGeneration = beginLatestRequest(requestGenerationRef);
     if (loadSQL) {
-      loadSQL().then((sql) => {
-        if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
-        sqlEditorRef.current?.setValue(sql, 'reset');
-        updateWorkspaceTabBoundInfo({
-          ...boundInfoRef.current,
-          ddl: sql,
+      loadSQL()
+        .then((sql) => {
+          if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
+          sqlEditorRef.current?.setValue(sql, 'reset');
+          updateWorkspaceTabBoundInfo({
+            ...boundInfoRef.current,
+            ddl: sql,
+          });
+        })
+        .catch((error) => {
+          if (!isLatestRequest(requestGenerationRef, requestGeneration)) return;
+          reportLoadSqlError(error, (message) => sqlEditorRef.current?.showErrorMessage(message));
         });
-      });
     }
     return () => {
       invalidateLatestRequest(requestGenerationRef);

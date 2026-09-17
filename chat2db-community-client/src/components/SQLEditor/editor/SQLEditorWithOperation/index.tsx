@@ -88,6 +88,7 @@ interface ISQLEditorWithOperationProps {
 
 export interface ISQLEditorWithOperationRef extends SQLEditorRef, EditorCloseGuardRef {
   executeSQL: () => void;
+  showErrorMessage: (message: string) => void;
 }
 
 const contextMenuDefaultConfig = {
@@ -207,6 +208,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
       sqlEditorRef.current?.handleQuickSQLParser(sql, _dbInfo),
     getTableIdentifierAtPosition: (position) => sqlEditorRef.current?.getTableIdentifierAtPosition(position) ?? null,
     executeSQL: handleExecuteSQL,
+    showErrorMessage: (message: string) => setErrorMessage(message),
     hasUnsavedChangesBeforeClose,
     saveBeforeClose,
     waitForPendingSave:
