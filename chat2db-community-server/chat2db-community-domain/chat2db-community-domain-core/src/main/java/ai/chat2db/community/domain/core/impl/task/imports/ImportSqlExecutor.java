@@ -76,19 +76,37 @@ public final class ImportSqlExecutor {
     }
 
     static TaskExecutionException importFailure(Exception error) {
-        String code = "import.sql.executionFailed";
+        SQLException firstSqlError = null;
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause instanceof SQLException sqlException) {
-                String state = StringUtils.defaultString(sqlException.getSQLState());
-                if (state.startsWith("23")) code = "import.sql.constraintViolation";
-                else if (state.startsWith("22")) code = "import.sql.invalidValue";
-                else if (state.startsWith("42")) code = "import.sql.invalidStatement";
-                else if (state.startsWith("08")) code = "import.sql.connectionFailed";
-                return new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                        I18nUtils.getMessage(code), "SQLState=" + state + ", code=" + sqlException.getErrorCode(), error);
+                String code = errorCode(sqlException);
+                if (!"import.sql.executionFailed".equals(code)) {
+                    return failure(code, sqlException, error);
+                }
+                if (firstSqlError == null) {
+                    firstSqlError = sqlException;
+                }
             }
         }
-        return new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(), I18nUtils.getMessage(code), error);
+        return firstSqlError == null
+                ? new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                        I18nUtils.getMessage("import.sql.executionFailed"), error)
+                : failure("import.sql.executionFailed", firstSqlError, error);
+    }
+
+    private static TaskExecutionException failure(String code, SQLException sqlException, Exception error) {
+        return new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(), I18nUtils.getMessage(code),
+                "SQLState=" + StringUtils.defaultString(sqlException.getSQLState())
+                        + ", code=" + sqlException.getErrorCode(), error);
+    }
+
+    private static String errorCode(SQLException sqlException) {
+        String state = StringUtils.defaultString(sqlException.getSQLState());
+        if (state.startsWith("23")) return "import.sql.constraintViolation";
+        if (state.startsWith("22")) return "import.sql.invalidValue";
+        if (state.startsWith("42")) return "import.sql.invalidStatement";
+        if (state.startsWith("08")) return "import.sql.connectionFailed";
+        return "import.sql.executionFailed";
     }
 
     private void flushInserts(List<String> inserts) {

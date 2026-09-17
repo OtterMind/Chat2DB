@@ -139,7 +139,11 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
       children: (
         <>
           <div className={styles.mappingControls}>
-            <Checkbox checked={emptyAsNull} onChange={(event) => onEmptyAsNullChange(event.target.checked)}>
+            <Checkbox
+              disabled={disabled || loading}
+              checked={emptyAsNull}
+              onChange={(event) => onEmptyAsNullChange(event.target.checked)}
+            >
               {emptyAsNullLabel}
             </Checkbox>
             <Select

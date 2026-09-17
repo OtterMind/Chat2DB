@@ -7,7 +7,6 @@ import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.core.impl.db.CsvParser;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
-import com.alibaba.excel.support.ExcelTypeEnum;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -72,10 +71,5 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
                 })
                 .max()
                 .orElse(0);
-    }
-
-    @Override
-    protected ExcelTypeEnum getExcelType() {
-        return ExcelTypeEnum.CSV;
     }
 }

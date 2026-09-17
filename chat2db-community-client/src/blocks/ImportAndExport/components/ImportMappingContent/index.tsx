@@ -19,7 +19,8 @@ import { useStyles } from './style';
 import type { FileUrl } from '@/components/UploadLocalFile';
 import { stageSelectedImportFile } from './fileStaging';
 import CsvOptionsSections from './CsvOptionsSections';
-import DataFileOptionsSections from './DataFileOptionsSections';
+import ExcelOptionsSections from './ExcelOptionsSections';
+import JsonOptionsSections from './JsonOptionsSections';
 import { DEFAULT_EXCEL_OPTIONS, DEFAULT_JSON_OPTIONS } from '../../utils/importOptions';
 import ImportModeControl from '../ImportModeControl';
 import useImportDataSections from './ImportDataSections';
@@ -301,15 +302,25 @@ const ImportMappingContent = ({
             />
           </div>
         )}
-        {!isCsv && (
-          <DataFileOptionsSections
-            {...(isJson
-              ? ({ format: 'json', value: jsonOptions, onChange: setJsonOptions } as const)
-              : ({ format: 'excel', value: excelOptions, onChange: setExcelOptions, sheets } as const))}
+        {isJson && (
+          <JsonOptionsSections
+            value={jsonOptions}
             disabled={executing}
             activeKeys={activeSections}
             onActiveKeysChange={setActiveSections}
             dataItems={dataSectionItems}
+            onChange={setJsonOptions}
+          />
+        )}
+        {isExcel && (
+          <ExcelOptionsSections
+            value={excelOptions}
+            sheets={sheets}
+            disabled={executing}
+            activeKeys={activeSections}
+            onActiveKeysChange={setActiveSections}
+            dataItems={dataSectionItems}
+            onChange={setExcelOptions}
           />
         )}
         {!preview && (

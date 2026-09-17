@@ -1,8 +1,9 @@
-import { Collapse, type CollapseProps } from 'antd';
+import type { CollapseProps } from 'antd';
 import type { ICsvOptions } from '@/typings/importExport';
 import i18n from '@/i18n';
 import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
 import SingleCharacterSelect from '@/components/SingleCharacterSelect';
+import OptionsSections from './OptionsSections';
 import SourceRowsFields from './SourceRowsFields';
 import ValueFormatFields from './ValueFormatFields';
 import { useStyles } from './style';
@@ -35,12 +36,9 @@ const CsvOptionsSections = ({
   };
 
   return (
-    <Collapse
-      className={styles.sections}
-      ghost
-      size="small"
-      activeKey={activeKeys}
-      onChange={(keys) => onActiveKeysChange(Array.isArray(keys) ? keys : [keys])}
+    <OptionsSections
+      activeKeys={activeKeys}
+      onActiveKeysChange={onActiveKeysChange}
       items={[
         {
           key: 'csvFormat',
@@ -112,5 +110,4 @@ const CsvOptionsSections = ({
     />
   );
 };
-
 export default CsvOptionsSections;

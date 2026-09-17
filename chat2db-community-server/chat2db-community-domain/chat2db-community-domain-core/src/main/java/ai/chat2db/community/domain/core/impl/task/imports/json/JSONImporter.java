@@ -19,6 +19,7 @@ public class JSONImporter extends BaseImporter {
     @Override
     protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
         JsonOptions options = (spec.getJsonOptions() == null ? new JsonOptions() : spec.getJsonOptions()).validate();
+        spec.setJsonOptions(options);
         ImportRowSqlBuilder builder = new ImportRowSqlBuilder(spec, columns);
         ImportSqlExecutor executor = new ImportSqlExecutor(context);
         Map<Integer, String> header = new LinkedHashMap<>();

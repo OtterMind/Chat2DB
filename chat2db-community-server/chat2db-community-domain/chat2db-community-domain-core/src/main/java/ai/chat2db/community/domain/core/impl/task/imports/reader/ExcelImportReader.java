@@ -27,7 +27,7 @@ public final class ExcelImportReader {
         }
     }
 
-    public static List<String> read(File file, ExcelOptions settings, int limit, int minimumColumns,
+    public static void read(File file, ExcelOptions settings, int limit, int minimumColumns,
             Consumer<Map<Integer, String>> headerConsumer,
             BiConsumer<Map<Integer, ImportCell>, Integer> rowConsumer, Runnable checkCancelled) {
         ExcelOptions options = settings.validate();
@@ -80,7 +80,6 @@ public final class ExcelImportReader {
             public void doAfterAllAnalysed(AnalysisContext context) { }
         }).headRowNumber(0).autoTrim(false).ignoreEmptyRow(false).useDefaultListener(false)
                 .sheet(options.getSheetIndex()).doRead();
-        return sheets;
     }
 
     private static ImportCell cell(ReadCellData<?> cell, AnalysisContext context, ExcelOptions options, int column) {

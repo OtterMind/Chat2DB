@@ -60,7 +60,7 @@ public final class ImportPreviewFileParser {
             throw e;
         } catch (Exception e) {
             log.warn("CSV import preview parse failed for {}", file, e);
-            throw new BusinessException("import.preview.parseFailed", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.parseFailed", null, e);
         }
     }
 
@@ -68,13 +68,13 @@ public final class ImportPreviewFileParser {
         Map<Integer, String> header = new LinkedHashMap<>();
         List<Map<Integer, String>> rows = new ArrayList<>();
         try {
-            List<String> sheets = ExcelImportReader.read(file, options, limit, 0, header::putAll, (cells, number) -> {
+            ExcelImportReader.read(file, options, limit, 0, header::putAll, (cells, number) -> {
                 Map<Integer, String> row = new LinkedHashMap<>();
                 cells.forEach((index, cell) -> row.put(index, cell.display()));
                 rows.add(row);
             }, () -> { });
             return new ParsedRows(options.getHasHeader() ? header : syntheticHeader(rows), rows,
-                    !options.getHasHeader(), sheets);
+                    !options.getHasHeader());
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -115,11 +115,7 @@ public final class ImportPreviewFileParser {
         return file != null && file.getName().toLowerCase(Locale.ROOT).endsWith(".csv");
     }
 
-    record ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader,
-                      List<String> sheets) {
-        ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader) {
-            this(header, data, syntheticHeader, List.of());
-        }
+    record ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader) {
         private static ParsedRows empty() {
             return new ParsedRows(Map.of(), List.of(), false);
         }
