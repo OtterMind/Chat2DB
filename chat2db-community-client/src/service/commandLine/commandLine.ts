@@ -5,6 +5,7 @@ import { ErrorCodesWithoutToast } from '@/constants/request';
 import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
+import { redactForLog } from './redactForLog';
 
 export interface ICommandLineRequest {
   requestUrl: string;
@@ -77,7 +78,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
       }),
     );
     if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', JSON.stringify(res));
+      console.log('%cCHAT2DB_IPC_REQUEST', 'color: #00008B', redactForLog(res));
     }
     const signal = options?.restParams?.signal;
     const abortSignal = typeof signal === 'function' ? undefined : signal;
@@ -159,7 +160,7 @@ export const commandLineRequest = <R>(data: ICommandLineRequest, options: IOptio
 export const pushMessageFlow = (_data) => {
   const data = JSON.parse(_data);
   if (__PRINT_LOGS__ || window._PRINT_LOGS) {
-    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), data);
+    console.log('%cCHAT2DB_IPC_RESPONSE', 'color: #B8860B', new Date().toISOString(), redactForLog(data));
   }
   const { setServiceStatus, commandLineRequestList, removeCommandLineRequestListItem } = useGlobalStore.getState();
 

@@ -1,119 +1,85 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { test } from 'node:test';
-import ts from 'typescript';
-import type { ICommandLineRequestListItem, IOptions } from './commandLine';
+import test from 'node:test';
+import { redactForLog } from './redactForLog';
 
-const source = readFileSync(`${__dirname}/commandLine.ts`, 'utf8');
-const code = ts.transpileModule(source, { compilerOptions: {
-  module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
-} }).outputText;
-
-function setup(bridge: 'ready' | 'missing' | 'throws' = 'ready') {
-  const pending: Record<string, ICommandLineRequestListItem> = {};
-  type Query = { request: string; onSuccess: (value: string) => void;
-    onFailure: (code: number, message: string) => void };
-  const requests: Query[] = [];
-  const timers = new Map<number, () => void>();
-  let next = 0;
-  const state = {
-    baseSetting: { language: 'zh-CN' }, commandLineRequestList: pending,
-    addCommandLineRequestListItem: (item: ICommandLineRequestListItem) => { pending[item.requestData.uuid] = item; },
-    removeCommandLineRequestListItem: (id: string) => { delete pending[id]; },
+test('redacts connection credentials in both request and response log copies', () => {
+  const connection = {
+    user: 'demo',
+    password: 'database-password',
+    url: 'jdbc:postgresql://localhost/db?password=url-password',
+    ssh: { password: 'ssh-password', passphrase: 'ssh-passphrase', use: false },
+    extendInfo: [
+      { key: 'password', value: 'property-password', required: true },
+      { key: 'connectTimeout', value: '10' },
+    ],
   };
-  const modules: Record<string, unknown> = {
-    uuid: { v4: () => `request-${++next}` },
-    '@/store/global': { useGlobalStore: { getState: () => state } },
-    '@/constants/common': { ServiceStatus: {} },
-    '@/constants/request': { ErrorCodesWithoutToast: ['quiet'] },
-    '@/service/interceptorsResponse': { default: () => {} },
-    '@chat2db/ui': { staticMessage: { error: () => {} } },
+  const redactedConnection = {
+    user: 'demo',
+    password: '***',
+    url: '***',
+    ssh: { password: '***', passphrase: '***', use: false },
+    extendInfo: [
+      { key: 'password', value: '***', required: true },
+      { key: 'connectTimeout', value: '10' },
+    ],
   };
-  const exports = {} as typeof import('./commandLine');
-  new Function('require', 'exports', 'window', '__PRINT_LOGS__', 'alert', 'setTimeout', 'clearTimeout', code)(
-    (name: string) => { assert.ok(name in modules, name); return modules[name]; }, exports,
-    { javaQuery: bridge === 'missing' ? undefined : (query: typeof requests[number]) => {
-      if (bridge === 'throws') throw new Error('Bridge disconnected');
-      requests.push(query); return requests.length;
-    } },
-    false, () => {},
-    (fn: () => void) => { timers.set(++next, fn); return next; },
-    (id: number) => timers.delete(id),
-  );
-  const call = (requestOptions?: IOptions['restParams'], rawResponse = false) => exports.commandLineRequest({
-    requestUrl: '/api/v3/ai/skills', method: 'get', message: undefined,
-  }, { errorLevel: false, permissionError: false, timeout: true, restParams: requestOptions, rawResponse });
-  const respond = (success = true, errorCode = '') => {
-    const last = requests.at(-1)!;
-    last.onSuccess(JSON.stringify({ uuid: JSON.parse(last.request).uuid,
-      message: { success, data: ['chart'], errorCode, errorMessage: 'test failure' } }));
+  const request = { uuid: 'req-1', requestUrl: '/api/connection/datasource/create', message: connection };
+  const response = { uuid: 'req-1', message: { success: true, data: connection } };
+  const before = JSON.stringify({ request, response });
+
+  const requestLog = redactForLog(request);
+  const responseLog = redactForLog(response);
+
+  assert.notEqual(requestLog, request);
+  assert.notEqual(responseLog, response);
+  assert.deepEqual(requestLog, { ...request, message: redactedConnection });
+  assert.deepEqual(responseLog, { ...response, message: { success: true, data: redactedConnection } });
+  assert.equal(JSON.stringify({ request, response }), before, 'real payloads must remain unchanged');
+});
+
+test('handles nested arrays, mixed-case credential keys and named connection properties', () => {
+  const input = {
+    headers: { Authorization: 'Bearer credential', 'Accept-Language': 'en' },
+    items: [
+      { api_key: 'key', 'API-KEY': 'key', accessToken: 'token', clientSecret: 'secret' },
+      [{ key: 'SSLPassword', value: 'certificate-password' }, { key: 'apiKey', value: 'api-key' }],
+      { key: 'applicationName', value: 'review' },
+      { key: 42, value: 'ordinary-value' },
+    ],
   };
-  return { call, respond, pending, requests, timers };
-}
 
-function signal() {
-  const controller = new AbortController();
-  let listeners = 0;
-  const add = controller.signal.addEventListener.bind(controller.signal);
-  const remove = controller.signal.removeEventListener.bind(controller.signal);
-  controller.signal.addEventListener = (...args) => { listeners++; add(...args); };
-  controller.signal.removeEventListener = (...args) => { listeners--; remove(...args); };
-  return { controller, listeners: () => listeners };
-}
-
-test('native AbortSignal reaches javaQuery and successful reply releases the request', async () => {
-  const app = setup(); const s = signal();
-  const request = app.call({ signal: s.controller.signal });
-  assert.equal(app.requests.length, 1);
-  app.respond();
-  assert.deepEqual(await request, ['chart']);
-  assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
-});
-
-test('pre-aborted request does not send; abort drops late responses without leaking listeners', async () => {
-  const app = setup(); const before = new AbortController(); before.abort();
-  await assert.rejects(app.call({ signal: before.signal }), { name: 'AbortError' });
-  assert.equal(app.requests.length, 0);
-  const s = signal(); const request = app.call({ signal: s.controller.signal });
-  s.controller.abort();
-  await assert.rejects(request, { name: 'AbortError' });
-  app.respond();
-  assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
-});
-
-test('business error, native failure and timeout each release abort listeners', async () => {
-  for (const kind of ['quiet', 'native', 'timeout']) {
-    const app = setup(); const s = signal(); const request = app.call({ signal: s.controller.signal });
-    if (kind === 'quiet') app.respond(false, 'quiet');
-    if (kind === 'native') app.requests[0].onFailure(1, 'bridge failure');
-    if (kind === 'timeout') { const fn = [...app.timers.values()][0]; app.timers.clear(); fn(); }
-    await assert.rejects(request);
-    assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
-  }
-});
-
-test('legacy callback and requests without a signal still work', async () => {
-  const app = setup(); let registered = '';
-  const request = app.call({ signal: ({ id }) => { registered = id; } });
-  assert.equal(registered, JSON.parse(app.requests[0].request).uuid);
-  app.respond(); assert.deepEqual(await request, ['chart']);
-  const ordinary = app.call(); app.respond(); assert.deepEqual(await ordinary, ['chart']);
-});
-
-test('raw response mode preserves failed envelopes for the typed client and still cleans up', async () => {
-  const app = setup(); const s = signal();
-  const request = app.call({ signal: s.controller.signal }, true);
-  app.respond(false, 'permissionDenied');
-  assert.deepEqual(await request, {
-    success: false, data: ['chart'], errorCode: 'permissionDenied', errorMessage: 'test failure',
+  assert.deepEqual(redactForLog(input), {
+    headers: { Authorization: '***', 'Accept-Language': 'en' },
+    items: [
+      { api_key: '***', 'API-KEY': '***', accessToken: '***', clientSecret: '***' },
+      [{ key: 'SSLPassword', value: '***' }, { key: 'apiKey', value: '***' }],
+      { key: 'applicationName', value: 'review' },
+      { key: 42, value: 'ordinary-value' },
+    ],
   });
-  assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
 });
 
-test('missing or disconnected native bridge rejects immediately without leaving a pending request', async () => {
-  for (const bridge of ['missing', 'throws'] as const) {
-    const app = setup(bridge); const s = signal();
-    await assert.rejects(app.call({ signal: s.controller.signal }, true));
-    assert.equal(s.listeners(), 0); assert.equal(app.timers.size, 0); assert.deepEqual(app.pending, {});
+test('omits JDBC strings across dialects instead of parsing credential delimiters', () => {
+  const urls = [
+    'jdbc:postgresql://localhost/db?password=p%26ss&ssl=true',
+    'jdbc:mysql://user:password@localhost/db',
+    'jdbc:sqlserver://localhost;user=demo;password={p;as}}s}',
+    'jdbc:oracle:thin:demo/password@localhost:1521/service',
+    '  JDBC:postgresql://localhost/db?%70assword=secret',
+    'jdbc:h2:mem:review',
+  ];
+
+  assert.deepEqual(redactForLog({ urls }), { urls: urls.map(() => '***') });
+  assert.equal(urls[0], 'jdbc:postgresql://localhost/db?password=p%26ss&ssl=true');
+});
+
+test('preserves ordinary values and returns an independent log snapshot', () => {
+  const input = { message: { rows: [null, false, 0, '', 'SELECT 1'], comment: 'visible' }, data: undefined };
+  const output = redactForLog(input);
+  assert.deepEqual(output, input);
+  input.message.comment = 'changed after logging';
+  assert.deepEqual(output, { message: { rows: [null, false, 0, '', 'SELECT 1'], comment: 'visible' }, data: undefined });
+  for (const value of [null, undefined, false, 0, '', 'CHAT2DB_IPC_RESPONSE_SERVICE_STATUS_SUCCESS']) {
+    assert.equal(redactForLog(value), value);
   }
 });

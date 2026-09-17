@@ -157,6 +157,14 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Test Windows signing script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install winscp -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'WinSCP installation failed' }
+          ./script/package/tests/windows-signing-test.ps1 -WinScpPath "${env:ProgramFiles(x86)}/WinSCP/WinSCP.com"
+
       - name: Test updater and desktop integration
         shell: bash
         run: |

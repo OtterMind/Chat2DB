@@ -26,7 +26,7 @@ public class SmallDataStorage<T> implements IWorkspaceLocalStorage<T> {
 
     protected static final String DB_STORAGE_PATH = ConfigUtils.getEnvBasePath() + File.separator + "storage";
 
-    protected Map<Long, T> dataMap = new ConcurrentSkipListMap<>();
+    protected volatile Map<Long, T> dataMap = new ConcurrentSkipListMap<>();
 
     protected String filePath;
 

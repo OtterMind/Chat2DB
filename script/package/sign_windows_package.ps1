@@ -32,8 +32,11 @@ $commands = @(
     ('rm ' + (Quote-WinScp $remote))
     'exit'
 )
+$scriptFile = [IO.Path]::GetTempFileName()
 try {
-    & $executable /ini=nul /command @commands
+    # WinSCP has its own command parser; native argv escaping can corrupt embedded quotes.
+    [IO.File]::WriteAllLines($scriptFile, $commands, [Text.UTF8Encoding]::new($true))
+    & $executable /ini=nul "/script=$scriptFile"
     if ($LASTEXITCODE -ne 0) { throw 'Remote package signing failed.' }
     $signature = Get-AuthenticodeSignature -LiteralPath $signed
     if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
@@ -41,5 +44,5 @@ try {
     }
     Move-Item -LiteralPath $signed -Destination $source -Force
 } finally {
-    Remove-Item -LiteralPath $signed -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $signed, $scriptFile -Force -ErrorAction SilentlyContinue
 }
