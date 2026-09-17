@@ -27,8 +27,12 @@ public class I18nUtils implements InitializingBean {
     }
 
     public static String getMessage(String messageCode, @Nullable Object[] args) {
+        MessageSource messageSource = messageSourceStatic;
+        if (messageSource == null) {
+            return messageCode;
+        }
         try {
-            return messageSourceStatic.getMessage(messageCode, args, LocaleContextHolder.getLocale());
+            return messageSource.getMessage(messageCode, args, LocaleContextHolder.getLocale());
         } catch (NoSuchMessageException e) {
             return messageCode + " : no message.";
         }
