@@ -177,7 +177,8 @@ class AiAgentFileAccessServiceImplTest {
     void fixedSkillDirectoryAllowsFilesWithoutWorkspaceAccessButNeverShellOrResources() throws Exception {
         Path root = temporary.toRealPath();
         Path sources = Files.createDirectories(root.resolve("用户 skills"));
-        Path skill = Files.createDirectories(sources.resolve(".resources/hash/chart"));
+        Path builtin = Files.createDirectories(sources.resolveSibling("builtin"));
+        Path skill = Files.createDirectories(builtin.resolve("chart"));
         Files.writeString(skill.resolve("SKILL.md"), "bundled");
         Path managed = Files.createDirectories(root.resolve("history/sessions"));
         Path workspace = Files.createDirectory(root.resolve("workspace"));
@@ -186,7 +187,7 @@ class AiAgentFileAccessServiceImplTest {
         var access = service(managed, skill, new AtomicReference<>(workspace.toString()), Set.of(), new ByteArrayOutputStream(), sources);
         assertEquals("user skill", ((AgentOutputRead) access.execute(context(), "read", Map.of("path", entry.toString())).data()).content());
         var wrongSnapshot = assertThrows(SecurityException.class, () -> access.execute(context(), "read",
-                Map.of("path", sources.resolve(".resources/unknown/chart/SKILL.md").toString())));
+                Map.of("path", builtin.resolve("missing/chart/SKILL.md").toString())));
         assertTrue(wrongSnapshot.getMessage().contains(skill.resolve("SKILL.md").toString()));
         assertEquals(sources.toString(), access.authorizedDirectory("session", "write", workspace.toString(),
                 Map.of("path", source.resolve("references/新文件.md").toString())));
@@ -222,7 +223,7 @@ class AiAgentFileAccessServiceImplTest {
             case "prepare", "selected" -> List.of(new AiAgentSkill("chart", skill.resolve("SKILL.md").toString(), "fixture"));
             case "resolveLegacyPath" -> args[0];
             case "userDirectory" -> userRoot;
-            case "resourceDirectory" -> userRoot == null ? null : userRoot.resolve(".resources");
+            case "resourceDirectory" -> userRoot == null ? null : userRoot.resolveSibling("builtin");
             default -> null;
         });
         IAiAgentOutputService outputs = proxy(IAiAgentOutputService.class, (method, args) -> switch (method) {

@@ -15,8 +15,9 @@ public class AgentSkillConfiguration {
     public IAiAgentSkillService agentSkillService(
             @Value("${chat2db.agent.v2.skills.directory:${user.home}/.chat2db-skills}") String directory) {
         Path skillRoot = Path.of(directory).toAbsolutePath().normalize();
+        Path storageRoot = Path.of(ConfigUtils.getEnvBasePath()).resolve("storage");
         return new AiAgentSkillServiceImpl(new ClassPathResource("/skills/catalog.json", AgentSkillConfiguration.class),
-                skillRoot.resolve(".resources"), skillRoot,
-                Path.of(ConfigUtils.getEnvBasePath()).resolve("storage/ai-chat-history-v2/resources/skills"));
+                storageRoot.resolve("agent-v2/skills/builtin"), skillRoot,
+                storageRoot.resolve("ai-chat-history-v2/resources/skills"));
     }
 }

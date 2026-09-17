@@ -11,10 +11,10 @@ Bash/PowerShell is not part of the default skill-directory access. If an install
 
 - For creating or editing a skill, read [creation guidance](references/creation.md).
 - For importing a local skill or installing from GitHub, read [installation guidance](references/installation.md).
-- To inspect installed user skills, use `ls`, `find`, `read`, or `grep` in the user skill directory. Hidden runtime resources are read-only and are not user installation destinations.
+- To inspect installed user skills, use `ls`, `find`, `read`, or `grep` in the user skill directory. Bundled skills live outside it and are read-only.
 
 Keep each user skill in its own named folder with `SKILL.md` and the resources it actually needs. User skill files can be read and edited without enabling general workspace file access. Bash/PowerShell remain separate capabilities and require the normal command approval. Do not substitute shell execution to bypass denied file access.
 
-A user request to create, edit, or install a skill already supplies that intent. Ask only for information that materially affects the result and cannot be inferred. Do not silently overwrite an unrelated skill or modify a bundled skill. Offer a differently named user copy when adapting a bundled skill.
+A user request to create, edit, or install a skill already supplies that intent. Ask only for information that materially affects the result and cannot be inferred. When the name is already taken and the content differs, ask the user whether to overwrite it or use a new name; never overwrite silently and never modify a bundled skill.
 
 The host validates and loads changed skills before the next conversation turn. Finish referenced files before writing the new entrypoint. Re-read the result and report its name and intended use. Distinguish files saved from resources loaded and behavior tested; writing a file alone does not prove the skill has run successfully. Explicit invocation uses `/skill:<name>`.

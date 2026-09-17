@@ -49,7 +49,7 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         boolean skill = skillRoots(sessionId).stream().anyMatch(target::startsWith);
         Path resources = skills.resourceDirectory();
         if (!skill && resources != null && target.startsWith(resources)) {
-            throw new SecurityException("Skill snapshot path is not loaded. Resolve references from the exact loaded entry: "
+            throw new SecurityException("Skill resource path is not loaded. Resolve references from the exact loaded entry: "
                     + skills.selected(sessionId).stream().map(item -> item.entryPath()).toList());
         }
         if ("ls".equals(toolName) || "find".equals(toolName)) {

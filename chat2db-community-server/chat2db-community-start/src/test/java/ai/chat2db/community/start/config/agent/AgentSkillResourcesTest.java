@@ -26,9 +26,12 @@ class AgentSkillResourcesTest {
             assertFalse(new ClassPathResource("skills/catalog.json").exists());
             var skills = new AgentSkillConfiguration().agentSkillService(temporaryDirectory.resolve(".chat2db-skills").toString()).prepare();
             assertEquals(java.util.List.of("chart", "skill-manager"), skills.stream().map(skill -> skill.name()).toList());
+            Path builtinRoot = Path.of(ai.chat2db.community.tools.util.ConfigUtils.getEnvBasePath())
+                    .resolve("storage/agent-v2/skills/builtin").toRealPath();
             for (var skill : skills) {
                 assertTrue(java.nio.file.Files.readString(Path.of(skill.entryPath())).contains("name: " + skill.name()));
-                assertTrue(Path.of(skill.entryPath()).startsWith(temporaryDirectory.toRealPath().resolve(".chat2db-skills/.resources")));
+                assertTrue(Path.of(skill.entryPath()).startsWith(builtinRoot));
+                assertFalse(Path.of(skill.entryPath()).startsWith(temporaryDirectory.resolve(".chat2db-skills").toRealPath()));
                 if (skill.name().equals("chart")) assertTrue(java.nio.file.Files.isRegularFile(Path.of(skill.entryPath()).resolveSibling("references/combo.md")));
             }
         } finally {

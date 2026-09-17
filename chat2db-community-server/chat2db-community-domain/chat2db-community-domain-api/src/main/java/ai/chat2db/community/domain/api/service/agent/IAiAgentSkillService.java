@@ -16,11 +16,13 @@ public interface IAiAgentSkillService {
 
     default void release(String sessionId) { }
 
-    /** Mutable user sources; packaged resources and snapshots below it remain protected. */
+    /** Mutable user sources, edited in place. */
     default Path userDirectory() { return null; }
 
+    /** Installed packaged skills; read-only and never a user installation destination. */
     default Path resourceDirectory() { return null; }
 
+    /** Resolves a resource path recorded by an earlier run to the skill that is loaded now. */
     default Path resolveLegacyPath(Path path) { return path; }
 
     AiAgentSkillResolveResponse resolve(AiAgentSkillResolveRequest aiAgentSkillResolveRequest);
