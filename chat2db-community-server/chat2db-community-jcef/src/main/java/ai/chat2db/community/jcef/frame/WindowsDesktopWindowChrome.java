@@ -6,6 +6,7 @@ import javax.swing.JComponent;
 import javax.swing.JRootPane;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.Point;
 import java.awt.event.InputEvent;
@@ -67,6 +68,23 @@ final class WindowsDesktopWindowChrome {
         );
     }
 
+    /**
+     * Native Windows behavior when a maximized window is dragged: restore it
+     * and place it so the pointer stays at the same relative position inside
+     * the window, instead of leaving it pinned against the maximized bounds.
+     */
+    static Point restoredDragOrigin(Dimension maximizedSize, Dimension restoredSize,
+            Point windowOrigin, Point pointerScreen) {
+        double ratioX = maximizedSize.width <= 0 ? 0.5
+                : (double) (pointerScreen.x - windowOrigin.x) / maximizedSize.width;
+        double ratioY = maximizedSize.height <= 0 ? 0.5
+                : (double) (pointerScreen.y - windowOrigin.y) / maximizedSize.height;
+        return new Point(
+                pointerScreen.x - (int) Math.round(ratioX * restoredSize.width),
+                pointerScreen.y - (int) Math.round(ratioY * restoredSize.height)
+        );
+    }
+
     private static final class BrowserWindowDragHandler extends MouseAdapter {
 
         private final Frame frame;
@@ -96,7 +114,14 @@ final class WindowsDesktopWindowChrome {
                     || (event.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) == 0) {
                 return;
             }
-            frame.setLocation(draggedWindowLocation(windowOrigin, pointerOrigin, event.getLocationOnScreen()));
+            Point pointer = event.getLocationOnScreen();
+            if ((frame.getExtendedState() & Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH) {
+                Dimension maximizedSize = frame.getSize();
+                frame.setExtendedState(frame.getExtendedState() & ~Frame.MAXIMIZED_BOTH);
+                windowOrigin = restoredDragOrigin(maximizedSize, frame.getSize(), windowOrigin, pointer);
+                pointerOrigin = pointer;
+            }
+            frame.setLocation(draggedWindowLocation(windowOrigin, pointerOrigin, pointer));
         }
 
         @Override
