@@ -2,8 +2,12 @@ package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.tools.exception.BusinessException;
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.support.ExcelTypeEnum;
+import ai.chat2db.community.domain.api.model.task.ExcelOptions;
+import ai.chat2db.community.domain.api.model.task.JsonOptions;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.JsonImportReader;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
+import java.util.ArrayList;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +22,15 @@ import java.util.Map;
 public final class ImportPreviewFileParser {
 
     ParsedRows parse(File file, int limit, CsvOptions csvOptions) {
-        return isCsv(file) ? parseCsv(file, limit, csvOptions) : parseExcel(file, limit);
+        return parse(file, limit, csvOptions, null, null);
+    }
+
+    ParsedRows parse(File file, int limit, CsvOptions csvOptions, ExcelOptions excelOptions, JsonOptions jsonOptions) {
+        if (isCsv(file)) return parseCsv(file, limit, csvOptions);
+        if (file.getName().toLowerCase(Locale.ROOT).endsWith(".json")) {
+            return parseJson(file, limit, jsonOptions == null ? new JsonOptions() : jsonOptions);
+        }
+        return parseExcel(file, limit, excelOptions == null ? new ExcelOptions() : excelOptions);
     }
 
     private ParsedRows parseCsv(File file, int limit, CsvOptions csvOptions) {
@@ -52,17 +64,42 @@ public final class ImportPreviewFileParser {
         }
     }
 
-    private ParsedRows parseExcel(File file, int limit) {
+    private ParsedRows parseExcel(File file, int limit, ExcelOptions options) {
+        Map<Integer, String> header = new LinkedHashMap<>();
+        List<Map<Integer, String>> rows = new ArrayList<>();
         try {
-            ImportPreviewListener listener = new ImportPreviewListener(limit);
-            EasyExcel.read(file, listener).excelType(excelType(file)).sheet().headRowNumber(1).doRead();
-            List<Map<Integer, String>> rows = listener.rows();
-            return rows.isEmpty() ? ParsedRows.empty()
-                    : new ParsedRows(rows.get(0), rows.subList(1, rows.size()), false);
+            List<String> sheets = ExcelImportReader.read(file, options, limit, 0, header::putAll, (cells, number) -> {
+                Map<Integer, String> row = new LinkedHashMap<>();
+                cells.forEach((index, cell) -> row.put(index, cell.display()));
+                rows.add(row);
+            }, () -> { });
+            return new ParsedRows(options.getHasHeader() ? header : syntheticHeader(rows), rows,
+                    !options.getHasHeader(), sheets);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.warn("Excel import preview parse failed for {}", file, e);
-            throw new BusinessException("import.preview.parseFailed", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.invalidExcelFile", null, e);
         }
+    }
+
+    private ParsedRows parseJson(File file, int limit, JsonOptions options) {
+        List<Map<String, ImportCell>> records = new ArrayList<>();
+        Map<String, Integer> indexes = new LinkedHashMap<>();
+        JsonImportReader.read(file, options, limit, (record, number) -> {
+            if (records.size() < limit) {
+                records.add(record);
+            }
+            record.keySet().forEach(name -> indexes.computeIfAbsent(name, ignored -> indexes.size()));
+        }, () -> { }, true);
+        Map<Integer, String> header = new LinkedHashMap<>();
+        indexes.forEach((name, index) -> header.put(index, name));
+        List<Map<Integer, String>> rows = new ArrayList<>();
+        for (Map<String, ImportCell> record : records) {
+            Map<Integer, String> row = new LinkedHashMap<>();
+            indexes.forEach((name, index) -> row.put(index, record.containsKey(name) ? record.get(name).display() : null));
+            rows.add(row);
+        }
+        return new ParsedRows(header, rows, false);
     }
 
     private static Map<Integer, String> syntheticHeader(List<Map<Integer, String>> data) {
@@ -78,12 +115,11 @@ public final class ImportPreviewFileParser {
         return file != null && file.getName().toLowerCase(Locale.ROOT).endsWith(".csv");
     }
 
-    private static ExcelTypeEnum excelType(File file) {
-        return file.getName().toLowerCase(Locale.ROOT).endsWith(".xls")
-                ? ExcelTypeEnum.XLS : ExcelTypeEnum.XLSX;
-    }
-
-    record ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader) {
+    record ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader,
+                      List<String> sheets) {
+        ParsedRows(Map<Integer, String> header, List<Map<Integer, String>> data, boolean syntheticHeader) {
+            this(header, data, syntheticHeader, List.of());
+        }
         private static ParsedRows empty() {
             return new ParsedRows(Map.of(), List.of(), false);
         }

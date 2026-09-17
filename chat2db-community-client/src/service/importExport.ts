@@ -1,7 +1,7 @@
 import createRequest from './base';
 import { IDatabaseBaseInfo } from '@/typings/database';
 import { IPageResponse } from '@/typings';
-import type { ICsvOptions, ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
+import type { IExcelOptions, IJsonOptions, ISqlImportOptions, ICsvOptions, ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 
 export interface GenerateJavaClassParams extends IDatabaseBaseInfo {
@@ -65,6 +65,9 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   format: ImportExportFileType;
   dataTimeFormat?: string;
   csvOptions?: ICsvOptions;
+  excelOptions?: IExcelOptions;
+  jsonOptions?: IJsonOptions;
+  sqlImportOptions?: ISqlImportOptions;
   mode?: 'FAST' | 'STANDARD';
 }
 

@@ -64,6 +64,12 @@ public class TaskWebConverter {
                 .format(format)
                 .dataTimeFormat(request.getDataTimeFormat())
                 .csvOptions(csvOptions(format, request.getCsvOptions()))
+                .excelOptions(("XLS".equals(format) || "XLSX".equals(format)) && request.getExcelOptions() != null
+                        ? request.getExcelOptions().validate() : null)
+                .jsonOptions("JSON".equals(format) && request.getJsonOptions() != null
+                        ? request.getJsonOptions().validate() : null)
+                .sqlImportOptions("SQL".equals(format) && request.getSqlImportOptions() != null
+                        ? request.getSqlImportOptions().validate() : null)
                 .mode(request.getMode())
                 .build();
     }

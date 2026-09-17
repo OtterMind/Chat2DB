@@ -3,14 +3,15 @@ package ai.chat2db.community.domain.core.impl.task.imports.sql;
 import ai.chat2db.spi.DefaultSqlSyntaxHandler;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.SqlImportOptions;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
-import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.tools.util.EasyStringUtils;
 import ai.chat2db.community.domain.core.impl.task.imports.*;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportTextFile;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.util.JdbcUtils;
@@ -25,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.Charset;
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -41,6 +43,10 @@ public class SQLImporter implements IImportStrategy {
         try {
             context.checkCancelled();
             File sourceFile = new File(spec.getSourceFile());
+            if (spec.getSqlImportOptions() != null) {
+                importConfiguredFile(spec, context, sourceFile);
+                return;
+            }
             ImportSqlExecutor sqlExecutor = new ImportSqlExecutor(context);
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             String databaseType = connectInfo.getDbType();
@@ -106,8 +112,17 @@ public class SQLImporter implements IImportStrategy {
             throw e;
         } catch (Exception e) {
             log.error("Could not import SQL file", e);
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "Could not import SQL file", e);
+            throw ImportTaskErrors.from(e, "import.sql.parseFailed");
+        }
+    }
+
+    private void importConfiguredFile(ImportTaskSpec spec, TaskExecutionContext context, File sourceFile) throws Exception {
+        SqlImportOptions options = spec.getSqlImportOptions().validate();
+        java.nio.file.Path decoded = ImportTextFile.utf8Copy(sourceFile, options.getEncoding(), context::checkCancelled);
+        try {
+            run(ImportTaskSpec.builder().sourceFile(decoded.toString()).build(), context);
+        } finally {
+            Files.deleteIfExists(decoded);
         }
     }
 

@@ -1,5 +1,5 @@
 import createRequest from './base';
-import type { ICsvOptions } from '@/typings/importExport';
+import type { IExcelOptions, IJsonOptions, ICsvOptions } from '@/typings/importExport';
 import { ImportUnmappedTarget } from '@/constants/importExport';
 import {
   IPageResponse,
@@ -479,9 +479,16 @@ const getImportPreview = createRequest<
     tableName: string;
     fileId: string;
     csvOptions?: ICsvOptions;
+    excelOptions?: IExcelOptions;
+    jsonOptions?: IJsonOptions;
   },
   IImportPreview
 >('/api/rdb/import_preview/preview', { method: 'post', errorLevel: false });
+
+const getImportSheets = createRequest<
+  { dataSourceId: number; databaseName: string; schemaName?: string; tableName: string; fileId: string },
+  string[]
+>('/api/rdb/import_preview/sheets', { method: 'post', errorLevel: false });
 
 const executeImportWithMapping = createRequest<
   {
@@ -493,6 +500,8 @@ const executeImportWithMapping = createRequest<
     mappings: { sourceColumn: string | null; targetColumn: string }[];
     unmappedTarget: ImportUnmappedTarget;
     csvOptions?: ICsvOptions;
+    excelOptions?: IExcelOptions;
+    jsonOptions?: IJsonOptions;
     mode?: import('@/typings/importExport').ImportExecutionMode;
   },
   IImportTaskSubmitResult
@@ -616,6 +625,7 @@ export default {
   getAllFieldByTable,
   checkIsSelectSQL,
   getImportPreview,
+  getImportSheets,
   executeImportWithMapping,
   uploadImportFile,
   stageDesktopImportFile,

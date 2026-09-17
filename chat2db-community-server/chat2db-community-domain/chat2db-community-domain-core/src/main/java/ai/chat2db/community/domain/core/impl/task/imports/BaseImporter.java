@@ -4,15 +4,12 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.community.domain.api.model.metadata.DataType;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
-import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
-import ai.chat2db.community.tools.exception.BusinessException;
-import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.TableMetadataRequest;
@@ -43,12 +40,9 @@ public abstract class BaseImporter implements IImportStrategy {
             context.logInfo(TaskEventCode.FILE_READ_COMPLETED.name(), "Import file read completed");
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
-        } catch (BusinessException e) {
-            throw new TaskExecutionException(e.getCode(), I18nUtils.getMessage(e.getCode(), e.getArgs()), e);
         } catch (Exception e) {
             log.error("Could not import data file", e);
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "Could not import data file", e);
+            throw ImportTaskErrors.from(e, "import.file.failed");
         }
     }
 

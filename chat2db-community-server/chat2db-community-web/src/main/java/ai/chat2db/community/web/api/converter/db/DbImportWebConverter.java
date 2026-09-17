@@ -15,6 +15,8 @@ public class DbImportWebConverter {
                 .tableName(request.getTableName())
                 .fileId(request.getFileId())
                 .csvOptions(request.getCsvOptions())
+                .excelOptions(request.getExcelOptions())
+                .jsonOptions(request.getJsonOptions())
                 .mappings(request.getMappings())
                 .unmappedTarget(request.getUnmappedTarget())
                 .mode(request.getMode())

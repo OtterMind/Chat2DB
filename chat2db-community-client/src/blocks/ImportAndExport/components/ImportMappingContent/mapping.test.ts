@@ -59,3 +59,15 @@ assert.equal(
   ),
   'The import file contains duplicate source fields',
 );
+
+// Specific parser diagnostics survive the shared display; missing backend text has a useful fallback.
+assert.equal(
+  getImportPreviewErrorMessage({ errorCode: 'import.preview.jsonEncodingMismatch',
+    errorMessage: 'JSON 无法按 UTF-8 编码读取，请检查上方的编码是否与文件一致。' }, '无法预览文件'),
+  'JSON 无法按 UTF-8 编码读取，请检查上方的编码是否与文件一致。',
+);
+assert.equal(
+  getImportPreviewErrorMessage({ errorCode: 'import.preview.parseFailed',
+    errorMessage: 'import.preview.parseFailed : no message.' }, '请检查文件内容和格式设置'),
+  '请检查文件内容和格式设置',
+);

@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -53,8 +54,7 @@ public final class ImportSqlExecutor {
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "Could not execute imported SQL", e);
+            throw importFailure(e);
         }
     }
 
@@ -71,9 +71,24 @@ public final class ImportSqlExecutor {
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
-            throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
-                    "Could not execute imported SQL", e);
+            throw importFailure(e);
         }
+    }
+
+    static TaskExecutionException importFailure(Exception error) {
+        String code = "import.sql.executionFailed";
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException) {
+                String state = StringUtils.defaultString(sqlException.getSQLState());
+                if (state.startsWith("23")) code = "import.sql.constraintViolation";
+                else if (state.startsWith("22")) code = "import.sql.invalidValue";
+                else if (state.startsWith("42")) code = "import.sql.invalidStatement";
+                else if (state.startsWith("08")) code = "import.sql.connectionFailed";
+                return new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                        I18nUtils.getMessage(code), "SQLState=" + state + ", code=" + sqlException.getErrorCode(), error);
+            }
+        }
+        return new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(), I18nUtils.getMessage(code), error);
     }
 
     private void flushInserts(List<String> inserts) {

@@ -4,7 +4,6 @@ import { TriangleAlert } from 'lucide-react';
 import { ImportUnmappedTarget, SKIP_IMPORT_SOURCE_FIELD } from '@/constants/importExport';
 import i18n from '@/i18n';
 import type { IImportPreview } from '@/service/sql';
-import type { ICsvOptions } from '@/typings/importExport';
 import { buildImportMappingRows, type IDuplicateImportMapping, type ImportMappingRow } from './mapping';
 import { useStyles } from './style';
 
@@ -14,12 +13,13 @@ interface Props {
   duplicateMappings: Record<string, IDuplicateImportMapping>;
   blockedColumnNames: Set<string>;
   unmappedTarget: ImportUnmappedTarget;
-  csvOptions: ICsvOptions;
-  isCsv: boolean;
+  emptyAsNull: boolean;
+  emptyAsNullLabel: string;
   loading: boolean;
+  disabled: boolean;
   onMappingChange: (sourceColumn: string, targetColumn: string) => void;
   onUnmappedTargetChange: (value: ImportUnmappedTarget) => void;
-  onCsvOptionsChange: (value: ICsvOptions) => void;
+  onEmptyAsNullChange: (value: boolean) => void;
 }
 
 const useImportDataSections = (props: Props): CollapseProps['items'] => {
@@ -30,12 +30,13 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
     duplicateMappings,
     blockedColumnNames,
     unmappedTarget,
-    csvOptions,
-    isCsv,
+    emptyAsNull,
+    emptyAsNullLabel,
     loading,
+    disabled,
     onMappingChange,
     onUnmappedTargetChange,
-    onCsvOptionsChange,
+    onEmptyAsNullChange,
   } = props;
   if (!preview) {
     return [];
@@ -70,7 +71,11 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
         }
         const duplicate = duplicateMappings[record.sourceColumn];
         const warning = duplicate
-          ? i18n('workspace.importExport.duplicateMappingContent', duplicate.targetColumn, duplicate.mappedSource)
+          ? i18n(
+              'workspace.importExport.duplicateMappingContent',
+              duplicate.targetColumn,
+              duplicate.mappedSource,
+            )
           : undefined;
         return (
           <div className={styles.targetColumnCell}>
@@ -84,6 +89,7 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
               </span>
             )}
             <Select
+              disabled={disabled || loading}
               className={cx(styles.targetColumnSelect, warning && styles.targetColumnSelectWarning)}
               value={mapping[record.sourceColumn]}
               options={targetOptions}
@@ -103,7 +109,9 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
             : i18n('workspace.importExport.mapped');
         }
         if (blockedColumnNames.has(record.targetColumn.name)) {
-          return <span className={styles.requiredStatus}>{i18n('workspace.importExport.unmappedRequired')}</span>;
+          return (
+            <span className={styles.requiredStatus}>{i18n('workspace.importExport.unmappedRequired')}</span>
+          );
         }
         if (record.targetColumn.autoIncrement) {
           return i18n('workspace.importExport.unmappedAutoIncrement');
@@ -131,20 +139,19 @@ const useImportDataSections = (props: Props): CollapseProps['items'] => {
       children: (
         <>
           <div className={styles.mappingControls}>
-            {isCsv && (
-              <Checkbox
-                checked={csvOptions.emptyAsNull}
-                onChange={(event) => onCsvOptionsChange({ ...csvOptions, emptyAsNull: event.target.checked })}
-              >
-                {i18n('workspace.importExport.emptyAsNull')}
-              </Checkbox>
-            )}
+            <Checkbox checked={emptyAsNull} onChange={(event) => onEmptyAsNullChange(event.target.checked)}>
+              {emptyAsNullLabel}
+            </Checkbox>
             <Select
+              disabled={disabled || loading}
               className={styles.unmappedTargetSelect}
               value={unmappedTarget}
               onChange={onUnmappedTargetChange}
               options={[
-                { value: ImportUnmappedTarget.DEFAULT, label: i18n('workspace.importExport.unmappedDefault') },
+                {
+                  value: ImportUnmappedTarget.DEFAULT,
+                  label: i18n('workspace.importExport.unmappedDefault'),
+                },
                 { value: ImportUnmappedTarget.NULL, label: i18n('workspace.importExport.unmappedNull') },
               ]}
             />

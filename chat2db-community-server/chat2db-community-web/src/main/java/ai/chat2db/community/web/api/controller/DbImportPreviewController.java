@@ -64,7 +64,12 @@ public class DbImportPreviewController {
     public DataResult<ImportPreview> preview(@Valid @RequestBody ImportPreviewRequest request) {
         return DataResult.of(importPreviewService.preview(request.getDataSourceId(), request.getDatabaseName(),
                 request.getSchemaName(), request.getTableName(), importFileStagingService.resolve(request.getFileId()),
-                request.getCsvOptions()));
+                request.getCsvOptions(), request.getExcelOptions(), request.getJsonOptions()));
+    }
+
+    @PostMapping("/sheets")
+    public DataResult<java.util.List<String>> sheets(@Valid @RequestBody ImportPreviewRequest request) {
+        return DataResult.of(importPreviewService.sheetNames(importFileStagingService.resolve(request.getFileId())));
     }
 
     @PostMapping("/execute")

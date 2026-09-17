@@ -48,12 +48,13 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
         validateUniqueMappings(mappings);
         File file = importFileStagingService.resolve(execution.getFileId());
         ImportPreview preview = importPreviewService.preview(execution.getDataSourceId(), execution.getDatabaseName(),
-                execution.getSchemaName(), execution.getTableName(), file, execution.getCsvOptions());
+                execution.getSchemaName(), execution.getTableName(), file, execution.getCsvOptions(), execution.getExcelOptions(), execution.getJsonOptions());
         validateMappings(mappings, preview);
         UnmappedTargetStrategy strategy = execution.getUnmappedTarget() == null
                 ? UnmappedTargetStrategy.DEFAULT : execution.getUnmappedTarget();
         validateRequiredColumns(mappings, preview, strategy);
 
+        String format = extension(file.getName());
         ImportTaskSpec spec = ImportTaskSpec.builder()
                 .taskType(TaskType.DATA_FILE_IMPORT.name())
                 .taskName("Import " + preview.getTargetTableName())
@@ -66,8 +67,10 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .sourceFile(file.getAbsolutePath())
                 .importFileId(execution.getFileId())
                 .displayFileName(file.getName())
-                .format(extension(file.getName()))
-                .csvOptions(execution.getCsvOptions())
+                .format(format)
+                .csvOptions("CSV".equals(format) ? execution.getCsvOptions() : null)
+                .excelOptions("XLS".equals(format) || "XLSX".equals(format) ? execution.getExcelOptions() : null)
+                .jsonOptions("JSON".equals(format) ? execution.getJsonOptions() : null)
                 .columnMappings(mappings)
                 .unmappedTarget(strategy)
                 .mode(execution.getMode())

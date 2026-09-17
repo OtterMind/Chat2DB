@@ -20,6 +20,31 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class TaskWebConverterTest {
 
     @Test
+    void retainsBasicFileOptionsInTaskSpecifications() {
+        TaskImportRequest request = new TaskImportRequest();
+        request.setFormat("XLSX");
+        var excel = new ai.chat2db.community.domain.api.model.task.ExcelOptions();
+        excel.setSheetIndex(2);
+        excel.setColumnRange("B:H");
+        request.setExcelOptions(excel);
+        assertEquals("B:H", new TaskWebConverter().importRequest2spec(request).getExcelOptions().getColumnRange());
+        request.setFormat("JSON");
+        var json = new ai.chat2db.community.domain.api.model.task.JsonOptions();
+        json.setDataPath("$.data.items");
+        request.setJsonOptions(json);
+        var jsonSpec = new TaskWebConverter().importRequest2spec(request);
+        assertEquals("$.data.items", jsonSpec.getJsonOptions().getDataPath());
+        org.junit.jupiter.api.Assertions.assertNull(jsonSpec.getExcelOptions());
+        request.setFormat("SQL");
+        var sql = new ai.chat2db.community.domain.api.model.task.SqlImportOptions();
+        sql.setEncoding("GBK");
+        request.setSqlImportOptions(sql);
+        var spec = new TaskWebConverter().importRequest2spec(request);
+        assertEquals("GBK", spec.getSqlImportOptions().getEncoding());
+        org.junit.jupiter.api.Assertions.assertNull(spec.getJsonOptions());
+    }
+
+    @Test
     void importPreservesStagedSourceAndExecutionMode() {
         var request = new ai.chat2db.community.web.api.model.request.task.TaskImportRequest();
         request.setFileId("staged-source");
