@@ -229,7 +229,7 @@ public class OracleSqlBuilder extends DefaultSqlBuilder {
         int offset = request.getOffset();
         int pageSize = request.getPageSize();
         int startRow = offset;
-        int endRow = offset + pageSize;
+        long endRow = (long) offset + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
         sqlBuilder.append(SQL_SELECT);
         if (startRow > 0) {
