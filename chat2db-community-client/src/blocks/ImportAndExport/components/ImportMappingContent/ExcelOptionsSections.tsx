@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Input, Select, type CollapseProps } from 'antd';
 import type { IExcelOptions } from '@/typings/importExport';
 import i18n from '@/i18n';
@@ -27,6 +28,16 @@ export default function ExcelOptionsSections({
 }: Props) {
   const { styles } = useStyles();
   const update = (patch: Partial<IExcelOptions>) => onChange({ ...value, ...patch });
+  const [columnRange, setColumnRange] = useState(value.columnRange);
+  useEffect(() => {
+    setColumnRange(value.columnRange);
+  }, [value.columnRange]);
+  const commitColumnRange = () => {
+    const next = columnRange.trim();
+    if (next !== value.columnRange) {
+      update({ columnRange: next });
+    }
+  };
   return (
     <OptionsSections
       activeKeys={activeKeys}
@@ -53,8 +64,10 @@ export default function ExcelOptionsSections({
                   <Input
                     disabled={disabled}
                     placeholder="A:H"
-                    value={value.columnRange}
-                    onChange={(event) => update({ columnRange: event.target.value })}
+                    value={columnRange}
+                    onChange={(event) => setColumnRange(event.target.value)}
+                    onBlur={commitColumnRange}
+                    onPressEnter={commitColumnRange}
                   />
                 </label>
               </div>

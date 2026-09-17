@@ -45,7 +45,7 @@ public final class ExcelImportReader {
                 int rowNumber = context.readRowHolder().getRowIndex() + 1;
                 boolean isHeader = options.getHasHeader() && rowNumber == options.getHeaderRow();
                 if (!isHeader && rowNumber < options.getDataStartRow()) return;
-                if (options.getDataEndRow() != null && rowNumber > options.getDataEndRow() && !isHeader) return;
+                if (options.getDataEndRow() != null && rowNumber > options.getDataEndRow()) return;
                 int dataLastColumn = data.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1);
                 int lastColumn = options.getColumnRange().isEmpty()
                         ? Math.max(Math.max(minimumColumns - 1, dataLastColumn), sourceColumnCount - 1)

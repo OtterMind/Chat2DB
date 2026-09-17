@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.db.ImportPreview;
 import ai.chat2db.community.domain.api.model.task.CsvOptions;
 
 import java.io.File;
+import java.util.List;
 import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.JsonOptions;
 
@@ -37,7 +38,7 @@ public interface IDbImportPreviewService {
                                   ExcelOptions excelOptions, JsonOptions jsonOptions) {
         return preview(dataSourceId, databaseName, schemaName, tableName, file, csvOptions);
     }
-    default java.util.List<String> sheetNames(File file) {
-        return java.util.List.of();
+    default List<String> sheetNames(File file) {
+        return List.of();
     }
 }

@@ -486,7 +486,7 @@ const getImportPreview = createRequest<
 >('/api/rdb/import_preview/preview', { method: 'post', errorLevel: false });
 
 const getImportSheets = createRequest<
-  { dataSourceId: number; databaseName: string; schemaName?: string; tableName: string; fileId: string },
+  { dataSourceId: number; databaseName: string; schemaName?: string; fileId: string },
   string[]
 >('/api/rdb/import_preview/sheets', { method: 'post', errorLevel: false });
 

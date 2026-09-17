@@ -35,7 +35,6 @@ public abstract class BaseExcelImporter extends BaseImporter {
         context.checkCancelled();
     }
 
-
     public class NoModelDataListener {
 
         private final TaskExecutionContext taskContext;

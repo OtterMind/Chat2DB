@@ -42,4 +42,27 @@ class ImportSqlFailureTest {
             field.set(null, previous);
         }
     }
+
+    @Test
+    void classifiesTheDeepestKnownStateWhenTheOuterSqlExceptionHasNone() throws Exception {
+        var field = I18nUtils.class.getDeclaredField("messageSourceStatic");
+        field.setAccessible(true);
+        Object previous = field.get(null);
+        StaticMessageSource messages = new StaticMessageSource();
+        field.set(null, messages);
+        try {
+            messages.addMessage("import.sql.constraintViolation", LocaleContextHolder.getLocale(),
+                    "Localized constraintViolation");
+            var driver = new SQLException("duplicate key", "23505", 1062);
+            var batchWrapper = new SQLException("batch failed", null, 0, driver);
+
+            var error = ImportSqlExecutor.importFailure(new RuntimeException(batchWrapper));
+
+            assertTrue(error.publicMessage().contains("Localized constraintViolation"));
+            assertTrue(error.publicMessage().contains("SQLState=23505"));
+            assertFalse(error.publicMessage().contains("duplicate key"));
+        } finally {
+            field.set(null, previous);
+        }
+    }
 }

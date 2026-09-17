@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Input, Select, type CollapseProps } from 'antd';
 import type { IJsonOptions } from '@/typings/importExport';
 import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
@@ -25,6 +26,16 @@ export default function JsonOptionsSections({
 }: Props) {
   const { styles } = useStyles();
   const update = (patch: Partial<IJsonOptions>) => onChange({ ...value, ...patch });
+  const [dataPath, setDataPath] = useState(value.dataPath);
+  useEffect(() => {
+    setDataPath(value.dataPath);
+  }, [value.dataPath]);
+  const commitDataPath = () => {
+    const next = dataPath.trim();
+    if (next !== value.dataPath) {
+      update({ dataPath: next });
+    }
+  };
   return (
     <OptionsSections
       activeKeys={activeKeys}
@@ -65,9 +76,11 @@ export default function JsonOptionsSections({
                 <span>{i18n('workspace.importExport.jsonDataPath')}</span>
                 <Input
                   disabled={disabled || value.structure === 'LINES'}
-                  value={value.dataPath}
+                  value={dataPath}
                   placeholder="$.data.items"
-                  onChange={(event) => update({ dataPath: event.target.value })}
+                  onChange={(event) => setDataPath(event.target.value)}
+                  onBlur={commitDataPath}
+                  onPressEnter={commitDataPath}
                 />
               </label>
             </div>

@@ -137,7 +137,7 @@ public final class JsonImportReader {
         return false;
     }
 
-    private static Map<String, ImportCell> fields(JsonNode node, JsonOptions options) throws IOException {
+    private static Map<String, ImportCell> fields(JsonNode node, JsonOptions options) {
         if (node == null || !node.isObject()) throw new BusinessException("import.preview.jsonExpectedObject", new Object[]{options.getDataPath()});
         Map<String, ImportCell> fields = new LinkedHashMap<>();
         flatten(node, "", fields, options);

@@ -185,7 +185,7 @@ const ImportMappingContent = ({
     if (!fileId || !isExcel) return;
     let active = true;
     sqlService
-      .getImportSheets({ dataSourceId, databaseName, schemaName, tableName, fileId })
+      .getImportSheets({ dataSourceId, databaseName, schemaName, fileId })
       .then((names) => {
         if (active) setSheets(names);
       })

@@ -22,6 +22,7 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
             return;
         }
         CsvOptions options = (spec.getCsvOptions() == null ? CsvOptions.defaults() : spec.getCsvOptions()).validate();
+        spec.setCsvOptions(options);
         NoModelDataListener listener = new NoModelDataListener(spec, context, columns);
         boolean[] initialized = {false};
         int[] sourceRow = {0};
