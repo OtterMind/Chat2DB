@@ -25,7 +25,7 @@ The backend setting `chat2db.agent.v2.skills.directory` overrides the root, for 
 
 Existing file tools can read and edit user skills in this fixed directory without enabling general workspace access. Files outside the skill directory retain the usual workspace permissions. Bundled resources and snapshots remain read-only.
 
-Bash and PowerShell require their existing tool setting and command approval. Setting their working directory does not confine shell commands to that directory. GitHub installation uses available shell download/archive commands and does not require Python; the agent reports missing commands or authentication rather than assuming they exist.
+Bash and PowerShell are omitted from the active tool set until the user enables the corresponding tool, and every command still requires approval. Setting their working directory does not confine shell commands to that directory. GitHub installation uses shell download/archive commands only when the user has enabled a shell tool; otherwise the agent asks for that setting and does not claim a download occurred. It does not require Python, and the agent reports missing commands or authentication rather than assuming they exist.
 
 The backend validates sources and loads complete snapshots before the next turn. Running turns keep their selected versions. An invalid edit does not replace a valid snapshot already known by the running backend. Removing a user source removes it from future discovery, but does not delete historical snapshots or conversations.
 

@@ -5,7 +5,9 @@ description: Create, improve, inspect, or install reusable skills when the user 
 
 # Skill Manager
 
-Use the existing file and shell tools to maintain standard skills. The user skill directory is given in the file tools' descriptions; its default is `~/.chat2db-skills/`. Use the actual absolute path supplied by the host. Do not change the conversation working directory to access it.
+Use the existing file tools to maintain standard skills. The user skill directory is given in the file tools' descriptions; its default is `~/.chat2db-skills/`. Use the actual absolute path supplied by the host. Do not change the conversation working directory to access it.
+
+Bash/PowerShell is not part of the default skill-directory access. If an installation needs a remote download or archive command and the shell tool is not available, tell the user which shell tool must be enabled in Pi Agent settings and wait for that change. Enabling it only makes the command available; every shell command still requires the normal approval. Keep downloads in a temporary location, inspect them, and finish the installation with the file tools.
 
 - For creating or editing a skill, read [creation guidance](references/creation.md).
 - For importing a local skill or installing from GitHub, read [installation guidance](references/installation.md).

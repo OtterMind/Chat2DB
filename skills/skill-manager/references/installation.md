@@ -2,6 +2,8 @@
 
 Adapted from OpenAI's skill-installer. Install standard skill directories into the user skill directory supplied by the host. Reuse existing file and shell tools; no Python installer, new model tool, or helper runtime is required.
 
+Routine inspection, validation, and copying use the basic file tools in the user skill directory. Remote downloads are the exception: they require an enabled Bash/PowerShell tool and an approval for each command. If the required shell tool is absent, stop before attempting the download and ask the user to enable it in Pi Agent settings. Do not imply that a failed or hidden shell call downloaded anything.
+
 ## Select the source
 
 Use the location the user supplied. A local directory or archive must already be accessible with the user's file permissions; a browser-local path is not a server path. Uploaded files must use the paths returned by the existing attachment tools.

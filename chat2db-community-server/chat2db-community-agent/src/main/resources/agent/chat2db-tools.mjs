@@ -153,7 +153,7 @@ export default function (pi) {
         description: `${name === "ls" ? "List directory entries" : "Find entries by glob pattern"} within the permitted user directory, without following symlinks. Explicit limit bounds entries and returns hasMore; otherwise large listings are saved as JSONL with a preview and output.path.` + skillFiles,
         promptSnippet: name === "ls" ? "List directory entries" : "Find entries by glob pattern",
       } : name === "bash" || name === "powershell" ? {
-        description: `Execute a ${name} command in the configured working directory after user approval. Large stdout/stderr is saved with output.path and a bounded preview, including failed commands. Read or grep the saved file for more output.`,
+        description: `Execute a ${name} command in the configured working directory only when the user has enabled this tool, and after user approval. Large stdout/stderr is saved with output.path and a bounded preview, including failed commands. Read or grep the saved file for more output.`,
       } : {}),
       parameters: withCallDescription(parameters),
       async execute(toolCallId, args, signal, onUpdate) {
