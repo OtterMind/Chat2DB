@@ -58,7 +58,9 @@ public final class ExcelImportReader {
                 if (isHeader || !options.getHasHeader() && !hasHeader) {
                     sourceColumnCount = Math.max(sourceColumnCount, cells.size());
                     Map<Integer, String> header = new LinkedHashMap<>();
-                    cells.forEach((column, cell) -> header.put(column, isHeader ? org.apache.commons.lang3.StringUtils.defaultIfBlank(cell.display(), "column_" + (column + 1)) : "column_" + (column + 1)));
+                    cells.forEach((column, cell) -> header.put(column, isHeader
+                            ? org.apache.commons.lang3.StringUtils.defaultIfBlank(cell.display(), SourceColumnName.of(column))
+                            : SourceColumnName.of(column)));
                     headerConsumer.accept(header);
                     hasHeader = true;
                 }

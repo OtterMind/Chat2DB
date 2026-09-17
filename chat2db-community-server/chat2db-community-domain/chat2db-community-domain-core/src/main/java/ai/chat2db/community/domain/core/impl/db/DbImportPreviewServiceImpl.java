@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.JsonOptions;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -60,7 +61,7 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
         Map<Integer, String> header = parsedRows.header();
         List<String> sourceNames = new ArrayList<>();
         for (int i = 0; i < header.size(); i++) {
-            String name = StringUtils.defaultIfBlank(header.get(i), "column_" + (i + 1));
+            String name = StringUtils.defaultIfBlank(header.get(i), SourceColumnName.of(i));
             sourceNames.add(name);
         }
         requireUniqueSourceColumns(sourceNames);

@@ -44,7 +44,7 @@ public final class ImportTextFile {
             if (bom.length >= 2 && (bom[0] & 255) == 254 && (bom[1] & 255) == 255) return StandardCharsets.UTF_16BE;
             if (bom.length == 3 && (bom[0] & 255) == 239 && (bom[1] & 255) == 187 && (bom[2] & 255) == 191) return StandardCharsets.UTF_8;
         }
-        for (String candidate : List.of("UTF-8", "GB18030", "windows-1252", "ISO-8859-1")) {
+        for (String candidate : List.of("UTF-8", "GB18030", "windows-1252")) {
             Charset charset = Charset.forName(candidate);
             try (var reader = Files.newBufferedReader(file, charset)) {
                 char[] buffer = new char[8192];
@@ -54,6 +54,7 @@ public final class ImportTextFile {
                 // Try the next supported encoding only for a decoding error.
             }
         }
-        throw new BusinessException("import.preview.invalidEncoding", new Object[]{encoding});
+        // Every byte sequence decodes as ISO-8859-1, so detection always has a fallback.
+        return StandardCharsets.ISO_8859_1;
     }
 }

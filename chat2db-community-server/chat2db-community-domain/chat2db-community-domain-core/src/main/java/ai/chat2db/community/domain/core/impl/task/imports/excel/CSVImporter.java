@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.core.impl.db.CsvParser;
 import ai.chat2db.community.domain.core.impl.task.imports.IImportStrategy;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -51,7 +52,7 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
     static Map<Integer, String> syntheticHeader(int columnCount) {
         Map<Integer, String> header = new LinkedHashMap<>();
         for (int index = 0; index < columnCount; index++) {
-            header.put(index, "column_" + (index + 1));
+            header.put(index, SourceColumnName.of(index));
         }
         return header;
     }
@@ -61,15 +62,7 @@ public class CSVImporter extends BaseExcelImporter implements IImportStrategy {
             return 0;
         }
         return spec.getColumnMappings().stream()
-                .map(mapping -> mapping.getSourceColumn())
-                .filter(source -> source != null && source.startsWith("column_"))
-                .mapToInt(source -> {
-                    try {
-                        return Integer.parseInt(source.substring("column_".length()));
-                    } catch (NumberFormatException ignored) {
-                        return 0;
-                    }
-                })
+                .mapToInt(mapping -> SourceColumnName.columnNumber(mapping.getSourceColumn()))
                 .max()
                 .orElse(0);
     }

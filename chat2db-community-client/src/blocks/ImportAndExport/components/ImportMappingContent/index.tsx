@@ -69,9 +69,16 @@ const ImportMappingContent = ({
   const [jsonOptions, setJsonOptions] = useState<IJsonOptions>(DEFAULT_JSON_OPTIONS);
   const [sheets, setSheets] = useState<string[]>([]);
   const selectedFileName = file.fileName || file.file?.name || file.filePath || '';
-  const isCsv = inferImportFileFormat(selectedFileName) === ImportExportFileType.CSV;
-  const isJson = inferImportFileFormat(selectedFileName) === ImportExportFileType.JSON;
-  const isExcel = !isCsv && !isJson;
+  const fileFormat = inferImportFileFormat(selectedFileName);
+  const isCsv = fileFormat === ImportExportFileType.CSV;
+  const isJson = fileFormat === ImportExportFileType.JSON;
+  const isExcel = fileFormat === ImportExportFileType.XLS || fileFormat === ImportExportFileType.XLSX;
+  const emptyAsNull = isCsv ? csvOptions.emptyAsNull : isJson ? jsonOptions.emptyAsNull : excelOptions.emptyAsNull;
+  const setEmptyAsNull = (value: boolean) => {
+    if (isCsv) setCsvOptions((current) => ({ ...current, emptyAsNull: value }));
+    else if (isJson) setJsonOptions((current) => ({ ...current, emptyAsNull: value }));
+    else setExcelOptions((current) => ({ ...current, emptyAsNull: value }));
+  };
   const fileOptions = useMemo(
     () => (isCsv ? { csvOptions } : isJson ? { jsonOptions } : { excelOptions }),
     [isCsv, isJson, csvOptions, jsonOptions, excelOptions],
@@ -189,8 +196,9 @@ const ImportMappingContent = ({
       .then((names) => {
         if (active) setSheets(names);
       })
-      .catch((requestError) => {
-        if (active) setError(resolveErrorMessage(requestError));
+      .catch(() => {
+        // Worksheets only refine the selection; the preview below already reports file problems.
+        if (active) setSheets([]);
       });
     return () => {
       active = false;
@@ -215,7 +223,7 @@ const ImportMappingContent = ({
     duplicateMappings,
     blockedColumnNames: new Set(blockedColumns.map(({ name }) => name)),
     unmappedTarget,
-    emptyAsNull: isCsv ? csvOptions.emptyAsNull : isJson ? jsonOptions.emptyAsNull : excelOptions.emptyAsNull,
+    emptyAsNull,
     emptyAsNullLabel: i18n(
       isJson ? 'workspace.importExport.emptyStringAsNull' : 'workspace.importExport.emptyAsNull',
     ),
@@ -224,11 +232,7 @@ const ImportMappingContent = ({
     onMappingChange: (sourceColumn, targetColumn) =>
       setMapping((current) => ({ ...current, [sourceColumn]: targetColumn })),
     onUnmappedTargetChange: setUnmappedTarget,
-    onEmptyAsNullChange: (emptyAsNull) => {
-      if (isCsv) setCsvOptions((value) => ({ ...value, emptyAsNull }));
-      else if (isJson) setJsonOptions((value) => ({ ...value, emptyAsNull }));
-      else setExcelOptions((value) => ({ ...value, emptyAsNull }));
-    },
+    onEmptyAsNullChange: setEmptyAsNull,
   });
 
   const execute = () => {
@@ -290,8 +294,8 @@ const ImportMappingContent = ({
       {modalContextHolder}
       <div className={styles.scrollContent}>
         {error && preview && <div className={styles.error}>{error}</div>}
-        {isCsv && (
-          <div className={styles.csvOptions}>
+        <div className={styles.csvOptions}>
+          {isCsv && (
             <CsvOptionsSections
               value={csvOptions}
               activeKeys={activeSections}
@@ -300,29 +304,29 @@ const ImportMappingContent = ({
               onChange={setCsvOptions}
               onActiveKeysChange={setActiveSections}
             />
-          </div>
-        )}
-        {isJson && (
-          <JsonOptionsSections
-            value={jsonOptions}
-            disabled={executing}
-            activeKeys={activeSections}
-            onActiveKeysChange={setActiveSections}
-            dataItems={dataSectionItems}
-            onChange={setJsonOptions}
-          />
-        )}
-        {isExcel && (
-          <ExcelOptionsSections
-            value={excelOptions}
-            sheets={sheets}
-            disabled={executing}
-            activeKeys={activeSections}
-            onActiveKeysChange={setActiveSections}
-            dataItems={dataSectionItems}
-            onChange={setExcelOptions}
-          />
-        )}
+          )}
+          {isJson && (
+            <JsonOptionsSections
+              value={jsonOptions}
+              disabled={executing}
+              activeKeys={activeSections}
+              onActiveKeysChange={setActiveSections}
+              dataItems={dataSectionItems}
+              onChange={setJsonOptions}
+            />
+          )}
+          {isExcel && (
+            <ExcelOptionsSections
+              value={excelOptions}
+              sheets={sheets}
+              disabled={executing}
+              activeKeys={activeSections}
+              onActiveKeysChange={setActiveSections}
+              dataItems={dataSectionItems}
+              onChange={setExcelOptions}
+            />
+          )}
+        </div>
         {!preview && (
           <div className={styles.previewState} role={error ? undefined : 'status'}>
             {error ? (

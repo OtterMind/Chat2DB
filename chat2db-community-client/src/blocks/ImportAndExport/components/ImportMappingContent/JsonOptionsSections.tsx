@@ -28,8 +28,11 @@ export default function JsonOptionsSections({
   const update = (patch: Partial<IJsonOptions>) => onChange({ ...value, ...patch });
   const [dataPath, setDataPath] = useState(value.dataPath);
   useEffect(() => {
-    setDataPath(value.dataPath);
-  }, [value.dataPath]);
+    // JSON Lines has no data node; keep the path the user typed for when they switch back.
+    if (value.structure !== 'LINES') {
+      setDataPath(value.dataPath);
+    }
+  }, [value.dataPath, value.structure]);
   const commitDataPath = () => {
     const next = dataPath.trim();
     if (next !== value.dataPath) {
@@ -49,6 +52,7 @@ export default function JsonOptionsSections({
               <div className={styles.csvOptionField}>
                 <span>{i18n('workspace.importExport.encoding')}</span>
                 <LocalFileEncodingSelect
+                  className={styles.fullWidthControl}
                   charset={value.encoding}
                   disabled={disabled}
                   size="middle"
@@ -68,7 +72,10 @@ export default function JsonOptionsSections({
                     label: i18n(`workspace.importExport.json${structure}`),
                   }))}
                   onChange={(structure) =>
-                    update({ structure, dataPath: structure === 'LINES' ? '$' : value.dataPath })
+                    update({
+                      structure,
+                      dataPath: structure === 'LINES' ? '$' : dataPath.trim() || '$',
+                    })
                   }
                 />
               </label>

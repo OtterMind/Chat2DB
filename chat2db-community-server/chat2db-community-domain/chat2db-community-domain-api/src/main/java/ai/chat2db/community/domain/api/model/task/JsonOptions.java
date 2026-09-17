@@ -17,13 +17,16 @@ public class JsonOptions extends ImportValueOptions {
 
     public JsonOptions validate() {
         validateFormats();
+        encoding = StringUtils.defaultIfBlank(encoding, "UTF-8");
+        structure = StringUtils.defaultIfBlank(structure, "ARRAY");
+        dataPath = StringUtils.defaultIfBlank(dataPath, "$");
+        if (emptyAsNull == null) emptyAsNull = false;
         try {
             encoding = Charset.forName(encoding).name();
         } catch (Exception e) {
-            throw new BusinessException("import.preview.invalidEncoding", new Object[]{StringUtils.defaultString(encoding)}, e);
+            throw new BusinessException("import.preview.invalidEncoding", new Object[]{encoding}, e);
         }
-        if (!Set.of("ARRAY", "OBJECT", "LINES").contains(structure == null ? "" : structure)
-                || emptyAsNull == null || dataPath == null
+        if (!Set.of("ARRAY", "OBJECT", "LINES").contains(structure)
                 || !dataPath.matches("\\$(?:\\.[^.\\[\\]\\s]+|\\[[0-9]+\\])*")
                 || "LINES".equals(structure) && !"$".equals(dataPath)) {
             throw new BusinessException("import.preview.invalidJsonOptions");

@@ -10,10 +10,11 @@ public class SqlImportOptions {
     private String encoding = "AUTO";
 
     public SqlImportOptions validate() {
+        encoding = StringUtils.defaultIfBlank(encoding, "AUTO");
         try {
             if (!"AUTO".equals(encoding)) encoding = Charset.forName(encoding).name();
         } catch (Exception e) {
-            throw new BusinessException("import.preview.invalidEncoding", new Object[]{StringUtils.defaultString(encoding)}, e);
+            throw new BusinessException("import.preview.invalidEncoding", new Object[]{encoding}, e);
         }
         return this;
     }

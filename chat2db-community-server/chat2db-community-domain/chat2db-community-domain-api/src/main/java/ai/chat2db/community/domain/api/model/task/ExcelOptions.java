@@ -22,14 +22,17 @@ public class ExcelOptions extends ImportValueOptions {
 
     public ExcelOptions validate() {
         validateFormats();
-        if (sheetIndex == null || sheetIndex < 0) throw new BusinessException("import.preview.excelSheetMissing");
-        if (hasHeader == null || headerRow == null || headerRow < 1
-                || emptyAsNull == null || getDataStartRow() < 1
+        if (sheetIndex == null) sheetIndex = 0;
+        if (hasHeader == null) hasHeader = true;
+        if (headerRow == null) headerRow = 1;
+        if (emptyAsNull == null) emptyAsNull = true;
+        columnRange = columnRange == null ? "" : columnRange.trim().toUpperCase(Locale.ROOT);
+        if (sheetIndex < 0) throw new BusinessException("import.preview.excelSheetMissing");
+        if (headerRow < 1 || getDataStartRow() < 1
                 || hasHeader && headerRow >= getDataStartRow()
                 || dataEndRow != null && dataEndRow < getDataStartRow()) {
             throw new BusinessException("import.preview.invalidRowRange");
         }
-        columnRange = columnRange == null ? "" : columnRange.trim().toUpperCase(Locale.ROOT);
         if (!columnRange.isEmpty() && (!columnRange.matches("[A-Z]{1,3}:[A-Z]{1,3}")
                 || firstColumn() > lastColumn() || lastColumn() > 16383)) {
             throw new BusinessException("import.preview.invalidColumnRange");

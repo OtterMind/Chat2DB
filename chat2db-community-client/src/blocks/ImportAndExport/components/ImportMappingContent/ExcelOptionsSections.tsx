@@ -53,8 +53,9 @@ export default function ExcelOptionsSections({
                   <span>{i18n('workspace.importExport.sheet')}</span>
                   <Select
                     aria-label={i18n('workspace.importExport.sheet')}
-                    disabled={disabled}
-                    value={value.sheetIndex}
+                    disabled={disabled || sheets.length === 0}
+                    placeholder={i18n('common.text.loading')}
+                    value={sheets.length > 0 ? value.sheetIndex : undefined}
                     options={sheets.map((label, index) => ({ label, value: index }))}
                     onChange={(sheetIndex) => update({ sheetIndex })}
                   />

@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.JsonOptions;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.JsonImportReader;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
 import java.util.ArrayList;
 import lombok.extern.slf4j.Slf4j;
@@ -106,7 +107,7 @@ public final class ImportPreviewFileParser {
         int columnCount = data.stream().mapToInt(Map::size).max().orElse(0);
         Map<Integer, String> header = new LinkedHashMap<>();
         for (int index = 0; index < columnCount; index++) {
-            header.put(index, "column_" + (index + 1));
+            header.put(index, SourceColumnName.of(index));
         }
         return header;
     }

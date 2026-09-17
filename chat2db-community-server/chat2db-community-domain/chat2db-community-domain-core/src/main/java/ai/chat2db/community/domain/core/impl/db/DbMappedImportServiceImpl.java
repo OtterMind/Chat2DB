@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.service.db.IDbImportPreviewService;
 import ai.chat2db.community.domain.api.service.db.IDbMappedImportService;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
@@ -43,7 +44,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
     public Long submit(MappedImportExecution execution) {
         List<ImportColumnMapping> mappings = execution.getMappings();
         if (mappings == null || mappings.isEmpty()) {
-            throw new IllegalArgumentException("At least one source column must be mapped");
+            throw new BusinessException("import.preview.invalidMapping");
         }
         validateUniqueMappings(mappings);
         File file = importFileStagingService.resolve(execution.getFileId());
@@ -84,7 +85,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
         for (ImportColumnMapping mapping : mappings) {
             if (mapping == null || !sourceColumns.add(normalizeColumn(mapping.getSourceColumn()))
                     || !targetColumns.add(normalizeColumn(mapping.getTargetColumn()))) {
-                throw new IllegalArgumentException("Duplicate or invalid import column mapping");
+                throw new BusinessException("import.preview.invalidMapping");
             }
         }
     }
@@ -100,7 +101,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
         for (ImportColumnMapping mapping : mappings) {
             if (!sourceColumns.contains(normalizeColumn(mapping.getSourceColumn()))
                     || !targetColumns.contains(normalizeColumn(mapping.getTargetColumn()))) {
-                throw new IllegalArgumentException("Import column mapping does not match the preview");
+                throw new BusinessException("import.preview.invalidMapping");
             }
         }
     }
@@ -116,13 +117,13 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .filter(column -> !mappedTargets.contains(normalizeColumn(column.getName())))
                 .anyMatch(column -> strategy == UnmappedTargetStrategy.NULL || column.getDefaultValue() == null);
         if (missingRequiredColumn) {
-            throw new IllegalArgumentException("Required import target column is not mapped");
+            throw new BusinessException("import.preview.invalidMapping");
         }
     }
 
     private static String normalizeColumn(String columnName) {
         if (StringUtils.isBlank(columnName)) {
-            throw new IllegalArgumentException("Import column mapping must not be blank");
+            throw new BusinessException("import.preview.invalidMapping");
         }
         return columnName.toUpperCase(Locale.ROOT);
     }

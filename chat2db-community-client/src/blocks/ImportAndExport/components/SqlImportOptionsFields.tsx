@@ -15,6 +15,7 @@ export default function SqlImportOptionsFields({ value, onChange }: Props) {
       <div className={styles.csvOptionField}>
         <span>{i18n('workspace.importExport.encoding')}</span>
         <LocalFileEncodingSelect
+          className={styles.fullWidthControl}
           charset={value.encoding === 'AUTO' ? undefined : value.encoding}
           size="middle"
           variant="outlined"

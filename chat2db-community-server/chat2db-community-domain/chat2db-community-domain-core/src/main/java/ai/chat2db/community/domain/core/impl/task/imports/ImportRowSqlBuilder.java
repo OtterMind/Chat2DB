@@ -37,9 +37,14 @@ public final class ImportRowSqlBuilder {
         this.valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
         this.connectInfo = Chat2DBContext.getConnectInfo();
         this.sqlBuilder = Chat2DBContext.getSqlBuilder();
-        this.valueOptions = spec.getExcelOptions() != null ? spec.getExcelOptions().validate()
-                : spec.getJsonOptions() != null ? spec.getJsonOptions().validate()
-                : spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
+        this.valueOptions = valueOptions(spec);
+    }
+
+    /** Each importer writes the options of its own format back to the spec before building rows. */
+    private static ImportValueFormat valueOptions(ImportTaskSpec spec) {
+        if (spec.getExcelOptions() != null) return spec.getExcelOptions().validate();
+        if (spec.getJsonOptions() != null) return spec.getJsonOptions().validate();
+        return spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
     }
 
     public void acceptHead(Map<Integer, String> headers) {

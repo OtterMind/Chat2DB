@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import ai.chat2db.community.tools.exception.BusinessException;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DbMappedImportServiceImplTest {
@@ -43,7 +45,7 @@ class DbMappedImportServiceImplTest {
         DbMappedImportServiceImpl service = service(stagingService, preview("orders", target("name")),
                 new AtomicReference<>());
 
-        assertThrows(IllegalArgumentException.class, () -> service.submit(execution(List.of(
+        assertThrows(BusinessException.class, () -> service.submit(execution(List.of(
                 mapping("name", "name"), mapping("email", "NAME")))));
 
     }
@@ -54,7 +56,7 @@ class DbMappedImportServiceImplTest {
         DbMappedImportServiceImpl service = service(stagingService, preview("orders", target("name")),
                 new AtomicReference<>());
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> service.submit(execution(mapping("missing", "name"))));
 
     }
@@ -68,7 +70,7 @@ class DbMappedImportServiceImplTest {
         MappedImportExecution execution = execution(mapping("Name", "name"));
         execution.setUnmappedTarget(UnmappedTargetStrategy.DEFAULT);
 
-        assertThrows(IllegalArgumentException.class, () -> service.submit(execution));
+        assertThrows(BusinessException.class, () -> service.submit(execution));
 
     }
 

@@ -119,7 +119,7 @@ public final class CsvParser {
         } catch (BusinessException e) {
             throw e;
         } catch (IOException e) {
-            throw new BusinessException("import.preview.fileUnreadable", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.fileUnreadable", null, e);
         }
     }
 
@@ -153,7 +153,7 @@ public final class CsvParser {
                     || first == 0xFF && second == 0xFE
                     || first == 0xFE && second == 0xFF;
         } catch (IOException e) {
-            throw new BusinessException("import.preview.fileUnreadable", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.fileUnreadable", null, e);
         }
     }
 
@@ -324,9 +324,9 @@ public final class CsvParser {
         } catch (RuntimeException e) {
             throw e;
         } catch (IOException e) {
-            throw new BusinessException("import.preview.parseFailed", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.parseFailed", null, e);
         } catch (Exception e) {
-            throw new BusinessException("import.preview.parseFailed", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.parseFailed", null, e);
         }
         if (inQuotedField) {
             throw new BusinessException("import.preview.unclosedQuote", new Object[]{quoteStartLine});

@@ -60,7 +60,7 @@ public class ImportFileStagingService implements IImportFileStagingService {
             }
             Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new BusinessException("import.preview.fileUnreadable", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.fileUnreadable", null, e);
         }
         return id;
     }
@@ -79,7 +79,7 @@ public class ImportFileStagingService implements IImportFileStagingService {
             }
             return file.toFile();
         } catch (IOException e) {
-            throw new BusinessException("import.preview.fileUnreadable", new Object[]{e.getMessage()}, e);
+            throw new BusinessException("import.preview.fileUnreadable", null, e);
         }
     }
 
