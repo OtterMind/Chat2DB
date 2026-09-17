@@ -21,6 +21,7 @@ export function createLiveSqlEditorHandle(
     handleQuickSQLParser: (sql, dbInfo) => editorRef.current?.handleQuickSQLParser(sql, dbInfo),
     getTableIdentifierAtPosition: (position) => editorRef.current?.getTableIdentifierAtPosition(position) ?? null,
     executeSQL: () => editorRef.current?.executeSQL(),
+    showErrorMessage: (message) => editorRef.current?.showErrorMessage(message),
     hasUnsavedChangesBeforeClose: () => editorRef.current?.hasUnsavedChangesBeforeClose?.() ?? true,
     saveBeforeClose: () => editorRef.current?.saveBeforeClose?.() ?? Promise.resolve(false),
     waitForPendingSave: () => editorRef.current?.waitForPendingSave?.() ?? Promise.resolve(),
