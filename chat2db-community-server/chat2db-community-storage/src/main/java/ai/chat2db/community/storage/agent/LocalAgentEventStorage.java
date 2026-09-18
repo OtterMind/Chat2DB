@@ -13,7 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.util.Comparator;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,23 +83,23 @@ public class LocalAgentEventStorage implements AgentEventStorage {
         }
         storageFileUtils.rejectSymbolicLink(directory);
         storageFileUtils.verifyInsideRoot(paths.root(), directory);
-        try (Stream<Path> entries = Files.list(directory)) {
-            List<AgentEvent> stored = entries
-                    .peek(storageFileUtils::rejectSymbolicLink)
-                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
-                    .map(path -> readEvent(path, sessionId))
-                    .toList();
-            validateContinuousSequence(stored);
-            lastSequences.put(sessionId, stored.isEmpty() ? 0L : stored.get(stored.size() - 1).sequence());
-            return stored.stream()
-                    .filter(event -> event.sequence() > afterSequence)
-                    .limit(limit)
-                    .toList();
-        } catch (IOException exception) {
-            throw new StorageException("Failed to list V2 agent events", exception);
+        // Event files are named by their sequence, so a page is a range read upwards from the cursor.
+        // The watermark says where the history ends; it is verified against the file names when it is
+        // not cached yet, which is also where a broken sequence behind the cursor is reported.
+        long last = lastSequence(sessionId, directory);
+        if (afterSequence >= last) {
+            return List.of();
         }
+        List<AgentEvent> page = new ArrayList<>();
+        for (long sequence = afterSequence + 1; sequence <= last && page.size() < limit; sequence++) {
+            Path eventFile = paths.eventFile(sessionId, sequence);
+            if (!Files.isRegularFile(eventFile, LinkOption.NOFOLLOW_LINKS)) {
+                throw new StorageException("V2 agent event sequence is not continuous at " + sequence);
+            }
+            page.add(readEvent(eventFile, sessionId));
+        }
+        lastSequences.put(sessionId, last);
+        return List.copyOf(page);
     }
 
     @Override
@@ -121,7 +122,7 @@ public class LocalAgentEventStorage implements AgentEventStorage {
         storageFileUtils.verifyInsideRoot(paths.root(), directory);
         // Event files are named by their sequence, so a range read needs no directory scan: walk downwards and
         // stop at the first missing record, which is the start of the history or a gap.
-        List<AgentEvent> page = new java.util.ArrayList<>();
+        List<AgentEvent> page = new ArrayList<>();
         for (long sequence = beforeSequence - 1; sequence >= 1 && page.size() < limit; sequence--) {
             Path eventFile = paths.eventFile(sessionId, sequence);
             if (!Files.isRegularFile(eventFile, LinkOption.NOFOLLOW_LINKS)) {
@@ -129,7 +130,7 @@ public class LocalAgentEventStorage implements AgentEventStorage {
             }
             page.add(readEvent(eventFile, sessionId));
         }
-        java.util.Collections.reverse(page);
+        Collections.reverse(page);
         return List.copyOf(page);
     }
 
@@ -159,10 +160,6 @@ public class LocalAgentEventStorage implements AgentEventStorage {
         } catch (IOException exception) {
             throw new StorageException("Failed to inspect V2 agent events", exception);
         }
-    }
-
-    private void validateContinuousSequence(List<AgentEvent> events) {
-        validateContinuousSequenceValues(events.stream().map(AgentEvent::sequence).toList());
     }
 
     private void validateContinuousSequenceValues(List<Long> sequences) {

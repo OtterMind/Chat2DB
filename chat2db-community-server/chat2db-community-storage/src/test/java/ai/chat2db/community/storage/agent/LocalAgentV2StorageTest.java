@@ -171,6 +171,37 @@ class LocalAgentV2StorageTest {
     }
 
     @Test
+    void pagesForwardFromTheCursorAndReportsAGapInsideTheWindow() throws Exception {
+        for (long sequence = 1; sequence <= 5; sequence++) {
+            events.append(event(sequence, AgentEventType.ASSISTANT_TEXT_DELTA), USER_ID);
+        }
+
+        assertEquals(list(3, 4), events.list(SESSION_ID, USER_ID, 2, 2));
+        assertEquals(list(5), events.list(SESSION_ID, USER_ID, 4, 10));
+        assertTrue(events.list(SESSION_ID, USER_ID, 5, 10).isEmpty());
+        assertTrue(events.list(SESSION_ID, 2L, 0, 10).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> events.list(SESSION_ID, USER_ID, -1, 10));
+        assertThrows(IllegalArgumentException.class, () -> events.list(SESSION_ID, USER_ID, 0, 1001));
+
+        Files.delete(paths.eventFile(SESSION_ID, 3));
+        assertThrows(StorageException.class, () -> events.list(SESSION_ID, USER_ID, 0, 10));
+    }
+
+    @Test
+    void forwardPagingDoesNotReadFilesOutsideItsWindow() throws Exception {
+        for (long sequence = 1; sequence <= 5; sequence++) {
+            events.append(event(sequence, AgentEventType.ASSISTANT_TEXT_DELTA), USER_ID);
+        }
+        // A poll knows where the history ends, so files beyond the requested page are never parsed.
+        Files.writeString(paths.eventFile(SESSION_ID, 7), "{ not json");
+        Files.writeString(paths.eventFile(SESSION_ID, 9), "{ not json");
+
+        assertEquals(list(1, 2), events.list(SESSION_ID, USER_ID, 0, 2));
+        assertEquals(list(3, 4), events.list(SESSION_ID, USER_ID, 2, 2));
+        assertTrue(events.list(SESSION_ID, USER_ID, 5, 2).isEmpty());
+    }
+
+    @Test
     void rejectsEventSequenceGapsAfterRestart() throws Exception {
         events.append(event(1, AgentEventType.RUN_STARTED), USER_ID);
         events.append(event(2, AgentEventType.RUN_COMPLETED), USER_ID);
