@@ -5,6 +5,7 @@ export enum RedisFieldType {
   ZSET = 'zset',
   HASH = 'hash',
   STREAM = 'stream',
+  JSON = 'json',
 }
 
 export enum ActionType {
@@ -21,4 +22,5 @@ export const redisFieldTypeList = [
   { label: RedisFieldType.ZSET, value: RedisFieldType.ZSET },
   { label: RedisFieldType.HASH, value: RedisFieldType.HASH },
   { label: RedisFieldType.STREAM, value: RedisFieldType.STREAM },
+  { label: RedisFieldType.JSON, value: RedisFieldType.JSON },
 ];
