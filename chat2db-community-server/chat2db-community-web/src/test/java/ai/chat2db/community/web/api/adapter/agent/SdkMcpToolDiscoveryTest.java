@@ -72,6 +72,48 @@ class SdkMcpToolDiscoveryTest {
     }
 
     @Test
+    void reachesAnHttpServerOverStreamableHttp() throws Exception {
+        Assumptions.assumeTrue(nodeAvailable(), "node is required for the HTTP fixture server");
+        Path server = Path.of("src/test/resources/agent/mcp-http-fixture-server.cjs").toAbsolutePath();
+        Assumptions.assumeTrue(Files.isRegularFile(server), "HTTP fixture server is missing");
+        int port = 3117;
+        Process fixture = new ProcessBuilder("node", server.toString(), String.valueOf(port))
+                .redirectErrorStream(true).start();
+        try {
+            Assumptions.assumeTrue(waitForPort(port), "the HTTP fixture server did not start");
+            McpServerConfig config = new McpServerConfig("http-fixture", McpTransport.HTTP, null, List.of(),
+                    "http://127.0.0.1:" + port + "/mcp", List.of(), List.of(), Map.of(), true,
+                    McpToolPolicy.ASK, List.of(), null, List.of(), null);
+
+            List<McpToolDescriptor> tools = discovery.discover(config);
+
+            assertEquals(List.of("echo", "big"), tools.stream().map(McpToolDescriptor::name).toList());
+            assertTrue(tools.get(0).readOnlyHint());
+            IMcpToolDiscovery.McpToolCallResult small = discovery.call(config, "echo", Map.of("text", "http"));
+            assertTrue(small.ok(), small.errorMessage());
+            assertEquals("echo:http", small.text());
+
+            IMcpToolDiscovery.McpToolCallResult large = discovery.call(config, "big", Map.of("kilobytes", 64));
+            assertTrue(large.ok(), large.errorMessage());
+            assertTrue(large.text().length() >= 64 * 1024, "a large result is returned to the caller, which spools it");
+        } finally {
+            discovery.close("http-fixture");
+            fixture.destroy();
+        }
+    }
+
+    private static boolean waitForPort(int port) throws InterruptedException {
+        for (int attempt = 0; attempt < 40; attempt++) {
+            try (var socket = new java.net.Socket("127.0.0.1", port)) {
+                return true;
+            } catch (IOException error) {
+                Thread.sleep(100);
+            }
+        }
+        return false;
+    }
+
+    @Test
     void reportsACommandThatCannotBeStarted() {
         McpServerConfig missing = new McpServerConfig("fixture", McpTransport.STDIO, "chat2db-missing-command",
                 List.of(), null, List.of(), List.of(), Map.of(), true, McpToolPolicy.ASK, List.of(), null,
