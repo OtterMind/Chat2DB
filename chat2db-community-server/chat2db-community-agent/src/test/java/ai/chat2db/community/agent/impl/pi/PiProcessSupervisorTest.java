@@ -90,7 +90,8 @@ class PiProcessSupervisorTest {
 
         supervisor.start("session", "external", List.of(), access, "existing V1 prompt\nwith formatting");
 
-        assertEquals("short-ticket", captured[0].environment().get("CHAT2DB_MODEL_TICKET"));
+        assertFalse(captured[0].environment().containsKey("CHAT2DB_MODEL_TICKET"),
+                "the model ticket stays in the session configuration, not in the child environment");
         assertFalse(captured[0].environment().containsKey("OPENAI_API_KEY"));
         int promptIndex = captured[0].command().indexOf("--system-prompt");
         assertTrue(promptIndex > 0);

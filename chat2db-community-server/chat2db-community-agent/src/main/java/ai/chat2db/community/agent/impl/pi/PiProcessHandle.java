@@ -50,6 +50,8 @@ public class PiProcessHandle implements AutoCloseable {
         try {
             if (!process.waitFor(2, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
+                // Wait for the exit, so a follow-up launch does not race a process the OS still reports.
+                process.waitFor(5, TimeUnit.SECONDS);
             }
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();

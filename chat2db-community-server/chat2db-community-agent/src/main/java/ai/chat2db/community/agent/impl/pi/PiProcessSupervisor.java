@@ -122,9 +122,8 @@ public class PiProcessSupervisor implements AutoCloseable {
             if (value != null) builder.environment().put(name, value);
         }
         builder.environment().put("PI_CODING_AGENT_DIR", configDirectory.toString());
-        if (modelAccess != null) {
-            builder.environment().put("CHAT2DB_MODEL_TICKET", modelAccess.ticket());
-        }
+        // The model ticket stays in models.json: putting it in the environment would hand every shell command
+        // the runtime starts a live bearer ticket it does not need.
         Process process = processStarter.start(builder);
         AgentTrace.record("pi.process.started", sessionId, null,
                 Map.of("version", layout.version(), "extensions", extensions.size(),

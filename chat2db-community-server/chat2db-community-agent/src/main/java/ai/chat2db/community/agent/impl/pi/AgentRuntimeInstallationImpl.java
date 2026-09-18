@@ -137,12 +137,9 @@ public class AgentRuntimeInstallationImpl implements IAgentRuntimeInstallation {
     }
 
     private void extractTarGzip(byte[] archive, Path target) throws IOException {
-        ByteArrayOutputStream tarBytes = new ByteArrayOutputStream();
-        try (GzipCompressorInputStream gzip = new GzipCompressorInputStream(new ByteArrayInputStream(archive))) {
-            gzip.transferTo(tarBytes);
-        }
-        try (TarArchiveInputStream input = new TarArchiveInputStream(
-                new ByteArrayInputStream(tarBytes.toByteArray()))) {
+        // Parse the tar while decompressing, so a high-ratio archive cannot expand into heap first.
+        try (GzipCompressorInputStream gzip = new GzipCompressorInputStream(new ByteArrayInputStream(archive));
+                TarArchiveInputStream input = new TarArchiveInputStream(gzip)) {
             long extractedBytes = 0;
             int fileCount = 0;
             TarArchiveEntry entry;
@@ -224,7 +221,8 @@ public class AgentRuntimeInstallationImpl implements IAgentRuntimeInstallation {
 
     private void publish(Path stagingRoot, Path staging, Path target) throws IOException {
         Files.createDirectories(target.getParent());
-        Path backup = stagingRoot.resolve("previous");
+        // Keep the backup outside the staging root, whose cleanup runs even when a restore fails.
+        Path backup = target.getParent().resolve(target.getFileName() + ".previous-" + UUID.randomUUID());
         if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
             move(target, backup);
         }
@@ -235,6 +233,11 @@ public class AgentRuntimeInstallationImpl implements IAgentRuntimeInstallation {
                 move(backup, target);
             }
             throw error;
+        }
+        try {
+            deleteTree(backup);
+        } catch (IOException ignored) {
+            // The verified target is already published; a later install can clean the leftover backup.
         }
         try {
             deleteTree(stagingRoot);
@@ -285,20 +288,31 @@ public class AgentRuntimeInstallationImpl implements IAgentRuntimeInstallation {
         @Override
         public byte[] fetch(URI uri, long maximumBytes) throws IOException {
             try {
-                HttpResponse<byte[]> response = client.send(
+                HttpResponse<InputStream> response = client.send(
                         HttpRequest.newBuilder(uri)
                                 .timeout(Duration.ofSeconds(20))
                                 .header("Accept-Encoding", "identity")
                                 .GET()
                                 .build(),
-                        HttpResponse.BodyHandlers.ofByteArray());
+                        HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() != 200) {
+                    try (InputStream errorBody = response.body()) {
+                        errorBody.readNBytes(4096);
+                    }
                     throw new IOException("Pi runtime download failed with HTTP " + response.statusCode());
                 }
-                if (response.body().length > maximumBytes) {
-                    throw new IOException("Pi runtime download exceeds the size limit");
+                try (InputStream body = response.body(); ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+                    // Enforce the size limit while reading, instead of buffering an unbounded response first.
+                    byte[] chunk = new byte[8192];
+                    long total = 0;
+                    int read;
+                    while ((read = body.read(chunk)) != -1) {
+                        total += read;
+                        if (total > maximumBytes) throw new IOException("Pi runtime download exceeds the size limit");
+                        buffer.write(chunk, 0, read);
+                    }
+                    return buffer.toByteArray();
                 }
-                return response.body();
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Pi runtime download was interrupted", error);

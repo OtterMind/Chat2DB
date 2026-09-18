@@ -16,6 +16,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -23,6 +25,8 @@ import java.util.function.Supplier;
 public class PiRpcTransportImpl implements IPiRpcTransport {
 
     public static final int DEFAULT_MAXIMUM_FRAME_BYTES = 8 * 1024 * 1024;
+    private static final long STALL_TIMEOUT_MILLIS = java.time.Duration.ofMinutes(5).toMillis();
+    private static final long STALL_CHECK_SECONDS = 30;
 
     private final InputStream stdout;
     private final OutputStream stdin;
@@ -32,6 +36,8 @@ public class PiRpcTransportImpl implements IPiRpcTransport {
     private final Supplier<String> idGenerator;
     private final Map<String, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
     private final ExecutorService readerExecutor;
+    private final ScheduledExecutorService watchdog;
+    private volatile long lastFrameMillis = System.currentTimeMillis();
     private final CompletableFuture<Void> termination = new CompletableFuture<>();
     private final AtomicBoolean closed = new AtomicBoolean();
 
@@ -63,6 +69,26 @@ public class PiRpcTransportImpl implements IPiRpcTransport {
         this.idGenerator = idGenerator;
         this.readerExecutor = readerExecutor;
         readerExecutor.execute(this::readLoop);
+        this.watchdog = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "chat2db-pi-rpc-watchdog");
+            thread.setDaemon(true);
+            return thread;
+        });
+        watchdog.scheduleWithFixedDelay(this::failStalledRequests, STALL_CHECK_SECONDS, STALL_CHECK_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Fails waiting commands when the runtime stops emitting frames, so a mute Pi process cannot leave a run
+     * pending forever. An active turn keeps sending events, so the timeout measures silence rather than duration.
+     */
+    private void failStalledRequests() {
+        if (pending.isEmpty()) return;
+        long idleMillis = System.currentTimeMillis() - lastFrameMillis;
+        if (idleMillis < STALL_TIMEOUT_MILLIS) return;
+        PiRpcException stalled = new PiRpcException("Pi RPC stalled: no frame received for " + idleMillis + " ms");
+        pending.forEach((id, response) -> {
+            if (pending.remove(id, response)) response.completeExceptionally(stalled);
+        });
     }
 
     public CompletableFuture<JsonNode> request(String command, JsonNode payload) {
@@ -106,6 +132,7 @@ public class PiRpcTransportImpl implements IPiRpcTransport {
                 if (frame == null) {
                     throw new PiRpcException("Pi RPC stdout closed unexpectedly");
                 }
+                lastFrameMillis = System.currentTimeMillis();
                 route(objectMapper.readTree(frame));
             }
         } catch (IOException | RuntimeException error) {
@@ -183,6 +210,7 @@ public class PiRpcTransportImpl implements IPiRpcTransport {
             pending.values().forEach(future -> future.completeExceptionally(error));
             pending.clear();
             readerExecutor.shutdownNow();
+            watchdog.shutdownNow();
         }
     }
 
@@ -194,6 +222,7 @@ public class PiRpcTransportImpl implements IPiRpcTransport {
             pending.values().forEach(future -> future.completeExceptionally(error));
             pending.clear();
             readerExecutor.shutdownNow();
+            watchdog.shutdownNow();
             try {
                 stdout.close();
                 stdin.close();

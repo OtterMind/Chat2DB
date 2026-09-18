@@ -276,8 +276,6 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             health = AgentRuntimeHealth.STOPPED;
         }
         try {
-            runtimeTerminated(null);
-        } finally {
             try {
                 process.close();
             } finally {
@@ -287,6 +285,9 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
                     try { modelConfiguration.close(); } finally { closeHook.run(); }
                 }
             }
+        } finally {
+            // Publish termination only after the child is gone, so a caller that observes it can relaunch safely.
+            runtimeTerminated(null);
         }
     }
 
