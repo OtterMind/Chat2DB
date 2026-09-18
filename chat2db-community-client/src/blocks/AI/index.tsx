@@ -2440,13 +2440,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
     return (
       <>
-        {hasOlderHistory && (
-          <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
-            onClick={() => void handleLoadEarlierHistory()}
-          >
-            {loadingEarlier ? i18n('common.text.loading') : i18n('stream.history.loadEarlier')}
-          </button>
-        )}
         {rounds.map((round, index) => {
           const isCurrentRound = round.user?.id === currentRoundUserMessageId;
           const isLastRound = index === rounds.length - 1;
@@ -2741,6 +2734,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 onTouchEndCapture={handleMessageListScroll}
               >
                 <div className={styles.contentWidth} ref={messageContentRef}>
+                  {hasOlderHistory && (
+                    <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
+                      onClick={() => void handleLoadEarlierHistory()}
+                    >
+                      {loadingEarlier ? i18n('common.text.loading') : i18n('stream.history.loadEarlier')}
+                    </button>
+                  )}
                   {renderMessages()}
                 </div>
               </div>
