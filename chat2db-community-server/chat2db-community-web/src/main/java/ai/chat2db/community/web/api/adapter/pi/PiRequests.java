@@ -10,7 +10,7 @@ public final class PiRequests {
     public record Empty() { }
     public record Session(@NotBlank String sessionId) { }
     public record SessionGet(@NotBlank String sessionId, @Min(2) @Max(2) int sessionVersion) { }
-    public record SessionRename(@NotBlank String sessionId, @NotBlank String title) { }
+    public record SessionRename(@NotBlank String sessionId, @NotBlank @Size(max = 100) String title) { }
     public record RunStart(@NotBlank String sessionId, @NotBlank String modelConfigId,
             @NotBlank String message, @NotBlank String idempotencyKey, @Valid AgentRunContextRequest context) { }
     public record RunCancel(@NotBlank String sessionId, @NotBlank String runId) { }

@@ -17,6 +17,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import ai.chat2db.community.web.api.config.console.DesktopBridgeRequestContext;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AgentFeatureControllerTest {
 
@@ -28,10 +30,15 @@ class AgentFeatureControllerTest {
                 List.of(service), List.of(bashService), new AgentHostEnvironmentProvider("5.3.0"));
 
         assertEquals(1, controller.list().getData().size());
-        assertEquals(true, controller.enablePi(new AgentRuntimeEnableRequest(true)).getData().enabled());
-        assertEquals(false, controller.disablePi().getData().enabled());
-        assertEquals(true, controller.enableBash(new AgentRuntimeEnableRequest(true)).getData().enabled());
-        assertEquals(false, controller.disableBash().getData().enabled());
+        // Feature toggles are local capabilities, exactly like the desktop bridge invokes them.
+        DesktopBridgeRequestContext.invoke(() -> {
+            assertEquals(true, controller.enablePi(new AgentRuntimeEnableRequest(true)).getData().enabled());
+            assertEquals(false, controller.disablePi().getData().enabled());
+            assertEquals(true, controller.enableBash(new AgentRuntimeEnableRequest(true)).getData().enabled());
+            assertEquals(false, controller.disableBash().getData().enabled());
+            return null;
+        });
+        assertThrows(SecurityException.class, () -> controller.enableBash(new AgentRuntimeEnableRequest(true)));
         assertEquals("5.3.0", service.environment.applicationVersion());
     }
 

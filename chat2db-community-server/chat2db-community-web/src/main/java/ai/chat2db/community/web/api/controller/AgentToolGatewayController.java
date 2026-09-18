@@ -71,6 +71,8 @@ public class AgentToolGatewayController {
     @PostMapping("/sessions/{sessionId}/approvals")
     public ActionResult decide(@PathVariable String sessionId,
             @RequestBody @Valid DecisionRequest decision) {
+        // An approval grants shell execution, so only the local user may decide it.
+        AgentLocalRequestGuard.requireLocal();
         approvals.decide(sessionId, decision.approvalId(), identity.currentUserId(), decision.approved());
         return ActionResult.isSuccess();
     }

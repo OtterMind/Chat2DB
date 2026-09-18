@@ -55,6 +55,8 @@ public class AgentOutputController {
 
     @PostMapping("/download-path")
     public DataResult<String> downloadPath(@PathVariable String sessionId, @PathVariable String artifactId) {
+        // Saving to a host path is a desktop capability, like the directory picker.
+        AgentLocalRequestGuard.requireLocal();
         if (desktopDownloads.isEmpty()) throw new IllegalStateException("Desktop file saving is unavailable");
         return DataResult.of(desktopDownloads.get(0).save(sessionId, identity.currentUserId(), artifactId));
     }

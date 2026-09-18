@@ -33,6 +33,9 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import ai.chat2db.community.tools.exception.agent.AgentRuntimeUnavailableException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -51,7 +54,16 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final IAiAgentOutputService outputs;
     private final IAiAgentFileAccessService files;
 
+    @Autowired
     public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
+            IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address,
+            IAiAgentOutputService outputs, ObjectProvider<IAiAgentFileAccessService> files) {
+        // The file access service only exists while the Pi runtime is configured; other deployments still start.
+        this(tools, questionTool, chartTool, sessions, runs, identity, approvals, workspaces, address, outputs,
+                files.getIfAvailable(() -> FILE_ACCESS_UNAVAILABLE));
+    }
+
+    AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
             IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address,
             IAiAgentOutputService outputs, IAiAgentFileAccessService files) {
         this.tools = tools;
@@ -66,6 +78,19 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         this.outputs = outputs;
         this.files = files;
     }
+
+    /** Reached only when a deployment without the Pi runtime still serves an agent tool route. */
+    private static final IAiAgentFileAccessService FILE_ACCESS_UNAVAILABLE = new IAiAgentFileAccessService() {
+        @Override public IAgentToolResult<?> execute(AgentToolExecutionContext context, String toolName,
+                Map<String, Object> arguments) {
+            throw new AgentRuntimeUnavailableException("PI", "Agent file access is unavailable");
+        }
+
+        @Override public void authorizeNative(String sessionId, String toolName, String workingDirectory,
+                Map<String, Object> arguments) {
+            throw new AgentRuntimeUnavailableException("PI", "Agent file access is unavailable");
+        }
+    };
 
     @Override
     public AgentToolAccess issue(String sessionId, IAgentRuntimeEventSink eventSink) {

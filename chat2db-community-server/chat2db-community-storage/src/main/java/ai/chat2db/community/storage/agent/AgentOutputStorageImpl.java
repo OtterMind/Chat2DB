@@ -184,6 +184,12 @@ public class AgentOutputStorageImpl implements IAgentOutputStorage {
             files.writeAtomically(upload.metadata, JSON.toJSONString(metadata));
             return reference;
         } catch (IOException | RuntimeException exception) {
+            // Drop the temporary part file, so the same tool call can be retried without restarting the process.
+            try {
+                Files.deleteIfExists(upload.temporary);
+            } catch (IOException ignored) {
+                // A leftover part file is discarded when the storage is initialized again.
+            }
             return AgentOutputReference.unavailable(combineWarnings(warning,
                     "Complete output could not be published: " + message(exception)));
         } finally {

@@ -65,11 +65,13 @@ public class AgentFeatureController {
     @PostMapping("/pi/enable")
     public DataResult<AgentRuntimeEnableResult> enablePi(
             @RequestBody @Valid AgentRuntimeEnableRequest request) {
+        AgentLocalRequestGuard.requireLocal();
         return DataResult.of(require(AgentRuntimeType.PI).enableAsync(environmentProvider.current()));
     }
 
     @PostMapping("/pi/disable")
     public DataResult<AgentRuntimeFeatureState> disablePi() {
+        AgentLocalRequestGuard.requireLocal();
         return DataResult.of(require(AgentRuntimeType.PI).disable(environmentProvider.current()));
     }
 
@@ -81,11 +83,13 @@ public class AgentFeatureController {
     @PostMapping("/bash/enable")
     public DataResult<AgentFeatureState> enableBash(
             @RequestBody @Valid AgentRuntimeEnableRequest request) {
+        AgentLocalRequestGuard.requireLocal();
         return DataResult.of(require(AgentFeature.BASH).enable());
     }
 
     @PostMapping("/bash/disable")
     public DataResult<AgentFeatureState> disableBash() {
+        AgentLocalRequestGuard.requireLocal();
         return DataResult.of(require(AgentFeature.BASH).disable());
     }
 

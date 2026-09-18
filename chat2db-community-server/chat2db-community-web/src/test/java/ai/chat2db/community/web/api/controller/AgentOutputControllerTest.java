@@ -15,6 +15,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
+import ai.chat2db.community.web.api.config.console.DesktopBridgeRequestContext;
 
 class AgentOutputControllerTest {
     @Test
@@ -53,8 +54,13 @@ class AgentOutputControllerTest {
         controller.download("session", "output", response);
         assertEquals(content, body.toString(java.nio.charset.StandardCharsets.UTF_8));
         assertEquals("attachment; filename=\"output.txt\"", headers.get("Content-Disposition"));
-        assertThrows(IllegalStateException.class, () -> controller.downloadPath("session", "output"));
-        var desktop = new AgentOutputController(outputs, identity, List.of((session, user, artifact) -> null));
-        assertNull(desktop.downloadPath("session", "output").getData());
+        // Saving to a host path is a local capability, so it is exercised through the desktop bridge context.
+        DesktopBridgeRequestContext.invoke(() -> {
+            assertThrows(IllegalStateException.class, () -> controller.downloadPath("session", "output"));
+            var desktop = new AgentOutputController(outputs, identity, List.of((session, user, artifact) -> null));
+            assertNull(desktop.downloadPath("session", "output").getData());
+            return null;
+        });
+        assertThrows(SecurityException.class, () -> controller.downloadPath("session", "output"));
     }
 }

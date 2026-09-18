@@ -8,19 +8,21 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-def check_module(root: Path, name: str, package: str) -> list[str]:
+def check_module(root: Path, name: str, package: str, extra_artifacts: tuple[str, ...] = (),
+        extra_packages: tuple[str, ...] = ()) -> list[str]:
     module = root / "chat2db-community-server" / name
     errors = []
     namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
     pom = ET.parse(module / "pom.xml")
+    allowed_artifacts = {"chat2db-community-tools", *extra_artifacts}
     for dependency in pom.findall(".//m:dependency", namespace):
         group = dependency.findtext("m:groupId", namespaces=namespace)
         artifact = dependency.findtext("m:artifactId", namespaces=namespace)
         if group in {"ai.chat2db", "${project.groupId}", "${pom.groupId}"}:
-            if artifact != "chat2db-community-tools":
+            if artifact not in allowed_artifacts:
                 errors.append(f"{name}/pom.xml: forbidden project dependency {group}:{artifact}")
 
-    allowed = (package + ".", "ai.chat2db.community.tools.")
+    allowed = (package + ".", "ai.chat2db.community.tools.", *extra_packages)
     for source in sorted((module / "src").rglob("*.java")):
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
             for reference in re.findall(r"\bai\.chat2db\.(?:\w+\.)*\w+", line):
@@ -30,7 +32,9 @@ def check_module(root: Path, name: str, package: str) -> list[str]:
 
 
 def check(root: Path) -> list[str]:
-    errors = check_module(root, "chat2db-community-jcef", "ai.chat2db.community.jcef")
+    # The desktop JCEF module owns in-app updates, so it may use the updater module and its package.
+    errors = check_module(root, "chat2db-community-jcef", "ai.chat2db.community.jcef",
+            ("chat2db-community-updater",), ("ai.chat2db.community.updater.",))
     errors += check_module(root, "chat2db-community-agent", "ai.chat2db.community.agent")
     return errors
 

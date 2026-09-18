@@ -138,7 +138,14 @@ public final class PiOperationRegistry {
     }
 
     private ObjectNode envelope(String requestId, JsonNode response) {
-        ObjectNode result = (ObjectNode) response;
+        ObjectNode result;
+        if (response instanceof ObjectNode object) {
+            result = object;
+        } else {
+            // A null or non-object result still needs a valid envelope instead of a class cast failure.
+            result = json.createObjectNode();
+            if (response == null) result.putNull("data"); else result.set("data", response);
+        }
         result.put("protocolVersion", PROTOCOL_VERSION);
         result.put("requestId", requestId);
         return result;

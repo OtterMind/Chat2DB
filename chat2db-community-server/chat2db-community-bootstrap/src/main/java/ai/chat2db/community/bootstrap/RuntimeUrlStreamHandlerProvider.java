@@ -9,7 +9,8 @@ public final class RuntimeUrlStreamHandlerProvider extends URLStreamHandlerProvi
     private static volatile Map<String, URLStreamHandler> handlers = Map.of();
 
     static void register(ClassLoader runtime) throws ReflectiveOperationException {
-        handlers = Map.of("jar", handler(runtime, "jar"), "nested", handler(runtime, "nested"));
+        // The JDK never consults providers for "jar", so only the nested protocol is registered here.
+        handlers = Map.of("nested", handler(runtime, "nested"));
     }
 
     private static URLStreamHandler handler(ClassLoader runtime, String protocol) throws ReflectiveOperationException {
