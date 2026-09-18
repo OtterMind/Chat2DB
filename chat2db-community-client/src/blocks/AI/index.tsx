@@ -62,7 +62,7 @@ import pi, { AgentEvent } from '@/service/pi';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
-import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, AgentTimelineEntry } from './agentEvents';
+import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, AgentTimelineEntry } from './agentEvents';
 import { activeAgentRunId, followAgentRun, readAgentHistory, traceAgentStage } from './agentEventStream';
 import { getChatSessionId, getChatSessionUrl, resolveChatSessionVersion } from './chatSessionRoute';
 import AgentV2Session, { AgentV2Message } from './components/AgentV2Session';
@@ -583,11 +583,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentRoundUserMessageId, setCurrentRoundUserMessageId] = useState<string | null>(null);
   const [highlightedUserMessageId, setHighlightedUserMessageId] = useState<string | null>(null);
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
-  const [historyWindow, setHistoryWindow] = useState(INITIAL_AGENT_HISTORY_EVENTS);
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const loadEarlierRef = useRef<() => void>(() => {});
   const historyLoadingRef = useRef(false);
   const pendingHistoryAnchorRef = useRef<number | null>(null);
+  const historyEventsRef = useRef<AgentEvent[]>([]);
+  const historyWindowRef = useRef(INITIAL_AGENT_HISTORY_EVENTS);
+  const canLoadEarlierRef = useRef(true);
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -800,7 +803,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
-    if (container.scrollTop <= LOAD_EARLIER_SCROLL_THRESHOLD) {
+    if (container.scrollTop <= LOAD_EARLIER_SCROLL_THRESHOLD && canLoadEarlierRef.current) {
       loadEarlierRef.current();
     }
   }, [setAutoFollow]);
@@ -1742,7 +1745,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         currentSessionIdRef.current = sessionId;
         setCurrentSessionTitle(session.title || title || '');
         currentSessionTitleRef.current = session.title || title || '';
-        setHistoryWindow(historyEvents);
+        historyEventsRef.current = events;
+        historyWindowRef.current = historyEvents;
         setHasOlderHistory((events[0]?.sequence ?? 1) > 1);
         if (activeRunId) {
           operation.runId = activeRunId;
@@ -1761,24 +1765,60 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
       } finally {
         historyLoadingRef.current = false;
-        if (!operation.controller.signal.aborted) setSessionLoading(false);
+        setSessionLoading(false);
       }
     },
     [pollAgentRun, setSelectedModel, stop, stopAgentPolling],
   );
 
-  const handleLoadEarlierHistory = useCallback(() => {
+  /** Prepends the previous stretch of a long conversation without disturbing the live view. */
+  const handleLoadEarlierHistory = useCallback(async () => {
     const sessionId = currentSessionIdRef.current;
-    if (!sessionId || historyLoadingRef.current) return;
+    const loaded = historyEventsRef.current;
+    const operation = agentOperationRef.current;
+    const oldest = loaded.length ? loaded[0].sequence : 0;
+    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1) return;
+    historyLoadingRef.current = true;
+    canLoadEarlierRef.current = false;
+    setLoadingEarlier(true);
     const container = messageListRef.current;
-    // Keep the reading position while the older stretch is rebuilt above it.
+    // Keep the reading position while the older stretch is inserted above it.
     pendingHistoryAnchorRef.current = container ? container.scrollHeight - container.scrollTop : null;
-    void handleLoadAgentSessionById(sessionId, currentSessionTitleRef.current, historyWindow * 2);
-  }, [handleLoadAgentSessionById, historyWindow]);
+    try {
+      const earlier = await readAgentHistory(pi.events.list, sessionId, operation.controller.signal, {
+        fromSequence: Math.max(0, oldest - historyWindowRef.current),
+        maxEvents: historyWindowRef.current,
+        alignToRunStart: true,
+      });
+      if (operation.controller.signal.aborted || earlier.length === 0) {
+        if (earlier.length === 0) setHasOlderHistory(false);
+        return;
+      }
+      const merged = mergeAgentEvents(earlier, loaded);
+      historyEventsRef.current = merged;
+      const transcript = buildAgentTranscript(merged);
+      const visible = transcript.filter((message) => message.status || message.content || message.traceEntries.length
+        || message.timeline?.length);
+      const activeRunId = activeAgentRunId(merged);
+      const activeReply = activeRunId
+        ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId) : undefined;
+      const restored = visible.filter((item) => item !== activeReply);
+      setMessages(restored);
+      messagesRef.current = restored;
+      setAgentCharts(updateAgentCharts([], merged));
+      setHasOlderHistory((merged[0]?.sequence ?? 1) > 1);
+      traceAgentStage('history.prepended', { sessionId, total: merged.length });
+    } catch (error) {
+      if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
+    } finally {
+      historyLoadingRef.current = false;
+      setLoadingEarlier(false);
+    }
+  }, [setSelectedModel]);
 
   useEffect(() => {
     loadEarlierRef.current = () => {
-      if (hasOlderHistory && !sessionLoading) handleLoadEarlierHistory();
+      if (hasOlderHistory && !sessionLoading) void handleLoadEarlierHistory();
     };
   }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
 
@@ -1790,7 +1830,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (!container) return;
     suppressScrollTrackingRef.current = true;
     container.scrollTop = Math.max(0, container.scrollHeight - anchor);
-    window.setTimeout(() => { suppressScrollTrackingRef.current = false; }, PROGRAMMATIC_SCROLL_LOCK_MS);
+    window.setTimeout(() => {
+      suppressScrollTrackingRef.current = false;
+      // Only a fresh scroll gesture may request the next stretch.
+      canLoadEarlierRef.current = true;
+    }, PROGRAMMATIC_SCROLL_LOCK_MS);
   }, [messages]);
 
   // Restore the conversation from the path when first opening /stream/:chatId.
@@ -2396,8 +2440,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return (
       <>
         {hasOlderHistory && (
-          <button type="button" className={styles.loadEarlier} onClick={handleLoadEarlierHistory}>
-            {i18n('stream.history.loadEarlier')}
+          <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
+            onClick={() => void handleLoadEarlierHistory()}
+          >
+            {loadingEarlier ? i18n('common.text.loading') : i18n('stream.history.loadEarlier')}
           </button>
         )}
         {rounds.map((round, index) => {
