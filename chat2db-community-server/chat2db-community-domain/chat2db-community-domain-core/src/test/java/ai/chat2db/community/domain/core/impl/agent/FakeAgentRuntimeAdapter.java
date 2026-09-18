@@ -151,6 +151,11 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         lastHandle.emit(runId, type);
     }
 
+    void emitTextDelta(String runId, String text) {
+        if (lastHandle == null) throw new IllegalStateException("No runtime session opened");
+        lastHandle.emitTextDelta(runId, text);
+    }
+
     void hangSnapshots() {
         snapshotFuture = new CompletableFuture<>();
     }
@@ -238,6 +243,17 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
                     runId,
                     type,
                     Map.of(),
+                    LocalDateTime.of(2026, 9, 8, 22, 0)));
+        }
+
+        private void emitTextDelta(String runId, String text) {
+            eventSink.emit(new AgentRuntimeEvent(
+                    "delta-event",
+                    sessionId,
+                    runId,
+                    AgentEventType.ASSISTANT_TEXT_DELTA,
+                    Map.of("assistantMessageEvent", Map.of("type", "text_delta", "delta", text),
+                            "usage", Map.of("input", 0, "output", 0)),
                     LocalDateTime.of(2026, 9, 8, 22, 0)));
         }
     }

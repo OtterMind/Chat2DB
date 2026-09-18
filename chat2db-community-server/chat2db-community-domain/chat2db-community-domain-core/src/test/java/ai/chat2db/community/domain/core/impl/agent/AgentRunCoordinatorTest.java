@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -183,6 +184,28 @@ class AgentRunCoordinatorTest {
         adapter.emitLate(running.id(), AgentEventType.ASSISTANT_TEXT_DELTA);
 
         assertEquals("Renamed while running", storage.get(SESSION_ID, USER_ID).title());
+    }
+
+    @Test
+    void mergesStreamedTextIntoFewEventsWithoutUsageCopies() {
+        AgentRun running = coordinator.start(startCommand("request-deltas")).toCompletableFuture().join();
+
+        StringBuilder expected = new StringBuilder();
+        for (int index = 0; index < 60; index++) {
+            String chunk = "chunk-" + index + ";";
+            expected.append(chunk);
+            adapter.emitTextDelta(running.id(), chunk);
+        }
+        adapter.emitLate(running.id(), AgentEventType.RUN_COMPLETED);
+
+        List<AgentEvent> deltas = storage.events.stream()
+                .filter(event -> event.type() == AgentEventType.ASSISTANT_TEXT_DELTA).toList();
+        assertTrue(deltas.size() <= 3, "streamed text must be merged into few events, was " + deltas.size());
+        String merged = deltas.stream()
+                .map(event -> String.valueOf(((Map<?, ?>) event.payload().get("assistantMessageEvent")).get("delta")))
+                .collect(java.util.stream.Collectors.joining());
+        assertEquals(expected.toString(), merged);
+        assertFalse(deltas.get(0).payload().containsKey("usage"), "usage must not be copied into every delta");
     }
 
     @Test

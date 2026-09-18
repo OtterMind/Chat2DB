@@ -37,6 +37,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -68,6 +70,13 @@ public class AgentRunCoordinator {
     private final Duration snapshotTimeout;
 
     private static final Duration DEFAULT_SNAPSHOT_TIMEOUT = Duration.ofSeconds(2);
+    /**
+     * Streamed text arrives token by token. Persisting every token produced tens of thousands of tiny event files
+     * per conversation, so consecutive deltas of one channel are merged into a single durable event.
+     */
+    private static final int MAX_PENDING_DELTA_CHARS = 2048;
+    private static final int MAX_PENDING_DELTA_COUNT = 25;
+    private final Map<String, PendingDelta> pendingDeltas = new HashMap<>();
 
     @Autowired
     public AgentRunCoordinator(
@@ -239,6 +248,7 @@ public class AgentRunCoordinator {
             throw new IllegalStateException("Active agent session cannot be deleted");
         }
         handleRegistry.close(sessionId);
+        pendingDeltas.values().removeIf(pending -> pending.sessionId.equals(sessionId));
         runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
                 new AgentRuntimeSessionDeleteRequest(session.id(), session.runtimeBinding()));
         sessionStorage.delete(sessionId, userId);
@@ -364,27 +374,109 @@ public class AgentRunCoordinator {
                     Map.of("reason", "run_missing", "type", runtimeEvent.type()));
             return;
         }
-        if (run.status().isTerminal()) return;
+        if (run.status().isTerminal()) {
+            discardPendingDeltas(session.id(), runtimeEvent.runId());
+            return;
+        }
+        if (isStreamedDelta(runtimeEvent.type())) {
+            String key = runtimeEvent.sessionId() + '\0' + runtimeEvent.runId() + '\0' + runtimeEvent.type();
+            PendingDelta pending = pendingDeltas.computeIfAbsent(key,
+                    ignored -> new PendingDelta(runtimeEvent.sessionId(), runtimeEvent.runId(), runtimeEvent.type()));
+            pending.text.append(deltaText(runtimeEvent.payload()));
+            pending.count++;
+            if (pending.text.length() >= MAX_PENDING_DELTA_CHARS || pending.count >= MAX_PENDING_DELTA_COUNT) {
+                flushPendingDelta(userId, pending);
+            }
+            return;
+        }
+        // Any other event must not overtake the text that was streamed before it.
+        flushPendingDeltas(userId, session.id(), run.id());
+        // Flushing advanced the durable position, so the incoming event must use the fresh snapshots.
+        AgentSession currentSession = requireSession(session.id(), userId);
+        AgentRun currentRun = runStorage.get(session.id(), run.id(), userId);
+        if (currentRun == null || currentRun.status().isTerminal()) return;
+        persistEvent(userId, currentSession, currentRun, runtimeEvent.type(), runtimeEvent.payload());
+    }
+
+    private void persistEvent(Long userId, AgentSession session, AgentRun run, AgentEventType type,
+            Map<String, Object> payload) {
         long sequence = session.lastEventSequence() + 1;
-        eventStorage.append(productEvent(
-                session.id(), run.id(), sequence, runtimeEvent.type(), runtimeEvent.payload()), userId);
-        AgentRunStatus runStatus = runStatus(runtimeEvent.type(), run.status());
-        AgentFailure failure = runtimeEvent.type() == AgentEventType.RUN_FAILED
+        eventStorage.append(productEvent(session.id(), run.id(), sequence, type, payload), userId);
+        AgentRunStatus runStatus = runStatus(type, run.status());
+        AgentFailure failure = type == AgentEventType.RUN_FAILED
                 ? new AgentFailure("RUNTIME_FAILED",
-                        Objects.toString(runtimeEvent.payload().get("error"), "Runtime reported a failed run"), false)
+                        Objects.toString(payload.get("error"), "Runtime reported a failed run"), false)
                 : run.failure();
-        AgentUsage usage = runtimeEvent.type() == AgentEventType.USAGE_UPDATED
-                ? accumulateUsage(run, runtimeEvent.payload()) : run.usage();
+        AgentUsage usage = type == AgentEventType.USAGE_UPDATED
+                ? accumulateUsage(run, payload) : run.usage();
         AgentRun updatedRun = new AgentRun(
                 run.id(), run.sessionId(), runStatus, run.model(), run.requestMessageId(), run.idempotencyKey(),
                 run.externalRunId(), run.firstEventSequence(), sequence, usage, failure);
         if (!runStorage.compareAndSet(updatedRun, run.status(), userId)) {
             throw new IllegalStateException("Agent run changed while recording a runtime event");
         }
-        updateSession(session, session.status(), sessionStatus(runtimeEvent.type(), session.status()), sequence);
+        updateSession(session, session.status(), sessionStatus(type, session.status()), sequence);
         AgentTrace.record("event.persisted", session.id(), run.id(),
-                Map.of("sequence", sequence, "type", runtimeEvent.type(), "runStatus", runStatus,
-                        "sessionStatus", sessionStatus(runtimeEvent.type(), session.status())));
+                Map.of("sequence", sequence, "type", type, "runStatus", runStatus,
+                        "sessionStatus", sessionStatus(type, session.status())));
+    }
+
+    private void flushPendingDeltas(Long userId, String sessionId, String runId) {
+        for (PendingDelta pending : List.copyOf(pendingDeltas.values())) {
+            if (pending.sessionId.equals(sessionId) && pending.runId.equals(runId)) {
+                flushPendingDelta(userId, pending);
+            }
+        }
+    }
+
+    /** Writes the merged text of one streamed channel as a single event. */
+    private void flushPendingDelta(Long userId, PendingDelta pending) {
+        pendingDeltas.remove(pending.key());
+        if (pending.text.length() == 0) return;
+        AgentSession session = sessionStorage.get(pending.sessionId, userId);
+        AgentRun run = session == null ? null : runStorage.get(pending.sessionId, pending.runId, userId);
+        if (run == null || run.status().isTerminal()) return;
+        persistEvent(userId, session, run, pending.type, Map.of(
+                "assistantMessageEvent", Map.of("type", deltaEventName(pending.type), "delta", pending.text.toString()),
+                "type", "message_update"));
+    }
+
+    private static String deltaEventName(AgentEventType type) {
+        return type == AgentEventType.ASSISTANT_REASONING_DELTA ? "thinking_delta" : "text_delta";
+    }
+
+    private static boolean isStreamedDelta(AgentEventType type) {
+        return type == AgentEventType.ASSISTANT_TEXT_DELTA || type == AgentEventType.ASSISTANT_REASONING_DELTA;
+    }
+
+    private static String deltaText(Map<String, Object> payload) {
+        Object assistantEvent = payload.get("assistantMessageEvent");
+        if (assistantEvent instanceof Map<?, ?> map && map.get("delta") instanceof String delta) return delta;
+        Object text = payload.get("text");
+        return text instanceof String value ? value : "";
+    }
+
+    private void discardPendingDeltas(String sessionId, String runId) {
+        pendingDeltas.values().removeIf(pending -> pending.sessionId.equals(sessionId) && pending.runId.equals(runId));
+    }
+
+    /** Buffered streamed text of one conversation, run and channel. */
+    private static final class PendingDelta {
+        private final String sessionId;
+        private final String runId;
+        private final AgentEventType type;
+        private final StringBuilder text = new StringBuilder();
+        private int count;
+
+        private PendingDelta(String sessionId, String runId, AgentEventType type) {
+            this.sessionId = sessionId;
+            this.runId = runId;
+            this.type = type;
+        }
+
+        private String key() {
+            return sessionId + '\0' + runId + '\0' + type;
+        }
     }
 
     private AgentRun bindExternalRun(
