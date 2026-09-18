@@ -34,7 +34,10 @@ public class JSqlParserLineageFinder {
             SimpleSqlStatement simpleSqlStatement = new SimpleSqlStatement(sql);
             if (statement instanceof Select) {
                 TableColumnLineage lineage = new TableColumnLineage(databaseConfig);
-                ((Select) statement).getSelectBody().accept(lineage);
+                Select selectBody = ((Select) statement).getSelectBody();
+                if (selectBody instanceof PlainSelect plainSelect) {
+                    lineage.visit(plainSelect);
+                }
                 List<SimpleSqlStatement.SimpleTable> tables = lineage.getLineage();
                 simpleSqlStatement.setSqlType(SqlTypeEnum.SELECT.name());
                 simpleSqlStatement.setTables(tables);
@@ -123,31 +126,23 @@ public class JSqlParserLineageFinder {
                 }
             }
             for (SelectItem item : plainSelect.getSelectItems()) {
-                item.accept(new SelectItemVisitorAdapter() {
-                    @Override
-                    public void visit(SelectItem selectExpressionItem) {
-                        if (selectExpressionItem.getExpression() instanceof Column) {
-                            net.sf.jsqlparser.schema.Column column =
-                                    (net.sf.jsqlparser.schema.Column) selectExpressionItem.getExpression();
-                            String tableAlias = column.getTable() != null ? column.getTable().getName() : null;
-                            String columnName = column.getColumnName();
-                            String alias = selectExpressionItem.getAlias() != null ?
-                                    selectExpressionItem.getAlias().getName() : null;
-                            String tableName = tableAlias != null && tableAliases.containsValue(tableAlias)
-                                    ? tableAliases.entrySet().stream()
-                                    .filter(e -> e.getValue().equals(tableAlias))
-                                    .findFirst()
-                                    .map(Map.Entry::getKey)
-                                    .orElse(null)
-                                    : tableAlias;
+                if (item.getExpression() instanceof Column column) {
+                    String tableAlias = column.getTable() != null ? column.getTable().getName() : null;
+                    String columnName = column.getColumnName();
+                    String alias = item.getAlias() != null ? item.getAlias().getName() : null;
+                    String tableName = tableAlias != null && tableAliases.containsValue(tableAlias)
+                            ? tableAliases.entrySet().stream()
+                            .filter(e -> e.getValue().equals(tableAlias))
+                            .findFirst()
+                            .map(Map.Entry::getKey)
+                            .orElse(null)
+                            : tableAlias;
 
-                            if (tableName != null) {
-                                columnMap.computeIfAbsent(tableName, k -> new ArrayList<>())
-                                        .add(new SimpleSqlStatement.Column(tableName, columnName, alias));
-                            }
-                        }
+                    if (tableName != null) {
+                        columnMap.computeIfAbsent(tableName, k -> new ArrayList<>())
+                                .add(new SimpleSqlStatement.Column(tableName, columnName, alias));
                     }
-                });
+                }
             }
             buildTables();
         }
