@@ -233,6 +233,18 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       box-sizing: border-box;
     `,
 
+    loadEarlier: css`
+      display: block;
+      margin: 4px auto 12px;
+      padding: 2px 12px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      background: transparent;
+      color: inherit;
+      font-size: 12px;
+      opacity: 0.7;
+      cursor: pointer;
+    `,
     roundBlock: css`
       display: flex;
       flex-direction: column;

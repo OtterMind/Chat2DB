@@ -121,6 +121,7 @@ export default {
   'stream.attachment.parsing': '正在解析文件...',
   'stream.attachment.parseFailed': '文件解析失败，请检查文件格式或内容',
   'stream.attachment.piUnsupported': 'Pi 会话暂不支持附件，请移除文件后用文字提问',
+  'stream.history.loadEarlier': '加载更早的消息',
   'stream.attachment.partialFailed': '部分文件解析失败，成功解析 {1} 个文件',
   'stream.attachment.added': '已添加 {1} 个文件',
   'stream.source.files': 'Files',

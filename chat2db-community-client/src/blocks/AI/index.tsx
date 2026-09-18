@@ -337,6 +337,8 @@ const MESSAGE_TOP_ALIGNMENT_GAP = 20;
 const COLLAPSED_THOUGHT_PREVIEW_MAX_LENGTH = 48;
 const AI_RUNTIME_STORAGE_KEY = 'chat2db-ai-runtime';
 const ACTIVE_AGENT_SESSION_KEY = 'chat2db-active-agent-session';
+/** Events loaded first when a long conversation is opened; older events load on demand. */
+const INITIAL_AGENT_HISTORY_EVENTS = 400;
 
 const agentRequestId = () =>
   globalThis.crypto?.randomUUID?.() ||
@@ -579,6 +581,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentRoundUserMessageId, setCurrentRoundUserMessageId] = useState<string | null>(null);
   const [highlightedUserMessageId, setHighlightedUserMessageId] = useState<string | null>(null);
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
+  const [historyWindow, setHistoryWindow] = useState(INITIAL_AGENT_HISTORY_EVENTS);
+  const [hasOlderHistory, setHasOlderHistory] = useState(false);
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -1673,16 +1677,20 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   );
 
   const handleLoadAgentSessionById = useCallback(
-    async (sessionId: string, title?: string) => {
+    async (sessionId: string, title?: string, historyEvents = INITIAL_AGENT_HISTORY_EVENTS) => {
       stop();
       stopAgentPolling();
       const operation = createAgentOperation(sessionId);
       agentOperationRef.current = operation;
       setSessionLoading(true);
       try {
-        const [session, events, approvals, questions, availableModels] = await Promise.all([
-          pi.sessions.get({ sessionId, sessionVersion: 2 }, { signal: operation.controller.signal }),
-          readAgentHistory(pi.events.list, sessionId, operation.controller.signal),
+        const session = await pi.sessions.get({ sessionId, sessionVersion: 2 },
+          { signal: operation.controller.signal });
+        // Open a long conversation on its newest events instead of replaying every streamed delta.
+        const historyStart = Math.max(0, (session.lastEventSequence ?? 0) - historyEvents);
+        const [events, approvals, questions, availableModels] = await Promise.all([
+          readAgentHistory(pi.events.list, sessionId, operation.controller.signal,
+            { fromSequence: historyStart, maxEvents: historyEvents }),
           pi.approvals.list({ sessionId }, { signal: operation.controller.signal }),
           pi.questions.list({ sessionId }, { signal: operation.controller.signal }),
           listAvailableModelOptions(),
@@ -1725,6 +1733,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         currentSessionIdRef.current = sessionId;
         setCurrentSessionTitle(session.title || title || '');
         currentSessionTitleRef.current = session.title || title || '';
+        setHistoryWindow(historyEvents);
+        setHasOlderHistory(historyStart > 0);
         if (activeRunId) {
           operation.runId = activeRunId;
           const userMessageId = transcript.find((item) => item.role === 'user' && item.runId === activeRunId)?.id || null;
@@ -1746,6 +1756,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     },
     [pollAgentRun, setSelectedModel, stop, stopAgentPolling],
   );
+
+  const handleLoadEarlierHistory = useCallback(() => {
+    const sessionId = currentSessionIdRef.current;
+    if (!sessionId) return;
+    void handleLoadAgentSessionById(sessionId, currentSessionTitleRef.current, historyWindow * 2);
+  }, [handleLoadAgentSessionById, historyWindow]);
 
   // Restore the conversation from the path when first opening /stream/:chatId.
 
@@ -2349,6 +2365,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
     return (
       <>
+        {hasOlderHistory && (
+          <button type="button" className={styles.loadEarlier} onClick={handleLoadEarlierHistory}>
+            {i18n('stream.history.loadEarlier')}
+          </button>
+        )}
         {rounds.map((round, index) => {
           const isCurrentRound = round.user?.id === currentRoundUserMessageId;
           const isLastRound = index === rounds.length - 1;

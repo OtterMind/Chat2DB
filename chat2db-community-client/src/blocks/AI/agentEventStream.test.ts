@@ -47,6 +47,14 @@ async function main() {
   assert.equal(activeAgentRunId([...restored, event(1210, 'RUN_OUTCOME_UNKNOWN', 'current')]), undefined,
     'a reconciled unknown outcome releases the run');
 
+  // A long conversation opens on its newest events and keeps the window bounded.
+  const windowed = await readAgentHistory(async ({ afterSequence, limit }) =>
+    history.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session',
+  new AbortController().signal, { fromSequence: 1180, maxEvents: 25 });
+  assert.equal(windowed[0].sequence, 1181, 'the requested window starts at the requested sequence');
+  assert.equal(windowed.length, 25, 'the window stops at the requested size');
+  assert.equal(windowed[24].sequence, 1205);
+
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
     let attempts = 0;

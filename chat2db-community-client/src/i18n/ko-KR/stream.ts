@@ -121,6 +121,7 @@ export default {
   'stream.attachment.parsing': '파일 분석 중...',
   'stream.attachment.parseFailed': '파일을 분석하지 못했습니다. 파일 형식이나 내용을 확인해 주세요.',
   'stream.attachment.piUnsupported': 'Pi 대화는 아직 첨부 파일을 지원하지 않습니다. 파일을 제거하고 텍스트로 질문해 주세요.',
+  'stream.history.loadEarlier': '이전 메시지 불러오기',
   'stream.attachment.partialFailed': '일부 파일을 분석하지 못했습니다. {1}개 파일을 분석했습니다.',
   'stream.attachment.added': '{1}개 파일을 추가했습니다.',
   'stream.source.files': '파일',

@@ -26,6 +26,8 @@ export interface IChatSession {
   modelConfigId?: string;
   gmtCreate: string;
   gmtModified: string;
+  /** Last durable event sequence of a V2 session, so history can load its newest page first. */
+  lastEventSequence?: number;
 }
 
 export interface IChatMessage {

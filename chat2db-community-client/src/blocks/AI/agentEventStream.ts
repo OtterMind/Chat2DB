@@ -55,16 +55,26 @@ async function readEventPage(read: ReadAgentEvents, query: EventQuery, signal: A
   return [];
 }
 
-export async function readAgentHistory(read: ReadAgentEvents, sessionId: string, signal: AbortSignal) {
+export interface AgentHistoryWindow {
+  /** First sequence to load, so a long conversation can start at its newest events. */
+  fromSequence?: number;
+  /** Maximum number of events to load for this window. */
+  maxEvents?: number;
+}
+
+export async function readAgentHistory(read: ReadAgentEvents, sessionId: string, signal: AbortSignal,
+  window: AgentHistoryWindow = {}) {
+  const maxEvents = window.maxEvents ?? Number.POSITIVE_INFINITY;
   let events: AgentEvent[] = [];
-  let sequence = 0;
+  let sequence = window.fromSequence ?? 0;
   while (!signal.aborted) {
-    const page = await readEventPage(read, { sessionId, afterSequence: sequence, limit: PAGE_SIZE }, signal);
+    const limit = Math.max(1, Math.min(PAGE_SIZE, maxEvents - events.length));
+    const page = await readEventPage(read, { sessionId, afterSequence: sequence, limit }, signal);
     signal.throwIfAborted();
     const incoming = page.filter((event) => event.sessionId === sessionId && event.sequence > sequence);
     events = mergeAgentEvents(events, incoming);
     traceAgentStage('history.page', { sessionId, afterSequence: sequence, received: page.length, total: events.length });
-    if (incoming.length === 0 || page.length < PAGE_SIZE) return events;
+    if (incoming.length === 0 || page.length < limit || events.length >= maxEvents) return events;
     sequence = events[events.length - 1].sequence;
   }
   signal.throwIfAborted();

@@ -12,7 +12,8 @@ public record AiSessionSummary(
         AgentSessionStatus agentStatus,
         String modelConfigId,
         LocalDateTime gmtCreate,
-        LocalDateTime gmtModified) {
+        LocalDateTime gmtModified,
+        Long lastEventSequence) {
 
     public AiSessionSummary {
         if (id == null || id.isBlank()) {
@@ -30,6 +31,9 @@ public record AiSessionSummary(
         if (sessionVersion == 2 && (runtimeType == null || agentStatus == null
                 || modelConfigId == null || modelConfigId.isBlank())) {
             throw new IllegalArgumentException("V2 session requires Agent runtime state");
+        }
+        if (sessionVersion == 1 && lastEventSequence != null) {
+            throw new IllegalArgumentException("V1 session cannot expose an Agent event sequence");
         }
     }
 }
