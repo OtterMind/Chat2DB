@@ -29,6 +29,15 @@ class CsvImportValueNormalizerTest {
     }
 
     @Test
+    void rejectsACommaDecimalWhenTheSettingsDeclareADot() {
+        CsvOptions options = CsvOptions.builder().decimalSymbol(".").build().validate();
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> normalize("12,5", Types.DECIMAL, options));
+        assertEquals("import.csv.invalidValue", error.getCode());
+    }
+
+    @Test
     void supportsTimeFirstAndASeparateYearDelimiter() {
         CsvOptions options = CsvOptions.builder()
                 .dateOrder("DMY")

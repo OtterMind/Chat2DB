@@ -31,9 +31,7 @@ public final class ExcelImportReader {
             Consumer<Map<Integer, String>> headerConsumer,
             BiConsumer<Map<Integer, ImportCell>, Integer> rowConsumer, Runnable checkCancelled) {
         ExcelOptions options = settings.validate();
-        List<String> sheets = sheets(file);
-        if (options.getSheetIndex() >= sheets.size()) throw new BusinessException("import.preview.excelSheetMissing");
-        EasyExcel.read(file, new AnalysisEventListener<Map<Integer, ReadCellData<?>>>() {
+        AnalysisEventListener<Map<Integer, ReadCellData<?>>> listener = new AnalysisEventListener<>() {
             private int emitted;
             private boolean hasHeader;
             private int sourceColumnCount = options.getColumnRange().isEmpty()
@@ -80,8 +78,16 @@ public final class ExcelImportReader {
 
             @Override
             public void doAfterAllAnalysed(AnalysisContext context) { }
-        }).headRowNumber(0).autoTrim(false).ignoreEmptyRow(false).useDefaultListener(false)
-                .sheet(options.getSheetIndex()).doRead();
+        };
+        try (ExcelReader reader = EasyExcel.read(file, listener)
+                .headRowNumber(0).autoTrim(false).ignoreEmptyRow(false).useDefaultListener(false)
+                .build()) {
+            if (options.getSheetIndex() >= reader.excelExecutor().sheetList().size()) {
+                throw new BusinessException("import.preview.excelSheetMissing");
+            }
+            reader.read(EasyExcel.readSheet(options.getSheetIndex())
+                    .headRowNumber(0).autoTrim(false).build());
+        }
     }
 
     private static ImportCell cell(ReadCellData<?> cell, AnalysisContext context, ExcelOptions options, int column) {

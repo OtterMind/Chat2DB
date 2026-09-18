@@ -118,6 +118,11 @@ public final class CsvImportValueNormalizer {
 
     private static String normalizeNumber(String value, ImportValueFormat options) {
         if (!",".equals(options.getDecimalSymbol())) {
+            // A comma is either a decimal point the settings do not declare or a thousands
+            // separator; both would reach the database as a malformed numeric literal.
+            if (value.indexOf(',') >= 0) {
+                throw new IllegalArgumentException("value uses a comma but the decimal symbol is a dot");
+            }
             return value;
         }
         if (value.indexOf('.') >= 0 && value.indexOf(',') >= 0) {

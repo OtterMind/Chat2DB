@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.web.api.model.request.task.TaskExportRequest;
 import ai.chat2db.community.web.api.model.request.task.TaskImportRequest;
 import org.apache.commons.collections4.CollectionUtils;
@@ -83,10 +84,10 @@ public class TaskWebConverter {
 
     private String resolveExportTaskType(TaskExportRequest request) {
         if (StringUtils.isNotBlank(request.getTaskType())) {
-            TaskType taskType = TaskType.valueOf(normalize(request.getTaskType()));
+            TaskType taskType = taskType(request.getTaskType());
             if (taskType != TaskType.QUERY_RESULT_EXPORT && taskType != TaskType.SQL_EXPORT
                     && taskType != TaskType.TABLE_DATA_EXPORT) {
-                throw new IllegalArgumentException("Unsupported export task type: " + taskType);
+                throw new BusinessException("task.type.invalid");
             }
             return taskType.name();
         }
@@ -101,14 +102,22 @@ public class TaskWebConverter {
 
     private String resolveImportTaskType(String requestedTaskType, String format) {
         if (StringUtils.isNotBlank(requestedTaskType)) {
-            TaskType taskType = TaskType.valueOf(normalize(requestedTaskType));
+            TaskType taskType = taskType(requestedTaskType);
             if (taskType != TaskType.DATA_FILE_IMPORT && taskType != TaskType.SQL_FILE_IMPORT) {
-                throw new IllegalArgumentException("Unsupported import task type: " + taskType);
+                throw new BusinessException("task.type.invalid");
             }
             return taskType.name();
         }
         return TaskFileFormat.SQL.name().equals(format)
                 ? TaskType.SQL_FILE_IMPORT.name() : TaskType.DATA_FILE_IMPORT.name();
+    }
+
+    private TaskType taskType(String requested) {
+        try {
+            return TaskType.valueOf(normalize(requested));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("task.type.invalid", null, e);
+        }
     }
 
     private TaskTargetSnapshot target(Long dataSourceId, String databaseName, String schemaName, String tableName) {

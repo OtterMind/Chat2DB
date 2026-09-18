@@ -159,6 +159,10 @@ class BasicImportOptionsTest {
         Files.writeString(file, "[{\"id\":1}] {\"id\":2}");
         assertThrows(BusinessException.class, () -> JsonImportReader.read(file.toFile(), new JsonOptions(),
                 Integer.MAX_VALUE, (row, number) -> { }, () -> { }));
+        // The preview walks the same document for field discovery, so it must reject it too.
+        BusinessException previewError = assertThrows(BusinessException.class,
+                () -> new ImportPreviewFileParser().parse(file.toFile(), 10, null, null, new JsonOptions()));
+        assertEquals("import.preview.jsonInvalidDocument", previewError.getCode());
     }
 
     @Test

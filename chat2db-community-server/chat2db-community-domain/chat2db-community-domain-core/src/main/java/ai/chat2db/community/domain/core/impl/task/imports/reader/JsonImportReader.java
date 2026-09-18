@@ -87,8 +87,9 @@ public final class JsonImportReader {
                     }
                     if (count == 0) throw new BusinessException("import.preview.emptyFile");
                 }
-                // Finish parsing the enclosing document to reject malformed input during execution.
-                if (limit == Integer.MAX_VALUE) {
+                // The preview scans the whole document for field discovery, so both callers can
+                // reject a trailing document here; a bounded read stops before this point.
+                if (scanRemaining || limit == Integer.MAX_VALUE) {
                     while (parser.nextToken() != null) {
                         checkCancelled.run();
                         var token = parser.currentToken();
