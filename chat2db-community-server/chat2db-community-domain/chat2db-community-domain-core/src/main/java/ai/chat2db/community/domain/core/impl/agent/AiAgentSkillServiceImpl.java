@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -26,6 +27,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -44,7 +46,10 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
     private final Map<Path, AiAgentSkill> userSkills = new LinkedHashMap<>();
     private final Map<Path, String> errors = new HashMap<>();
     private final Map<String, List<AiAgentSkill>> selected = new HashMap<>();
-    private List<AiAgentSkill> prepared;
+    private volatile List<AiAgentSkill> prepared;
+    private Path resolvedBuiltinRoot;
+    private Path resolvedUserRoot;
+    private boolean userUnavailable;
 
     public AiAgentSkillServiceImpl(Resource catalog, Path builtinRoot) {
         this(catalog, builtinRoot, null, null);
@@ -62,6 +67,7 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
         List<AiAgentSkill> builtins = builtins();
         if (userRoot == null) return builtins;
         Path source = userDirectory();
+        if (source == null) return builtins;
         List<Path> directories;
         try (var paths = Files.list(source)) {
             directories = paths.filter(path -> !path.getFileName().toString().startsWith("."))
@@ -107,16 +113,41 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
 
     @Override public synchronized void release(String sessionId) { selected.remove(sessionId); }
 
-    @Override public Path userDirectory() {
-        return canonical(userRoot, "User skill directory cannot be a symbolic link", "Cannot open user skill directory");
+    @Override public synchronized Path userDirectory() {
+        if (userRoot == null || userUnavailable) return null;
+        if (resolvedUserRoot == null) {
+            try {
+                if (Files.isSymbolicLink(userRoot)) throw new IOException("User skill directory cannot be a symbolic link");
+                Files.createDirectories(userRoot);
+                resolvedUserRoot = userRoot.toRealPath();
+            } catch (IOException error) {
+                // An unusable user root removes user skills only; it must not fail unrelated file tools.
+                userUnavailable = true;
+                AgentTrace.record("skills.directory.unavailable", null, null,
+                        Map.of("path", userRoot.toString(), "reason", Objects.toString(error.getMessage(), "unusable")));
+                return null;
+            }
+        }
+        return resolvedUserRoot;
     }
 
-    @Override public Path resourceDirectory() {
-        return canonical(builtinRoot, "Skill resources cannot be a symbolic link", "Cannot open skill resource directory");
+    @Override public synchronized Path resourceDirectory() {
+        if (resolvedBuiltinRoot == null) {
+            try {
+                if (Files.isSymbolicLink(builtinRoot)) throw new IOException("Skill resources cannot be a symbolic link");
+                Files.createDirectories(builtinRoot);
+                resolvedBuiltinRoot = builtinRoot.toRealPath();
+            } catch (IOException error) {
+                AgentTrace.record("skills.resources.unavailable", null, null,
+                        Map.of("path", builtinRoot.toString(), "reason", Objects.toString(error.getMessage(), "unusable")));
+                return null;
+            }
+        }
+        return resolvedBuiltinRoot;
     }
 
     /** Redirects a path recorded by an earlier run, which used snapshots, to the skill loaded now. */
-    @Override public Path resolveLegacyPath(Path path) {
+    @Override public synchronized Path resolveLegacyPath(Path path) {
         Path relative = legacyRelative(path);
         if (relative == null || relative.getNameCount() < 2) return path;
         String name = relative.getName(1).toString();
@@ -147,6 +178,7 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
             JsonNode entries = new ObjectMapper().readTree(input).path("skills");
             if (!entries.isArray()) throw new IOException("Skill catalog must contain a skills array");
             Path root = resourceDirectory();
+            if (root == null) throw new IOException("Cannot open skill resource directory");
             discardInterrupted(root);
             List<AiAgentSkill> skills = new ArrayList<>();
             for (JsonNode entry : entries) {
@@ -233,6 +265,14 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
                     if (matches(directory, files)) return;
                     retired = null;
                 }
+                if (retired != null) {
+                    try {
+                        // Moving keeps the source timestamps, which would make this fresh rollback copy look abandoned.
+                        Files.setLastModifiedTime(retired, FileTime.from(Instant.now()));
+                    } catch (IOException ignored) {
+                        // A stale timestamp only risks cleanup; the publication itself continues.
+                    }
+                }
             }
             try {
                 Files.move(staging, directory, StandardCopyOption.ATOMIC_MOVE);
@@ -305,20 +345,10 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
         }
     }
 
-    private static Path canonical(Path root, String symlinkMessage, String failureMessage) {
-        if (root == null) return null;
-        try {
-            if (Files.isSymbolicLink(root)) throw new IOException(symlinkMessage);
-            Files.createDirectories(root);
-            return root.toRealPath();
-        } catch (IOException error) {
-            throw new IllegalStateException(failureMessage, error);
-        }
-    }
-
     @Override
     public AiAgentSkillResolveResponse resolve(AiAgentSkillResolveRequest aiAgentSkillResolveRequest) {
         String message = aiAgentSkillResolveRequest.message();
+        if (message == null) return new AiAgentSkillResolveResponse("", null);
         var match = COMMAND.matcher(message.stripLeading());
         if (!match.matches()) return new AiAgentSkillResolveResponse(message, null);
         String name = match.group(1);

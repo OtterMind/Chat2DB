@@ -141,7 +141,7 @@ export default function (pi) {
     const executions = new Map();
     pi.on("before_agent_start", () => executions.clear());
     const skillFiles = access.userSkillDirectory && !["bash", "powershell"].includes(name)
-      ? ` User skill source directory: ${access.userSkillDirectory}. File tools may read and edit user skills there without enabling workspace access. Hidden runtime resources remain read-only. Other user paths require workspace permission.` : "";
+      ? ` User skill source directory: ${access.userSkillDirectory}. File tools may read and edit user skills there without enabling workspace access. Bundled skills live outside that directory and are read-only. Other user paths require workspace permission.` : "";
     pi.registerTool({
       ...definition,
       description: definition.description + skillFiles,

@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -21,6 +22,7 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.PatternSyntaxException;
 
 public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
     private final List<IAiAgentWorkspaceService> workspaces;
@@ -206,10 +208,18 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         return root.toString();
     }
 
+    private static PathMatcher pathMatcher(Path directory, String glob) {
+        try {
+            return directory.getFileSystem().getPathMatcher("glob:" + glob);
+        } catch (PatternSyntaxException error) {
+            throw new IllegalArgumentException("Invalid glob pattern: " + glob, error);
+        }
+    }
+
     private Object searchDirectory(String sessionId, Path directory, Map<String, Object> arguments, boolean skill) {
         try {
             String glob = string(arguments, "glob", null);
-            var matcher = glob == null ? null : directory.getFileSystem().getPathMatcher("glob:" + glob);
+            PathMatcher matcher = glob == null ? null : pathMatcher(directory, glob);
             List<Path> collected = new ArrayList<>();
             Files.walkFileTree(directory, new SimpleFileVisitor<>() {
                 @Override public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attributes) {

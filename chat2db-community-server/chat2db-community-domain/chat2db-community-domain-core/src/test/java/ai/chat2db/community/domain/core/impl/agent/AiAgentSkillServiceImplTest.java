@@ -164,6 +164,28 @@ class AiAgentSkillServiceImplTest {
         } finally { executor.shutdownNow(); }
     }
 
+    @Test
+    void unusableUserRootDropsUserSkillsWithoutFailingTheService() throws Exception {
+        Path userRoot = Files.writeString(temporaryDirectory.resolve("not-a-directory"), "occupied");
+        var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
+                temporaryDirectory.resolve("builtin"), userRoot, null);
+        assertNull(service.userDirectory());
+        assertEquals(List.of("chart", "skill-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
+        assertEquals("chart", service.resolve(new AiAgentSkillResolveRequest("/skill:chart go")).skillName());
+    }
+
+    @Test
+    void abandonedPublicationCopiesAreDiscardedWhileFreshOnesSurvive() throws Exception {
+        Path builtinRoot = Files.createDirectories(temporaryDirectory.resolve("builtin"));
+        Path abandoned = Files.createDirectories(builtinRoot.resolve(".staging-abandoned"));
+        Files.setLastModifiedTime(abandoned, java.nio.file.attribute.FileTime.from(java.time.Instant.now().minus(java.time.Duration.ofHours(2))));
+        Path fresh = Files.createDirectories(builtinRoot.resolve(".retired-fresh"));
+        var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"), builtinRoot);
+        assertEquals(List.of("chart", "skill-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
+        assertFalse(Files.exists(abandoned));
+        assertTrue(Files.exists(fresh));
+    }
+
     private static AiAgentSkill report(List<AiAgentSkill> skills) {
         return skills.stream().filter(skill -> skill.name().equals("report")).findFirst().orElseThrow();
     }
