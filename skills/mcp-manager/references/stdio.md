@@ -38,6 +38,12 @@ A server that needs a token:
 }
 ```
 
+## Calling the tools
+
+A server's tools join this conversation under a prefixed name, `mcp__<server>__<tool>`. Use the
+`callName` that `mcp_test_server`, `mcp_add_server` or `mcp_update_server` reports, and the exact name
+shown in the tool list; the server's own label (`name`) is not callable on its own.
+
 ## What the user approves
 
 The first time the server runs, the user sees the exact command line (`command` plus `args`) and the environment variable names. Values are never shown. An approved command stays approved until the command, the arguments or the variable names change.

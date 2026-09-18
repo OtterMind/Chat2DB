@@ -160,6 +160,11 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         snapshotFuture = new CompletableFuture<>();
     }
 
+    /** Marks the current handle as started with resources that changed on disk since. */
+    void markStale() {
+        if (lastHandle != null) lastHandle.stale = true;
+    }
+
     private final class FakeSessionHandle implements IAgentRuntimeSessionHandle {
 
         private final String sessionId;
@@ -170,6 +175,12 @@ final class FakeAgentRuntimeAdapter implements IAgentRuntimeAdapter {
         private final CompletableFuture<AgentRuntimeSnapshot> snapshotFuture;
         private AgentRuntimeHealth health = AgentRuntimeHealth.READY;
         private String activeRunId;
+        private boolean stale;
+
+        @Override
+        public boolean needsRestart() {
+            return stale;
+        }
 
         private FakeSessionHandle(
                 String sessionId,

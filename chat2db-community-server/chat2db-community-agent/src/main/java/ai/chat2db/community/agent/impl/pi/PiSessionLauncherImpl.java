@@ -17,6 +17,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -109,7 +112,7 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
                     () -> toolAccessService.revoke(toolAccessRef.get().ticket()),
                     modelConfiguration,
                     () -> refreshToolAccess(sessionId, eventSink, configuration, toolAccessService,
-                            objectMapper, toolAccessRef), skillConfiguration);
+                            objectMapper, toolAccessRef), skillConfiguration, extension);
             synchronized (eventLock) {
                 handleReference.set(handle);
                 for (JsonNode event : earlyEvents) {
@@ -159,6 +162,26 @@ public class PiSessionLauncherImpl implements IPiSessionLauncher {
             provider.revoke(next.ticket());
             throw error instanceof RuntimeException runtime
                     ? runtime : new PiRpcException("Cannot refresh Pi tool access", error);
+        }
+    }
+
+    /** Digest of the packaged extension; a running process that started with another one is stale. */
+    static String extensionDigest() {
+        try (var resource = new ClassPathResource("/agent/chat2db-tools.mjs", PiSessionLauncherImpl.class)
+                .getInputStream()) {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(resource.readAllBytes()));
+        } catch (IOException | NoSuchAlgorithmException error) {
+            return null;
+        }
+    }
+
+    /** Digest of the extension copy a session process is running with. */
+    static String digest(Path extension) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(extension)));
+        } catch (IOException | NoSuchAlgorithmException error) {
+            return null;
         }
     }
 

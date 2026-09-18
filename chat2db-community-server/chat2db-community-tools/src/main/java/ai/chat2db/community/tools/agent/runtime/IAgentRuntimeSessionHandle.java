@@ -18,6 +18,14 @@ public interface IAgentRuntimeSessionHandle extends AutoCloseable {
 
     CompletionStage<AgentRuntimeSnapshot> snapshot();
 
+    /**
+     * True when the runtime resources this handle was started with changed on disk, so the next run
+     * must start a fresh runtime instead of serving a process that still holds the old resources.
+     */
+    default boolean needsRestart() {
+        return false;
+    }
+
     /** Completes when the underlying runtime process or transport terminates. */
     default CompletionStage<Void> termination() {
         return new CompletableFuture<>();

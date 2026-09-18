@@ -24,7 +24,7 @@ class McpServerStorageImplTest {
 
     @Test
     void roundTripsServersAndKeepsTheFileReadableForTheUser() throws Exception {
-        Path file = directory.resolve("mcp.json");
+        Path file = directory.resolve("servers.json");
         McpServerStorageImpl storage = new McpServerStorageImpl(file);
 
         assertTrue(storage.load().isEmpty());
@@ -53,14 +53,21 @@ class McpServerStorageImplTest {
     }
 
     @Test
+    void keepsTheConfigurationInsideTheAgentDataDirectory() {
+        // The file belongs to the agent data root, not to a cache directory or the session tree.
+        assertTrue(new McpServerStorageImpl().path().replace('\\', '/')
+                .endsWith("/storage/agent-v2/mcp/servers.json"), new McpServerStorageImpl().path());
+    }
+
+    @Test
     void reportsAnUnreadableFileInsteadOfLosingIt() throws Exception {
-        Path file = directory.resolve("mcp.json");
+        Path file = directory.resolve("servers.json");
         Files.writeString(file, "{ not json");
 
         McpServerStorageImpl storage = new McpServerStorageImpl(file);
 
         IllegalStateException error = assertThrows(IllegalStateException.class, storage::load);
-        assertTrue(error.getMessage().contains("mcp.json"));
+        assertTrue(error.getMessage().contains("servers.json"));
         assertTrue(Files.exists(file), "an unreadable file is never overwritten by a read");
     }
 }

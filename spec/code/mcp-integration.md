@@ -27,8 +27,9 @@ re-reads the catalogue at the end of every run.
 
 ## Configuration
 
-`McpServerStorageImpl` keeps one plain-text file next to the other user settings
-(`<cache directory>/mcp.json`, owner-only permissions where the platform supports it). Nothing in a
+`McpServerStorageImpl` keeps one plain-text file in the agent data directory
+(`<env base path>/storage/agent-v2/mcp/servers.json`, next to the skill directory, owner-only
+permissions where the platform supports it). Nothing in a
 skill or a prompt may hardcode that location: `IMcpServerService.configPath()` is reported by
 `mcp_list_servers` and the `mcp-manager` skill tells the model to use it verbatim.
 

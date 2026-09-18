@@ -70,11 +70,12 @@ public final class AgentGatewayServer implements AutoCloseable {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
             boolean catalog = (TOOLS + "catalog").equals(path) && "GET".equals(method);
+            boolean definitions = (TOOLS + "definitions").equals(path) && "GET".equals(method);
             boolean execute = (TOOLS + "execute").equals(path) && "POST".equals(method);
             boolean nativeTool = (TOOLS + "prepare-native").equals(path) && "POST".equals(method);
             boolean output = (TOOLS + "output").equals(path) && "POST".equals(method);
             boolean model = path.startsWith(MODEL) && "POST".equals(method);
-            if (!catalog && !execute && !nativeTool && !output && !model) {
+            if (!catalog && !definitions && !execute && !nativeTool && !output && !model) {
                 writeJson(exchange, 404, Map.of("success", false, "errorMessage", "Unknown Agent endpoint"));
                 return;
             }
@@ -89,6 +90,11 @@ public final class AgentGatewayServer implements AutoCloseable {
             String remote = exchange.getRemoteAddress().getAddress().getHostAddress();
             if (catalog) {
                 writeJson(exchange, 200, tools.get().activeTools(ticket, remote));
+                return;
+            }
+            // A session re-reads the catalogue after adding a server, so its tools become callable.
+            if (definitions) {
+                writeJson(exchange, 200, tools.get().definitions(ticket, remote));
                 return;
             }
             byte[] body = exchange.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);

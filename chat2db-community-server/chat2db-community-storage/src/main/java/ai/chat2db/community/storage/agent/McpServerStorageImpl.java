@@ -2,7 +2,7 @@ package ai.chat2db.community.storage.agent;
 
 import ai.chat2db.community.domain.api.model.agent.mcp.McpServerConfig;
 import ai.chat2db.community.domain.api.service.agent.IMcpServerStorage;
-import ai.chat2db.community.tools.util.SystemSettingsUtil;
+import ai.chat2db.community.tools.util.ConfigUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -21,14 +21,14 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Stores MCP servers in one plain-text file next to the other user settings. The file is meant to be
- * readable and editable by hand, so it holds no generated identifiers and is written with owner-only
- * permissions where the platform supports them.
+ * Stores MCP servers in one plain-text file inside the agent data directory, next to the skill
+ * directory it belongs to. The file is meant to be readable and editable by hand, so it holds no
+ * generated identifiers and is written with owner-only permissions where the platform supports them.
  */
 @Component
 public class McpServerStorageImpl implements IMcpServerStorage {
 
-    private static final String FILE_NAME = "mcp.json";
+    private static final String FILE_NAME = "servers.json";
     private static final int SCHEMA_VERSION = 1;
     private static final Set<PosixFilePermission> OWNER_ONLY = PosixFilePermissions.fromString("rw-------");
 
@@ -36,7 +36,7 @@ public class McpServerStorageImpl implements IMcpServerStorage {
     private final ObjectMapper json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
     public McpServerStorageImpl() {
-        this(Paths.get(SystemSettingsUtil.getCachePath(), FILE_NAME));
+        this(Paths.get(ConfigUtils.getEnvBasePath(), "storage", "agent-v2", "mcp", FILE_NAME));
     }
 
     McpServerStorageImpl(Path file) {

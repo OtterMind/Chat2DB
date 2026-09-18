@@ -25,8 +25,8 @@ export default function (pi) {
     description: "Reload the model configuration selected by Chat2DB for the next message.",
     async handler(_args, ctx) {
       await ctx.modelRegistry.refresh(AbortSignal.timeout(10000));
-      const active = await request("/catalog", { signal: AbortSignal.timeout(10000) });
-      applyActiveTools(active);
+      // Re-read the definitions first: a server added since the session started contributes tools now.
+      await refreshToolset();
     },
   });
   const accessFile = join(process.env.PI_CODING_AGENT_DIR, "tools.json");
@@ -99,7 +99,10 @@ export default function (pi) {
     return body;
   }
 
-  for (const tool of access.tools) {
+  const registeredTools = new Set();
+  const registerCatalogTool = tool => {
+    if (!tool?.name || registeredTools.has(tool.name)) return false;
+    registeredTools.add(tool.name);
     pi.registerTool({
       name: tool.name,
       label: tool.name,
@@ -118,7 +121,9 @@ export default function (pi) {
         return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
       },
     });
-  }
+    return true;
+  };
+  for (const tool of access.tools) registerCatalogTool(tool);
 
   // Tools are registered up front but only the active set reaches the model. Tools of a group that a
   // session rarely needs stay inactive until a model searches for them through tool_search.
@@ -149,6 +154,17 @@ export default function (pi) {
   const refreshActiveTools = async () => {
     const active = await request("/catalog", { signal: AbortSignal.timeout(10000) });
     if (Array.isArray(active)) applyActiveTools(active);
+  };
+  // A server added while this session is open contributes tools the initial catalogue did not have,
+  // so the definitions are re-read before the active set is applied.
+  const refreshToolset = async () => {
+    const definitions = await request("/definitions", { signal: AbortSignal.timeout(10000) });
+    if (Array.isArray(definitions)) {
+      for (const tool of definitions) {
+        if (registerCatalogTool(tool)) groups.set(tool.group, [...(groups.get(tool.group) ?? []), tool.name]);
+      }
+    }
+    await refreshActiveTools();
   };
   pi.registerTool({
     name: TOOL_SEARCH,
@@ -295,13 +311,11 @@ export default function (pi) {
   const fallbackActive = () => [...access.tools.filter(tool => tool.defaultActive !== false).map(tool => tool.name),
     ...nativeNames];
   const refreshOrFallback = () => {
-    refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
+    refreshToolset().catch(() => applyActiveTools(fallbackActive()));
   };
   pi.on("session_start", refreshOrFallback);
   // A server added mid-conversation contributes its tools from the next step on.
-  pi.on("agent_end", () => {
-    refreshActiveTools().catch(() => {});
-  });
+  pi.on("agent_end", refreshOrFallback);
   refreshOrFallback();
 
 }

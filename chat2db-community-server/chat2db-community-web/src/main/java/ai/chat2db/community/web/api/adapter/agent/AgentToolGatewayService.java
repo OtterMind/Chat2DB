@@ -121,19 +121,31 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         tickets.entrySet().removeIf(entry -> entry.getValue().expiresAt.isBefore(Instant.now()));
         tickets.put(ticket, new Access(sessionId, userId, context, eventSink));
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
-        var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
-        definitions.add(chartTool.definition());
-        // MCP management tools are registered but stay inactive until a model asks for them; the
-        // tools of configured servers follow their enabled state.
-        definitions.addAll(mcp.definitions());
-        definitions.addAll(AgentMcpTools.definitions(mcpServers.enabledServers()));
-        return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions),
+        return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, toolDefinitions(),
                 files.userSkillDirectory());
     }
 
     @Override
     public void revoke(String ticket) {
         tickets.remove(ticket);
+    }
+
+    @Override
+    public List<AgentToolAccess.Tool> definitions(String ticket, String address) {
+        requireAccess(ticket, address);
+        return toolDefinitions();
+    }
+
+    /** The catalogue one session sees: built-ins, the management tools and every enabled server. */
+    private List<AgentToolAccess.Tool> toolDefinitions() {
+        var definitions = new ArrayList<>(tools.definitions());
+        definitions.add(questionTool.definition());
+        definitions.add(chartTool.definition());
+        // MCP management tools are registered but stay inactive until a model asks for them; the
+        // tools of configured servers follow their enabled state.
+        definitions.addAll(mcp.definitions());
+        definitions.addAll(AgentMcpTools.definitions(mcpServers.enabledServers()));
+        return List.copyOf(definitions);
     }
 
     @Override

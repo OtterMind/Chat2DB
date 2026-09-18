@@ -60,6 +60,19 @@ class AgentRunCoordinatorTest {
     }
 
     @Test
+    void replacesARuntimeWhoseResourcesChanged() {
+        AgentRun first = coordinator.start(startCommand("request-one")).toCompletableFuture().join();
+        coordinator.cancel(new AgentRunCancelCommand(USER_ID, SESSION_ID, first.id())).toCompletableFuture().join();
+        assertEquals(1, adapter.openSessionCount());
+        adapter.markStale();
+
+        coordinator.start(startCommand("request-two")).toCompletableFuture().join();
+
+        assertEquals(2, adapter.openSessionCount(), "a stale runtime is closed and opened again");
+        assertEquals(1, handles.size(), "and only the new handle stays registered");
+    }
+
+    @Test
     void startsIdempotentlyAndCancelsOneRun() {
         AgentRunStartCommand start = new AgentRunStartCommand(
                 USER_ID, SESSION_ID, "model", new AgentRuntimeInput("hello", List.of()), "request-one");

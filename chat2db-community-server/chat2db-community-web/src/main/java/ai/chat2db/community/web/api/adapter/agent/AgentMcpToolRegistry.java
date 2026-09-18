@@ -173,7 +173,7 @@ public class AgentMcpToolRegistry {
                             + "the server needs an interactive OAuth login (not supported yet).");
         }
         List<Map<String, Object>> tools = servers.require(name).tools().stream()
-                .map(tool -> toolView(tool)).toList();
+                .map(tool -> toolView(name, tool)).toList();
         return AgentMcpResponse.success(Map.of("server", state, "tools", tools));
     }
 
@@ -193,8 +193,10 @@ public class AgentMcpToolRegistry {
             McpServerState state = servers.refreshTools(name);
             result.put("connected", true);
             result.put("server", state);
-            result.put("tools", servers.require(name).tools().stream().map(AgentMcpToolRegistry::toolView).toList());
-            result.put("hint", "Tell the user the tools are available now; they may need to confirm the approval card first.");
+            result.put("tools", servers.require(name).tools().stream()
+                    .map(tool -> toolView(name, tool)).toList());
+            result.put("hint", "Tell the user the tools are available now and name them exactly as `callName`; the "
+                    + "first call of each one asks for approval.");
         } catch (RuntimeException error) {
             result.put("connected", false);
             result.put("error", Objects.toString(error.getMessage(), error.getClass().getSimpleName()));
@@ -205,9 +207,11 @@ public class AgentMcpToolRegistry {
         return result;
     }
 
-    private static Map<String, Object> toolView(McpToolDescriptor tool) {
+    /** {@code callName} is the name the model must call; the bare name is only the server's own label. */
+    private static Map<String, Object> toolView(String server, McpToolDescriptor tool) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("name", tool.name());
+        view.put("callName", AgentMcpTools.name(server, tool.name()));
         view.put("description", tool.description());
         view.put("readOnly", tool.readOnlyHint());
         view.put("destructive", tool.destructiveHint());

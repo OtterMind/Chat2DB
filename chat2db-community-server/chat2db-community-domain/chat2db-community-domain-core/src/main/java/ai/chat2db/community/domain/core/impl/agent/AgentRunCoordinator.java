@@ -339,8 +339,13 @@ public class AgentRunCoordinator {
             AgentSession session, AgentRunStartCommand command, AgentModelSnapshot model,
             List<ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSkill> selectedSkills) {
         IAgentRuntimeSessionHandle existing = handleRegistry.get(session.id());
-        if (existing != null) {
+        if (existing != null && !existing.needsRestart()) {
             return existing;
+        }
+        if (existing != null) {
+            // An updated extension takes effect on the next run instead of after an application restart.
+            handleRegistry.remove(session.id(), existing);
+            AgentTrace.record("runtime.restarted", session.id(), null, Map.of("reason", "runtime resources changed"));
         }
         handleRegistry.closeIdle(id -> {
             AgentSession other = sessionStorage.get(id, command.userId());

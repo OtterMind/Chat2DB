@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
@@ -41,6 +42,9 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
     private final Runnable refreshToolAccess;
     private final IPiModelConfiguration modelConfiguration;
     private final PiSkillConfiguration skillConfiguration;
+    /** The extension copy and its digest at launch; a changed file means the process is stale. */
+    private final Path extension;
+    private final String extensionDigest;
     private boolean skillRefreshFailed;
     private CompletableFuture<Void> resourceRefresh = CompletableFuture.completedFuture(null);
     private String modelConfigurationError;
@@ -80,13 +84,21 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             IPiModelConfiguration modelConfiguration,
             Runnable refreshToolAccess) {
         this(sessionId, session, process, rpc, eventConverter, eventSink, objectMapper,
-                closeHook, modelConfiguration, refreshToolAccess, null);
+                closeHook, modelConfiguration, refreshToolAccess, null, null);
     }
 
     AgentRuntimeSessionHandleImpl(String sessionId, AgentRuntimeSessionRef session, PiProcessHandle process,
             IPiRpcTransport rpc, PiEventConverter eventConverter, IAgentRuntimeEventSink eventSink,
             ObjectMapper objectMapper, Runnable closeHook, IPiModelConfiguration modelConfiguration,
             Runnable refreshToolAccess, PiSkillConfiguration skillConfiguration) {
+        this(sessionId, session, process, rpc, eventConverter, eventSink, objectMapper, closeHook,
+                modelConfiguration, refreshToolAccess, skillConfiguration, null);
+    }
+
+    AgentRuntimeSessionHandleImpl(String sessionId, AgentRuntimeSessionRef session, PiProcessHandle process,
+            IPiRpcTransport rpc, PiEventConverter eventConverter, IAgentRuntimeEventSink eventSink,
+            ObjectMapper objectMapper, Runnable closeHook, IPiModelConfiguration modelConfiguration,
+            Runnable refreshToolAccess, PiSkillConfiguration skillConfiguration, Path extension) {
         this.sessionId = sessionId;
         this.session = session;
         this.process = process;
@@ -98,6 +110,8 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
         this.modelConfiguration = modelConfiguration;
         this.refreshToolAccess = refreshToolAccess;
         this.skillConfiguration = skillConfiguration;
+        this.extension = extension;
+        this.extensionDigest = extension == null ? null : PiSessionLauncherImpl.digest(extension);
         rpc.termination().whenComplete((ignored, error) -> runtimeTerminated(error));
     }
 
@@ -266,6 +280,16 @@ public class AgentRuntimeSessionHandleImpl implements IAgentRuntimeSessionHandle
             finish(skillRefreshFailed ? AgentRuntimeHealth.FAILED : AgentRuntimeHealth.READY);
         }
         return event;
+    }
+
+    @Override
+    public boolean needsRestart() {
+        if (extensionDigest == null) return false;
+        String packaged = PiSessionLauncherImpl.extensionDigest();
+        String current = PiSessionLauncherImpl.digest(extension);
+        if (packaged == null || current == null) return false;
+        // Either the packaged extension was updated or this session's copy changed on disk.
+        return !extensionDigest.equals(packaged) || !extensionDigest.equals(current);
     }
 
     @Override

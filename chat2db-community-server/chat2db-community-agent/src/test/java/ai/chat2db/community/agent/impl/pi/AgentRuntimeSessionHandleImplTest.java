@@ -45,6 +45,25 @@ class AgentRuntimeSessionHandleImplTest {
             });
 
     @Test
+    void aProcessStartedWithAnotherExtensionIsStale() throws Exception {
+        java.nio.file.Path changed = java.nio.file.Files.createTempFile("chat2db-tools", ".mjs");
+        java.nio.file.Files.writeString(changed, "// rebuilt extension\n");
+        assertEquals(false, handle.needsRestart(), "the packaged extension is the current one");
+
+        var stale = new AgentRuntimeSessionHandleImpl("session", new AgentRuntimeSessionRef("external", "resume"),
+                new PiProcessHandle("session", new FakeProcess()), transport, new PiEventConverter(), events::add,
+                objectMapper, () -> { }, new IPiModelConfiguration() {
+                    @Override public AgentModelAccess prepare(AgentModelSnapshot model) {
+                        return new AgentModelAccess("chat2db", model.modelId(), "openai-responses",
+                                "http://127.0.0.1/v1", "ticket");
+                    }
+                    @Override public void close() { }
+                }, () -> { }, null, changed);
+
+        assertEquals(true, stale.needsRestart(), "a rebuilt extension needs a fresh runtime process");
+    }
+
+    @Test
     void startsStreamsCompletesAndSnapshots() throws Exception {
         var start = handle.startRun(runRequest());
         assertEquals("prompt", transport.command);

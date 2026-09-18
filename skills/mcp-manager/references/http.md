@@ -29,6 +29,11 @@ An HTTP server is a remote endpoint that speaks MCP over streamable HTTP. Chat2D
 }
 ```
 
+## Calling the tools
+
+As with stdio servers, each tool is callable as `mcp__<server>__<tool>`; use the `callName` reported
+by the tools rather than the server's own label.
+
 ## Authentication that is not supported yet
 
 Servers that require an interactive OAuth login (a browser round trip, a device code, or dynamic client registration) cannot be connected in this version. Tell the user that plainly and offer a token- or API-key-based server instead; do not try to build the OAuth flow yourself.

@@ -56,11 +56,21 @@ const imports = {
 };
 const catalogCalls = [];
 let catalogFailure = false;
+// The backend catalogue grows while the session is open, exactly like adding an MCP server does.
+const catalogDefinitions = [
+  { name: "db_query", group: "db", defaultActive: true },
+  { name: "mcp_list_servers", group: "mcp-manage", defaultActive: false },
+];
+const activatedNames = ["read", "grep"];
+let lateToolAdded = false;
 const context = vm.createContext({ process: { env: { PI_CODING_AGENT_DIR: "/fixture" }, cwd: () => "/fixture", platform: "linux" }, AbortController, AbortSignal,
   fetch: async (url, options) => {
     catalogCalls.push({ url, options });
     if (catalogFailure) throw new Error("catalog unavailable");
-    return { ok: true, status: 200, json: async () => ["read", "grep"] };
+    if (url.endsWith("/definitions")) {
+      return { ok: true, status: 200, json: async () => [...catalogDefinitions] };
+    }
+    return { ok: true, status: 200, json: async () => [...activatedNames] };
   },
 });
 const module = new vm.SourceTextModule(readFileSync(new URL("../../main/resources/agent/chat2db-tools.mjs", import.meta.url), "utf8"), { context });
@@ -78,7 +88,8 @@ module.namespace.default({ registerCommand: (name, command) => registeredCommand
   on: (name, handler) => listeners.set(name, handler) });
 await new Promise(resolve => setImmediate(resolve));
 // The backend catalogue decides the first active set; inactive groups wait for tool_search.
-assert.equal(catalogCalls.length, 1);
+assert.equal(catalogCalls.length, 2, "the definitions and the active names are read once each");
+assert.ok(catalogCalls[0].url.endsWith("/definitions"));
 assert.deepEqual([...activeTools].sort(), ["grep", "read", "tool_search"]);
 const search = await registered.get("tool_search").execute("search", { query: "mcp server" });
 assert.deepEqual([...search.details.added], ["mcp_list_servers"]);
@@ -118,18 +129,25 @@ let modelRefreshes = 0;
 const runtime = { modelRegistry: { refresh: async () => { modelRefreshes++; } } };
 await refresh("", runtime);
 assert.equal(modelRefreshes, 1);
-assert.equal(catalogCalls.length, 2);
+assert.equal(catalogCalls.length, 4, "the refresh re-reads definitions and names");
 assert.equal(catalogCalls.at(-1).options.headers.Authorization, "Bearer renewed-ticket");
 assert.ok(catalogCalls.at(-1).options.signal instanceof AbortSignal);
 assert.deepEqual([...activeTools].sort(), ["grep", "mcp_list_servers", "read", "tool_search"]);
 catalogFailure = true;
 await assert.rejects(refresh("", runtime), /catalog unavailable/);
-assert.equal(catalogCalls.length, 3);
+assert.equal(catalogCalls.length, 5);
 ticket = "fixture";
+catalogFailure = false;
 listeners.get("before_agent_start")();
 await registered.get("bash").execute("shell-call", { command: "fixture", description: "Next run" });
 assert.equal(commands, 2);
+// A server is added during the conversation: its tool appears in the catalogue from the next step on.
+catalogDefinitions.push({ name: "mcp__fixture__echo", group: "mcp-server:fixture", defaultActive: true });
+activatedNames.push("mcp__fixture__echo");
+lateToolAdded = true;
 listeners.get("agent_end")();
-await new Promise(resolve => setImmediate(resolve));
-assert.equal(catalogCalls.length, 4, "the end of a run re-reads the catalogue for tools added meanwhile");
-console.log("Managed output routing, per-run replay isolation, tool activation and ticket refresh handshake passed");
+await new Promise(resolve => setTimeout(resolve, 20));
+assert.ok(registered.has("mcp__fixture__echo"), "a tool that appeared later must be registered");
+assert.ok(activeTools.includes("mcp__fixture__echo"), "and it must be active for the next step");
+assert.ok(catalogCalls.some(call => call.url.endsWith("/definitions")), "definitions are re-read, not only names");
+console.log("Managed output routing, per-run replay isolation, tool activation, late MCP tools and ticket refresh handshake passed");
