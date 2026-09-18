@@ -17,6 +17,15 @@ export interface AgentApprovalItem {
   status: 'pending' | 'approved' | 'denied' | 'closed';
 }
 
+/** The label an approval card shows for the tool that asked for permission. */
+export const approvalToolLabel = (toolName: unknown): string => {
+  if (typeof toolName !== 'string' || !toolName) return 'Bash';
+  if (toolName === 'db_query') return 'SQL';
+  if (toolName === 'powershell') return 'PowerShell';
+  if (toolName === 'bash') return 'Bash';
+  return toolName;
+};
+
 export const updateAgentApprovals = (
   current: AgentApprovalItem[], events: AgentEvent[],
 ): AgentApprovalItem[] => {
@@ -30,7 +39,9 @@ export const updateAgentApprovals = (
       approvals.set(approvalId, {
         id: approvalId, sessionId: event.sessionId, runId: event.runId, command,
         workingDirectory: typeof workingDirectory === 'string' ? workingDirectory : '',
-        toolName: toolName === 'db_query' ? 'SQL' : toolName === 'powershell' ? 'PowerShell' : 'Bash',
+        // Only the known shell and SQL tools get a friendly label; anything else (an MCP tool,
+        // for example) keeps its own name so the card says what it will actually do.
+        toolName: approvalToolLabel(toolName),
         ...(toolName === 'db_query' && typeof dataSourceId === 'string' ? { databaseTarget: {
           dataSourceId,
           dataSourceName: typeof dataSourceName === 'string' ? dataSourceName : dataSourceId,

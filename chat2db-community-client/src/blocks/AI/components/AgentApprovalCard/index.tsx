@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Dropdown } from 'antd';
-import { ChevronDown, Database, Terminal } from 'lucide-react';
+import { ChevronDown, Database, Plug, Terminal } from 'lucide-react';
 import i18n from '@/i18n';
 import { AgentApprovalDecision, AgentApprovalItem, agentErrorText } from '../../agentEvents';
 import { useStyles } from './style';
@@ -14,6 +14,9 @@ export default function AgentApprovalCard({ approval, onDecide }: {
   const [error, setError] = useState('');
   const pending = approval.status === 'pending';
   const target = approval.databaseTarget;
+  // Only an external MCP tool can be remembered; shell and configuration approvals ask again.
+  const rememberable = approval.toolName.startsWith('mcp__');
+  const Icon = target ? Database : /^(Bash|PowerShell)$/.test(approval.toolName) ? Terminal : Plug;
   const decide = async (decision: AgentApprovalDecision) => {
     if (submitting || !pending) return;
     setSubmitting(decision === 'DENY' ? 'deny' : 'approve');
@@ -29,7 +32,7 @@ export default function AgentApprovalCard({ approval, onDecide }: {
 
   return <section className={styles.card} aria-label={i18n('stream.approval.title')}>
     <div className={styles.header}>
-      {target ? <Database size={16} aria-hidden="true" /> : <Terminal size={16} aria-hidden="true" />}
+      <Icon size={16} aria-hidden="true" />
       <strong>{approval.toolName}</strong>
       <span className={styles.status} role="status">{i18n(`stream.approval.${approval.status}`)}</span>
     </div>
@@ -56,21 +59,23 @@ export default function AgentApprovalCard({ approval, onDecide }: {
           <Button size="small" type="primary" disabled={!!submitting} loading={submitting === 'approve'}
             onClick={() => void decide('ALLOW_ONCE')}
           >{i18n('stream.approval.approve')}</Button>
-          <Dropdown
-            trigger={['click']}
-            disabled={!!submitting}
-            menu={{
-              items: [
-                { key: 'ALLOW_TOOL', label: i18n('stream.approval.allowTool') },
-                { key: 'ALLOW_SERVER', label: i18n('stream.approval.allowServer') },
-              ],
-              onClick: ({ key }) => void decide(key as AgentApprovalDecision),
-            }}
-          >
-            <Button size="small" disabled={!!submitting} aria-label={i18n('stream.approval.allowMore')}>
-              <ChevronDown size={14} />
-            </Button>
-          </Dropdown>
+          {rememberable && (
+            <Dropdown
+              trigger={['click']}
+              disabled={!!submitting}
+              menu={{
+                items: [
+                  { key: 'ALLOW_TOOL', label: i18n('stream.approval.allowTool') },
+                  { key: 'ALLOW_SERVER', label: i18n('stream.approval.allowServer') },
+                ],
+                onClick: ({ key }) => void decide(key as AgentApprovalDecision),
+              }}
+            >
+              <Button size="small" disabled={!!submitting} aria-label={i18n('stream.approval.allowMore')}>
+                <ChevronDown size={14} />
+              </Button>
+            </Dropdown>
+          )}
         </div>
       </div>
       {error && <div className={styles.error} role="alert">{error}</div>}
