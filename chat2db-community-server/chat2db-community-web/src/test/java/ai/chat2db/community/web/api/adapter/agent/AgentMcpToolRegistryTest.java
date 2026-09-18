@@ -30,6 +30,16 @@ class AgentMcpToolRegistryTest {
         }
         assertTrue(registry.contains(AgentMcpToolRegistry.ADD));
         assertFalse(registry.contains("mcp_unknown_tool"));
+        for (var tool : registry.definitions()) {
+            Map<?, ?> schema = (Map<?, ?>) tool.parameters();
+            Map<?, ?> properties = (Map<?, ?>) schema.get("properties");
+            assertFalse(properties.containsKey("properties"), tool.name() + " must not nest a second schema");
+            for (var entry : properties.entrySet()) {
+                assertTrue(entry.getValue() instanceof Map, tool.name() + "." + entry.getKey()
+                        + " must be a schema object, not a bare value");
+            }
+            assertTrue(schema.get("additionalProperties") instanceof Boolean, tool.name());
+        }
     }
 
     @Test

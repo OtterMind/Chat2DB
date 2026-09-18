@@ -133,11 +133,18 @@ export default function (pi) {
   }
   const activatedBySearch = new Set();
   // Declared as a function so the model-refresh command registered earlier can call it at runtime.
+  // Activating a tool the runtime does not know must never take the whole session down, so every
+  // failure here is reported and swallowed.
   function applyActiveTools(names) {
-    const active = new Set(names);
-    active.add(TOOL_SEARCH);
-    for (const name of activatedBySearch) active.add(name);
-    pi.setActiveTools([...active]);
+    try {
+      const known = new Set(pi.getAllTools?.().map(tool => tool.name) ?? []);
+      const active = new Set(names.filter(name => known.size === 0 || known.has(name)));
+      active.add(TOOL_SEARCH);
+      for (const name of activatedBySearch) active.add(name);
+      pi.setActiveTools([...active]);
+    } catch (error) {
+      process.stderr.write("chat2db: could not apply the active tool set: " + error + "\n");
+    }
   }
   const refreshActiveTools = async () => {
     const active = await request("/catalog", { signal: AbortSignal.timeout(10000) });
@@ -287,13 +294,14 @@ export default function (pi) {
   const nativeNames = Object.keys(factories);
   const fallbackActive = () => [...access.tools.filter(tool => tool.defaultActive !== false).map(tool => tool.name),
     ...nativeNames];
-  pi.on("session_start", () => {
-    void refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
-  });
+  const refreshOrFallback = () => {
+    refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
+  };
+  pi.on("session_start", refreshOrFallback);
   // A server added mid-conversation contributes its tools from the next step on.
   pi.on("agent_end", () => {
-    void refreshActiveTools().catch(() => {});
+    refreshActiveTools().catch(() => {});
   });
-  void refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
+  refreshOrFallback();
 
 }

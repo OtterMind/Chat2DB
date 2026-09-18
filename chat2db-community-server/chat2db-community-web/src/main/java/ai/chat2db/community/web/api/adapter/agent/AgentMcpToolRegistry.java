@@ -67,7 +67,7 @@ public class AgentMcpToolRegistry {
                 + "omitting a field keeps its current value. Changing the command, url, arguments, environment variable "
                 + "names or header names invalidates the previous approval, so the user is asked again. The user is asked "
                 + "to approve this change first.",
-                schema(withRequired(Map.of(
+                schema(Map.of(
                         "name", text("Name of the server to change."),
                         "transport", enumOf("stdio", "http", "Switch the transport."),
                         "command", text("New executable for a stdio server."),
@@ -78,7 +78,7 @@ public class AgentMcpToolRegistry {
                         "secrets", secrets("Values to set. A blank value removes that entry."),
                         "enabled", bool("Enable or disable the server."),
                         "policy", enumOf("ASK", "ALLOW", "Whether the server's tools ask before running.")),
-                        List.of("name")), List.of("name"))));
+                        List.of("name"))));
         definitions.put(REMOVE, definition(REMOVE, "Remove an MCP server and stop it. Its tools disappear from the "
                 + "conversation. The user is asked to approve this change first.",
                 schema(Map.of("name", text("Name of the server to remove.")), List.of("name"))));
@@ -90,11 +90,11 @@ public class AgentMcpToolRegistry {
                 + "tools the user allowed earlier. Pass policy ALLOW to stop asking for the whole server, or policy "
                 + "ASK with allowed_tools to keep only the listed tools approved. The user is asked to approve this "
                 + "change first.",
-                schema(withRequired(Map.of(
+                schema(Map.of(
                         "name", text("Name of the server to change."),
                         "policy", enumOf("ASK", "ALLOW", "Approval policy for every tool of this server."),
                         "allowed_tools", stringList("Exact tool names that stay approved without asking. Pass an empty list to ask for every tool again.")),
-                        List.of("name")), List.of("name"))));
+                        List.of("name"))));
     }
 
     public List<AgentToolAccess.Tool> definitions() {
@@ -305,10 +305,6 @@ public class AgentMcpToolRegistry {
         if (!required.isEmpty()) schema.put("required", required);
         schema.put("additionalProperties", false);
         return schema;
-    }
-
-    private static Map<String, Object> withRequired(Map<String, Object> properties, List<String> required) {
-        return schema(properties, required);
     }
 
     private static Map<String, Object> text(String description) {

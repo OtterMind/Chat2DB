@@ -177,7 +177,8 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         Access access = requireAccess(ticket, address);
         AgentRun run = activeRun(access);
         if (!tools.names().contains(toolName) && !AgentQuestionTool.NAME.equals(toolName)
-                && !AgentChartTool.NAME.equals(toolName) && !isFileTool(toolName) && !mcp.contains(toolName)) {
+                && !AgentChartTool.NAME.equals(toolName) && !isFileTool(toolName) && !mcp.contains(toolName)
+                && !toolName.startsWith(AgentMcpTools.PREFIX)) {
             return tools.execute(toolName, arguments);
         }
         String body = json.writeValueAsString(arguments);
@@ -209,7 +210,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 ContextUtils.setContext(access.context);
                 AgentToolExecutionContext executionContext = new AgentToolExecutionContext(access.sessionId, run.id(),
                         toolCallId, access.userId, access.sink, () -> isActive(access, run.id()));
-                result = mcp.contains(toolName)
+                result = mcp.contains(toolName) || toolName.startsWith(AgentMcpTools.PREFIX)
                         ? executeMcpTool(access, run, toolCallId, toolName, arguments)
                         : switch (toolName) {
                             case AgentQuestionTool.NAME -> questionTool.execute(access.sessionId, run.id(), toolCallId,
@@ -484,17 +485,22 @@ public class AgentToolGatewayService implements AgentToolAccessService {
             Map<String, Object> arguments) throws NoSuchAlgorithmException {
         AgentMcpTools.Resolved external = AgentMcpTools.resolve(mcpServers.enabledServers(), toolName);
         if (external != null) return callExternalTool(access, run, toolCallId, external, arguments);
-        boolean write = !AgentMcpToolRegistry.LIST.equals(toolName) && !AgentMcpToolRegistry.TEST.equals(toolName);
-        if (write) {
-            awaitMcpApproval(access, run, toolCallId, toolName, mcpSummary(toolName, arguments));
-            if (AgentMcpToolRegistry.ADD.equals(toolName) || AgentMcpToolRegistry.UPDATE.equals(toolName)) {
-                approveLaunchedCommand(arguments);
-            }
+        if (toolName.startsWith(AgentMcpTools.PREFIX)) {
+            return AgentMcpResponse.failure("MCP_SERVER_UNAVAILABLE", "toolName",
+                    "That MCP tool is not available. The server may be disabled or removed; call mcp_list_servers "
+                            + "to see the configured servers.");
         }
+        boolean write = !AgentMcpToolRegistry.LIST.equals(toolName) && !AgentMcpToolRegistry.TEST.equals(toolName);
+        if (write) awaitMcpApproval(access, run, toolCallId, toolName, mcpSummary(toolName, arguments));
         if (AgentMcpToolRegistry.TEST.equals(toolName)) {
             requireCommandApproval(access, run, toolCallId, string(arguments.get("name")));
         }
-        return mcp.execute(toolName, arguments);
+        IAgentToolResult<?> result = mcp.execute(toolName, arguments);
+        // The card showed this exact launch line, so recording it now keeps the next test call quiet.
+        if (result.ok() && (AgentMcpToolRegistry.ADD.equals(toolName) || AgentMcpToolRegistry.UPDATE.equals(toolName))) {
+            approveLaunchedCommand(arguments);
+        }
+        return result;
     }
 
     /** The configuration change was approved, so its launch line is approved as well. */
