@@ -1,7 +1,6 @@
 export default {
   'setting.agent.workingDirectory.serverHint': 'Pi が動作するサーバー上のディレクトリパスを入力してください。',
   "setting.agent.tools.userFilesHint": "以下のスイッチは作業ディレクトリへのアクセスを制御します。ユーザースキルは常に読み書きでき、システムの結果、内蔵スキル、実行時スナップショットは読み取り専用です。Bash/PowerShell コマンドには引き続き承認が必要です。",
-  'setting.modelConfig.agentApi': 'Agent API プロトコル',
   "setting.agent.tool.enable": "有効にする",
   "setting.agent.workingDirectory.choose": "フォルダーを選択",
   "setting.agent.tools.title": "Pi Agent のツール",

@@ -298,16 +298,6 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
                 onChange={handleProviderChange}
               />
             </Form.Item>
-            <Form.Item name="agentApi" label={i18n('setting.modelConfig.agentApi')}>
-              <Select
-                options={[
-                  { label: 'OpenAI Chat Completions', value: 'openai-completions' },
-                  { label: 'OpenAI Responses', value: 'openai-responses' },
-                  { label: 'Anthropic Messages', value: 'anthropic-messages' },
-                  { label: 'Google Generative AI', value: 'google-generative-ai' },
-                ]}
-              />
-            </Form.Item>
             <Form.Item
               name="model"
               label={i18n('setting.modelConfig.model')}

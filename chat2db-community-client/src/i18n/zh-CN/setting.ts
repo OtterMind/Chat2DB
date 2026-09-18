@@ -1,7 +1,6 @@
 export default {
   'setting.agent.workingDirectory.serverHint': '输入运行 Pi 的服务器上的目录路径。',
   "setting.agent.tools.userFilesHint": "以下开关控制工作目录的访问。用户技能目录始终可读写；系统结果、内置技能及运行快照只读。Bash/PowerShell 命令仍需审批。",
-  'setting.modelConfig.agentApi': 'Agent API 协议',
   "setting.agent.tool.enable": "启用",
   "setting.agent.workingDirectory.choose": "选择文件夹",
   "setting.agent.tools.title": "Pi Agent 工具",
