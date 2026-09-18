@@ -585,9 +585,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [prependCount, setPrependCount] = useState(0);
   const loadEarlierRef = useRef<() => void>(() => {});
   const historyLoadingRef = useRef(false);
-  const pendingHistoryAnchorRef = useRef<number | null>(null);
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const historyEventsRef = useRef<AgentEvent[]>([]);
   const historyWindowRef = useRef(INITIAL_AGENT_HISTORY_EVENTS);
   const canLoadEarlierRef = useRef(true);
@@ -1771,72 +1772,71 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     [pollAgentRun, setSelectedModel, stop, stopAgentPolling],
   );
 
-  /** Prepends the previous stretch of a long conversation without disturbing the live view. */
+  /**
+   * Loads the stretch before the oldest loaded event and prepends it. It never rebuilds the visible
+   * rounds and never touches streaming state, so it also works while a run is streaming.
+   */
   const handleLoadEarlierHistory = useCallback(async () => {
     const sessionId = currentSessionIdRef.current;
     const loaded = historyEventsRef.current;
     const operation = agentOperationRef.current;
     const oldest = loaded.length ? loaded[0].sequence : 0;
-    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1 || agentRunning) return;
+    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1) return;
     historyLoadingRef.current = true;
     canLoadEarlierRef.current = false;
     setLoadingEarlier(true);
     const container = messageListRef.current;
-    // Keep the reading position while the older stretch is inserted above it.
-    pendingHistoryAnchorRef.current = container ? container.scrollHeight - container.scrollTop : null;
+    prependAnchorRef.current = container ? { height: container.scrollHeight, top: container.scrollTop } : null;
     try {
       const earlier = await readAgentHistory(pi.events.list, sessionId, operation.controller.signal, {
         fromSequence: Math.max(0, oldest - historyWindowRef.current),
         maxEvents: historyWindowRef.current,
         alignToRunStart: true,
       });
-      if (operation.controller.signal.aborted || earlier.length === 0) {
-        if (earlier.length === 0) setHasOlderHistory(false);
+      if (operation.controller.signal.aborted) return;
+      if (earlier.length === 0) {
+        setHasOlderHistory(false);
         return;
       }
-      const merged = mergeAgentEvents(earlier, loaded);
-      historyEventsRef.current = merged;
-      const transcript = buildAgentTranscript(merged);
-      const visible = transcript.filter((message) => message.status || message.content || message.traceEntries.length
-        || message.timeline?.length);
-      const activeRunId = activeAgentRunId(merged);
-      const activeReply = activeRunId
-        ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId) : undefined;
-      const restored = visible.filter((item) => item !== activeReply);
-      setMessages(restored);
-      messagesRef.current = restored;
-      setAgentCharts(updateAgentCharts([], merged));
-      setHasOlderHistory((merged[0]?.sequence ?? 1) > 1);
-      traceAgentStage('history.prepended', { sessionId, total: merged.length });
+      historyEventsRef.current = mergeAgentEvents(earlier, loaded);
+      const older = buildAgentTranscript(earlier).filter((message) => message.status || message.content
+        || message.traceEntries.length || message.timeline?.length);
+      setMessages((current) => {
+        const prepended = [...older.filter((message) => !current.some((item) => item.id === message.id)), ...current];
+        messagesRef.current = prepended;
+        return prepended;
+      });
+      setAgentCharts(updateAgentCharts([], historyEventsRef.current));
+      setHasOlderHistory((historyEventsRef.current[0]?.sequence ?? 1) > 1);
+      setPrependCount((count) => count + 1);
+      traceAgentStage('history.prepended', { sessionId, events: earlier.length, total: historyEventsRef.current.length });
     } catch (error) {
       if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
     } finally {
       historyLoadingRef.current = false;
       setLoadingEarlier(false);
+      // Never leave the scroll trigger latched, even when no prepend changed the list.
+      window.setTimeout(() => { canLoadEarlierRef.current = true; }, PROGRAMMATIC_SCROLL_LOCK_MS);
     }
-  }, [setSelectedModel]);
+  }, []);
 
   useEffect(() => {
     loadEarlierRef.current = () => {
-      // While a run streams, new events keep arriving: rebuilding the list here fights the live view.
-      if (hasOlderHistory && !sessionLoading && !agentRunning) void handleLoadEarlierHistory();
+      if (hasOlderHistory && !sessionLoading) void handleLoadEarlierHistory();
     };
-  }, [agentRunning, handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
+  }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
 
+  // Restores the reading position after older rounds were inserted above it.
   React.useLayoutEffect(() => {
-    const anchor = pendingHistoryAnchorRef.current;
-    if (anchor === null) return;
-    pendingHistoryAnchorRef.current = null;
+    const anchor = prependAnchorRef.current;
+    if (!anchor) return;
+    prependAnchorRef.current = null;
     const container = messageListRef.current;
     if (!container) return;
     suppressScrollTrackingRef.current = true;
-    container.scrollTop = Math.max(0, container.scrollHeight - anchor);
-    window.setTimeout(() => {
-      suppressScrollTrackingRef.current = false;
-      // Only a fresh scroll gesture may request the next stretch.
-      canLoadEarlierRef.current = true;
-    }, PROGRAMMATIC_SCROLL_LOCK_MS);
-  }, [messages]);
+    container.scrollTop = Math.max(0, anchor.top + (container.scrollHeight - anchor.height));
+    window.setTimeout(() => { suppressScrollTrackingRef.current = false; }, PROGRAMMATIC_SCROLL_LOCK_MS);
+  }, [prependCount]);
 
   // Restore the conversation from the path when first opening /stream/:chatId.
 
@@ -2440,7 +2440,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
     return (
       <>
-        {hasOlderHistory && !agentRunning && (
+        {hasOlderHistory && (
           <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
             onClick={() => void handleLoadEarlierHistory()}
           >
