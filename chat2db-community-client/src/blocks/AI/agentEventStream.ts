@@ -6,6 +6,11 @@ export type ReadAgentEvents = (query: EventQuery, options: { signal: AbortSignal
 const PAGE_SIZE = 200;
 const READ_TIMEOUT_MS = 15_000;
 const MAX_RETRY_DELAY_MS = 10_000;
+const MAX_RECONNECT_ATTEMPTS = 8;
+
+/** A business error repeats identically, so only transport-shaped failures are worth retrying. */
+const isPermanentReadError = (error: unknown) =>
+  typeof error === 'object' && error !== null && Boolean((error as { errorCode?: unknown }).errorCode);
 
 export const traceAgentStage = (stage: string, fields: Record<string, unknown>) => {
   console.debug('[AgentTrace] ' + JSON.stringify({ stage, ...fields }));
@@ -19,6 +24,7 @@ export const activeAgentRunId = (events: AgentEvent[]) => {
 
 async function readEventPage(read: ReadAgentEvents, query: EventQuery, signal: AbortSignal, reconnect = false) {
   let retryDelay = 1_000;
+  let attempt = 0;
   while (!signal.aborted) {
     const controller = new AbortController();
     const abort = () => controller.abort(signal.reason);
@@ -35,8 +41,9 @@ async function readEventPage(read: ReadAgentEvents, query: EventQuery, signal: A
       return await Promise.race([read({ ...query }, { signal: controller.signal }), aborted]);
     } catch (error) {
       if (signal.aborted) return [];
-      if (!reconnect) throw error;
-      traceAgentStage('events.reconnecting', { sessionId: query.sessionId, afterSequence: query.afterSequence, retryDelay });
+      // Bounded reconnects: a failure that never heals must reach the caller so the run can end visibly.
+      if (!reconnect || ++attempt > MAX_RECONNECT_ATTEMPTS || isPermanentReadError(error)) throw error;
+      traceAgentStage('events.reconnecting', { sessionId: query.sessionId, afterSequence: query.afterSequence, retryDelay, attempt });
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);

@@ -120,6 +120,7 @@ export default {
   'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': 'Analizando archivos...',
   'stream.attachment.parseFailed': 'No se pudo analizar el archivo. Compruebe el formato o el contenido.',
+  'stream.attachment.piUnsupported': 'Las conversaciones de Pi aún no admiten archivos adjuntos. Quite el archivo y pregunte por texto.',
   'stream.attachment.partialFailed': 'No se pudieron analizar algunos archivos. Se analizaron correctamente {1} archivo(s).',
   'stream.attachment.added': 'Se añadieron {1} archivo(s).',
   'stream.source.files': 'Archivos',

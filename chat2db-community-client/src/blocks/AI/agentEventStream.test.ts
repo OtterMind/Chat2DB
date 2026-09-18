@@ -98,6 +98,27 @@ async function main() {
     await reconnecting;
     mock.timers.tick(60_000);
     assert.equal(cancelledAttempts, 1, 'leaving a session cancels pending retries');
+
+    let permanentAttempts = 0;
+    const permanent = followAgentRun(async () => {
+      permanentAttempts += 1;
+      throw Object.assign(new Error('business failure'), { errorCode: 'pi.invalidResponse' });
+    }, 'session', 'run', 0, new AbortController().signal, () => assert.fail('a failed observer must not deliver events'));
+    await assert.rejects(permanent, /business failure/, 'a business error must reach the caller without retrying');
+    assert.equal(permanentAttempts, 1);
+
+    let boundedAttempts = 0;
+    const bounded = followAgentRun(async () => {
+      boundedAttempts += 1;
+      throw new TypeError('offline');
+    }, 'session', 'run', 0, new AbortController().signal, () => assert.fail('a failed observer must not deliver events'));
+    const boundedFailure = bounded.then(() => undefined, (error: unknown) => error);
+    for (let tick = 0; tick < 12; tick += 1) {
+      mock.timers.tick(10_000);
+      await setImmediate();
+    }
+    assert.match(String(await boundedFailure), /offline/, 'reconnects must stop once the attempt budget is spent');
+    assert.equal(boundedAttempts, 9, 'one initial read plus the bounded reconnects');
   } finally {
     mock.timers.reset();
   }

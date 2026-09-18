@@ -594,6 +594,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
   );
   const [runtimeSwitching, setRuntimeSwitching] = useState(false);
+  const unmountedRef = useRef(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
@@ -1144,6 +1145,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
       if (streamThoughtPulseTimerRef.current !== null) {
         window.clearTimeout(streamThoughtPulseTimerRef.current);
         streamThoughtPulseTimerRef.current = null;
@@ -2460,10 +2462,15 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         state = result.state;
         if (result.taskId) {
           void useImportExportStore.getState().getTaskList();
+          const deadline = Date.now() + 5 * 60 * 1000;
           let task = await importExportService.getTaskDetails({ taskId: result.taskId });
-          while (task && ['PENDING', 'RUNNING'].includes(task.status)) {
+          while (task && ['PENDING', 'RUNNING'].includes(task.status) && Date.now() < deadline && !unmountedRef.current) {
             await new Promise((resolve) => window.setTimeout(resolve, 1000));
             task = await importExportService.getTaskDetails({ taskId: result.taskId });
+          }
+          if (task && ['PENDING', 'RUNNING'].includes(task.status)) {
+            feedback.error(task.errorMessage || i18n('setting.agent.enableFailed'));
+            return;
           }
           if (task?.status !== 'SUCCESS') {
             feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));

@@ -487,6 +487,12 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         return;
       }
 
+      if (runtimeChoice === 'PI') {
+        // Backstop for every selection path: Pi runs never carry attachments.
+        feedback.error(i18n('stream.attachment.piUnsupported'));
+        return;
+      }
+
       setAttachmentLoading(true);
       feedback.loading({
         content: i18n('stream.attachment.parsing'),
@@ -573,10 +579,8 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
     }
 
     if (runtimeChoice === 'PI') {
-      void pi.host.selectFiles(ATTACHMENT_FILE_TYPES).then(parseSelectedFiles)
-        .catch(() => {
-          feedback.error(i18n('stream.attachment.parseFailed'));
-        });
+      // Pi runs do not carry attachments, so refuse the selection instead of dropping the file silently.
+      feedback.error(i18n('stream.attachment.piUnsupported'));
       return;
     }
 

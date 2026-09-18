@@ -120,6 +120,7 @@ export default {
   'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': 'ファイルを解析中...',
   'stream.attachment.parseFailed': 'ファイル解析に失敗しました。形式または内容を確認してください。',
+  'stream.attachment.piUnsupported': 'Pi の会話は添付ファイルに未対応です。ファイルを外してテキストで質問してください。',
   'stream.attachment.partialFailed': '一部のファイル解析に失敗しました。{1} 件のファイルを解析しました。',
   'stream.attachment.added': '{1} 件のファイルを追加しました。',
   'stream.source.files': 'Files',

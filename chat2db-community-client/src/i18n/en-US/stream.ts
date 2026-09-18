@@ -120,6 +120,7 @@ export default {
   'stream.trace.duration': '{1}ms',
   'stream.attachment.parsing': 'Parsing files...',
   'stream.attachment.parseFailed': 'Failed to parse file. Please check the file format or content.',
+  'stream.attachment.piUnsupported': 'Pi conversations do not support attachments yet. Remove the file and ask in text.',
   'stream.attachment.partialFailed': 'Some files failed to parse. Successfully parsed {1} file(s).',
   'stream.attachment.added': 'Added {1} file(s).',
   'stream.source.files': 'Files',
