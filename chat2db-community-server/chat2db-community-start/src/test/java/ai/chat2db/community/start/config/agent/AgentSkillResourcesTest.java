@@ -25,7 +25,8 @@ class AgentSkillResourcesTest {
             thread.setContextClassLoader(desktopLoader);
             assertFalse(new ClassPathResource("skills/catalog.json").exists());
             var skills = new AgentSkillConfiguration().agentSkillService(temporaryDirectory.resolve(".chat2db-skills").toString()).prepare();
-            assertEquals(java.util.List.of("chart", "skill-manager"), skills.stream().map(skill -> skill.name()).toList());
+            assertEquals(java.util.List.of("chart", "skill-manager", "mcp-manager"),
+                    skills.stream().map(skill -> skill.name()).toList());
             Path builtinRoot = Path.of(ai.chat2db.community.tools.util.ConfigUtils.getEnvBasePath())
                     .resolve("storage/agent-v2/skills/builtin").toRealPath();
             for (var skill : skills) {
@@ -55,7 +56,10 @@ class AgentSkillResourcesTest {
                     var resource = catalog.createRelative(name + "/" + path);
                     String text = resource.getContentAsString(StandardCharsets.UTF_8);
                     if (path.equals("SKILL.md")) assertTrue(text.contains("name: " + name + "\n"));
-                    var examples = Pattern.compile("```json\\n(.*?)\\n```", Pattern.DOTALL).matcher(text);
+                    // Only the chart skill documents chart calls; other skills use JSON for their own shapes.
+                    var examples = name.equals("chart")
+                            ? Pattern.compile("```json\\n(.*?)\\n```", Pattern.DOTALL).matcher(text)
+                            : Pattern.compile("(?!)").matcher(text);
                     while (examples.find()) {
                         var call = json.readTree(examples.group(1));
                         String type = call.path("chartType").asText();

@@ -208,7 +208,7 @@ class PiTransportContractTest {
         }
         inputs.put("runs.start", "{\"sessionId\":\"session\",\"message\":\"hello\",\"modelConfigId\":\"model\",\"idempotencyKey\":\"once\"}");
         inputs.put("runs.cancel", "{\"sessionId\":\"session\",\"runId\":\"run\"}");
-        inputs.put("approvals.decide", "{\"sessionId\":\"session\",\"approvalId\":\"approval\",\"approved\":false}");
+        inputs.put("approvals.decide", "{\"sessionId\":\"session\",\"approvalId\":\"approval\",\"decision\":\"DENY\"}");
         inputs.put("questions.answer", "{\"sessionId\":\"session\",\"questionId\":\"question\",\"optionId\":\"all\"}");
         for (String operation : List.of("outputs.read", "outputs.save")) inputs.put(operation, "{\"sessionId\":\"session\",\"artifactId\":\"output\"}");
         inputs.put("outputs.search", "{\"sessionId\":\"session\",\"artifactId\":\"output\",\"pattern\":\"error\",\"literal\":false}");

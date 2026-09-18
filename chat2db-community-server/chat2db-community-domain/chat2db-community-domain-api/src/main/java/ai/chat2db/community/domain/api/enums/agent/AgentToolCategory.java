@@ -4,5 +4,6 @@ public enum AgentToolCategory {
     DATABASE,
     VISUALIZATION,
     BUILTIN,
-    INTERACTION
+    INTERACTION,
+    MCP
 }

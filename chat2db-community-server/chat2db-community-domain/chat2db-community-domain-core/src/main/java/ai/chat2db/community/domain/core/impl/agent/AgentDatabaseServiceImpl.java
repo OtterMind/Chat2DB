@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.domain.api.constant.agent.AgentDatabaseConstant;
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
@@ -240,14 +241,15 @@ public class AgentDatabaseServiceImpl implements AgentDatabaseService {
                 context.toolCallId(), AgentApprovalStatus.PENDING, AgentApprovalScope.ONCE, digest,
                 LocalDateTime.now().plusMinutes(2));
         payload.put("approvalId", approval.id());
-        boolean approved = approvals.awaitDecision(approval, context.userId(), () -> context.eventSink().emit(
+        AgentApprovalDecision decision = approvals.awaitDecision(approval, context.userId(), () -> context.eventSink().emit(
                 new AgentRuntimeEvent(UUID.randomUUID().toString(), context.sessionId(), context.runId(),
                         AgentEventType.APPROVAL_REQUESTED, payload, LocalDateTime.now())), context.active());
         if (context.active().getAsBoolean()) {
             context.eventSink().emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), context.sessionId(), context.runId(),
-                    AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(), "approved", approved), LocalDateTime.now()));
+                    AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(), "approved", decision.allowed()),
+                    LocalDateTime.now()));
         }
-        if (!approved || !context.active().getAsBoolean()) {
+        if (!decision.allowed() || !context.active().getAsBoolean()) {
             throw new AgentDatabaseException("APPROVAL_DENIED", "sql", "SQL execution was not approved or was cancelled. Do not retry without a new user request.", null);
         }
     }

@@ -1,11 +1,15 @@
 package ai.chat2db.community.web.api.adapter.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.enums.agent.AgentRunStatus;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolCategory;
 import ai.chat2db.community.domain.api.enums.agent.AgentToolStatus;
+import ai.chat2db.community.domain.api.enums.agent.McpToolPolicy;
 import ai.chat2db.community.domain.api.model.agent.*;
+import ai.chat2db.community.domain.api.model.agent.mcp.McpServerConfig;
+import ai.chat2db.community.domain.api.model.agent.mcp.McpServerState;
 import ai.chat2db.community.domain.api.model.agent.feature.AgentWorkspaceSettings;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolState;
@@ -53,19 +57,35 @@ public class AgentToolGatewayService implements AgentToolAccessService {
     private final AgentGatewayAddress address;
     private final IAiAgentOutputService outputs;
     private final IAiAgentFileAccessService files;
+    private final AgentMcpToolRegistry mcp;
+    private final IMcpServerService mcpServers;
+    private final ObjectProvider<IMcpToolDiscovery> mcpClient;
 
     @Autowired
     public AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
             IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address,
-            IAiAgentOutputService outputs, ObjectProvider<IAiAgentFileAccessService> files) {
+            IAiAgentOutputService outputs, ObjectProvider<IAiAgentFileAccessService> files, AgentMcpToolRegistry mcp,
+            IMcpServerService mcpServers, ObjectProvider<IMcpToolDiscovery> mcpClient) {
         // The file access service only exists while the Pi runtime is configured; other deployments still start.
         this(tools, questionTool, chartTool, sessions, runs, identity, approvals, workspaces, address, outputs,
-                files.getIfAvailable(() -> FILE_ACCESS_UNAVAILABLE));
+                files.getIfAvailable(() -> FILE_ACCESS_UNAVAILABLE), mcp, mcpServers, mcpClient);
+    }
+
+    /** Keeps deployments and tests that configure no MCP servers working unchanged. */
+    AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
+            IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address,
+            IAiAgentOutputService outputs, IAiAgentFileAccessService files) {
+        this(tools, questionTool, chartTool, sessions, runs, identity, approvals, workspaces, address, outputs, files,
+                new AgentMcpToolRegistry(MCP_UNAVAILABLE), MCP_UNAVAILABLE, provider(null));
     }
 
     AgentToolGatewayService(AgentDatabaseToolRegistry tools, AgentQuestionTool questionTool, AgentChartTool chartTool, AgentSessionStorage sessions, AgentRunStorage runs,
             IIdentityService identity, AgentApprovalService approvals, List<IAiAgentWorkspaceService> workspaces, AgentGatewayAddress address,
-            IAiAgentOutputService outputs, IAiAgentFileAccessService files) {
+            IAiAgentOutputService outputs, IAiAgentFileAccessService files, AgentMcpToolRegistry mcp,
+            IMcpServerService mcpServers, ObjectProvider<IMcpToolDiscovery> mcpClient) {
+        this.mcp = mcp;
+        this.mcpServers = mcpServers;
+        this.mcpClient = mcpClient;
         this.tools = tools;
         this.questionTool = questionTool;
         this.chartTool = chartTool;
@@ -103,6 +123,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         AgentTrace.record("tools.access.issued", sessionId, null, Map.of("userId", userId));
         var definitions = new ArrayList<>(tools.definitions()); definitions.add(questionTool.definition());
         definitions.add(chartTool.definition());
+        // MCP management tools are registered but stay inactive until a model asks for them; the
+        // tools of configured servers follow their enabled state.
+        definitions.addAll(mcp.definitions());
+        definitions.addAll(AgentMcpTools.definitions(mcpServers.enabledServers()));
         return new AgentToolAccess(address.baseUrl() + "/api/v3/ai/agent-tools", ticket, List.copyOf(definitions),
                 files.userSkillDirectory());
     }
@@ -120,6 +144,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         names.add(AgentChartTool.NAME);
         AgentNativeTools.currentPlatform().stream()
                 .filter(name -> isFileReader(name) || skillFileTool(name) || nativeToolEnabled(name)).forEach(names::add);
+        names.addAll(AgentMcpTools.activeNames(mcpServers.enabledServers()));
         return names;
     }
 
@@ -132,6 +157,11 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 AgentToolCategory.INTERACTION, AgentToolStatus.ENABLED));
         catalog.add(new AgentToolState(AgentChartTool.NAME, chartTool.definition().description(),
                 AgentToolCategory.VISUALIZATION, AgentToolStatus.ENABLED));
+        mcp.definitions().forEach(tool -> catalog.add(new AgentToolState(tool.name(), tool.description(),
+                AgentToolCategory.MCP, AgentToolStatus.DISABLED)));
+        AgentMcpTools.definitions(mcpServers.enabledServers()).forEach(tool -> catalog.add(
+                new AgentToolState(tool.name(), tool.description(), AgentToolCategory.MCP,
+                        tool.defaultActive() ? AgentToolStatus.ENABLED : AgentToolStatus.DISABLED)));
         for (String name : AgentNativeTools.currentPlatform()) {
             AgentToolStatus status = workspaces.isEmpty() ? AgentToolStatus.UNAVAILABLE
                     : nativeToolEnabled(name) ? AgentToolStatus.ENABLED : AgentToolStatus.DISABLED;
@@ -147,7 +177,9 @@ public class AgentToolGatewayService implements AgentToolAccessService {
         Access access = requireAccess(ticket, address);
         AgentRun run = activeRun(access);
         if (!tools.names().contains(toolName) && !AgentQuestionTool.NAME.equals(toolName)
-                && !AgentChartTool.NAME.equals(toolName) && !isFileTool(toolName)) return tools.execute(toolName, arguments);
+                && !AgentChartTool.NAME.equals(toolName) && !isFileTool(toolName) && !mcp.contains(toolName)) {
+            return tools.execute(toolName, arguments);
+        }
         String body = json.writeValueAsString(arguments);
         if (body.length() > 64 * 1024) throw new IllegalArgumentException("Tool arguments exceed the size limit");
         String digest = digest(toolName + "\n" + body);
@@ -177,13 +209,15 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 ContextUtils.setContext(access.context);
                 AgentToolExecutionContext executionContext = new AgentToolExecutionContext(access.sessionId, run.id(),
                         toolCallId, access.userId, access.sink, () -> isActive(access, run.id()));
-                result = switch (toolName) {
-                    case AgentQuestionTool.NAME -> questionTool.execute(access.sessionId, run.id(), toolCallId,
-                            access.userId, arguments, access.sink, executionContext.active());
-                    case AgentChartTool.NAME -> chartTool.execute(arguments, executionContext);
-                    case "read", "grep", "ls", "find" -> files.execute(executionContext, toolName, arguments);
-                    default -> tools.execute(toolName, arguments, executionContext);
-                };
+                result = mcp.contains(toolName)
+                        ? executeMcpTool(access, run, toolCallId, toolName, arguments)
+                        : switch (toolName) {
+                            case AgentQuestionTool.NAME -> questionTool.execute(access.sessionId, run.id(), toolCallId,
+                                    access.userId, arguments, access.sink, executionContext.active());
+                            case AgentChartTool.NAME -> chartTool.execute(arguments, executionContext);
+                            case "read", "grep", "ls", "find" -> files.execute(executionContext, toolName, arguments);
+                            default -> tools.execute(toolName, arguments, executionContext);
+                        };
                 if (!isFileTool(toolName)) result = outputs.present(result, executionContext);
             } finally {
                 if (previous == null) ContextUtils.removeContext(); else ContextUtils.setContext(previous);
@@ -235,7 +269,7 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                 AgentApproval approval = new AgentApproval(UUID.randomUUID().toString(), access.sessionId, run.id(),
                         toolCallId, AgentApprovalStatus.PENDING, AgentApprovalScope.ONCE,
                         digest(argumentsDigest + "\n" + cwd), LocalDateTime.now().plusMinutes(2));
-                boolean approved = approvals.awaitDecision(approval, access.userId, () ->
+                AgentApprovalDecision decision = approvals.awaitDecision(approval, access.userId, () ->
                         access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
                                 AgentEventType.APPROVAL_REQUESTED,
                                 Map.of("approvalId", approval.id(), "toolName", toolName,
@@ -243,10 +277,10 @@ public class AgentToolGatewayService implements AgentToolAccessService {
                         () -> isActive(access, run.id()) && nativeToolEnabled(toolName));
                 if (isActive(access, run.id())) {
                     access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
-                            AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(), "approved", approved),
-                            LocalDateTime.now()));
+                            AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(),
+                                    "approved", decision.allowed()), LocalDateTime.now()));
                 }
-                if (!approved) throw new IllegalStateException("Shell command was not approved");
+                if (!decision.allowed()) throw new IllegalStateException("Shell command was not approved");
             }
             if (!isActive(access, run.id())) throw new IllegalStateException("Agent run has stopped");
             if (!allowedRoot.equals(files.authorizedDirectory(access.sessionId, toolName, cwd, arguments))) {
@@ -407,6 +441,175 @@ public class AgentToolGatewayService implements AgentToolAccessService {
             CompletableFuture<AgentNativePreparation> result) { }
 
     public record NativeResult(boolean ok, Object data, AgentOutputReference output, String warning) implements IAgentToolResult<Object> { }
+
+
+    /** External tools ask the user until the tool or the whole server has been allowed for good. */
+    private IAgentToolResult<?> callExternalTool(Access access, AgentRun run, String toolCallId,
+            AgentMcpTools.Resolved resolved, Map<String, Object> arguments) throws NoSuchAlgorithmException {
+        McpServerConfig config = mcpServers.require(resolved.serverName());
+        if (!mcpServers.isToolAllowed(config, resolved.toolName())) {
+            AgentApprovalDecision decision = awaitMcpDecision(access, run, toolCallId,
+                    AgentMcpTools.name(config.name(), resolved.toolName()),
+                    AgentMcpTools.summarize(resolved, arguments));
+            if (!decision.allowed()) {
+                return AgentMcpResponse.failure("MCP_DENIED", null,
+                        "The user refused this call. Do not retry it without a new request.");
+            }
+            if (decision == AgentApprovalDecision.ALLOW_TOOL) {
+                mcpServers.rememberTool(config.name(), resolved.toolName());
+            } else if (decision == AgentApprovalDecision.ALLOW_SERVER) {
+                mcpServers.rememberServer(config.name());
+            }
+        }
+        IMcpToolDiscovery client = mcpClient.getIfAvailable();
+        if (client == null) {
+            return AgentMcpResponse.failure("MCP_UNAVAILABLE", null, "MCP support is not available in this runtime");
+        }
+        IMcpToolDiscovery.McpToolCallResult result = client.call(config, resolved.toolName(), arguments);
+        if (!result.ok()) {
+            return AgentMcpResponse.failure(result.errorCode(), resolved.toolName(), result.errorMessage());
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("server", config.name());
+        data.put("tool", resolved.toolName());
+        data.put("content", result.text());
+        return AgentMcpResponse.success(data);
+    }
+
+    /**
+     * Every MCP change and every command that has not been approved yet is confirmed by the user
+     * first. A stdio server never starts before the exact launch line has been allowed.
+     */
+    private IAgentToolResult<?> executeMcpTool(Access access, AgentRun run, String toolCallId, String toolName,
+            Map<String, Object> arguments) throws NoSuchAlgorithmException {
+        AgentMcpTools.Resolved external = AgentMcpTools.resolve(mcpServers.enabledServers(), toolName);
+        if (external != null) return callExternalTool(access, run, toolCallId, external, arguments);
+        boolean write = !AgentMcpToolRegistry.LIST.equals(toolName) && !AgentMcpToolRegistry.TEST.equals(toolName);
+        if (write) {
+            awaitMcpApproval(access, run, toolCallId, toolName, mcpSummary(toolName, arguments));
+            if (AgentMcpToolRegistry.ADD.equals(toolName) || AgentMcpToolRegistry.UPDATE.equals(toolName)) {
+                approveLaunchedCommand(arguments);
+            }
+        }
+        if (AgentMcpToolRegistry.TEST.equals(toolName)) {
+            requireCommandApproval(access, run, toolCallId, string(arguments.get("name")));
+        }
+        return mcp.execute(toolName, arguments);
+    }
+
+    /** The configuration change was approved, so its launch line is approved as well. */
+    private void approveLaunchedCommand(Map<String, Object> arguments) {
+        Object name = arguments.get("name");
+        if (!(name instanceof String serverName) || serverName.isBlank()) return;
+        try {
+            var config = mcpServers.require(serverName);
+            mcpServers.approveCommand(config.name(), mcpServers.commandHash(config));
+        } catch (RuntimeException ignored) {
+            // A derived name or a rejected configuration has nothing to approve.
+        }
+    }
+
+    private void requireCommandApproval(Access access, AgentRun run, String toolCallId, String name)
+            throws NoSuchAlgorithmException {
+        if (name == null) return;
+        var config = mcpServers.require(name);
+        String hash = mcpServers.commandHash(config);
+        if (mcpServers.isCommandApproved(config, hash)) return;
+        awaitMcpApproval(access, run, toolCallId, AgentMcpToolRegistry.TEST,
+                "Run MCP server '" + config.name() + "': " + config.commandLine());
+        mcpServers.approveCommand(config.name(), hash);
+    }
+
+    private void awaitMcpApproval(Access access, AgentRun run, String toolCallId, String toolName, String summary)
+            throws NoSuchAlgorithmException {
+        if (!awaitMcpDecision(access, run, toolCallId, toolName, summary).allowed()) {
+            throw new IllegalStateException("MCP change was not approved");
+        }
+    }
+
+    private AgentApprovalDecision awaitMcpDecision(Access access, AgentRun run, String toolCallId, String toolName,
+            String summary) throws NoSuchAlgorithmException {
+        AgentApproval approval = new AgentApproval(UUID.randomUUID().toString(), access.sessionId, run.id(),
+                toolCallId, AgentApprovalStatus.PENDING, AgentApprovalScope.ONCE, digest(toolName + "\n" + summary),
+                LocalDateTime.now().plusMinutes(5));
+        AgentApprovalDecision decision = approvals.awaitDecision(approval, access.userId, () ->
+                access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
+                        AgentEventType.APPROVAL_REQUESTED, Map.of("approvalId", approval.id(), "toolName", toolName,
+                                "command", summary), LocalDateTime.now())),
+                () -> isActive(access, run.id()));
+        if (isActive(access, run.id())) {
+            access.sink.emit(new AgentRuntimeEvent(UUID.randomUUID().toString(), access.sessionId, run.id(),
+                    AgentEventType.APPROVAL_DECIDED, Map.of("approvalId", approval.id(),
+                            "approved", decision.allowed()), LocalDateTime.now()));
+        }
+        return decision;
+    }
+
+    /** A short, secret-free description of what a management call is about to change. */
+    private String mcpSummary(String toolName, Map<String, Object> arguments) {
+        String name = string(arguments.get("name"));
+        String command = string(arguments.get("command"));
+        String url = string(arguments.get("url"));
+        return switch (toolName) {
+            case AgentMcpToolRegistry.ADD, AgentMcpToolRegistry.UPDATE -> (AgentMcpToolRegistry.ADD.equals(toolName)
+                    ? "Add MCP server " : "Update MCP server ") + Objects.toString(name, "(derived name)")
+                    + (command != null ? ": " + command + " " + String.join(" ", stringList(arguments.get("args"))) : "")
+                    + (url != null ? ": " + url : "");
+            case AgentMcpToolRegistry.REMOVE -> "Remove MCP server " + Objects.toString(name, "(name required)");
+            case AgentMcpToolRegistry.SET_POLICY -> "Change MCP approval for " + Objects.toString(name, "(name required)")
+                    + ": policy=" + Objects.toString(arguments.get("policy"), "unchanged")
+                    + ", allowedTools=" + stringList(arguments.get("allowed_tools"));
+            default -> toolName;
+        };
+    }
+
+    private static String string(Object value) {
+        return value instanceof String text && !text.isBlank() ? text : null;
+    }
+
+    private static List<String> stringList(Object value) {
+        if (!(value instanceof List<?> items)) return List.of();
+        return items.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+    }
+
+
+
+    private static ObjectProvider<IMcpToolDiscovery> provider(IMcpToolDiscovery client) {
+        return new ObjectProvider<>() {
+            @Override public IMcpToolDiscovery getObject() {
+                if (client == null) throw new IllegalStateException("MCP support is not available in this runtime");
+                return client;
+            }
+            @Override public IMcpToolDiscovery getObject(Object... args) { return getObject(); }
+            @Override public IMcpToolDiscovery getIfAvailable() { return client; }
+            @Override public IMcpToolDiscovery getIfUnique() { return client; }
+        };
+    }
+
+    /** MCP configuration is absent in this deployment; the management tools report that when called. */
+    private static final IMcpServerService MCP_UNAVAILABLE = new IMcpServerService() {
+        @Override public String configPath() { return ""; }
+        @Override public List<McpServerState> list() { return List.of(); }
+        @Override public McpServerConfig require(String name) { throw unavailable(); }
+        @Override public McpServerState add(McpServerRegistration registration) { throw unavailable(); }
+        @Override public McpServerState update(String name, McpServerRegistration registration) { throw unavailable(); }
+        @Override public void remove(String name) { throw unavailable(); }
+        @Override public McpServerState setEnabled(String name, boolean enabled) { throw unavailable(); }
+        @Override public McpServerState setPolicy(String name, McpToolPolicy policy, List<String> allowedTools) {
+            throw unavailable();
+        }
+        @Override public McpServerState refreshTools(String name) { throw unavailable(); }
+        @Override public List<McpServerConfig> enabledServers() { return List.of(); }
+        @Override public void rememberTool(String name, String toolName) { throw unavailable(); }
+        @Override public void rememberServer(String name) { throw unavailable(); }
+        @Override public boolean isToolAllowed(McpServerConfig config, String toolName) { return false; }
+        @Override public String commandHash(McpServerConfig config) { return ""; }
+        @Override public void approveCommand(String name, String commandHash) { throw unavailable(); }
+        @Override public boolean isCommandApproved(McpServerConfig config, String commandHash) { return true; }
+        private IllegalStateException unavailable() {
+            return new IllegalStateException("MCP support is not available in this runtime");
+        }
+    };
 
     private record Execution(String digest, CompletableFuture<IAgentToolResult<?>> result) { }
 }

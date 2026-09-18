@@ -1,6 +1,6 @@
 # Skills in Pi Agent
 
-Pi Agent includes `chart` and `skill-manager`. Use `/skill:skill-manager` or ask the agent to create, improve, or install a skill.
+Pi Agent includes `chart`, `skill-manager` and `mcp-manager`. Use `/skill:skill-manager` or ask the agent to create, improve, or install a skill, and `/skill:mcp-manager` or a plain request to connect or manage an external MCP server.
 
 ## Location
 
@@ -15,7 +15,7 @@ User skills live in `~/.chat2db-skills/` by default:
 
 Put each custom skill folder directly in this directory. `SKILL.md` requires YAML frontmatter with a lowercase, hyphenated `name` and a nonempty `description`. Keep referenced files inside the skill folder. Names of bundled skills are reserved; use a new name for a customized copy.
 
-The user directory is the running resource: no copy is made, and an edit applies to the next turn. Bundled skills are installed outside it, under the product data directory at `storage/agent-v2/skills/builtin/<name>/`, and are replaced in place whenever the packaged content changes. Paths recorded by older conversations that used per-content snapshots are resolved to the skill loaded now.
+The user directory is the running resource: no copy is made, and an edit applies to the next turn. Bundled skills are installed outside it, under the product data directory at `storage/agent-v2/skills/builtin/<name>/`, and are replaced in place whenever the packaged content changes.
 
 The backend setting `chat2db.agent.v2.skills.directory` overrides the root, for example for an isolated development deployment. On a remote web deployment, this is a server directory. File tools receive the resolved absolute path from the host.
 
@@ -28,6 +28,10 @@ Bash and PowerShell are omitted from the active tool set until the user enables 
 The backend validates sources and loads the current version before the next turn. A running turn keeps the version it selected, while the files it reads are the live ones. An invalid source is reported and not offered; other skills keep working. Removing a user source removes it from future discovery.
 
 Slash completion refreshes after a turn and when reopened. Saving files, loading a skill, and successfully exercising its behavior are separate outcomes. A custom skill's own scripts can still have additional dependencies.
+
+## MCP servers
+
+External MCP servers are configured from the conversation through the `mcp-manager` skill and the `mcp_*` management tools; there is no settings page. Server definitions live in one plain-text file in the product configuration directory, and the tools report its absolute path (`configPath`) so neither a skill nor a prompt has to hardcode a location that differs per product and environment. Every external tool asks the user before it runs until the user chooses to allow it for good, and a stdio server never starts before its exact command line has been approved.
 
 ## Maintaining bundled skills
 

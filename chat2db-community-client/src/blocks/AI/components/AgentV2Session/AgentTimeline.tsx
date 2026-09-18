@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Alert } from 'antd';
 import QuestionCard from '@/components/QuestionCard';
 import type { QuestionResponse } from '@/types/question';
-import type { AgentApprovalItem, AgentTimelineEntry } from '../../agentEvents';
+import type { AgentApprovalDecision, AgentApprovalItem, AgentTimelineEntry } from '../../agentEvents';
 import type { AgentQuestionItem } from '../../agentQuestions';
 import type { AgentChart } from '../../agentCharts';
 import AgentApprovalCard from '../AgentApprovalCard';
@@ -23,7 +23,7 @@ export interface AgentTimelineProps {
   approvals: AgentApprovalItem[];
   questions: AgentQuestionItem[];
   renderMarkdown: (content: string) => ReactNode;
-  onDecideApproval: (approval: AgentApprovalItem, approved: boolean) => Promise<void>;
+  onDecideApproval: (approval: AgentApprovalItem, decision: AgentApprovalDecision) => Promise<void>;
   onAnswerQuestion: (question: AgentQuestionItem, answer?: QuestionResponse) => Promise<void>;
 }
 
@@ -72,7 +72,7 @@ export default function AgentTimeline(props: AgentTimelineProps) {
       case 'approval': {
         const approval = props.approvals.find((item) => item.id === entry.id && item.runId === runId);
         content = approval && <AgentApprovalCard approval={approval}
-          onDecide={(approved) => props.onDecideApproval(approval, approved)}
+          onDecide={(decision) => props.onDecideApproval(approval, decision)}
                               />;
         break;
       }

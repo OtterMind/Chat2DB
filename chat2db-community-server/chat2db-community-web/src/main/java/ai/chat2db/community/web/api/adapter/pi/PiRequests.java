@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.adapter.pi;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.web.api.model.request.agent.AgentRunContextRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -17,7 +18,8 @@ public final class PiRequests {
     public record Events(@NotBlank String sessionId, @PositiveOrZero Long afterSequence,
             @Positive Long beforeSequence,
             @Min(1) @Max(500) Integer limit) { }
-    public record Decision(@NotBlank String sessionId, @NotBlank String approvalId, @NotNull Boolean approved) { }
+    public record Decision(@NotBlank String sessionId, @NotBlank String approvalId,
+            @NotNull AgentApprovalDecision decision) { }
     public record Answer(@NotBlank String sessionId, @NotBlank String questionId,
             @Size(max=64) String optionId, @Size(max=4000) String text) { }
     public record ToolEnabled(@NotBlank String toolName, @NotNull Boolean enabled) { }

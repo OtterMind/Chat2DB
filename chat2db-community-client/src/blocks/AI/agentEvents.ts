@@ -3,6 +3,9 @@ import type { AgentOutputItem } from '@/types/agentOutput';
 import { toolOutputItems } from './agentOutput';
 import { agentContextDatabaseType, agentContextSummary } from './agentContext';
 
+/** What the user answered on an approval card. */
+export type AgentApprovalDecision = 'ALLOW_ONCE' | 'ALLOW_TOOL' | 'ALLOW_SERVER' | 'DENY';
+
 export interface AgentApprovalItem {
   id: string;
   sessionId: string;

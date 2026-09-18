@@ -26,7 +26,7 @@ export default function (pi) {
     async handler(_args, ctx) {
       await ctx.modelRegistry.refresh(AbortSignal.timeout(10000));
       const active = await request("/catalog", { signal: AbortSignal.timeout(10000) });
-      pi.setActiveTools(active);
+      applyActiveTools(active);
     },
   });
   const accessFile = join(process.env.PI_CODING_AGENT_DIR, "tools.json");
@@ -119,6 +119,58 @@ export default function (pi) {
       },
     });
   }
+
+  // Tools are registered up front but only the active set reaches the model. Tools of a group that a
+  // session rarely needs stay inactive until a model searches for them through tool_search.
+  const TOOL_SEARCH = "tool_search";
+  const SEARCH_GROUP = "mcp-manage";
+  const groups = new Map();
+  for (const tool of access.tools) {
+    if (!tool.group) continue;
+    const names = groups.get(tool.group) ?? [];
+    names.push(tool.name);
+    groups.set(tool.group, names);
+  }
+  const activatedBySearch = new Set();
+  // Declared as a function so the model-refresh command registered earlier can call it at runtime.
+  function applyActiveTools(names) {
+    const active = new Set(names);
+    active.add(TOOL_SEARCH);
+    for (const name of activatedBySearch) active.add(name);
+    pi.setActiveTools([...active]);
+  }
+  const refreshActiveTools = async () => {
+    const active = await request("/catalog", { signal: AbortSignal.timeout(10000) });
+    if (Array.isArray(active)) applyActiveTools(active);
+  };
+  pi.registerTool({
+    name: TOOL_SEARCH,
+    label: "Tool Search",
+    description: "Find and activate tools that are not available yet, such as the tools that manage external MCP servers. Search with the capability you need in words, for example \"mcp server\".",
+    promptSnippet: "Search for additional tools when the active tools cannot perform the task",
+    parameters: { type: "object", properties: {
+      query: { type: "string", minLength: 1, maxLength: 200, description: "Capability to search for." },
+    }, required: ["query"], additionalProperties: false },
+    async execute(_toolCallId, params) {
+      const query = String(params?.query ?? "").toLowerCase();
+      const matches = new Set();
+      for (const [group, names] of groups) {
+        const hit = query.includes(group.toLowerCase()) || names.some(name => query.includes(name.toLowerCase()))
+          || (group === SEARCH_GROUP && (query.includes("mcp") || query.includes("server")));
+        if (hit) names.forEach(name => matches.add(name));
+      }
+      const added = [...matches].filter(name => !pi.getActiveTools().includes(name));
+      if (added.length === 0) {
+        return { content: [{ type: "text", text: matches.size === 0
+          ? "No tool matches that capability."
+          : "Those tools are already active." }], details: { matches: [...matches], added: [] } };
+      }
+      added.forEach(name => activatedBySearch.add(name));
+      pi.setActiveTools([...pi.getActiveTools(), ...added]);
+      return { content: [{ type: "text", text: `Activated ${added.length} tool(s): ${added.join(", ")}. `
+        + "Call them in the next step." }], details: { matches: [...matches], added } };
+    },
+  });
 
   pi.on("tool_result", event => {
     if (typeof event.details?.ok === "boolean") {
@@ -229,5 +281,19 @@ export default function (pi) {
       },
     });
   }
+
+  // The backend decides which tools are active: it knows the enabled shell tools and the servers a
+  // session may use. The fallback keeps file tools working when the catalogue cannot be reached.
+  const nativeNames = Object.keys(factories);
+  const fallbackActive = () => [...access.tools.filter(tool => tool.defaultActive !== false).map(tool => tool.name),
+    ...nativeNames];
+  pi.on("session_start", () => {
+    void refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
+  });
+  // A server added mid-conversation contributes its tools from the next step on.
+  pi.on("agent_end", () => {
+    void refreshActiveTools().catch(() => {});
+  });
+  void refreshActiveTools().catch(() => applyActiveTools(fallbackActive()));
 
 }

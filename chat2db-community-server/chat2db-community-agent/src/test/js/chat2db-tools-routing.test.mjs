@@ -13,7 +13,10 @@ const uploaded = [];
 const sourceBytes = Buffer.from("first-record\n" + "详细结果\n".repeat(20000) + "exit-diagnostic\n");
 let commands = 0;
 const imports = {
-  "node:fs": { readFileSync: () => JSON.stringify({ baseUrl: "http://127.0.0.1", ticket, tools: [] }), realpathSync: value => value },
+  "node:fs": { readFileSync: () => JSON.stringify({ baseUrl: "http://127.0.0.1", ticket, tools: [
+    { name: "db_query", group: "db", defaultActive: true },
+    { name: "mcp_list_servers", group: "mcp-manage", defaultActive: false },
+  ] }), realpathSync: value => value },
   "node:path": { join: (...parts) => parts.join("/") },
   "node:http": { request(url, options, respond) {
     const request = new EventEmitter();
@@ -70,10 +73,21 @@ await module.link(specifier => {
 await module.evaluate();
 let activeTools;
 module.namespace.default({ registerCommand: (name, command) => registeredCommands.set(name, command),
-  setActiveTools: tools => { activeTools = tools; }, registerTool: tool => registered.set(tool.name, tool),
+  setActiveTools: tools => { activeTools = tools; }, getActiveTools: () => activeTools ?? [],
+  registerTool: tool => registered.set(tool.name, tool),
   on: (name, handler) => listeners.set(name, handler) });
-assert.equal(listeners.has("session_start"), false);
-assert.equal(catalogCalls.length, 0);
+await new Promise(resolve => setImmediate(resolve));
+// The backend catalogue decides the first active set; inactive groups wait for tool_search.
+assert.equal(catalogCalls.length, 1);
+assert.deepEqual([...activeTools].sort(), ["grep", "read", "tool_search"]);
+const search = await registered.get("tool_search").execute("search", { query: "mcp server" });
+assert.deepEqual([...search.details.added], ["mcp_list_servers"]);
+assert.ok(activeTools.includes("mcp_list_servers"));
+const again = await registered.get("tool_search").execute("search", { query: "mcp" });
+assert.deepEqual([...again.details.added], []);
+assert.match(again.content[0].text, /already active/);
+const missing = await registered.get("tool_search").execute("search", { query: "spreadsheets" });
+assert.match(missing.content[0].text, /No tool matches/);
 
 const read = await registered.get("read").execute("read-call", { path: "/managed/output.txt", cursor: "cursor", description: "Read more rows" });
 assert.equal(read.details.data.content, "page");
@@ -104,16 +118,18 @@ let modelRefreshes = 0;
 const runtime = { modelRegistry: { refresh: async () => { modelRefreshes++; } } };
 await refresh("", runtime);
 assert.equal(modelRefreshes, 1);
-assert.equal(catalogCalls.length, 1);
-assert.equal(catalogCalls[0].options.headers.Authorization, "Bearer renewed-ticket");
-assert.ok(catalogCalls[0].options.signal instanceof AbortSignal);
-assert.deepEqual(activeTools, ["read", "grep"]);
+assert.equal(catalogCalls.length, 2);
+assert.equal(catalogCalls.at(-1).options.headers.Authorization, "Bearer renewed-ticket");
+assert.ok(catalogCalls.at(-1).options.signal instanceof AbortSignal);
+assert.deepEqual([...activeTools].sort(), ["grep", "mcp_list_servers", "read", "tool_search"]);
 catalogFailure = true;
 await assert.rejects(refresh("", runtime), /catalog unavailable/);
-assert.equal(catalogCalls.length, 2);
+assert.equal(catalogCalls.length, 3);
 ticket = "fixture";
 listeners.get("before_agent_start")();
 await registered.get("bash").execute("shell-call", { command: "fixture", description: "Next run" });
 assert.equal(commands, 2);
-assert.equal(catalogCalls.length, 2);
-console.log("Managed output routing, per-run replay isolation and ticket refresh handshake passed");
+listeners.get("agent_end")();
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(catalogCalls.length, 4, "the end of a run re-reads the catalogue for tools added meanwhile");
+console.log("Managed output routing, per-run replay isolation, tool activation and ticket refresh handshake passed");

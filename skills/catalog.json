@@ -28,6 +28,16 @@
         "references/installation.md",
         "LICENSE.txt"
       ]
+    },
+    {
+      "name": "mcp-manager",
+      "files": [
+        "SKILL.md",
+        "references/http.md",
+        "references/policy.md",
+        "references/stdio.md",
+        "references/troubleshooting.md"
+      ]
     }
   ]
 }

@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalScope;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.domain.api.model.agent.*;
@@ -21,11 +22,13 @@ class AgentApprovalServiceImplTest {
         var result = CompletableFuture.supplyAsync(() ->
                 service.awaitDecision(approval(), 1L, published::countDown, () -> true));
         assertTrue(published.await(2, TimeUnit.SECONDS));
-        assertThrows(IllegalArgumentException.class, () -> service.decide("session", "approval", 2L, true));
-        service.decide("session", "approval", 1L, true);
-        assertTrue(result.get(2, TimeUnit.SECONDS));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.decide("session", "approval", 2L, AgentApprovalDecision.ALLOW_ONCE));
+        service.decide("session", "approval", 1L, AgentApprovalDecision.ALLOW_TOOL);
+        assertEquals(AgentApprovalDecision.ALLOW_TOOL, result.get(2, TimeUnit.SECONDS));
         assertEquals(AgentApprovalStatus.APPROVED, storage.row.status());
-        assertThrows(IllegalStateException.class, () -> service.decide("session", "approval", 1L, true));
+        assertThrows(IllegalStateException.class,
+                () -> service.decide("session", "approval", 1L, AgentApprovalDecision.ALLOW_ONCE));
     }
 
     @Test
@@ -38,7 +41,7 @@ class AgentApprovalServiceImplTest {
                 service.awaitDecision(approval(), 1L, published::countDown, active::get));
         assertTrue(published.await(2, TimeUnit.SECONDS));
         active.set(false);
-        assertFalse(result.get(2, TimeUnit.SECONDS));
+        assertEquals(AgentApprovalDecision.DENY, result.get(2, TimeUnit.SECONDS));
         assertEquals(AgentApprovalStatus.CANCELLED, storage.row.status());
     }
 

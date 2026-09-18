@@ -56,7 +56,9 @@ class AgentNativeToolApprovalTest {
             ((Runnable) args[2]).run();
             directory.set("/second");
             if (disableWhileWaiting.get()) enabledTools.remove(AgentNativeTools.currentPlatform().get(0));
-            return ((BooleanSupplier) args[3]).getAsBoolean();
+            return ((BooleanSupplier) args[3]).getAsBoolean()
+                    ? ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision.ALLOW_ONCE
+                    : ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision.DENY;
         });
         AgentDatabaseService database = proxy(AgentDatabaseService.class, (method, args) -> null);
         var outputReference = new ai.chat2db.community.tools.model.agent.tool.AgentOutputReference(

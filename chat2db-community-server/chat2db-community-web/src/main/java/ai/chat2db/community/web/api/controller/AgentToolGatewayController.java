@@ -1,5 +1,6 @@
 package ai.chat2db.community.web.api.controller;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.domain.api.enums.agent.AgentApprovalStatus;
 import ai.chat2db.community.web.api.model.request.agent.AgentToolRequest;
 import ai.chat2db.community.domain.api.model.agent.AgentApproval;
@@ -73,7 +74,7 @@ public class AgentToolGatewayController {
             @RequestBody @Valid DecisionRequest decision) {
         // An approval grants shell execution, so only the local user may decide it.
         AgentLocalRequestGuard.requireLocal();
-        approvals.decide(sessionId, decision.approvalId(), identity.currentUserId(), decision.approved());
+        approvals.decide(sessionId, decision.approvalId(), identity.currentUserId(), decision.decision());
         return ActionResult.isSuccess();
     }
 
@@ -103,5 +104,5 @@ public class AgentToolGatewayController {
         return authorization.substring(7);
     }
 
-    public record DecisionRequest(@NotBlank String approvalId, @NotNull Boolean approved) { }
+    public record DecisionRequest(@NotBlank String approvalId, @NotNull AgentApprovalDecision decision) { }
 }

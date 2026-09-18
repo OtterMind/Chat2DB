@@ -62,7 +62,7 @@ public final class PiOperationRegistry {
                         p.limit() == null ? 200 : p.limit()));
         register("approvals.list", PiRequests.Session.class, p -> interaction.pending(p.sessionId()));
         register("approvals.decide", PiRequests.Decision.class, p -> interaction.decide(p.sessionId(),
-                new AgentToolGatewayController.DecisionRequest(p.approvalId(), p.approved())));
+                new AgentToolGatewayController.DecisionRequest(p.approvalId(), p.decision())));
         register("questions.list", PiRequests.Session.class, p -> interaction.pendingQuestions(p.sessionId()));
         register("questions.answer", PiRequests.Answer.class, p -> interaction.answerQuestion(p.sessionId(),
                 new AgentToolGatewayController.QuestionAnswerRequest(p.questionId(), p.optionId(), p.text())));

@@ -45,7 +45,9 @@ export interface PiOperations {
     afterSequence?: number; beforeSequence?: number; limit?: number;
   }, AgentEvent[]>;
   'approvals.list': Operation<Session, { id: string }[]>;
-  'approvals.decide': Operation<Session & { approvalId: string; approved: boolean }, void>;
+  'approvals.decide': Operation<Session & {
+    approvalId: string; decision: 'ALLOW_ONCE' | 'ALLOW_TOOL' | 'ALLOW_SERVER' | 'DENY';
+  }, void>;
   'questions.list': Operation<Session, { id: string }[]>;
   'questions.answer': Operation<Session & { questionId: string } & QuestionResponse, QuestionAnswer>;
   'outputs.read': Operation<PiOutput & { cursor?: string; offset?: number; limit?: number }, AgentOutputPage>;

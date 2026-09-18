@@ -1,25 +1,25 @@
 import { useState } from 'react';
-import { Button } from 'antd';
-import { Database, Terminal } from 'lucide-react';
+import { Button, Dropdown } from 'antd';
+import { ChevronDown, Database, Terminal } from 'lucide-react';
 import i18n from '@/i18n';
-import { AgentApprovalItem, agentErrorText } from '../../agentEvents';
+import { AgentApprovalDecision, AgentApprovalItem, agentErrorText } from '../../agentEvents';
 import { useStyles } from './style';
 
 export default function AgentApprovalCard({ approval, onDecide }: {
   approval: AgentApprovalItem;
-  onDecide: (approved: boolean) => Promise<void>;
+  onDecide: (decision: AgentApprovalDecision) => Promise<void>;
 }) {
   const { styles } = useStyles();
   const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null);
   const [error, setError] = useState('');
   const pending = approval.status === 'pending';
   const target = approval.databaseTarget;
-  const decide = async (approved: boolean) => {
+  const decide = async (decision: AgentApprovalDecision) => {
     if (submitting || !pending) return;
-    setSubmitting(approved ? 'approve' : 'deny');
+    setSubmitting(decision === 'DENY' ? 'deny' : 'approve');
     setError('');
     try {
-      await onDecide(approved);
+      await onDecide(decision);
     } catch (failure) {
       setError(agentErrorText(failure) || i18n('stream.agent.sendFailed'));
     } finally {
@@ -51,11 +51,26 @@ export default function AgentApprovalCard({ approval, onDecide }: {
         <span>{i18n('stream.approval.hint')}</span>
         <div className={styles.actions}>
           <Button size="small" disabled={!!submitting} loading={submitting === 'deny'}
-            onClick={() => void decide(false)}
+            onClick={() => void decide('DENY')}
           >{i18n('stream.approval.deny')}</Button>
           <Button size="small" type="primary" disabled={!!submitting} loading={submitting === 'approve'}
-            onClick={() => void decide(true)}
+            onClick={() => void decide('ALLOW_ONCE')}
           >{i18n('stream.approval.approve')}</Button>
+          <Dropdown
+            trigger={['click']}
+            disabled={!!submitting}
+            menu={{
+              items: [
+                { key: 'ALLOW_TOOL', label: i18n('stream.approval.allowTool') },
+                { key: 'ALLOW_SERVER', label: i18n('stream.approval.allowServer') },
+              ],
+              onClick: ({ key }) => void decide(key as AgentApprovalDecision),
+            }}
+          >
+            <Button size="small" disabled={!!submitting} aria-label={i18n('stream.approval.allowMore')}>
+              <ChevronDown size={14} />
+            </Button>
+          </Dropdown>
         </div>
       </div>
       {error && <div className={styles.error} role="alert">{error}</div>}

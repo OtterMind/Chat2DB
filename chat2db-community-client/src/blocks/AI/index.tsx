@@ -62,7 +62,7 @@ import pi, { AgentEvent } from '@/service/pi';
 import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
-import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, AgentTimelineEntry } from './agentEvents';
+import { AgentApprovalDecision, AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, AgentTimelineEntry } from './agentEvents';
 import { activeAgentRunId, followAgentRun, readAgentHistoryBefore, readAgentHistoryTail, traceAgentStage }
   from './agentEventStream';
 import { getChatSessionId, getChatSessionUrl, resolveChatSessionVersion } from './chatSessionRoute';
@@ -1071,15 +1071,15 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     currentRoundUserMessageIdRef.current = null;
   }, []);
 
-  const decideAgentApproval = async (approval: AgentApprovalItem, approved: boolean) => {
+  const decideAgentApproval = async (approval: AgentApprovalItem, decision: AgentApprovalDecision) => {
     const operation = agentOperationRef.current;
     if (!operation || operation.controller.signal.aborted || operation.sessionId !== approval.sessionId
         || operation.runId !== approval.runId) throw new Error(i18n('stream.approval.closed'));
-    await pi.approvals.decide({ sessionId: approval.sessionId, approvalId: approval.id, approved },
+    await pi.approvals.decide({ sessionId: approval.sessionId, approvalId: approval.id, decision },
       { signal: operation.controller.signal });
     if (!operation.controller.signal.aborted) {
       setAgentApprovals((current) => current.map((item) => item.id === approval.id && item.status === 'pending'
-        ? { ...item, status: approved ? 'approved' : 'denied' } : item));
+        ? { ...item, status: decision === 'DENY' ? 'denied' : 'approved' } : item));
     }
   };
 
