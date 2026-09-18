@@ -15,7 +15,8 @@ public final class PiRequests {
             @NotBlank String message, @NotBlank String idempotencyKey, @Valid AgentRunContextRequest context) { }
     public record RunCancel(@NotBlank String sessionId, @NotBlank String runId) { }
     public record Events(@NotBlank String sessionId, @PositiveOrZero Long afterSequence,
-            @Min(1) @Max(200) Integer limit) { }
+            @Positive Long beforeSequence,
+            @Min(1) @Max(500) Integer limit) { }
     public record Decision(@NotBlank String sessionId, @NotBlank String approvalId, @NotNull Boolean approved) { }
     public record Answer(@NotBlank String sessionId, @NotBlank String questionId,
             @Size(max=64) String optionId, @Size(max=4000) String text) { }

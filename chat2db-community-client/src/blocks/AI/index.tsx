@@ -63,7 +63,8 @@ import importExportService from '@/service/importExport';
 import { useImportExportStore } from '@/store/importExport';
 import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
 import { AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, AgentTimelineEntry } from './agentEvents';
-import { activeAgentRunId, followAgentRun, readAgentHistory, traceAgentStage } from './agentEventStream';
+import { activeAgentRunId, followAgentRun, readAgentHistoryBefore, readAgentHistoryTail, traceAgentStage }
+  from './agentEventStream';
 import { getChatSessionId, getChatSessionUrl, resolveChatSessionVersion } from './chatSessionRoute';
 import AgentV2Session, { AgentV2Message } from './components/AgentV2Session';
 
@@ -331,16 +332,14 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
 /** is sent each time AI The maximum number of historical rounds carried (one round = (one question and one answer) */
 const MAX_HISTORY_ROUNDS = 5;
 const SCROLL_BOTTOM_THRESHOLD = 1;
-/** Reaching this close to the top loads the previous stretch of a long conversation. */
-const LOAD_EARLIER_SCROLL_THRESHOLD = 80;
+/** Reaching this close to the top reads one more page of older events. */
+const EARLIER_HISTORY_LOAD_OFFSET = 240;
 const INITIAL_VIEWPORT_ANIMATION_MS = 260;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const MESSAGE_TOP_ALIGNMENT_GAP = 20;
 const COLLAPSED_THOUGHT_PREVIEW_MAX_LENGTH = 48;
 const AI_RUNTIME_STORAGE_KEY = 'chat2db-ai-runtime';
 const ACTIVE_AGENT_SESSION_KEY = 'chat2db-active-agent-session';
-/** Events loaded first when a long conversation is opened; older events load on demand. */
-const INITIAL_AGENT_HISTORY_EVENTS = 400;
 
 const agentRequestId = () =>
   globalThis.crypto?.randomUUID?.() ||
@@ -586,13 +585,12 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [prependCount, setPrependCount] = useState(0);
-  const loadEarlierRef = useRef<() => void>(() => {});
   const historyLoadingRef = useRef(false);
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const historyEventsRef = useRef<AgentEvent[]>([]);
-  const historyWindowRef = useRef(INITIAL_AGENT_HISTORY_EVENTS);
   const historyControllerRef = useRef<AbortController | null>(null);
-  const canLoadEarlierRef = useRef(true);
+  /** Set by the effect below; both the scroll handler and the wheel handler ask it for the previous page. */
+  const loadEarlierRef = useRef<() => void>(() => {});
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -805,9 +803,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
-    if (container.scrollTop <= LOAD_EARLIER_SCROLL_THRESHOLD && canLoadEarlierRef.current) {
-      loadEarlierRef.current();
-    }
+    loadEarlierRef.current();
   }, [setAutoFollow]);
 
   const interruptMessageAutoScroll = useCallback(() => {
@@ -1690,7 +1686,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   );
 
   const handleLoadAgentSessionById = useCallback(
-    async (sessionId: string, title?: string, historyEvents = INITIAL_AGENT_HISTORY_EVENTS) => {
+    async (sessionId: string, title?: string) => {
       stop();
       stopAgentPolling();
       const operation = createAgentOperation(sessionId);
@@ -1704,10 +1700,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         const session = await pi.sessions.get({ sessionId, sessionVersion: 2 },
           { signal: operation.controller.signal });
         // Open a long conversation on its newest events instead of replaying every streamed delta.
-        const historyStart = Math.max(0, (session.lastEventSequence ?? 0) - historyEvents);
         const [events, approvals, questions, availableModels] = await Promise.all([
-          readAgentHistory(pi.events.list, sessionId, operation.controller.signal,
-            { fromSequence: historyStart, maxEvents: historyEvents, alignToRunStart: true }),
+          readAgentHistoryTail(pi.events.list, sessionId, operation.controller.signal,
+            session.lastEventSequence ?? 0),
           pi.approvals.list({ sessionId }, { signal: operation.controller.signal }),
           pi.questions.list({ sessionId }, { signal: operation.controller.signal }),
           listAvailableModelOptions(),
@@ -1751,7 +1746,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setCurrentSessionTitle(session.title || title || '');
         currentSessionTitleRef.current = session.title || title || '';
         historyEventsRef.current = events;
-        historyWindowRef.current = historyEvents;
         setHasOlderHistory((events[0]?.sequence ?? 1) > 1);
         if (activeRunId) {
           operation.runId = activeRunId;
@@ -1777,7 +1771,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   );
 
   /**
-   * Loads the stretch before the oldest loaded event and prepends it. It never rebuilds the visible
+   * Reads the page just before the oldest loaded event and prepends it. It never rebuilds the visible
    * rounds and never touches streaming state, so it also works while a run is streaming.
    */
   const handleLoadEarlierHistory = useCallback(async () => {
@@ -1787,16 +1781,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     const oldest = loaded.length ? loaded[0].sequence : 0;
     if (!sessionId || !signal || historyLoadingRef.current || oldest <= 1) return;
     historyLoadingRef.current = true;
-    canLoadEarlierRef.current = false;
     setLoadingEarlier(true);
     const container = messageListRef.current;
     prependAnchorRef.current = container ? { height: container.scrollHeight, top: container.scrollTop } : null;
     try {
-      const earlier = await readAgentHistory(pi.events.list, sessionId, signal, {
-        fromSequence: Math.max(0, oldest - historyWindowRef.current),
-        maxEvents: historyWindowRef.current,
-        alignToRunStart: true,
-      });
+      const earlier = await readAgentHistoryBefore(pi.events.list, sessionId, signal, oldest);
       if (signal.aborted) return;
       if (earlier.length === 0) {
         setHasOlderHistory(false);
@@ -1819,14 +1808,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     } finally {
       historyLoadingRef.current = false;
       setLoadingEarlier(false);
-      // Never leave the scroll trigger latched, even when no prepend changed the list.
-      window.setTimeout(() => { canLoadEarlierRef.current = true; }, PROGRAMMATIC_SCROLL_LOCK_MS);
     }
   }, []);
 
   useEffect(() => {
     loadEarlierRef.current = () => {
-      if (hasOlderHistory && !sessionLoading) void handleLoadEarlierHistory();
+      const container = messageListRef.current;
+      if (!hasOlderHistory || sessionLoading || !container) return;
+      // Paging costs one range read now, so reading into the top zone simply asks for the next page.
+      if (container.scrollTop > EARLIER_HISTORY_LOAD_OFFSET) return;
+      void handleLoadEarlierHistory();
     };
   }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
 
@@ -2732,7 +2723,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 onWheelCapture={(event) => {
                   if (event.ctrlKey || !event.deltaY) return;
                   interruptMessageAutoScroll();
+                  // A wheel that can no longer move the list still asks for the previous page.
                   if (event.deltaY > 0) handleMessageListScroll();
+                  else loadEarlierRef.current();
                 }}
                 onTouchMoveCapture={interruptMessageAutoScroll}
                 onTouchEndCapture={handleMessageListScroll}

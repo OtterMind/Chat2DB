@@ -154,6 +154,17 @@ public class AgentServiceImpl implements AgentService {
     }
 
     @Override
+    public List<AgentEvent> listEventsBefore(String sessionId, Long userId, long beforeSequence, int limit) {
+        if (runCoordinator.recoverSession(sessionId, userId) == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        if (limit < 1 || limit > 1000) {
+            throw new IllegalArgumentException("limit must be between 1 and 1000");
+        }
+        return eventStorage.listBefore(sessionId, userId, beforeSequence, limit);
+    }
+
+    @Override
     public AgentSession renameSession(String sessionId, Long userId, String title) {
         if (title == null || title.isBlank()) {
             throw new IllegalArgumentException("title must not be blank");

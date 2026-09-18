@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mock } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 import type { AgentEvent } from '@/service/agent';
-import { activeAgentRunId, followAgentRun, readAgentHistory } from './agentEventStream';
+import { activeAgentRunId, followAgentRun, readAgentHistoryBefore, readAgentHistoryTail,
+  type ReadAgentEvents } from './agentEventStream';
 import { buildAgentTranscript, updateAgentApprovals } from './agentEvents';
 
 const event = (sequence: number, type: AgentEvent['type'], runId = 'run'): AgentEvent => ({
@@ -33,39 +34,55 @@ async function main() {
   assert.equal(transcript[0].traceEntries[0].content, 'model connection failed');
   assert.equal(transcript[0].status, 'failed');
 
-  const history = Array.from({ length: 1205 }, (_, index) => event(index + 1, 'ASSISTANT_TEXT_DELTA'));
-  const loaded = await readAgentHistory(async ({ afterSequence, limit }) =>
-    history.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session',
-  new AbortController().signal);
-  assert.equal(loaded.length, 1205, 'history must load all pages');
+  /** Reads pages backwards, the way the server pages event files by sequence. */
+  const countingRead = (source: AgentEvent[]) => {
+    const reads: number[] = [];
+    const read: ReadAgentEvents = async ({ beforeSequence = 0, limit }) => {
+      reads.push(beforeSequence);
+      return source.filter((item) => item.sequence < beforeSequence).slice(-limit);
+    };
+    return { reads, read };
+  };
 
-  const completedHistory = [event(1, 'RUN_ACCEPTED'), ...history.map((item) => ({ ...item, sequence: item.sequence + 1 })),
-    event(1207, 'RUN_COMPLETED'), event(1208, 'RUN_ACCEPTED', 'current'), event(1209, 'RUN_SUSPENDED', 'current')];
-  const restored = await readAgentHistory(async ({ afterSequence, limit }) =>
-    completedHistory.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session', new AbortController().signal);
-  assert.equal(activeAgentRunId(restored), 'current', 'restore the newest unfinished run after all history pages');
-  assert.equal(activeAgentRunId([...restored, event(1210, 'RUN_OUTCOME_UNKNOWN', 'current')]), undefined,
+  // A long conversation opens on its newest events: one tail read, extended at most once to a turn start.
+  const history = Array.from({ length: 1205 }, (_, index) => event(index + 1, 'ASSISTANT_TEXT_DELTA'));
+  const tail = countingRead(history);
+  const loaded = await readAgentHistoryTail(tail.read, 'session', new AbortController().signal, 1205);
+  assert.deepEqual(tail.reads, [1206, 1006], 'the tail is read from the end, never from the start of the history');
+  assert.equal(loaded.length, 400, 'alignment stops after one extra page even without a turn boundary');
+  assert.equal(loaded[loaded.length - 1].sequence, 1205, 'the newest event stays in the window');
+
+  const completedHistory = [
+    ...Array.from({ length: 300 }, (_, index) => event(index + 1, 'ASSISTANT_TEXT_DELTA')),
+    event(301, 'RUN_COMPLETED', 'old'), event(302, 'RUN_ACCEPTED', 'current'),
+    event(303, 'RUN_SUSPENDED', 'current'),
+  ];
+  const restored = await readAgentHistoryTail(countingRead(completedHistory).read, 'session',
+    new AbortController().signal, 303);
+  assert.equal(restored[0].sequence, 302, 'a window cut inside a turn shrinks back to the turn start');
+  assert.equal(restored[0].type, 'RUN_ACCEPTED');
+  assert.equal(activeAgentRunId(restored), 'current', 'restore the newest unfinished run from the tail window');
+  assert.equal(activeAgentRunId([...restored, event(304, 'RUN_OUTCOME_UNKNOWN', 'current')]), undefined,
     'a reconciled unknown outcome releases the run');
 
-  // A long conversation opens on its newest events and keeps the window bounded.
-  const windowed = await readAgentHistory(async ({ afterSequence, limit }) =>
-    history.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session',
-  new AbortController().signal, { fromSequence: 1180, maxEvents: 25 });
-  assert.equal(windowed[0].sequence, 1181, 'the requested window starts at the requested sequence');
-  assert.equal(windowed.length, 25, 'the window stops at the requested size');
-  assert.equal(windowed[24].sequence, 1205);
+  // Reading further back costs exactly one page per request and never doubles an event.
+  const pagedRead = countingRead(completedHistory);
+  const earlier = await readAgentHistoryBefore(pagedRead.read, 'session', new AbortController().signal, 302);
+  assert.deepEqual(pagedRead.reads, [302, 102], 'one page back, plus at most one alignment read');
+  assert.deepEqual(earlier.map((item) => item.sequence),
+    Array.from({ length: 301 }, (_, index) => index + 1),
+    'the page is contiguous, keeps every earlier event, and stops before the loaded window');
 
-  // A window that would start in the middle of a turn is extended back to the turn start.
-  const turns = [
-    ...Array.from({ length: 300 }, (_, index) => event(index + 1, 'ASSISTANT_TEXT_DELTA')),
-    event(301, 'RUN_ACCEPTED', 'tail'),
-    ...Array.from({ length: 99 }, (_, index) => event(index + 302, 'ASSISTANT_TEXT_DELTA', 'tail')),
-  ];
-  const aligned = await readAgentHistory(async ({ afterSequence, limit }) =>
-    turns.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session',
-  new AbortController().signal, { fromSequence: 340, maxEvents: 30, alignToRunStart: true });
-  assert.equal(aligned[0].sequence, 301, 'a window must begin at the start of a turn');
-  assert.equal(aligned[0].type, 'RUN_ACCEPTED');
+  const openingRead = countingRead(history.slice(0, 120));
+  const opening = await readAgentHistoryTail(openingRead.read, 'session', new AbortController().signal, 120);
+  assert.deepEqual(openingRead.reads, [121], 'a short history needs no alignment read');
+  assert.equal(opening.length, 120, 'a window that reaches sequence 1 keeps the turn it has');
+
+  let startReads = 0;
+  const atStart = await readAgentHistoryBefore(async () => { startReads += 1; return []; }, 'session',
+    new AbortController().signal, 1);
+  assert.deepEqual(atStart, [], 'nothing is older than the first event');
+  assert.equal(startReads, 0, 'the start of the history is not read again');
 
   mock.timers.enable({ apis: ['setTimeout'] });
   try {

@@ -24,6 +24,9 @@ public interface AgentService {
 
     List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit);
 
+    /** The newest events before {@code beforeSequence}, so a long conversation opens on its last page. */
+    List<AgentEvent> listEventsBefore(String sessionId, Long userId, long beforeSequence, int limit);
+
     AgentSession renameSession(String sessionId, Long userId, String title);
 
     void deleteSession(String sessionId, Long userId);

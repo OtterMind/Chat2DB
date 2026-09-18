@@ -56,8 +56,10 @@ public final class PiOperationRegistry {
                 new AgentRunStartRequest(p.modelConfigId(), p.message(), p.idempotencyKey(), p.context())));
         register("runs.cancel", PiRequests.RunCancel.class,
                 p -> sessions.cancelRun(p.runId(), new AgentRunCancelRequest(p.sessionId())));
-        register("events.list", PiRequests.Events.class, p -> sessions.listEvents(p.sessionId(),
-                p.afterSequence() == null ? 0 : p.afterSequence(), p.limit() == null ? 200 : p.limit()));
+        register("events.list", PiRequests.Events.class, p -> p.beforeSequence() != null
+                ? sessions.listEventsBefore(p.sessionId(), p.beforeSequence(), p.limit() == null ? 200 : p.limit())
+                : sessions.listEvents(p.sessionId(), p.afterSequence() == null ? 0 : p.afterSequence(),
+                        p.limit() == null ? 200 : p.limit()));
         register("approvals.list", PiRequests.Session.class, p -> interaction.pending(p.sessionId()));
         register("approvals.decide", PiRequests.Decision.class, p -> interaction.decide(p.sessionId(),
                 new AgentToolGatewayController.DecisionRequest(p.approvalId(), p.approved())));

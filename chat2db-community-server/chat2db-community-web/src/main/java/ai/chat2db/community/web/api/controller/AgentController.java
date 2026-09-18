@@ -96,10 +96,22 @@ public class AgentController {
     public ListResult<AgentEventResponse> listEvents(
             @PathVariable String sessionId,
             @RequestParam(defaultValue = "0") long afterSequence,
+            @RequestParam(required = false) Long beforeSequence,
             @RequestParam(defaultValue = "200") int limit) {
-        List<AgentEvent> events = agentService.listEvents(
-                sessionId, identityService.currentUserId(), afterSequence, limit);
+        List<AgentEvent> events = beforeSequence == null
+                ? agentService.listEvents(sessionId, identityService.currentUserId(), afterSequence, limit)
+                : agentService.listEventsBefore(sessionId, identityService.currentUserId(), beforeSequence, limit);
         return ListResult.of(events.stream().map(AgentEventResponse::from).toList());
+    }
+
+    /** Shared by the REST route and the Pi operation registry, so both transports return the same payload. */
+    public ListResult<AgentEventResponse> listEvents(String sessionId, long afterSequence, int limit) {
+        return listEvents(sessionId, afterSequence, null, limit);
+    }
+
+    /** The newest events before {@code beforeSequence}, so a long conversation opens on its last page. */
+    public ListResult<AgentEventResponse> listEventsBefore(String sessionId, long beforeSequence, int limit) {
+        return listEvents(sessionId, 0L, beforeSequence, limit);
     }
 
     @PostMapping("/sessions/{sessionId}/rename")

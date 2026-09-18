@@ -67,6 +67,9 @@ class AgentControllerTest {
         assertEquals(AgentEventType.RUN_STARTED,
                 controller.listEvents("session-one", 0, 20).getData().get(0).type());
         assertEquals(USER_ID, service.eventUserId);
+        assertEquals(AgentEventType.RUN_STARTED,
+                controller.listEventsBefore("session-one", 500, 20).getData().get(0).type());
+        assertEquals(500L, service.beforeSequenceValue);
     }
 
     private AgentDefinition definition() {
@@ -88,6 +91,7 @@ class AgentControllerTest {
         private AgentRunStartCommand startCommand;
         private AgentRunCancelCommand cancelCommand;
         private Long eventUserId;
+        private Long beforeSequenceValue;
 
         @Override public AgentSession createSession(AgentSessionCreateCommand command) {
             createCommand = command;
@@ -108,6 +112,11 @@ class AgentControllerTest {
             eventUserId = userId;
             return List.of(new AgentEvent(
                     "event", sessionId, "run-one", 1, AgentEventType.RUN_STARTED, Map.of(), now));
+        }
+        @Override public List<AgentEvent> listEventsBefore(
+                String sessionId, Long userId, long beforeSequence, int limit) {
+            beforeSequenceValue = beforeSequence;
+            return listEvents(sessionId, userId, 0, limit);
         }
         @Override public AgentSession renameSession(String sessionId, Long userId, String title) {
             return session;

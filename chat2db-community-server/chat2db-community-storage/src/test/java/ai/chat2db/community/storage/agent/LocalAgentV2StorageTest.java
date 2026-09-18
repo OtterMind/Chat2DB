@@ -153,6 +153,24 @@ class LocalAgentV2StorageTest {
     }
 
     @Test
+    void pagesTheNewestEventsBeforeASequenceWithoutReadingUnrelatedFiles() throws Exception {
+        for (long sequence = 1; sequence <= 5; sequence++) {
+            events.append(event(sequence, AgentEventType.ASSISTANT_TEXT_DELTA), USER_ID);
+        }
+        // Sequence is encoded in the file name, so a page read never parses files outside its window.
+        Files.writeString(paths.eventFile(SESSION_ID, 6), "{ not json");
+        Files.writeString(paths.eventFile(SESSION_ID, 9), "{ not json");
+
+        assertEquals(list(3, 4, 5), events.listBefore(SESSION_ID, USER_ID, 6, 3));
+        assertEquals(list(1, 2), events.listBefore(SESSION_ID, USER_ID, 3, 3));
+        assertEquals(list(1), events.listBefore(SESSION_ID, USER_ID, 2, 10));
+        assertTrue(events.listBefore(SESSION_ID, USER_ID, 1, 10).isEmpty());
+        assertTrue(events.listBefore(SESSION_ID, 2L, 6, 10).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> events.listBefore(SESSION_ID, USER_ID, 6, 0));
+        assertThrows(IllegalArgumentException.class, () -> events.listBefore(SESSION_ID, USER_ID, 6, 1001));
+    }
+
+    @Test
     void rejectsEventSequenceGapsAfterRestart() throws Exception {
         events.append(event(1, AgentEventType.RUN_STARTED), USER_ID);
         events.append(event(2, AgentEventType.RUN_COMPLETED), USER_ID);
@@ -262,6 +280,12 @@ class LocalAgentV2StorageTest {
 
     private AgentModelSnapshot model() {
         return new AgentModelSnapshot("model-config", 1, "openai", "gpt-test", 128000, 4096);
+    }
+
+    private List<AgentEvent> list(long... sequences) {
+        return java.util.Arrays.stream(sequences)
+                .mapToObj(sequence -> event(sequence, AgentEventType.ASSISTANT_TEXT_DELTA))
+                .toList();
     }
 
     private AgentEvent event(long sequence, AgentEventType type) {

@@ -41,7 +41,9 @@ export interface PiOperations {
     modelConfigId: string; message: string; idempotencyKey: string; context?: AgentRunContextRequest;
   }, AgentRun>;
   'runs.cancel': Operation<Session & { runId: string }, AgentRun>;
-  'events.list': Operation<Session & { afterSequence: number; limit?: number }, AgentEvent[]>;
+  'events.list': Operation<Session & {
+    afterSequence?: number; beforeSequence?: number; limit?: number;
+  }, AgentEvent[]>;
   'approvals.list': Operation<Session, { id: string }[]>;
   'approvals.decide': Operation<Session & { approvalId: string; approved: boolean }, void>;
   'questions.list': Operation<Session, { id: string }[]>;

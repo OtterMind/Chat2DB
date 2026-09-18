@@ -97,6 +97,23 @@ class PiTransportContractTest {
     }
 
     @Test
+    void beforeSequencePagesGoThroughTheControllerLikeRest() throws Exception {
+        var paged = registry.invoke(request("events.list",
+                "{\"sessionId\":\"s\",\"beforeSequence\":500,\"limit\":20}")).toCompletableFuture().get();
+        assertTrue(paged.path("success").asBoolean(), paged.toString());
+        verify(sessions).listEventsBefore("s", 500L, 20);
+        verify(sessions, never()).listEvents(anyString(), anyLong(), anyInt());
+        clearInvocations(sessions);
+
+        var after = registry.invoke(request("events.list",
+                "{\"sessionId\":\"s\",\"afterSequence\":7,\"limit\":20}")).toCompletableFuture().get();
+        assertTrue(after.path("success").asBoolean(), after.toString());
+        verify(sessions).listEvents("s", 7L, 20);
+        verify(sessions, never()).listEventsBefore(anyString(), anyLong(), anyInt());
+        verify(sessions, never()).listEvents(anyString(), anyLong(), any(), anyInt());
+    }
+
+    @Test
     void invalidAndUnknownRequestsFailIdenticallyWithoutCallingBusinessCode() throws Exception {
         for (ObjectNode request : List.of(request("does.not.exist", "{}"), request("runs.start", "{}"),
                 request("runtime.enable", "{}"), request("runtime.enable", "{\"confirmed\":false}"),

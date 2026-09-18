@@ -571,5 +571,9 @@ class AgentRunCoordinatorTest {
         @Override public List<AgentEvent> list(String sessionId, Long userId, long afterSequence, int limit) {
             return events.stream().filter(event -> event.sequence() > afterSequence).limit(limit).toList();
         }
+        @Override public List<AgentEvent> listBefore(String sessionId, Long userId, long beforeSequence, int limit) {
+            List<AgentEvent> page = events.stream().filter(event -> event.sequence() < beforeSequence).toList();
+            return page.subList(Math.max(0, page.size() - limit), page.size());
+        }
     }
 }

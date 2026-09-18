@@ -101,6 +101,38 @@ public class LocalAgentEventStorage implements AgentEventStorage {
         }
     }
 
+    @Override
+    public synchronized List<AgentEvent> listBefore(
+            String sessionId,
+            Long userId,
+            long beforeSequence,
+            int limit) {
+        if (limit < 1 || limit > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("limit must be between 1 and " + MAX_PAGE_SIZE);
+        }
+        if (beforeSequence < 2 || !ownership.owns(sessionId, userId)) {
+            return List.of();
+        }
+        Path directory = paths.resourceDirectory(sessionId, "events");
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            return List.of();
+        }
+        storageFileUtils.rejectSymbolicLink(directory);
+        storageFileUtils.verifyInsideRoot(paths.root(), directory);
+        // Event files are named by their sequence, so a range read needs no directory scan: walk downwards and
+        // stop at the first missing record, which is the start of the history or a gap.
+        List<AgentEvent> page = new java.util.ArrayList<>();
+        for (long sequence = beforeSequence - 1; sequence >= 1 && page.size() < limit; sequence--) {
+            Path eventFile = paths.eventFile(sessionId, sequence);
+            if (!Files.isRegularFile(eventFile, LinkOption.NOFOLLOW_LINKS)) {
+                break;
+            }
+            page.add(readEvent(eventFile, sessionId));
+        }
+        java.util.Collections.reverse(page);
+        return List.copyOf(page);
+    }
+
     private long lastSequence(String sessionId, Path directory) {
         Long cached = lastSequences.get(sessionId);
         if (cached != null) {

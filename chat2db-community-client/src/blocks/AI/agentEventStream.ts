@@ -1,7 +1,7 @@
 import type { AgentEvent } from '@/service/agent';
 import { isTerminalAgentEvent, mergeAgentEvents } from './agentEvents';
 
-type EventQuery = { sessionId: string; afterSequence: number; limit: number };
+type EventQuery = { sessionId: string; afterSequence?: number; beforeSequence?: number; limit: number };
 export type ReadAgentEvents = (query: EventQuery, options: { signal: AbortSignal }) => Promise<AgentEvent[]>;
 const PAGE_SIZE = 200;
 const READ_TIMEOUT_MS = 15_000;
@@ -55,58 +55,50 @@ async function readEventPage(read: ReadAgentEvents, query: EventQuery, signal: A
   return [];
 }
 
-export interface AgentHistoryWindow {
-  /** First sequence to load, so a long conversation can start at its newest events. */
-  fromSequence?: number;
-  /** Maximum number of events to load for this window. */
-  maxEvents?: number;
-  /** Keep loading earlier events until the window starts at a run boundary, so no turn is cut in half. */
-  alignToRunStart?: boolean;
+const MAX_ALIGN_PAGES = 1;
+
+/**
+ * The newest events of a session. Event files are named by sequence, so the server can read this page
+ * straight from the tail instead of scanning the whole history. A long conversation therefore opens
+ * on its last turns instead of replaying every streamed delta.
+ */
+export async function readAgentHistoryTail(
+  read: ReadAgentEvents, sessionId: string, signal: AbortSignal, lastEventSequence: number) {
+  if (lastEventSequence < 1) return [];
+  const page = await readEventPage(read,
+    { sessionId, beforeSequence: lastEventSequence + 1, limit: PAGE_SIZE }, signal);
+  return alignPageToRunStart(read, sessionId, signal, page);
 }
 
-const MAX_ALIGN_PAGES = 5;
-
-export async function readAgentHistory(read: ReadAgentEvents, sessionId: string, signal: AbortSignal,
-  window: AgentHistoryWindow = {}) {
-  const maxEvents = window.maxEvents ?? Number.POSITIVE_INFINITY;
-  let events: AgentEvent[] = [];
-  let sequence = window.fromSequence ?? 0;
-  while (!signal.aborted) {
-    const limit = Math.max(1, Math.min(PAGE_SIZE, maxEvents - events.length));
-    const page = await readEventPage(read, { sessionId, afterSequence: sequence, limit }, signal);
-    signal.throwIfAborted();
-    const incoming = page.filter((event) => event.sessionId === sessionId && event.sequence > sequence);
-    events = mergeAgentEvents(events, incoming);
-    traceAgentStage('history.page', { sessionId, afterSequence: sequence, received: page.length, total: events.length });
-    if (incoming.length === 0 || page.length < limit || events.length >= maxEvents) {
-      return window.alignToRunStart ? alignToRunStart(read, sessionId, signal, events) : events;
-    }
-    sequence = events[events.length - 1].sequence;
-  }
-  signal.throwIfAborted();
-  return events;
+/** The page of events just before {@code beforeSequence}, aligned to a turn boundary. */
+export async function readAgentHistoryBefore(
+  read: ReadAgentEvents, sessionId: string, signal: AbortSignal, beforeSequence: number) {
+  if (beforeSequence < 2) return [];
+  const page = await readEventPage(read, { sessionId, beforeSequence, limit: PAGE_SIZE }, signal);
+  return alignPageToRunStart(read, sessionId, signal, page);
 }
 
-/** Extends a window backwards until it starts where a turn starts, or the history does. */
-async function alignToRunStart(read: ReadAgentEvents, sessionId: string, signal: AbortSignal,
-  events: AgentEvent[]): Promise<AgentEvent[]> {
-  let loaded = events;
-  for (let attempt = 0; attempt <= MAX_ALIGN_PAGES; attempt += 1) {
-    if (signal.aborted || loaded.length === 0) return loaded;
-    const boundary = loaded.findIndex((event) => event.type === 'RUN_ACCEPTED');
-    if (boundary >= 0) return loaded.slice(boundary);
-    const oldest = loaded[0].sequence;
-    if (oldest <= 1) return loaded;
-    const from = Math.max(0, oldest - PAGE_SIZE);
-    const earlier = await readEventPage(read, { sessionId, afterSequence: from, limit: oldest - from }, signal);
+/** Extends a cut-off page backwards until it starts where a turn starts, or the history does. */
+async function alignPageToRunStart(
+  read: ReadAgentEvents, sessionId: string, signal: AbortSignal, page: AgentEvent[]) {
+  let loaded = page.filter((event) => event.sessionId === sessionId);
+  for (let attempt = 0; attempt < MAX_ALIGN_PAGES; attempt += 1) {
+    if (signal.aborted || loaded.length < PAGE_SIZE || loaded[0].sequence <= 1
+      || loaded[0].type === 'RUN_ACCEPTED') break;
+    const older = (await readEventPage(read, {
+      sessionId, beforeSequence: loaded[0].sequence, limit: PAGE_SIZE }, signal))
+      .filter((event) => event.sessionId === sessionId && event.sequence < loaded[0].sequence);
     signal.throwIfAborted();
-    const incoming = earlier.filter((event) => event.sessionId === sessionId
-      && event.sequence >= from && event.sequence < oldest);
-    if (incoming.length === 0) return loaded;
-    loaded = mergeAgentEvents(loaded, incoming);
+    if (older.length === 0) break;
+    loaded = mergeAgentEvents(older, loaded);
   }
   const boundary = loaded.findIndex((event) => event.type === 'RUN_ACCEPTED');
-  return boundary > 0 ? loaded.slice(boundary) : loaded;
+  traceAgentStage('history.page', {
+    sessionId, beforeSequence: page[0]?.sequence ?? 0, received: page.length, total: loaded.length,
+  });
+  // A full page that starts inside a turn was cut off by the window, so drop that half turn. A short
+  // page reached sequence 1: it is the real start of the history and keeps the turn it has.
+  return boundary > 0 && loaded.length >= PAGE_SIZE ? loaded.slice(boundary) : loaded;
 }
 
 export async function followAgentRun(

@@ -26,6 +26,10 @@ Pi UI → host adapter → platform directory, attachment and output operations
 - The client owns timeout and AbortSignal cleanup. Aborting an observation
   drops late replies; it does not roll back an accepted mutation or stop a run.
   Stopping generation requires `runs.cancel` explicitly.
+- `events.list` pages forwards with `afterSequence` while a run streams, and
+  backwards with `beforeSequence` when the reader scrolls into older history.
+  Event files are named by sequence, so a backwards page is a range read of the
+  requested window instead of a scan of the whole session.
 
 ## Host operations
 
