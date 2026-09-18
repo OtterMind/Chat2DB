@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.JsonOptions;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.CsvImportReader;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.JsonImportReader;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
@@ -37,26 +38,13 @@ public final class ImportPreviewFileParser {
     private ParsedRows parseCsv(File file, int limit, CsvOptions csvOptions) {
         CsvOptions options = (csvOptions == null ? CsvOptions.defaults() : csvOptions).validate();
         try {
-            int previewEndRow = options.getDataStartRow() + limit - 1;
-            if (options.getDataEndRow() != null) {
-                previewEndRow = Math.min(previewEndRow, options.getDataEndRow());
-            }
-            int parseLimit = Math.max(previewEndRow,
-                    Boolean.TRUE.equals(options.getHasHeader()) ? options.getHeaderRow() : 0);
-            List<Map<Integer, String>> rows = new CsvParser(options).parse(file.toPath(), parseLimit).rows();
-            if (rows.isEmpty()) {
+            Map<Integer, String> header = new LinkedHashMap<>();
+            List<Map<Integer, String>> data = new ArrayList<>();
+            CsvImportReader.read(file, options, limit, 0, header::putAll, (row, number) -> data.add(row), () -> { });
+            if (header.isEmpty()) {
                 return ParsedRows.empty();
             }
-            int firstDataIndex = options.getDataStartRow() - 1;
-            int dataEndIndex = Math.min(rows.size(), previewEndRow);
-            List<Map<Integer, String>> data = firstDataIndex >= dataEndIndex
-                    ? List.of() : rows.subList(firstDataIndex, dataEndIndex);
-            if (Boolean.TRUE.equals(options.getHasHeader())) {
-                int headerIndex = options.getHeaderRow() - 1;
-                return headerIndex >= rows.size()
-                        ? ParsedRows.empty() : new ParsedRows(rows.get(headerIndex), data, false);
-            }
-            return new ParsedRows(syntheticHeader(data), data, true);
+            return new ParsedRows(header, data, !Boolean.TRUE.equals(options.getHasHeader()));
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
