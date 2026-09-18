@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import com.alibaba.excel.enums.CellDataTypeEnum;
+import org.apache.commons.lang3.StringUtils;
 
 /** Shared Excel row selection and cell conversion for preview and execution. */
 public final class ExcelImportReader {
@@ -57,7 +59,7 @@ public final class ExcelImportReader {
                     sourceColumnCount = Math.max(sourceColumnCount, cells.size());
                     Map<Integer, String> header = new LinkedHashMap<>();
                     cells.forEach((column, cell) -> header.put(column, isHeader
-                            ? org.apache.commons.lang3.StringUtils.defaultIfBlank(cell.display(), SourceColumnName.of(column))
+                            ? StringUtils.defaultIfBlank(cell.display(), SourceColumnName.of(column))
                             : SourceColumnName.of(column)));
                     headerConsumer.accept(header);
                     hasHeader = true;
@@ -91,7 +93,7 @@ public final class ExcelImportReader {
     }
 
     private static ImportCell cell(ReadCellData<?> cell, AnalysisContext context, ExcelOptions options, int column) {
-        if (cell == null || cell.getType() == com.alibaba.excel.enums.CellDataTypeEnum.EMPTY) {
+        if (cell == null || cell.getType() == CellDataTypeEnum.EMPTY) {
             return new ImportCell(options.getEmptyAsNull() ? null : "", true);
         }
         return switch (cell.getType()) {

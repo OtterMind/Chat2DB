@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.api.model.task;
 
 import lombok.Data;
+import ai.chat2db.community.tools.exception.BusinessException;
 
 /** Date and number options for text cells. Native file values retain their types. */
 @Data
@@ -19,8 +20,8 @@ public class ImportValueOptions implements ImportValueFormat {
             normalized = CsvOptions.builder().dateOrder(dateOrder).dateTimeOrder(dateTimeOrder)
                 .dateDelimiter(dateDelimiter).yearDelimiter(yearDelimiter)
                 .timeDelimiter(timeDelimiter).decimalSymbol(decimalSymbol).build().validate();
-        } catch (ai.chat2db.community.tools.exception.BusinessException e) {
-            throw new ai.chat2db.community.tools.exception.BusinessException("import.preview.invalidValueFormat", null, e);
+        } catch (BusinessException e) {
+            throw new BusinessException("import.preview.invalidValueFormat", null, e);
         }
         dateOrder = normalized.getDateOrder();
         dateTimeOrder = normalized.getDateTimeOrder();

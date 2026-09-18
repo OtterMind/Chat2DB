@@ -7,15 +7,17 @@ import org.springframework.context.i18n.LocaleContextHolder;
 import java.sql.SQLException;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
+import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 
 class ImportSqlFailureTest {
     @Test
     void preservesSpecificErrorsWrappedByScriptAndSpreadsheetParsers() {
-        var specific = new ai.chat2db.community.domain.api.model.task.TaskExecutionException(
+        var specific = new TaskExecutionException(
                 "IMPORT_FAILED", "Constraint failed", "SQLState=23000", new SQLException());
         assertSame(specific, ImportTaskErrors.from(new RuntimeException("parser wrapper", specific), "unused"));
-        var cancelled = new ai.chat2db.community.domain.api.model.task.TaskCancelledException();
-        assertThrows(ai.chat2db.community.domain.api.model.task.TaskCancelledException.class,
+        var cancelled = new TaskCancelledException();
+        assertThrows(TaskCancelledException.class,
                 () -> ImportTaskErrors.from(new RuntimeException(cancelled), "unused"));
     }
 

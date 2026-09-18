@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import java.math.BigDecimal;
 
 public final class CsvImportValueNormalizer {
 
@@ -48,7 +50,7 @@ public final class CsvImportValueNormalizer {
             };
         } catch (RuntimeException e) {
             String displayValue = value.length() > 80 ? value.substring(0, 80) + "..." : value;
-            throw new BusinessException(options instanceof ai.chat2db.community.domain.api.model.task.CsvOptions
+            throw new BusinessException(options instanceof CsvOptions
                     ? "import.csv.invalidValue" : "import.value.invalidValue",
                     new Object[]{sourceRow, column.getName(), displayValue}, e);
         }
@@ -66,7 +68,7 @@ public final class CsvImportValueNormalizer {
                 || column.getDataType() != null && (column.getDataType() == Types.BOOLEAN || column.getDataType() == Types.BIT))) {
             return bool ? "1" : "0";
         }
-        return value instanceof java.math.BigDecimal number ? number.stripTrailingZeros().toPlainString()
+        return value instanceof BigDecimal number ? number.stripTrailingZeros().toPlainString()
                 : value == null ? null : value.toString();
     }
 

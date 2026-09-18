@@ -14,7 +14,16 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import ai.chat2db.community.domain.api.model.task.ExcelOptions;
+import ai.chat2db.community.domain.api.model.task.JsonOptions;
+import ai.chat2db.community.domain.api.model.task.SqlImportOptions;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionMode;
+import ai.chat2db.community.web.api.model.request.db.ImportExecuteRequest;
+
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TaskWebConverterTest {
@@ -23,30 +32,30 @@ class TaskWebConverterTest {
     void retainsBasicFileOptionsInTaskSpecifications() {
         TaskImportRequest request = new TaskImportRequest();
         request.setFormat("XLSX");
-        var excel = new ai.chat2db.community.domain.api.model.task.ExcelOptions();
+        var excel = new ExcelOptions();
         excel.setSheetIndex(2);
         excel.setColumnRange("B:H");
         request.setExcelOptions(excel);
         assertEquals("B:H", new TaskWebConverter().importRequest2spec(request).getExcelOptions().getColumnRange());
         request.setFormat("JSON");
-        var json = new ai.chat2db.community.domain.api.model.task.JsonOptions();
+        var json = new JsonOptions();
         json.setDataPath("$.data.items");
         request.setJsonOptions(json);
         var jsonSpec = new TaskWebConverter().importRequest2spec(request);
         assertEquals("$.data.items", jsonSpec.getJsonOptions().getDataPath());
-        org.junit.jupiter.api.Assertions.assertNull(jsonSpec.getExcelOptions());
+        assertNull(jsonSpec.getExcelOptions());
         request.setFormat("SQL");
-        var sql = new ai.chat2db.community.domain.api.model.task.SqlImportOptions();
+        var sql = new SqlImportOptions();
         sql.setEncoding("GBK");
         request.setSqlImportOptions(sql);
         var spec = new TaskWebConverter().importRequest2spec(request);
         assertEquals("GBK", spec.getSqlImportOptions().getEncoding());
-        org.junit.jupiter.api.Assertions.assertNull(spec.getJsonOptions());
+        assertNull(spec.getJsonOptions());
     }
 
     @Test
     void importPreservesStagedSourceAndExecutionMode() {
-        var request = new ai.chat2db.community.web.api.model.request.task.TaskImportRequest();
+        var request = new TaskImportRequest();
         request.setFileId("staged-source");
         request.setFormat("CSV");
         request.setMode("FAST");
@@ -58,18 +67,18 @@ class TaskWebConverterTest {
     @Test
     void modeStaysAStringAndOnlyUppercaseFastEnablesParallelExecution() throws Exception {
         assertEquals(String.class, TaskImportRequest.class.getDeclaredField("mode").getType());
-        assertEquals(String.class, ai.chat2db.community.web.api.model.request.db.ImportExecuteRequest.class
+        assertEquals(String.class, ImportExecuteRequest.class
                 .getDeclaredField("mode").getType());
-        assertEquals(List.of("STANDARD", "FAST"), java.util.Arrays.stream(
-                ai.chat2db.community.domain.api.model.task.TaskExecutionMode.values()).map(Enum::name).toList());
-        for (String mode : java.util.Arrays.asList(null, "STANDARD", "FAST", "fast", " FAST ", "unknown")) {
+        assertEquals(List.of("STANDARD", "FAST"), Arrays.stream(
+                TaskExecutionMode.values()).map(Enum::name).toList());
+        for (String mode : Arrays.asList(null, "STANDARD", "FAST", "fast", " FAST ", "unknown")) {
             TaskImportRequest request = new TaskImportRequest();
             request.setFormat("CSV");
             request.setMode(mode);
             ImportTaskSpec spec = new TaskWebConverter().importRequest2spec(request);
             assertEquals(mode, spec.getMode());
             assertEquals("FAST".equals(mode),
-                    ai.chat2db.community.domain.api.model.task.TaskExecutionMode.isFast(spec.getMode()));
+                    TaskExecutionMode.isFast(spec.getMode()));
         }
     }
 

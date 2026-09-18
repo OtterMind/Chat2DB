@@ -18,9 +18,10 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
 import ai.chat2db.community.tools.exception.BusinessException;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DbMappedImportServiceImplTest {
@@ -80,7 +81,7 @@ class DbMappedImportServiceImplTest {
         AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
         DbMappedImportServiceImpl service = service(stagingService, preview("Orders", target("name")), submitted);
         MappedImportExecution execution = execution(mapping("Name", "name"));
-        var options = ai.chat2db.community.domain.api.model.task.CsvOptions.defaults();
+        var options = CsvOptions.defaults();
         options.setDelimiter(";");
         execution.setCsvOptions(options);
         execution.setMode("FAST");

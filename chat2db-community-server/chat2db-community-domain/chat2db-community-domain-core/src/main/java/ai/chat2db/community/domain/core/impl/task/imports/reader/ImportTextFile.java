@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.nio.charset.CharacterCodingException;
 
 /** Validates decoding before SQL execution and provides a BOM-free UTF-8 input. */
 public final class ImportTextFile {
@@ -26,7 +27,7 @@ public final class ImportTextFile {
                 checkCancelled.run();
                 writer.write(buffer, 0, count);
             }
-        } catch (java.nio.charset.CharacterCodingException e) {
+        } catch (CharacterCodingException e) {
             Files.deleteIfExists(result);
             throw new BusinessException("import.sql.encodingMismatch", new Object[]{encoding}, e);
         } catch (IOException | RuntimeException e) {
@@ -50,7 +51,7 @@ public final class ImportTextFile {
                 char[] buffer = new char[8192];
                 while (reader.read(buffer) != -1) checkCancelled.run();
                 return charset;
-            } catch (java.nio.charset.CharacterCodingException ignored) {
+            } catch (CharacterCodingException ignored) {
                 // Try the next supported encoding only for a decoding error.
             }
         }

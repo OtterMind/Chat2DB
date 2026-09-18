@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
 
 /**
  * Database-independent import preview. File parsing is delegated by format; this service
@@ -114,7 +115,7 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
 
     @Override
     public List<String> sheetNames(File file) {
-        return ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader.sheets(file);
+        return ExcelImportReader.sheets(file);
     }
 
     private static List<ImportTargetColumn> targetColumns(TableMetadataRequest target) {

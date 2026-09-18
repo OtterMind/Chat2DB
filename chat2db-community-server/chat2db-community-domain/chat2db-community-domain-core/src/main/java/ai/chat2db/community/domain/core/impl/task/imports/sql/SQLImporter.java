@@ -32,6 +32,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Map;
+import java.nio.file.Path;
 
 
 @Slf4j
@@ -117,7 +118,7 @@ public class SQLImporter implements IImportStrategy {
 
     private void importConfiguredFile(ImportTaskSpec spec, TaskExecutionContext context, File sourceFile) throws Exception {
         SqlImportOptions options = spec.getSqlImportOptions().validate();
-        java.nio.file.Path decoded = ImportTextFile.utf8Copy(sourceFile, options.getEncoding(), context::checkCancelled);
+        Path decoded = ImportTextFile.utf8Copy(sourceFile, options.getEncoding(), context::checkCancelled);
         try {
             run(ImportTaskSpec.builder().sourceFile(decoded.toString()).build(), context);
         } finally {
