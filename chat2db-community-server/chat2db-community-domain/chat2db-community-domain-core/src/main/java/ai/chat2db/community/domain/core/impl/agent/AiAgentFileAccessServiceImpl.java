@@ -48,9 +48,13 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         Path target = normalizeAliases(skills.resolveLegacyPath(resolve(path, cwd)), cwd);
         String cursor = string(arguments, "cursor", null);
         Integer limit = integer(arguments, "limit");
-        boolean skill = skillRoots(sessionId).stream().anyMatch(target::startsWith);
+        List<Path> roots = skillRoots(sessionId);
+        boolean skill = roots.stream().anyMatch(target::startsWith);
         Path resources = skills.resourceDirectory();
-        if (!skill && resources != null && target.startsWith(resources)) {
+        // The packaged root and any directory above a loaded skill stay listable, so a skill can be discovered.
+        boolean listed = "ls".equals(toolName) || "find".equals(toolName);
+        boolean aboveLoadedSkill = listed && roots.stream().anyMatch(root -> root.startsWith(target));
+        if (!skill && !aboveLoadedSkill && resources != null && target.startsWith(resources)) {
             throw new SecurityException("Skill resource path is not loaded. Resolve references from the exact loaded entry: "
                     + skills.selected(sessionId).stream().map(item -> item.entryPath()).toList());
         }
@@ -188,15 +192,21 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         boolean shell = "bash".equals(toolName) || "powershell".equals(toolName);
         Path target = shell ? null : normalizeAliases(resolve(string(arguments, "path", "."), cwd), cwd);
         Path userSkills = skills.userDirectory();
+        Path resources = skills.resourceDirectory();
         boolean userSkill = target != null && userSkills != null && target.startsWith(userSkills);
-        if (!userSkill && (workspaces.isEmpty() || !workspaces.get(0).isToolEnabled(toolName))) {
+        boolean packagedSkill = target != null && resources != null && target.startsWith(resources);
+        if (!userSkill && !packagedSkill && (workspaces.isEmpty() || !workspaces.get(0).isToolEnabled(toolName))) {
             throw new SecurityException("Access to user files is disabled for this tool");
         }
         if (shell) return cwd;
+        // Read-only tools may browse the packaged skill area; mutations there stay blocked below.
+        boolean readOnly = List.of("read", "grep", "ls", "find").contains(toolName);
         Path root;
-        try { root = userSkill ? userSkills : Path.of(cwd).toRealPath(); }
-        catch (IOException error) { throw new IllegalArgumentException("Working directory does not exist", error); }
-        if (!target.startsWith(root) || protectedPath(sessionId, target)) {
+        try {
+            root = userSkill ? userSkills : packagedSkill ? resources : Path.of(cwd).toRealPath();
+        } catch (IOException error) { throw new IllegalArgumentException("Working directory does not exist", error); }
+        boolean blocked = readOnly ? protectedPath(sessionId, target) : protectedWritePath(sessionId, target);
+        if (!target.startsWith(root) || blocked) {
             throw new SecurityException("File path is outside the permitted user directory");
         }
         // Check the nearest existing ancestor too, so a new write cannot escape via a symlink.
@@ -273,8 +283,15 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
     }
 
     private boolean protectedPath(String sessionId, Path path) {
-        // User-selected parents never grant access to private run/ticket data or system output writes, and a loaded
-        // bundled skill stays read-only. A loaded user skill remains editable: its own directory is the running source.
+        // A loaded skill stays visible in listings; other packaged resources stay hidden.
+        Path resources = skills.resourceDirectory();
+        boolean visibleSkill = resources != null && path.startsWith(resources)
+                && skillRoots(sessionId).stream().anyMatch(root -> path.startsWith(root) || root.startsWith(path));
+        return protectedWritePath(sessionId, path) && !visibleSkill;
+    }
+
+    /** Writes never reach private run data or a packaged skill, loaded or not. */
+    private boolean protectedWritePath(String sessionId, Path path) {
         Path managed = outputs.managedRoot().getParent();
         Path ownWorkspace = managed.resolve("workspaces").resolve(sessionId);
         Path resources = skills.resourceDirectory();

@@ -224,9 +224,41 @@ class AiAgentFileAccessServiceImplTest {
                 Map.of("path", bundled.resolve("SKILL.md").toString())));
     }
 
+    @Test
+    void listsLoadedPackagedSkillsAndHidesUnloadedOnes() throws Exception {
+        Path root = temporary.toRealPath();
+        Path managed = Files.createDirectories(root.resolve("history/sessions"));
+        Path builtin = Files.createDirectories(root.resolve("storage/agent-v2/skills/builtin"));
+        Path chart = Files.createDirectories(builtin.resolve("chart"));
+        Files.writeString(chart.resolve("SKILL.md"), "chart instructions");
+        Path ghost = Files.createDirectories(builtin.resolve("ghost"));
+        Files.writeString(ghost.resolve("SKILL.md"), "not loaded");
+        Path userRoot = Files.createDirectories(root.resolve("用户 skills"));
+        Path workspace = Files.createDirectory(root.resolve("workspace"));
+        var access = service(new AiAgentSkill("chart", chart.resolve("SKILL.md").toString(), "fixture"),
+                builtin, userRoot, managed, workspace, true);
+
+        var listing = (Map<?, ?>) access.execute(context(), "ls", Map.of("path", builtin.toString())).data();
+        assertEquals(1L, listing.get("count"), "only the loaded packaged skill is visible");
+        assertEquals(chart.toString(),
+                ((Map<?, ?>) ((List<?>) listing.get("entries")).get(0)).get("path"));
+
+        var inner = (Map<?, ?>) access.execute(context(), "ls", Map.of("path", chart.toString())).data();
+        assertEquals(1L, inner.get("count"), "a loaded packaged skill stays listable");
+
+        assertThrows(SecurityException.class,
+                () -> access.execute(context(), "read", Map.of("path", ghost.resolve("SKILL.md").toString())));
+        assertThrows(SecurityException.class, () -> access.authorizeNative("session", "edit", workspace.toString(),
+                Map.of("path", chart.resolve("SKILL.md").toString())));
+    }
+
     private AiAgentFileAccessServiceImpl service(AiAgentSkill selected, Path builtinRoot, Path userRoot, Path managed, Path workspace) {
+        return service(selected, builtinRoot, userRoot, managed, workspace, false);
+    }
+
+    private AiAgentFileAccessServiceImpl service(AiAgentSkill selected, Path builtinRoot, Path userRoot, Path managed, Path workspace, boolean toolsEnabled) {
         IAiAgentWorkspaceService workspaceService = proxy(IAiAgentWorkspaceService.class, (method, args) -> switch (method) {
-            case "isToolEnabled" -> false;
+            case "isToolEnabled" -> toolsEnabled;
             case "resolveWorkingDirectory" -> workspace.toString();
             default -> null;
         });
