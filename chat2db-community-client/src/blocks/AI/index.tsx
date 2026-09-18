@@ -591,6 +591,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const historyEventsRef = useRef<AgentEvent[]>([]);
   const historyWindowRef = useRef(INITIAL_AGENT_HISTORY_EVENTS);
+  const historyControllerRef = useRef<AbortController | null>(null);
   const canLoadEarlierRef = useRef(true);
 
   // Session management.
@@ -1694,6 +1695,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       stopAgentPolling();
       const operation = createAgentOperation(sessionId);
       agentOperationRef.current = operation;
+      // History loading must not depend on a live run: an idle session has no operation.
+      historyControllerRef.current?.abort();
+      historyControllerRef.current = new AbortController();
       historyLoadingRef.current = true;
       setSessionLoading(true);
       try {
@@ -1779,21 +1783,21 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const handleLoadEarlierHistory = useCallback(async () => {
     const sessionId = currentSessionIdRef.current;
     const loaded = historyEventsRef.current;
-    const operation = agentOperationRef.current;
+    const signal = historyControllerRef.current?.signal;
     const oldest = loaded.length ? loaded[0].sequence : 0;
-    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1) return;
+    if (!sessionId || !signal || historyLoadingRef.current || oldest <= 1) return;
     historyLoadingRef.current = true;
     canLoadEarlierRef.current = false;
     setLoadingEarlier(true);
     const container = messageListRef.current;
     prependAnchorRef.current = container ? { height: container.scrollHeight, top: container.scrollTop } : null;
     try {
-      const earlier = await readAgentHistory(pi.events.list, sessionId, operation.controller.signal, {
+      const earlier = await readAgentHistory(pi.events.list, sessionId, signal, {
         fromSequence: Math.max(0, oldest - historyWindowRef.current),
         maxEvents: historyWindowRef.current,
         alignToRunStart: true,
       });
-      if (operation.controller.signal.aborted) return;
+      if (signal.aborted) return;
       if (earlier.length === 0) {
         setHasOlderHistory(false);
         return;
@@ -1811,7 +1815,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       setPrependCount((count) => count + 1);
       traceAgentStage('history.prepended', { sessionId, events: earlier.length, total: historyEventsRef.current.length });
     } catch (error) {
-      if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
+      if (!signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
     } finally {
       historyLoadingRef.current = false;
       setLoadingEarlier(false);
