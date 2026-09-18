@@ -1777,7 +1777,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     const loaded = historyEventsRef.current;
     const operation = agentOperationRef.current;
     const oldest = loaded.length ? loaded[0].sequence : 0;
-    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1) return;
+    if (!sessionId || !operation || historyLoadingRef.current || oldest <= 1 || agentRunning) return;
     historyLoadingRef.current = true;
     canLoadEarlierRef.current = false;
     setLoadingEarlier(true);
@@ -1818,9 +1818,10 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   useEffect(() => {
     loadEarlierRef.current = () => {
-      if (hasOlderHistory && !sessionLoading) void handleLoadEarlierHistory();
+      // While a run streams, new events keep arriving: rebuilding the list here fights the live view.
+      if (hasOlderHistory && !sessionLoading && !agentRunning) void handleLoadEarlierHistory();
     };
-  }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
+  }, [agentRunning, handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
 
   React.useLayoutEffect(() => {
     const anchor = pendingHistoryAnchorRef.current;
@@ -2439,7 +2440,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
     return (
       <>
-        {hasOlderHistory && (
+        {hasOlderHistory && !agentRunning && (
           <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
             onClick={() => void handleLoadEarlierHistory()}
           >
