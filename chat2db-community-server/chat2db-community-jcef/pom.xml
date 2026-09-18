@@ -100,7 +100,7 @@
                     <include>**/application*.yml</include>
                     <include>**/application*.yaml</include>
                     <include>**/application*.properties</include>
-                    <include>chat2db-update-keys.properties</include>
+                    <include>chat2db-community-update-keys.properties</include>
                 </includes>
             </resource>
             <resource>
@@ -109,7 +109,7 @@
                     <exclude>**/application*.yml</exclude>
                     <exclude>**/application*.yaml</exclude>
                     <exclude>**/application*.properties</exclude>
-                    <exclude>chat2db-update-keys.properties</exclude>
+                    <exclude>chat2db-community-update-keys.properties</exclude>
                 </excludes>
             </resource>
         </resources>

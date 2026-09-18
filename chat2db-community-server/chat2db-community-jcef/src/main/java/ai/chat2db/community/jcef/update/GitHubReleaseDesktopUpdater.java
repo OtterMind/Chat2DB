@@ -36,7 +36,8 @@ public final class GitHubReleaseDesktopUpdater {
         HttpsUpdateTransport transport = new HttpsUpdateTransport(GitHubReleaseDesktopUpdater::isAllowedUrl);
         return FullPackageDesktopUpdater.create("COMMUNITY", "chat2db-community", transport,
             new UpdateDiscoveryService(transport,
-                new UpdateManifestVerifier(TrustedUpdateKeys.load()),
+                new UpdateManifestVerifier(
+                    TrustedUpdateKeys.load("/chat2db-community-update-keys.properties")),
                 GitHubReleaseDesktopUpdater::indexUrl));
     }
 }

@@ -109,7 +109,7 @@ shared updater and stages `tools/chat2db-updater.jar` plus `version.json` in
 each native application. The helper is a standalone shaded artifact; the
 application depends on the ordinary updater module JAR.
 
-The desktop trusts the `chat2db-update-keys.properties` resource bundled in
+The desktop trusts the `chat2db-community-update-keys.properties` resource bundled in
 `runtime/lib/chat2db-community-jcef-*.jar` together with the
 `chat2db.update.key-id` and `chat2db.update.public-key` system properties.
 `package-community-jcef.sh` passes both values to the Maven build, which

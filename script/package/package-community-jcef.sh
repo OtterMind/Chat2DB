@@ -308,17 +308,17 @@ verify_bundled_update_key() {
     -name 'chat2db-community-jcef-*.jar' -print -quit)
 
   extract_dir=$(mktemp -d)
-  if ! (cd "${extract_dir}" && jar xf "${jcef_jar}" chat2db-update-keys.properties) \
-      || [ ! -f "${extract_dir}/chat2db-update-keys.properties" ]; then
+  if ! (cd "${extract_dir}" && jar xf "${jcef_jar}" chat2db-community-update-keys.properties) \
+      || [ ! -f "${extract_dir}/chat2db-community-update-keys.properties" ]; then
     rm -rf "${extract_dir}"
     echo "[error] bundled update key resource is missing from ${jcef_jar}" >&2
     exit 1
   fi
-  key_file="${extract_dir}/chat2db-update-keys.properties"
+  key_file="${extract_dir}/chat2db-community-update-keys.properties"
   if ! grep -Fxq "keyId=${UPDATE_KEY_ID}" "${key_file}" || \
      ! grep -Fxq "publicKey=${UPDATE_PUBLIC_KEY}" "${key_file}"; then
     rm -rf "${extract_dir}"
-    echo "[error] bundled update signing key is not substituted in ${jcef_jar}; keep the chat2db-update-keys.properties resource filtered" >&2
+    echo "[error] bundled update signing key is not substituted in ${jcef_jar}; keep the chat2db-community-update-keys.properties resource filtered" >&2
     exit 1
   fi
   rm -rf "${extract_dir}"
