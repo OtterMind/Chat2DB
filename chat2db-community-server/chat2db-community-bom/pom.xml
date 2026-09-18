@@ -31,7 +31,7 @@
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <h2.version>2.1.214</h2.version>
         <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
-        <hikari.version>5.0.1</hikari.version>
+        <hikari.version>7.1.0</hikari.version>
         <liquibase.version>4.30.0</liquibase.version>
         <freemarker.version>2.3.34</freemarker.version>
         <aliyun-oss.version>3.10.2</aliyun-oss.version>
