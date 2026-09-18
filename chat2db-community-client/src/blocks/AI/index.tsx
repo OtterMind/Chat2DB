@@ -2738,13 +2738,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 onTouchEndCapture={handleMessageListScroll}
               >
                 <div className={styles.contentWidth} ref={messageContentRef}>
-                  {hasOlderHistory && (
-                    <button type="button" className={styles.loadEarlier} disabled={loadingEarlier}
-                      onClick={() => void handleLoadEarlierHistory()}
-                    >
-                      {loadingEarlier ? i18n('common.text.loading') : i18n('stream.history.loadEarlier')}
-                    </button>
-                  )}
+                  {loadingEarlier && <div className={styles.topLoadingBar} />}
                   {renderMessages()}
                 </div>
               </div>
