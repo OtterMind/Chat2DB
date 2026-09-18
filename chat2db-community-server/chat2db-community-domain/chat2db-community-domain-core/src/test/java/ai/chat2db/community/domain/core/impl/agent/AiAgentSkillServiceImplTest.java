@@ -81,8 +81,7 @@ class AiAgentSkillServiceImplTest {
         Files.writeString(source.resolve("references/说明 + guide.md"), "first reference");
         Path entry = Files.writeString(source.resolve("SKILL.md"),
                 "---\nname: report\ndescription: Build reports\ncompatibility: Chat2DB\ndisable-model-invocation: true\n---\n[Guide](references/说明%20+%20guide.md)\n");
-        var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"), builtinRoot, root,
-                temporaryDirectory.resolve("old/resources/skills"));
+        var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"), builtinRoot, root);
         var first = report(service.select("one"));
         assertEquals(entry.toRealPath().toString(), first.entryPath());
         Files.writeString(source.resolve("references/说明 + guide.md"), "second reference");
@@ -111,7 +110,7 @@ class AiAgentSkillServiceImplTest {
     void invalidSourcesCannotOverrideBuiltinsOrReadThroughLinks() throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve("skills")).toRealPath();
         var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
-                temporaryDirectory.resolve("builtin"), root, null);
+                temporaryDirectory.resolve("builtin"), root);
         var builtins = service.prepare();
         Path bad = Files.createDirectory(root.resolve("bad"));
         Files.writeString(bad.resolve("SKILL.md"), "---\nname: chart\ndescription: Override\n---\nwrong");
@@ -123,24 +122,6 @@ class AiAgentSkillServiceImplTest {
         assertEquals(builtins, service.prepare());
         Files.delete(bad.resolve("outside"));
         assertTrue(service.prepare().stream().anyMatch(skill -> skill.name().equals("linked")));
-    }
-
-    @Test
-    void recordedSnapshotPathsResolveToTheSkillLoadedNow() throws Exception {
-        Path root = temporaryDirectory.resolve("skills");
-        Path legacy = temporaryDirectory.resolve("history/resources/skills");
-        var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
-                temporaryDirectory.resolve("builtin"), root, legacy);
-        var chart = service.prepare().get(0);
-        assertEquals(Path.of(chart.entryPath()), service.resolveLegacyPath(legacy.resolve(chart.digest()).resolve("chart/SKILL.md")));
-        assertEquals(Path.of(chart.entryPath()).resolveSibling("references/pie.md"),
-                service.resolveLegacyPath(legacy.resolve(chart.digest()).resolve("chart/references/pie.md")));
-        assertEquals(Path.of(chart.entryPath()),
-                service.resolveLegacyPath(root.resolve(".resources").resolve(chart.digest()).resolve("chart/SKILL.md")));
-        Path unrelated = temporaryDirectory.resolve("notes/SKILL.md");
-        assertEquals(unrelated, service.resolveLegacyPath(unrelated));
-        assertFalse(Files.exists(legacy));
-        assertFalse(Files.exists(root.resolve(".resources")));
     }
 
     @Test
@@ -168,7 +149,7 @@ class AiAgentSkillServiceImplTest {
     void unusableUserRootDropsUserSkillsWithoutFailingTheService() throws Exception {
         Path userRoot = Files.writeString(temporaryDirectory.resolve("not-a-directory"), "occupied");
         var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
-                temporaryDirectory.resolve("builtin"), userRoot, null);
+                temporaryDirectory.resolve("builtin"), userRoot);
         assertNull(service.userDirectory());
         assertEquals(List.of("chart", "skill-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
         assertEquals("chart", service.resolve(new AiAgentSkillResolveRequest("/skill:chart go")).skillName());

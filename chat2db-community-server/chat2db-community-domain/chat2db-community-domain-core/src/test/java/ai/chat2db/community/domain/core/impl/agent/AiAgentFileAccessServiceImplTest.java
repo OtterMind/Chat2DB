@@ -264,7 +264,6 @@ class AiAgentFileAccessServiceImplTest {
         });
         IAiAgentSkillService skills = proxy(IAiAgentSkillService.class, (method, args) -> switch (method) {
             case "prepare", "selected" -> List.of(selected);
-            case "resolveLegacyPath" -> args[0];
             case "userDirectory" -> userRoot;
             case "resourceDirectory" -> builtinRoot;
             default -> null;
@@ -295,7 +294,6 @@ class AiAgentFileAccessServiceImplTest {
         });
         IAiAgentSkillService skills = proxy(IAiAgentSkillService.class, (method, args) -> switch (method) {
             case "prepare", "selected" -> List.of(new AiAgentSkill("chart", skill.resolve("SKILL.md").toString(), "fixture"));
-            case "resolveLegacyPath" -> args[0];
             case "userDirectory" -> userRoot;
             case "resourceDirectory" -> userRoot == null ? null : userRoot.resolveSibling("builtin");
             default -> null;

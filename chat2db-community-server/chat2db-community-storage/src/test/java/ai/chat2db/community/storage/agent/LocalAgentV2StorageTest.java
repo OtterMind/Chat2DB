@@ -60,7 +60,7 @@ class LocalAgentV2StorageTest {
     }
 
     @Test
-    void readsExistingSessionJsonAfterRuntimeContractPackagesMove() throws Exception {
+    void readsAStoredSessionWithoutRuntimeClassNames() throws Exception {
         Files.writeString(paths.sessionFile(SESSION_ID), """
                 {
                   "schemaVersion": 2,
@@ -89,32 +89,6 @@ class LocalAgentV2StorageTest {
         assertEquals(existing.runtimeBinding(), renamed.runtimeBinding());
         assertEquals(renamed, sessions.get(SESSION_ID, USER_ID));
         assertFalse(Files.readString(paths.sessionFile(SESSION_ID)).contains("ai.chat2db"));
-    }
-
-    @Test
-    void readsExistingRunAndEventJsonAfterEnumPackagesMove() throws Exception {
-        Files.createDirectories(paths.resourceDirectory(SESSION_ID, "runs"));
-        Files.writeString(paths.resourceFile(SESSION_ID, "runs", "run-one"), """
-                {
-                  "id": "run-one", "sessionId": "session-one", "status": "COMPLETED",
-                  "model": {
-                    "modelConfigId": "model-config", "modelRevision": 1, "provider": "openai",
-                    "modelId": "gpt-test", "contextWindow": 128000, "maxOutputTokens": 4096
-                  },
-                  "requestMessageId": "message-one", "idempotencyKey": "idempotency-one",
-                  "externalRunId": "external-run", "firstEventSequence": 1, "lastEventSequence": 1
-                }
-                """);
-        Files.createDirectories(paths.resourceDirectory(SESSION_ID, "events"));
-        Files.writeString(paths.eventFile(SESSION_ID, 1), """
-                {
-                  "id": "event-1", "sessionId": "session-one", "runId": "run-one", "sequence": 1,
-                  "type": "RUN_COMPLETED", "payload": {}, "occurredAt": "2026-09-08T21:00:01"
-                }
-                """);
-
-        assertEquals(run(AgentRunStatus.COMPLETED, 1), runs.get(SESSION_ID, "run-one", USER_ID));
-        assertEquals(List.of(event(1, AgentEventType.RUN_COMPLETED)), events.list(SESSION_ID, USER_ID, 0, 10));
     }
 
     @Test

@@ -22,8 +22,5 @@ public interface IAiAgentSkillService {
     /** Installed packaged skills; read-only and never a user installation destination. */
     default Path resourceDirectory() { return null; }
 
-    /** Resolves a resource path recorded by an earlier run to the skill that is loaded now. */
-    default Path resolveLegacyPath(Path path) { return path; }
-
     AiAgentSkillResolveResponse resolve(AiAgentSkillResolveRequest aiAgentSkillResolveRequest);
 }

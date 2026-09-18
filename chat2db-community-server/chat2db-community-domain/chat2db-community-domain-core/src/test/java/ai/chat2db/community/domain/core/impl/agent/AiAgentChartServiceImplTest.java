@@ -132,7 +132,7 @@ class AiAgentChartServiceImplTest {
             assertTrue(chart.page().hasMore());
         }
         var combo = service.render(new AiAgentChartRenderRequest(id, "Combo", "month", null, "Combo",
-                List.of(new AiAgentChartSeriesRequest("amount", "Line", "right"))), context);
+                List.of(new AiAgentChartSeriesRequest("amount", "Line", "right")), List.of(), false), context);
         assertEquals("amount", combo.series().get(0).field());
         assertEquals("right", combo.series().get(0).axisPosition());
     }
@@ -268,27 +268,6 @@ class AiAgentChartServiceImplTest {
     }
 
     @Test
-    void restoresOldChartJsonAndRequestConstructorsWithDefaultOptions() throws Exception {
-        String legacy = """
-                {"id":"chart","runId":"run","resultId":"query","chartType":"Line","title":"Totals",
-                "xField":"month","yField":"amount","series":[],"data":[{"month":"Jan","amount":1}],"warnings":[]}
-                """;
-        var restored = JSON.parseObject(legacy, AiAgentChart.class);
-        assertEquals(List.of(), restored.groupBy());
-        assertFalse(restored.stack());
-        var jacksonRestored = new ObjectMapper().readValue(legacy, AiAgentChart.class);
-        assertEquals(List.of(), jacksonRestored.groupBy());
-        assertFalse(jacksonRestored.stack());
-        var oldConstructor = new AiAgentChart("chart", "run", "query", "Line", "Totals", "month", "amount",
-                List.of(), List.of(), null, List.of());
-        assertEquals(List.of(), oldConstructor.groupBy());
-        assertFalse(oldConstructor.stack());
-        var oldRequest = request("query", "Line", "month", "amount");
-        assertEquals(List.of(), oldRequest.groupBy());
-        assertFalse(oldRequest.stack());
-    }
-
-    @Test
     void groupedChartsRetainCancellationOwnershipAndPrecisionChecks() {
         String id = capture(List.of("month", "amount", "region"),
                 List.of(List.of("Jan", "9007199254740993", "East")), false, List.of());
@@ -327,7 +306,7 @@ class AiAgentChartServiceImplTest {
     }
 
     private AiAgentChartRenderRequest request(String id, String type, String x, String y) {
-        return new AiAgentChartRenderRequest(id, type, x, y, "Monthly totals", null);
+        return new AiAgentChartRenderRequest(id, type, x, y, "Monthly totals", null, List.of(), false);
     }
 
     private void assertCode(String expected, Runnable action) {

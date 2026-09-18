@@ -17,7 +17,6 @@ public class AgentSkillConfiguration {
         Path skillRoot = Path.of(directory).toAbsolutePath().normalize();
         Path storageRoot = Path.of(ConfigUtils.getEnvBasePath()).resolve("storage");
         return new AiAgentSkillServiceImpl(new ClassPathResource("/skills/catalog.json", AgentSkillConfiguration.class),
-                storageRoot.resolve("agent-v2/skills/builtin"), skillRoot,
-                storageRoot.resolve("ai-chat-history-v2/resources/skills"));
+                storageRoot.resolve("agent-v2/skills/builtin"), skillRoot);
     }
 }

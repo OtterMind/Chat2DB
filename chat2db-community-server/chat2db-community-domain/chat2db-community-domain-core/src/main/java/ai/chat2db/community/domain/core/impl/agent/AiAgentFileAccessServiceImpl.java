@@ -45,7 +45,7 @@ public class AiAgentFileAccessServiceImpl implements IAiAgentFileAccessService {
         String path = string(arguments, "path", "read".equals(toolName) ? null : ".");
         if (path == null || path.isBlank()) throw new IllegalArgumentException("File path is required");
         String cwd = Path.of(path).isAbsolute() || workspaces.isEmpty() ? null : workspaces.get(0).resolveWorkingDirectory(sessionId);
-        Path target = normalizeAliases(skills.resolveLegacyPath(resolve(path, cwd)), cwd);
+        Path target = normalizeAliases(resolve(path, cwd), cwd);
         String cursor = string(arguments, "cursor", null);
         Integer limit = integer(arguments, "limit");
         List<Path> roots = skillRoots(sessionId);

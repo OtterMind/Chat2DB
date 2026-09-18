@@ -42,7 +42,6 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
     private final Resource catalog;
     private final Path builtinRoot;
     private final Path userRoot;
-    private final Path legacyRoot;
     private final Map<Path, AiAgentSkill> userSkills = new LinkedHashMap<>();
     private final Map<Path, String> errors = new HashMap<>();
     private final Map<String, List<AiAgentSkill>> selected = new HashMap<>();
@@ -52,14 +51,13 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
     private boolean userUnavailable;
 
     public AiAgentSkillServiceImpl(Resource catalog, Path builtinRoot) {
-        this(catalog, builtinRoot, null, null);
+        this(catalog, builtinRoot, null);
     }
 
-    public AiAgentSkillServiceImpl(Resource catalog, Path builtinRoot, Path userRoot, Path legacyRoot) {
+    public AiAgentSkillServiceImpl(Resource catalog, Path builtinRoot, Path userRoot) {
         this.catalog = catalog;
         this.builtinRoot = builtinRoot.toAbsolutePath().normalize();
         this.userRoot = userRoot == null ? null : userRoot.toAbsolutePath().normalize();
-        this.legacyRoot = legacyRoot == null ? null : legacyRoot.toAbsolutePath().normalize();
     }
 
     @Override
@@ -144,32 +142,6 @@ public class AiAgentSkillServiceImpl implements IAiAgentSkillService {
             }
         }
         return resolvedBuiltinRoot;
-    }
-
-    /** Redirects a path recorded by an earlier run, which used snapshots, to the skill loaded now. */
-    @Override public synchronized Path resolveLegacyPath(Path path) {
-        Path relative = legacyRelative(path);
-        if (relative == null || relative.getNameCount() < 2) return path;
-        String name = relative.getName(1).toString();
-        AiAgentSkill skill = known().stream().filter(candidate -> candidate.name().equals(name)).findFirst().orElse(null);
-        if (skill == null) return path;
-        Path resolved = Path.of(skill.entryPath()).getParent();
-        for (int index = 2; index < relative.getNameCount(); index++) resolved = resolved.resolve(relative.getName(index).toString());
-        return resolved;
-    }
-
-    private Path legacyRelative(Path path) {
-        if (legacyRoot != null && path.startsWith(legacyRoot)) return legacyRoot.relativize(path);
-        for (int index = 0; index < path.getNameCount(); index++) {
-            if (".resources".equals(path.getName(index).toString())) return path.subpath(index + 1, path.getNameCount());
-        }
-        return null;
-    }
-
-    private List<AiAgentSkill> known() {
-        List<AiAgentSkill> skills = new ArrayList<>(builtins());
-        skills.addAll(userSkills.values());
-        return skills;
     }
 
     private List<AiAgentSkill> builtins() {

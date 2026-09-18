@@ -22,11 +22,6 @@ public record AiAgentChartRenderRequest(
         stack = Boolean.TRUE.equals(stack);
     }
 
-    public AiAgentChartRenderRequest(String resultId, String chartType, String xField, String yField,
-            String title, List<AiAgentChartSeriesRequest> series) {
-        this(resultId, chartType, xField, yField, title, series, List.of(), false);
-    }
-
     public record AiAgentChartSeriesRequest(
             @NotBlank @Size(max = 256) String field,
             @NotBlank @Pattern(regexp = "Column|Line|AreaLine|Scatter") String chartType,
