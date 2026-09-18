@@ -33,6 +33,11 @@
           "key": "Trusted_Connection",
           "value": "yes",
           "required": false
+        },
+        {
+          "key": "sslProtocol",
+          "value": "TLSv1",
+          "required": false
         }
       ]
     }
