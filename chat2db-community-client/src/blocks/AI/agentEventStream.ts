@@ -60,7 +60,11 @@ export interface AgentHistoryWindow {
   fromSequence?: number;
   /** Maximum number of events to load for this window. */
   maxEvents?: number;
+  /** Keep loading earlier events until the window starts at a run boundary, so no turn is cut in half. */
+  alignToRunStart?: boolean;
 }
+
+const MAX_ALIGN_PAGES = 5;
 
 export async function readAgentHistory(read: ReadAgentEvents, sessionId: string, signal: AbortSignal,
   window: AgentHistoryWindow = {}) {
@@ -74,11 +78,35 @@ export async function readAgentHistory(read: ReadAgentEvents, sessionId: string,
     const incoming = page.filter((event) => event.sessionId === sessionId && event.sequence > sequence);
     events = mergeAgentEvents(events, incoming);
     traceAgentStage('history.page', { sessionId, afterSequence: sequence, received: page.length, total: events.length });
-    if (incoming.length === 0 || page.length < limit || events.length >= maxEvents) return events;
+    if (incoming.length === 0 || page.length < limit || events.length >= maxEvents) {
+      return window.alignToRunStart ? alignToRunStart(read, sessionId, signal, events) : events;
+    }
     sequence = events[events.length - 1].sequence;
   }
   signal.throwIfAborted();
   return events;
+}
+
+/** Extends a window backwards until it starts where a turn starts, or the history does. */
+async function alignToRunStart(read: ReadAgentEvents, sessionId: string, signal: AbortSignal,
+  events: AgentEvent[]): Promise<AgentEvent[]> {
+  let loaded = events;
+  for (let attempt = 0; attempt <= MAX_ALIGN_PAGES; attempt += 1) {
+    if (signal.aborted || loaded.length === 0) return loaded;
+    const boundary = loaded.findIndex((event) => event.type === 'RUN_ACCEPTED');
+    if (boundary >= 0) return loaded.slice(boundary);
+    const oldest = loaded[0].sequence;
+    if (oldest <= 1) return loaded;
+    const from = Math.max(0, oldest - PAGE_SIZE);
+    const earlier = await readEventPage(read, { sessionId, afterSequence: from, limit: oldest - from }, signal);
+    signal.throwIfAborted();
+    const incoming = earlier.filter((event) => event.sessionId === sessionId
+      && event.sequence >= from && event.sequence < oldest);
+    if (incoming.length === 0) return loaded;
+    loaded = mergeAgentEvents(loaded, incoming);
+  }
+  const boundary = loaded.findIndex((event) => event.type === 'RUN_ACCEPTED');
+  return boundary > 0 ? loaded.slice(boundary) : loaded;
 }
 
 export async function followAgentRun(

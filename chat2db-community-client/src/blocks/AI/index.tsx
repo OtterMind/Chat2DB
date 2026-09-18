@@ -331,6 +331,8 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
 /** is sent each time AI The maximum number of historical rounds carried (one round = (one question and one answer) */
 const MAX_HISTORY_ROUNDS = 5;
 const SCROLL_BOTTOM_THRESHOLD = 1;
+/** Reaching this close to the top loads the previous stretch of a long conversation. */
+const LOAD_EARLIER_SCROLL_THRESHOLD = 80;
 const INITIAL_VIEWPORT_ANIMATION_MS = 260;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const MESSAGE_TOP_ALIGNMENT_GAP = 20;
@@ -583,6 +585,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
   const [historyWindow, setHistoryWindow] = useState(INITIAL_AGENT_HISTORY_EVENTS);
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
+  const loadEarlierRef = useRef<() => void>(() => {});
+  const historyLoadingRef = useRef(false);
+  const pendingHistoryAnchorRef = useRef<number | null>(null);
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -795,6 +800,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
+    if (container.scrollTop <= LOAD_EARLIER_SCROLL_THRESHOLD) {
+      loadEarlierRef.current();
+    }
   }, [setAutoFollow]);
 
   const interruptMessageAutoScroll = useCallback(() => {
@@ -1682,6 +1690,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       stopAgentPolling();
       const operation = createAgentOperation(sessionId);
       agentOperationRef.current = operation;
+      historyLoadingRef.current = true;
       setSessionLoading(true);
       try {
         const session = await pi.sessions.get({ sessionId, sessionVersion: 2 },
@@ -1690,7 +1699,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         const historyStart = Math.max(0, (session.lastEventSequence ?? 0) - historyEvents);
         const [events, approvals, questions, availableModels] = await Promise.all([
           readAgentHistory(pi.events.list, sessionId, operation.controller.signal,
-            { fromSequence: historyStart, maxEvents: historyEvents }),
+            { fromSequence: historyStart, maxEvents: historyEvents, alignToRunStart: true }),
           pi.approvals.list({ sessionId }, { signal: operation.controller.signal }),
           pi.questions.list({ sessionId }, { signal: operation.controller.signal }),
           listAvailableModelOptions(),
@@ -1734,7 +1743,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setCurrentSessionTitle(session.title || title || '');
         currentSessionTitleRef.current = session.title || title || '';
         setHistoryWindow(historyEvents);
-        setHasOlderHistory(historyStart > 0);
+        setHasOlderHistory((events[0]?.sequence ?? 1) > 1);
         if (activeRunId) {
           operation.runId = activeRunId;
           const userMessageId = transcript.find((item) => item.role === 'user' && item.runId === activeRunId)?.id || null;
@@ -1751,6 +1760,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         if (agentOperationRef.current === operation) agentOperationRef.current = undefined;
         if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
       } finally {
+        historyLoadingRef.current = false;
         if (!operation.controller.signal.aborted) setSessionLoading(false);
       }
     },
@@ -1759,9 +1769,29 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const handleLoadEarlierHistory = useCallback(() => {
     const sessionId = currentSessionIdRef.current;
-    if (!sessionId) return;
+    if (!sessionId || historyLoadingRef.current) return;
+    const container = messageListRef.current;
+    // Keep the reading position while the older stretch is rebuilt above it.
+    pendingHistoryAnchorRef.current = container ? container.scrollHeight - container.scrollTop : null;
     void handleLoadAgentSessionById(sessionId, currentSessionTitleRef.current, historyWindow * 2);
   }, [handleLoadAgentSessionById, historyWindow]);
+
+  useEffect(() => {
+    loadEarlierRef.current = () => {
+      if (hasOlderHistory && !sessionLoading) handleLoadEarlierHistory();
+    };
+  }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
+
+  React.useLayoutEffect(() => {
+    const anchor = pendingHistoryAnchorRef.current;
+    if (anchor === null) return;
+    pendingHistoryAnchorRef.current = null;
+    const container = messageListRef.current;
+    if (!container) return;
+    suppressScrollTrackingRef.current = true;
+    container.scrollTop = Math.max(0, container.scrollHeight - anchor);
+    window.setTimeout(() => { suppressScrollTrackingRef.current = false; }, PROGRAMMATIC_SCROLL_LOCK_MS);
+  }, [messages]);
 
   // Restore the conversation from the path when first opening /stream/:chatId.
 

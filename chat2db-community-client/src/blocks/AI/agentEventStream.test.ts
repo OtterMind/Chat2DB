@@ -55,6 +55,18 @@ async function main() {
   assert.equal(windowed.length, 25, 'the window stops at the requested size');
   assert.equal(windowed[24].sequence, 1205);
 
+  // A window that would start in the middle of a turn is extended back to the turn start.
+  const turns = [
+    ...Array.from({ length: 300 }, (_, index) => event(index + 1, 'ASSISTANT_TEXT_DELTA')),
+    event(301, 'RUN_ACCEPTED', 'tail'),
+    ...Array.from({ length: 99 }, (_, index) => event(index + 302, 'ASSISTANT_TEXT_DELTA', 'tail')),
+  ];
+  const aligned = await readAgentHistory(async ({ afterSequence, limit }) =>
+    turns.filter((item) => item.sequence > afterSequence).slice(0, limit), 'session',
+  new AbortController().signal, { fromSequence: 340, maxEvents: 30, alignToRunStart: true });
+  assert.equal(aligned[0].sequence, 301, 'a window must begin at the start of a turn');
+  assert.equal(aligned[0].type, 'RUN_ACCEPTED');
+
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
     let attempts = 0;
