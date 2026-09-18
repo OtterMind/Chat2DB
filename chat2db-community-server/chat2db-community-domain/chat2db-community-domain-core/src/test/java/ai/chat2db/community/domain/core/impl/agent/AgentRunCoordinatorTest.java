@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -175,6 +176,16 @@ class AgentRunCoordinatorTest {
     }
 
     @Test
+    void keepsATitleRenamedWhileARunIsStreaming() {
+        AgentRun running = coordinator.start(startCommand("request-rename")).toCompletableFuture().join();
+
+        storage.rename(SESSION_ID, USER_ID, "Renamed while running");
+        adapter.emitLate(running.id(), AgentEventType.ASSISTANT_TEXT_DELTA);
+
+        assertEquals("Renamed while running", storage.get(SESSION_ID, USER_ID).title());
+    }
+
+    @Test
     void ignoresLateRuntimeEventsAfterTheRunIsTerminal() {
         adapter.emitTerminalEventOnStart(AgentEventType.RUN_COMPLETED);
         AgentRun completed = coordinator.start(startCommand("request-late-event"))
@@ -190,7 +201,7 @@ class AgentRunCoordinatorTest {
     }
 
     @Test
-    void treatsAStuckRuntimeSnapshotAsFailedAndRecoversWithoutBlocking() {
+    void keepsAHealthyRuntimeWhenTheSnapshotCannotBeConfirmedInTime() {
         adapter.hangSnapshots();
         AgentRun started = coordinator.start(startCommand("request-stuck-snapshot"))
                 .toCompletableFuture().join();
@@ -206,8 +217,10 @@ class AgentRunCoordinatorTest {
         AgentSession recovered = bounded.recoverSession(SESSION_ID, USER_ID);
         long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - begin);
 
-        assertEquals(AgentSessionStatus.UNKNOWN, recovered.status());
-        assertEquals(AgentRunStatus.UNKNOWN, storage.get(SESSION_ID, started.id(), USER_ID).status());
+        // An unconfirmed snapshot must not be treated as a dead runtime: no run is retired and no process killed.
+        assertEquals(AgentSessionStatus.RUNNING, recovered.status());
+        assertEquals(AgentRunStatus.RUNNING, storage.get(SESSION_ID, started.id(), USER_ID).status());
+        assertNotNull(handles.get(SESSION_ID), "the runtime handle stays available for a later confirmation");
         assertTrue(elapsedMillis < 1000, "stuck runtime snapshot must not block lifecycle operations");
     }
 
@@ -492,7 +505,15 @@ class AgentRunCoordinatorTest {
             return true;
         }
         @Override public AgentSession rename(String sessionId, Long userId, String title) {
-            throw new UnsupportedOperationException();
+            AgentSession current = sessions.get(sessionId);
+            if (current == null || !current.userId().equals(userId)) {
+                throw new IllegalArgumentException("Agent session does not exist");
+            }
+            AgentSession renamed = new AgentSession(current.schemaVersion(), current.id(), current.userId(),
+                    current.definition(), current.runtimeBinding(), current.status(), title,
+                    current.lastEventSequence(), current.gmtCreate(), LocalDateTime.now());
+            sessions.put(sessionId, renamed);
+            return renamed;
         }
         @Override public void delete(String sessionId, Long userId) { throw new UnsupportedOperationException(); }
 

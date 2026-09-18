@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
 import ai.chat2db.community.tools.agent.runtime.IAgentRuntimeSessionHandle;
+import ai.chat2db.community.tools.util.AgentTrace;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
@@ -65,7 +66,13 @@ public class AgentRuntimeHandleRegistry {
     public void closeAll() {
         closed.set(true);
         for (Map.Entry<String, IAgentRuntimeSessionHandle> entry : new ArrayList<>(handles.entrySet())) {
-            remove(entry.getKey(), entry.getValue());
+            try {
+                remove(entry.getKey(), entry.getValue());
+            } catch (RuntimeException failure) {
+                // Shutdown must still close the remaining runtimes when one handle fails to close.
+                AgentTrace.record("runtime.close.failed", entry.getKey(), null,
+                        Map.of("reason", Objects.toString(failure.getMessage(), failure.getClass().getSimpleName())));
+            }
         }
     }
 

@@ -30,6 +30,7 @@ import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeInput;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRef;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeRunRequest;
 import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionOpenRequest;
+import ai.chat2db.community.tools.model.agent.runtime.AgentRuntimeSessionDeleteRequest;
 import ai.chat2db.community.tools.util.AgentTrace;
 import java.time.Clock;
 import java.time.Duration;
@@ -205,14 +206,43 @@ public class AgentRunCoordinator {
         return handle.snapshot().thenCompose(snapshot -> {
                     String externalRunId = run.externalRunId() != null ? run.externalRunId() : snapshot.activeExternalRunId();
                     if (externalRunId == null) {
+                        AgentRun durable = requireRun(command.sessionId(), command.runId(), command.userId());
+                        if (durable.status() == AgentRunStatus.RUNNING) {
+                            // The runtime finished this run already and is publishing its terminal event.
+                            return CompletableFuture.<AgentRun>completedFuture(durable);
+                        }
                         throw new IllegalStateException("Agent run has not started: " + run.id());
                     }
                     var cancellation = handle.cancel(new AgentRuntimeCancelRequest(
                             command.sessionId(), command.runId(), externalRunId));
-                    questions.cancel(command.sessionId(), command.runId(), command.userId());
-                    return cancellation;
+                    // Close the pending question only after the abort was accepted, so a failed abort leaves it open.
+                    return cancellation.thenApply(ignored -> {
+                        questions.cancel(command.sessionId(), command.runId(), command.userId());
+                        return requireRun(command.sessionId(), command.runId(), command.userId());
+                    });
                 })
                 .thenApply(ignored -> requireRun(command.sessionId(), command.runId(), command.userId()));
+    }
+
+    /**
+     * Deletes a session under the same monitor that opens runtimes, so a concurrent start can no longer leave a live
+     * runtime handle behind for a session whose row is already gone.
+     */
+    public synchronized void deleteSession(String sessionId, Long userId) {
+        AgentSession session = recoverSession(sessionId, userId);
+        if (session == null) {
+            throw new IllegalArgumentException("Agent session does not exist");
+        }
+        if (session.status() == AgentSessionStatus.RUNNING
+                || session.status() == AgentSessionStatus.WAITING_APPROVAL
+                || session.status() == AgentSessionStatus.SUSPENDED) {
+            throw new IllegalStateException("Active agent session cannot be deleted");
+        }
+        handleRegistry.close(sessionId);
+        runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
+                new AgentRuntimeSessionDeleteRequest(session.id(), session.runtimeBinding()));
+        sessionStorage.delete(sessionId, userId);
+        skills.release(sessionId);
     }
 
     public synchronized AgentSession recoverSession(String sessionId, Long userId) {
@@ -221,6 +251,8 @@ public class AgentRunCoordinator {
         IAgentRuntimeSessionHandle handle = handleRegistry.get(sessionId);
         if (handle != null) {
             AgentRuntimeHealth health = snapshotHealth(handle);
+            // An unconfirmed snapshot (timeout or interrupted caller) must not tear down a healthy runtime.
+            if (health == null) return session;
             if (health != AgentRuntimeHealth.STOPPED && health != AgentRuntimeHealth.FAILED) return session;
             handleRegistry.remove(sessionId, handle);
             session = requireSession(sessionId, userId);
@@ -273,12 +305,12 @@ public class AgentRunCoordinator {
             Thread.currentThread().interrupt();
             AgentTrace.record("runtime.snapshot.interrupted",
                     Objects.toString(handle.session().externalSessionId(), "unknown"), null, Map.of());
-            return AgentRuntimeHealth.FAILED;
+            return null;
         } catch (ExecutionException | TimeoutException | java.util.concurrent.CancellationException error) {
             AgentTrace.record("runtime.snapshot.failed",
                     Objects.toString(handle.session().externalSessionId(), "unknown"), null,
                     Map.of("reason", Objects.toString(error.getMessage(), error.getClass().getSimpleName())));
-            return AgentRuntimeHealth.FAILED;
+            return null;
         }
     }
 
@@ -422,11 +454,17 @@ public class AgentRunCoordinator {
         }
         AgentSession updated = new AgentSession(
                 session.schemaVersion(), session.id(), session.userId(), definition,
-                session.runtimeBinding(), target, session.title(), sequence,
+                session.runtimeBinding(), target, currentTitle(session), sequence,
                 session.gmtCreate(), LocalDateTime.now(clock));
         if (!sessionStorage.compareAndSet(updated, expected)) {
             throw new IllegalStateException("Agent session changed while applying a lifecycle event");
         }
+    }
+
+    /** Keeps a title renamed after the caller read this session instead of writing the stale one back. */
+    private String currentTitle(AgentSession session) {
+        AgentSession current = sessionStorage.get(session.id(), session.userId());
+        return current == null ? session.title() : current.title();
     }
 
     private AgentSession requireSession(String sessionId, Long userId) {

@@ -163,21 +163,8 @@ public class AgentServiceImpl implements AgentService {
 
     @Override
     public void deleteSession(String sessionId, Long userId) {
-        AgentSession session = runCoordinator.recoverSession(sessionId, userId);
-        if (session == null) {
-            throw new IllegalArgumentException("Agent session does not exist");
-        }
-        if (session.status() == AgentSessionStatus.RUNNING
-                || session.status() == AgentSessionStatus.WAITING_APPROVAL
-                || session.status() == AgentSessionStatus.SUSPENDED) {
-            throw new IllegalStateException("Active agent session cannot be deleted");
-        }
-        handleRegistry.close(sessionId);
-        runtimeRegistry.require(session.runtimeBinding().runtimeType()).deleteSession(
-                new AgentRuntimeSessionDeleteRequest(
-                        session.id(), session.runtimeBinding()));
-        sessionStorage.delete(sessionId, userId);
-        runCoordinator.releaseSessionSkills(sessionId);
+        // Delegated so the status re-check, handle close, runtime cleanup and row deletion share one monitor.
+        runCoordinator.deleteSession(sessionId, userId);
     }
 
     private String requireGeneratedId(String id) {
