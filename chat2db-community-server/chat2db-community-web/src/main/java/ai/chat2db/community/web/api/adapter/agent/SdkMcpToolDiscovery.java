@@ -13,6 +13,7 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,6 +31,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class SdkMcpToolDiscovery implements IMcpToolDiscovery {
 
+    /**
+     * The transports default to the 2024-11-05 revision only, so a current server rejects the
+     * handshake. The SDK requests the <em>last</em> entry of this list and accepts any of them, so the
+     * list is ordered oldest to newest: we ask for the newest revision we implement and still accept a
+     * server that answers with an older one.
+     */
+    private static final List<String> PROTOCOL_VERSIONS = List.of(ProtocolVersions.MCP_2024_11_05,
+            ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
     private static final Duration DISCOVERY_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration CALL_TIMEOUT = Duration.ofMinutes(5);
     private static final int MAX_TEXT_LENGTH = 200_000;
@@ -110,10 +119,16 @@ public class SdkMcpToolDiscovery implements IMcpToolDiscovery {
                     .args(config.args())
                     .env(environment)
                     .build();
-            return new StdioClientTransport(parameters, mapper);
+            return new StdioClientTransport(parameters, mapper) {
+                @Override
+                public List<String> protocolVersions() {
+                    return PROTOCOL_VERSIONS;
+                }
+            };
         }
         return HttpClientStreamableHttpTransport.builder(config.url())
                 .jsonMapper(mapper)
+                .supportedProtocolVersions(PROTOCOL_VERSIONS)
                 .connectTimeout(DISCOVERY_TIMEOUT)
                 .customizeRequest(request -> config.headerNames().forEach(name -> {
                     String value = config.secrets().get(name);
