@@ -2,6 +2,7 @@ package ai.chat2db.community.jcef.handler.mouse;
 
 import org.cef.browser.CefBrowser;
 import org.cef.handler.CefDisplayHandlerAdapter;
+import org.cef.OS;
 
 import javax.swing.*;
 import java.awt.*;
@@ -12,10 +13,20 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
     private static volatile Integer forcedCursorType;
     private static long forcedCursorSequence;
 
+    public static boolean isNativeCursorOverrideEnabled() {
+        // Windows windowed JCEF owns its native cursor; AWT writes can compete with it.
+        return !OS.isWindows();
+    }
+
     @Override
     public boolean onCursorChange(CefBrowser browser, int cursorType) {
-        int effectiveCursorType = effectiveCursorType(cursorType);
-        if (!isPredefinedCursorType(effectiveCursorType)) {
+        if (!isPredefinedCursorType(cursorType)) {
+            return false;
+        }
+        if (OS.isWindows()) {
+            applyBrowserCursor(browser, cursorType);
+            // Let windowed JCEF finish its native cursor handling. This is the
+            // Windows workaround for CSS cursor changes in embedded Chromium.
             return false;
         }
         applyCursor(browser, cursorType);
@@ -23,6 +34,9 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
     }
 
     public static void setForcedCursor(CefBrowser browser, String cssCursor, long sequence) {
+        if (!isNativeCursorOverrideEnabled()) {
+            return;
+        }
         if (!updateForcedCursor(cssCursor, sequence)) {
             return;
         }
@@ -66,6 +80,19 @@ public class CursorHandler extends CefDisplayHandlerAdapter {
             case "ew-resize" -> Cursor.E_RESIZE_CURSOR;
             default -> null;
         };
+    }
+
+    private static void applyBrowserCursor(CefBrowser browser, int cursorType) {
+        if (browser == null) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> {
+            Cursor awtCursor = Cursor.getPredefinedCursor(cursorType);
+            Component component = browser.getUIComponent();
+            if (component != null) {
+                component.setCursor(awtCursor);
+            }
+        });
     }
 
     private static void applyCursor(CefBrowser browser, int cursorType) {

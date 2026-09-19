@@ -8,12 +8,47 @@ import ai.chat2db.community.tools.console.ConsoleResult;
 import com.alibaba.fastjson2.JSON;
 
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 final class JcefUpdateProgressReporter {
 
-    void progress(ConsoleResult consoleResult, long downloaded, long total) {
+    /** The transport reports every block, so pushes are coalesced like the previous updater. */
+    static final long MIN_PUSH_INTERVAL_MILLIS = 500L;
+
+    private final LongSupplier clock;
+    private int lastPercent = -1;
+    private long lastPushTimeMillis;
+
+    JcefUpdateProgressReporter() {
+        this(System::currentTimeMillis);
+    }
+
+    JcefUpdateProgressReporter(LongSupplier clock) {
+        this.clock = clock;
+    }
+
+    void reset() {
+        lastPercent = -1;
+        lastPushTimeMillis = 0L;
+    }
+
+    /**
+     * Reports download progress. Returns whether a push happened, which happens at most once per
+     * {@link #MIN_PUSH_INTERVAL_MILLIS} and only while the percentage keeps advancing.
+     */
+    boolean progress(ConsoleResult consoleResult, long downloaded, long total) {
         int percent = total <= 0 ? 0 : (int) Math.min(99L, downloaded * 100L / total);
+        long now = clock.getAsLong();
+        if (percent <= lastPercent) {
+            return false;
+        }
+        if (lastPercent >= 0 && now - lastPushTimeMillis < MIN_PUSH_INTERVAL_MILLIS) {
+            return false;
+        }
+        lastPercent = percent;
+        lastPushTimeMillis = now;
         push(consoleResult, percent, UpdatedStatus.Updating);
+        return true;
     }
 
     void completed(ConsoleResult consoleResult) {

@@ -44,21 +44,44 @@ export interface ImportExportTaskEvent {
   createdAt: number | string;
 }
 
-export interface ICsvOptions {
-  encoding: string;
-  delimiter: string;
-  quote: string;
-  escape: string;
-  newline: 'LF' | 'CRLF' | 'CR';
-  hasHeader: boolean;
-  emptyAsNull: boolean;
-  headerRow: number;
-  dataStartRow: number;
-  dataEndRow?: number;
+export interface IImportValueOptions {
   dateOrder: 'YMD' | 'YDM' | 'MDY' | 'MYD' | 'DMY' | 'DYM';
   dateTimeOrder: 'DATE_TIME' | 'TIME_DATE' | 'DATE_TIME_TIMEZONE' | 'TIME_DATE_TIMEZONE' | 'TIME_TIMEZONE_DATE';
   dateDelimiter: string;
   yearDelimiter: string;
   timeDelimiter: string;
   decimalSymbol: '.' | ',';
+}
+
+export interface ISourceRowOptions {
+  hasHeader: boolean;
+  headerRow: number;
+  dataStartRow: number;
+  dataEndRow?: number;
+}
+
+export interface ICsvOptions extends IImportValueOptions, ISourceRowOptions {
+  encoding: string;
+  delimiter: string;
+  quote: string;
+  escape: string;
+  newline: 'LF' | 'CRLF' | 'CR';
+  emptyAsNull: boolean;
+}
+
+export interface IExcelOptions extends IImportValueOptions, ISourceRowOptions {
+  sheetIndex: number;
+  columnRange: string;
+  emptyAsNull: boolean;
+}
+
+export interface IJsonOptions extends IImportValueOptions {
+  encoding: string;
+  structure: 'ARRAY' | 'OBJECT' | 'LINES';
+  dataPath: string;
+  emptyAsNull: boolean;
+}
+
+export interface ISqlImportOptions {
+  encoding: string;
 }

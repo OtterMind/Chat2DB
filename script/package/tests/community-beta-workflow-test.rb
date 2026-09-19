@@ -89,10 +89,27 @@ class CommunityBetaWorkflowTest < Minitest::Test
     assert_equal '5.3.799', values['native_version']
   end
 
-  def test_beta_tag_cannot_reach_stable_publish
-    values, status, _ = metadata('', event: 'push', ref: 'refs/tags/v5.3.7-beta.3')
-    refute status.success?
-    assert_empty values
+  def test_beta_tag_publishes_a_prerelease_on_the_beta_channel
+    values, status, error = metadata('', event: 'push', ref: 'refs/tags/v5.3.7-beta.3', source: '')
+    assert status.success?, error
+    assert_equal({'version' => '5.3.7-beta.3', 'native_version' => '5.3.703',
+                  'update_channel' => 'BETA', 'tag_name' => 'v5.3.7-beta.3',
+                  'channel' => 'beta', 'create_release' => 'true', 'publish' => 'false',
+                  'prerelease' => 'true', 'latest' => 'false'}, values)
+  end
+
+  def test_release_epoch_comes_from_the_annotated_tag_on_tag_pushes
+    step = RESOLVE['steps'].find { |candidate| candidate['id'] == 'update_metadata' }
+    assert_equal '${{ github.event_name }}', step['env']['EVENT_NAME']
+    assert_includes step['run'], 'if [ "${EVENT_NAME}" = "push" ]'
+    refute step['env'].key?('PUBLISH')
+    # Checkout replaces the annotated tag object with the tagged commit, so the
+    # tag ref must be fetched again before its type and annotation are read.
+    fetch_index = step['run'].index('git fetch --force origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"')
+    cat_file_index = step['run'].index('git cat-file -t "refs/tags/${TAG_NAME}"')
+    refute_nil fetch_index
+    refute_nil cat_file_index
+    assert_operator fetch_index, :<, cat_file_index
   end
 
   def test_source_is_resolved_once_and_helpers_stay_on_workflow_commit
@@ -123,15 +140,20 @@ class CommunityBetaWorkflowTest < Minitest::Test
     end
   end
 
-  def test_beta_index_is_published_only_after_the_version_release
+  def test_beta_channel_pointer_is_appended_after_the_version_release
     publish = WORKFLOW['jobs']['publish_release']
     steps = publish['steps']
     release = steps.index { |step| step['name'] == 'Publish validated Release' }
-    index = steps.index { |step| step['name'] == 'Publish Beta update index' }
-    assert_operator index, :>, release
-    assert_equal "${{ needs.resolve.outputs.channel == 'beta' }}", steps[index]['if']
+    pointer = steps.index { |step| step['name'] == 'Update Beta channel pointer' }
+    assert_operator pointer, :>, release
+    assert_equal "${{ needs.resolve.outputs.channel == 'beta' }}", steps[pointer]['if']
     assert_equal false, publish['concurrency']['cancel-in-progress']
     assert_includes publish['concurrency']['group'], 'needs.resolve.outputs.channel'
+    assert_equal 'community-beta-index', steps[pointer]['env']['CHANNEL_BRANCH']
+    refute_includes steps[pointer]['run'], '--force'
+    # A published release is immutable, so the workflow must never delete one.
+    commands = publish['steps'].map { |step| step['run'] }.compact.join("\n")
+    refute_includes commands, 'gh release delete'
   end
 
   def test_publish_release_is_a_boolean_dispatch_input

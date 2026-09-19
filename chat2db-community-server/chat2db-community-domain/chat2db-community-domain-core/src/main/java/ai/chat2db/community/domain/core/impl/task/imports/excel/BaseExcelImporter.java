@@ -10,16 +10,13 @@ import ai.chat2db.community.domain.api.model.task.TaskEventCode;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.context.AnalysisContext;
-import com.alibaba.excel.event.AnalysisEventListener;
-import com.alibaba.excel.metadata.data.ReadCellData;
-import com.alibaba.excel.support.ExcelTypeEnum;
-import com.alibaba.excel.util.ConverterUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import ai.chat2db.community.domain.api.model.task.ExcelOptions;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
 import java.util.*;
 
 
@@ -28,20 +25,17 @@ public abstract class BaseExcelImporter extends BaseImporter {
     @Override
     protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
         context.checkCancelled();
-        ExcelTypeEnum excelType = getExcelType();
-        NoModelDataListener noModelDataListener = new NoModelDataListener(spec, context, columns);
-        EasyExcel.read(new File(spec.getSourceFile()), noModelDataListener)
-                .excelType(excelType)
-                .sheet()
-                .headRowNumber(1)
-                .doRead();
+        ExcelOptions options = (spec.getExcelOptions() == null ? new ExcelOptions() : spec.getExcelOptions()).validate();
+        spec.setExcelOptions(options);
+        NoModelDataListener listener = new NoModelDataListener(spec, context, columns);
+        ExcelImportReader.read(new File(spec.getSourceFile()), options, Integer.MAX_VALUE,
+                CSVImporter.mappedSourceColumnCount(spec), listener::acceptHead, listener::acceptCells,
+                context::checkCancelled);
+        listener.finish();
         context.checkCancelled();
     }
 
-    protected abstract ExcelTypeEnum getExcelType();
-
-
-    public class NoModelDataListener extends AnalysisEventListener<Map<Integer, String>> {
+    public class NoModelDataListener {
 
         private final TaskExecutionContext taskContext;
 
@@ -65,32 +59,24 @@ public abstract class BaseExcelImporter extends BaseImporter {
         }
 
 
-        @Override
-        public void invokeHead(Map<Integer, ReadCellData<?>> headMap, AnalysisContext context) {
-            acceptHead(ConverterUtils.convertToStringMap(headMap, context));
-        }
-
         void acceptHead(Map<Integer, String> map) {
             this.taskContext.checkCancelled();
             rowSqlBuilder.acceptHead(map);
         }
 
-        @Override
-        public void invoke(Map<Integer, String> data, AnalysisContext context) {
-            acceptRow(data);
-        }
-
-        void acceptRow(Map<Integer, String> data) {
-            acceptRow(data, 0);
-        }
-
         void acceptRow(Map<Integer, String> data, long sourceRowNumber) {
+            Map<Integer, ImportCell> cells = new LinkedHashMap<>();
+            if (data != null) data.forEach((index, value) -> cells.put(index, new ImportCell(value, true)));
+            acceptCells(cells, sourceRowNumber);
+        }
+
+        void acceptCells(Map<Integer, ImportCell> data, long sourceRowNumber) {
             this.taskContext.checkCancelled();
             if (data == null || data.isEmpty()) {
                 skippedCount++;
                 return;
             }
-            String sql = rowSqlBuilder.build(data, sourceRowNumber);
+            String sql = rowSqlBuilder.buildCells(data, sourceRowNumber);
 
             if (StringUtils.isBlank(sql)) {
                 skippedCount++;
@@ -105,11 +91,6 @@ public abstract class BaseExcelImporter extends BaseImporter {
             } else {
 
             }
-        }
-
-        @Override
-        public void doAfterAllAnalysed(AnalysisContext context) {
-            finish();
         }
 
         void finish() {

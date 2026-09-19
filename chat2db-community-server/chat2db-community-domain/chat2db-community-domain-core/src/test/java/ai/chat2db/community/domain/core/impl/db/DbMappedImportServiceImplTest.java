@@ -18,6 +18,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import ai.chat2db.community.tools.exception.BusinessException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -43,7 +46,7 @@ class DbMappedImportServiceImplTest {
         DbMappedImportServiceImpl service = service(stagingService, preview("orders", target("name")),
                 new AtomicReference<>());
 
-        assertThrows(IllegalArgumentException.class, () -> service.submit(execution(List.of(
+        assertThrows(BusinessException.class, () -> service.submit(execution(List.of(
                 mapping("name", "name"), mapping("email", "NAME")))));
 
     }
@@ -54,7 +57,7 @@ class DbMappedImportServiceImplTest {
         DbMappedImportServiceImpl service = service(stagingService, preview("orders", target("name")),
                 new AtomicReference<>());
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(BusinessException.class,
                 () -> service.submit(execution(mapping("missing", "name"))));
 
     }
@@ -68,7 +71,7 @@ class DbMappedImportServiceImplTest {
         MappedImportExecution execution = execution(mapping("Name", "name"));
         execution.setUnmappedTarget(UnmappedTargetStrategy.DEFAULT);
 
-        assertThrows(IllegalArgumentException.class, () -> service.submit(execution));
+        assertThrows(BusinessException.class, () -> service.submit(execution));
 
     }
 
@@ -78,7 +81,7 @@ class DbMappedImportServiceImplTest {
         AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
         DbMappedImportServiceImpl service = service(stagingService, preview("Orders", target("name")), submitted);
         MappedImportExecution execution = execution(mapping("Name", "name"));
-        var options = ai.chat2db.community.domain.api.model.task.CsvOptions.defaults();
+        var options = CsvOptions.defaults();
         options.setDelimiter(";");
         execution.setCsvOptions(options);
         execution.setMode("FAST");

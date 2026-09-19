@@ -5,10 +5,10 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
-import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
@@ -123,7 +123,7 @@ class JSONImporterExtensionTest {
                 .build();
         TableColumn id = TableColumn.builder().name("id").columnType("INTEGER").build();
 
-        assertThrows(TaskExecutionException.class,
+        assertThrows(BusinessException.class,
                 () -> new JSONImporter().doImportData(spec, new NoOpTaskExecutionContext(), List.of(id)));
 
         try (Statement statement = connection.createStatement();

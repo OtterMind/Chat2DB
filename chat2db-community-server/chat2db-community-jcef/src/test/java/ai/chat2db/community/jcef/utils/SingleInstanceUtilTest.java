@@ -389,14 +389,14 @@ class SingleInstanceUtilTest {
     }
 
     @Test
-    void aNewLaunchInvalidatesPendingCloseRestartAndUpdateConfirmations() throws Exception {
+    void aNewLaunchInvalidatesPendingCloseAndRestartConfirmations() throws Exception {
         Path state = temporary.resolve("state");
         Child primary = start(state, -1);
         primary.awaitPrimary();
         primary.command("READY");
         await(() -> lineCount(primary.received()) == 1);
         int expected = 1;
-        for (String action : List.of("CLOSE", "RESTART", "INSTALL_UPDATE")) {
+        for (String action : List.of("CLOSE", "RESTART")) {
             primary.command("REQUEST_" + action);
             await(() -> Files.exists(primary.directory.resolve("exit-requested")));
             Files.delete(primary.directory.resolve("exit-requested"));
@@ -835,7 +835,7 @@ class SingleInstanceUtilTest {
                         try { attemptExit(directory, "HOLD_FAILED_EXIT"); }
                         catch (Exception exception) { throw new RuntimeException(exception); }
                     }).start();
-                    case "REQUEST_CLOSE", "REQUEST_RESTART", "REQUEST_INSTALL_UPDATE" -> {
+                    case "REQUEST_CLOSE", "REQUEST_RESTART" -> {
                         Field browser = JcefContext.class.getDeclaredField("browser_");
                         browser.setAccessible(true);
                         browser.set(JcefContext.getInstance(), Proxy.newProxyInstance(

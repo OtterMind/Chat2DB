@@ -176,10 +176,9 @@ end within the smallest coherent scope.
   is explicitly requested and documented with its security impact. Do not
   change the container's required internal `0.0.0.0` binding to enforce a host
   publication policy.
-- Keep these six `jpackage/input` resources versioned:
+- Keep these four `jpackage/input` resources versioned:
   `icons/community/logo.icns`, `icons/community/logo.ico`,
-  `icons/community/logo.png`, `macres/Info.plist`, `win/updater.jar`, and
-  `win/run-as-admin.vbs`.
+  `icons/community/logo.png`, and `macres/Info.plist`.
 - Treat `target/`, frontend `dist/`, `jpackage/output/`,
   `jpackage/input/runtime/`, and generated platform content such as
   `chat2db-community.jar`, `dist/`, `lib/`, and macOS `Frameworks/` as

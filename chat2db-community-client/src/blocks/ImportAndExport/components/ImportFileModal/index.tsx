@@ -26,7 +26,7 @@ interface IProps {
 
 const isPreviewFile = (file?: FileUrl) => {
   const name = (file?.fileName || file?.file?.name)?.toLowerCase();
-  return name?.endsWith('.csv') || name?.endsWith('.xls') || name?.endsWith('.xlsx');
+  return name?.endsWith('.csv') || name?.endsWith('.xls') || name?.endsWith('.xlsx') || name?.endsWith('.json');
 };
 
 export default memo<IProps>((_props) => {

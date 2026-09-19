@@ -376,44 +376,4 @@
             </plugin>
         </plugins>
     </build>
-    <profiles>
-        <!-- macOS packaging profile. -->
-        <profile>
-            <id>macos-build</id>
-            <activation>
-                <os>
-                    <!-- This profile is automatically active on macOS. -->
-                    <family>mac</family>
-                </os>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-dependency-plugin</artifactId>
-                        <version>${chat2db.maven-dependency-plugin.version}</version>
-                        <executions>
-                            <execution>
-                                <id>copy-mac-jcef-jar</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>copy</goal>
-                                </goals>
-                                <configuration>
-                                    <artifactItems>
-                                        <artifactItem>
-                                            <groupId>org.jetbrains.intellij.deps.jcef</groupId>
-                                            <artifactId>jcef</artifactId>
-                                            <version>${jcef.version}</version>
-                                            <outputDirectory>${project.basedir}/../../jpackage/input/mac</outputDirectory>
-                                        </artifactItem>
-                                    </artifactItems>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

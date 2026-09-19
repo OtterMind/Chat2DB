@@ -12,6 +12,7 @@ interface LocalFileEncodingSelectProps {
   charset?: string;
   bom?: boolean;
   disabled?: boolean;
+  allowAutoDetect?: boolean;
   size?: SelectProps['size'];
   variant?: SelectProps['variant'];
   onEncodingChange: (charset?: string) => Promise<void>;
@@ -22,6 +23,7 @@ const LocalFileEncodingSelect = ({
   charset,
   bom,
   disabled,
+  allowAutoDetect = true,
   size = 'small',
   variant = 'borderless',
   onEncodingChange,
@@ -67,7 +69,7 @@ const LocalFileEncodingSelect = ({
           aria-label={label}
           popupMatchSelectWidth={180}
           options={[
-            { value: AUTO_DETECT_VALUE, label: autoDetectLabel },
+            ...(allowAutoDetect ? [{ value: AUTO_DETECT_VALUE, label: autoDetectLabel }] : []),
             ...charsetOptions,
           ]}
           onChange={handleChange}

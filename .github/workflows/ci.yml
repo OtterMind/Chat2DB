@@ -183,10 +183,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Test desktop layout and Beta publication
+      - name: Test desktop layout, Beta pointer, and release guards
         run: |
           bash script/package/tests/desktop-layout-test.sh
-          python3 script/package/tests/beta-index-publication-test.py
+          python3 script/package/tests/release-deletion-guard-test.py
           ruby script/package/tests/community-beta-workflow-test.rb
 
       - name: Validate required repository files

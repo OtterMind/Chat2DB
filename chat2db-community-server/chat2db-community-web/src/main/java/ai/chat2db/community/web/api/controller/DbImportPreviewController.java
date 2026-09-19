@@ -11,6 +11,7 @@ import ai.chat2db.community.web.api.converter.db.DbImportWebConverter;
 import ai.chat2db.community.web.api.model.request.db.DesktopImportFileRequest;
 import ai.chat2db.community.web.api.model.request.db.ImportExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.ImportPreviewRequest;
+import ai.chat2db.community.web.api.model.request.db.ImportSheetsRequest;
 import ai.chat2db.community.web.api.model.response.task.TaskSubmitResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 /**
  * Database-independent, bounded import preview and column mapping. Preview and execution
@@ -64,7 +67,12 @@ public class DbImportPreviewController {
     public DataResult<ImportPreview> preview(@Valid @RequestBody ImportPreviewRequest request) {
         return DataResult.of(importPreviewService.preview(request.getDataSourceId(), request.getDatabaseName(),
                 request.getSchemaName(), request.getTableName(), importFileStagingService.resolve(request.getFileId()),
-                request.getCsvOptions()));
+                request.getCsvOptions(), request.getExcelOptions(), request.getJsonOptions()));
+    }
+
+    @PostMapping("/sheets")
+    public DataResult<List<String>> sheets(@Valid @RequestBody ImportSheetsRequest request) {
+        return DataResult.of(importPreviewService.sheetNames(importFileStagingService.resolve(request.getFileId())));
     }
 
     @PostMapping("/execute")

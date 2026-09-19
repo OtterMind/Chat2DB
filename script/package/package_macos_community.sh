@@ -150,6 +150,14 @@ package_application() {
         args+=("--java-options" "${opt}")
     done
 
+    local update_options
+    update_options=$(chat2db_update_java_options) || return 1
+    while IFS= read -r opt; do
+        if [ -n "${opt}" ]; then
+            args+=("--java-options" "${opt}")
+        fi
+    done <<< "${update_options}"
+
     args+=(
         "--mac-package-identifier" "${APP_IDENTIFIER}"
         "--mac-app-category" "public.app-category.developer-tools"
@@ -180,6 +188,11 @@ validate_packaged_dmg() {
     if [ -z "${app_dir}" ]; then
         cleanup_mount
         echo "Error: packaged app not found in DMG: ${APP_NAME}.app" >&2
+        exit 1
+    fi
+
+    if ! chat2db_verify_launcher_update_options "${app_dir}"; then
+        cleanup_mount
         exit 1
     fi
 

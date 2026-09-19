@@ -17,11 +17,11 @@
       "notification.ts": "500751da2f02391622f074448eb46611fd41da2e5530d6c7d65f17a1382bd236",
       "plugin.ts": "01f15b6342cc5b29899ee4144d67b04bb4bc02c6bb10779806be322dc5e9a2bc",
       "redis.ts": "cacf9cf685bf3bf6d019f18eead0f63713d4727be741a87d8dc1d22807ebd9ad",
-      "setting.ts": "01e4c01ebe44f2b6543e28195cd9cd37642293ac28e2173cc0f944654f1259fe",
+      "setting.ts": "5b870fe0ad9b6f017856112e9518b1f30f5931ec77f2c6b6ed75ea22b1804757",
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
       "sqlEditor.ts": "5c41e5f24d5ba78909795bcc681cabb8460cca075233b665dc4940afe82ce0c9",
       "stream.ts": "8c870a19ec607a359ed9a0fbfe711554cbb07c9c460414c371a350fb7b0ea405",
-      "workspace.ts": "60a8f556eebc9ec01e78769694481233d2cc1bf27df234ca065a847c6fc0bb94"
+      "workspace.ts": "f41dcc31f6fa7de500cda95ef550737c99606569077d26150239b4ce14db7ef1"
     },
     "ko-KR": {
       "ai.ts": "e7a2fcbfb3ed647bd14f63aca4b6c35c8fb402c49a6a1f36bb04f76f4e8415af",
@@ -38,11 +38,11 @@
       "notification.ts": "500751da2f02391622f074448eb46611fd41da2e5530d6c7d65f17a1382bd236",
       "plugin.ts": "01f15b6342cc5b29899ee4144d67b04bb4bc02c6bb10779806be322dc5e9a2bc",
       "redis.ts": "cacf9cf685bf3bf6d019f18eead0f63713d4727be741a87d8dc1d22807ebd9ad",
-      "setting.ts": "01e4c01ebe44f2b6543e28195cd9cd37642293ac28e2173cc0f944654f1259fe",
+      "setting.ts": "5b870fe0ad9b6f017856112e9518b1f30f5931ec77f2c6b6ed75ea22b1804757",
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
       "sqlEditor.ts": "5c41e5f24d5ba78909795bcc681cabb8460cca075233b665dc4940afe82ce0c9",
       "stream.ts": "8c870a19ec607a359ed9a0fbfe711554cbb07c9c460414c371a350fb7b0ea405",
-      "workspace.ts": "60a8f556eebc9ec01e78769694481233d2cc1bf27df234ca065a847c6fc0bb94"
+      "workspace.ts": "f41dcc31f6fa7de500cda95ef550737c99606569077d26150239b4ce14db7ef1"
     }
   }
 }

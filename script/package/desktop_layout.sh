@@ -74,6 +74,18 @@ chat2db_validate_desktop_input() {
         echo "Error: desktop main JAR is missing: ${input_dir}/${MAIN_JAR}" >&2
         return 1
     fi
+    local stray_jar
+    for stray_jar in "${input_dir}"/*.jar; do
+        [ -e "${stray_jar}" ] || continue
+        if [ "${CHAT2DB_DESKTOP_LAYOUT}" = "versioned-thin" ]; then
+            echo "Error: thin desktop input must not carry a root-level JAR: ${stray_jar}" >&2
+            return 1
+        fi
+        if [ "$(basename "${stray_jar}")" != "$(basename "${MAIN_JAR}")" ]; then
+            echo "Error: unexpected root-level JAR in desktop input: ${stray_jar}" >&2
+            return 1
+        fi
+    done
     if [ ! -f "${input_dir}/tools/chat2db-updater.jar" ]; then
         echo "Error: update helper is missing: ${input_dir}/tools/chat2db-updater.jar" >&2
         return 1
@@ -197,4 +209,57 @@ chat2db_jpackage_arguments() {
         --dest "${destination}"
         --runtime-image "${runtime_image}"
     )
+}
+
+# The desktop reads the update signing key from the launcher configuration, so a
+# packaged application whose configuration lost those options can never update.
+chat2db_verify_launcher_update_options() {
+    local root="$1"
+    if [ -z "${CHAT2DB_UPDATE_KEY_ID:-}" ] && [ -z "${CHAT2DB_UPDATE_PUBLIC_KEY_B64:-}" ]; then
+        echo "[check] update signing key not supplied; launcher options stay unconfigured"
+        return 0
+    fi
+    if [ -z "${CHAT2DB_UPDATE_KEY_ID:-}" ] || [ -z "${CHAT2DB_UPDATE_PUBLIC_KEY_B64:-}" ]; then
+        echo "Error: CHAT2DB_UPDATE_KEY_ID and CHAT2DB_UPDATE_PUBLIC_KEY_B64 must be set together" >&2
+        return 1
+    fi
+    local configuration
+    configuration=$(find "${root}" -maxdepth 4 -name '*.cfg' -print -quit)
+    if [ -z "${configuration}" ]; then
+        echo "Error: launcher configuration is missing under ${root}" >&2
+        return 1
+    fi
+    if ! grep -Fq -- "-Dchat2db.update.key-id=${CHAT2DB_UPDATE_KEY_ID}" "${configuration}" || \
+       ! grep -Fq -- "-Dchat2db.update.public-key=${CHAT2DB_UPDATE_PUBLIC_KEY_B64}" "${configuration}"; then
+        echo "Error: launcher configuration is missing the update signing key options: ${configuration}" >&2
+        return 1
+    fi
+    echo "[check] update signing key present in launcher configuration: $(basename "${configuration}")"
+}
+
+# Verifies the jpackage arguments when the produced package cannot be inspected,
+# for example a Windows MSI that only exposes its launcher configuration after
+# installation.
+chat2db_verify_update_java_option_arguments() {
+    if [ -z "${CHAT2DB_UPDATE_KEY_ID:-}" ] && [ -z "${CHAT2DB_UPDATE_PUBLIC_KEY_B64:-}" ]; then
+        echo "[check] update signing key not supplied; launcher options stay unconfigured"
+        return 0
+    fi
+    local expected found argument
+    for expected in \
+        "-Dchat2db.update.key-id=${CHAT2DB_UPDATE_KEY_ID:-}" \
+        "-Dchat2db.update.public-key=${CHAT2DB_UPDATE_PUBLIC_KEY_B64:-}"; do
+        found=false
+        for argument in "$@"; do
+            if [ "${argument}" = "${expected}" ]; then
+                found=true
+                break
+            fi
+        done
+        if [ "${found}" = false ]; then
+            echo "Error: jpackage arguments are missing ${expected%%=*}" >&2
+            return 1
+        fi
+    done
+    echo "[check] update signing key present in launcher options"
 }

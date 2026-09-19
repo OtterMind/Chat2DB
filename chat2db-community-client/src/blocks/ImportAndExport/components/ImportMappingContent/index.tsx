@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Collapse, Modal, Spin } from 'antd';
+import { Button, Modal, Spin } from 'antd';
 import { TriangleAlert } from 'lucide-react';
 import {
   ImportExportFileType,
@@ -9,7 +9,7 @@ import {
 } from '@/constants/importExport';
 import i18n from '@/i18n';
 import sqlService, { IImportPreview } from '@/service/sql';
-import type { ICsvOptions, ImportExecutionMode } from '@/typings/importExport';
+import type { ICsvOptions, IExcelOptions, IJsonOptions, ImportExecutionMode } from '@/typings/importExport';
 import {
   buildInitialImportMapping,
   getDuplicateImportMappings,
@@ -19,6 +19,9 @@ import { useStyles } from './style';
 import type { FileUrl } from '@/components/UploadLocalFile';
 import { stageSelectedImportFile } from './fileStaging';
 import CsvOptionsSections from './CsvOptionsSections';
+import ExcelOptionsSections from './ExcelOptionsSections';
+import JsonOptionsSections from './JsonOptionsSections';
+import { DEFAULT_EXCEL_OPTIONS, DEFAULT_JSON_OPTIONS } from '../../utils/importOptions';
 import ImportModeControl from '../ImportModeControl';
 import useImportDataSections from './ImportDataSections';
 import {
@@ -42,7 +45,14 @@ interface IProps {
  * unmapped target columns are filled (DEFAULT or NULL), executes the import, and reports
  * task progress. Preview and execution share the backend parser.
  */
-const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableName, file, onSubmitted }: IProps) => {
+const ImportMappingContent = ({
+  dataSourceId,
+  databaseName,
+  schemaName,
+  tableName,
+  file,
+  onSubmitted,
+}: IProps) => {
   const { styles } = useStyles();
   const [modal, modalContextHolder] = Modal.useModal();
   const [preview, setPreview] = useState<IImportPreview | null>(null);
@@ -55,21 +65,39 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
   const [mode, setMode] = useState<ImportExecutionMode>('STANDARD');
   const [activeSections, setActiveSections] = useState<string[]>(['mapping', 'preview']);
   const [csvOptions, setCsvOptions] = useState<ICsvOptions>(DEFAULT_CSV_OPTIONS);
+  const [excelOptions, setExcelOptions] = useState<IExcelOptions>(DEFAULT_EXCEL_OPTIONS);
+  const [jsonOptions, setJsonOptions] = useState<IJsonOptions>(DEFAULT_JSON_OPTIONS);
+  const [sheets, setSheets] = useState<string[]>([]);
   const selectedFileName = file.fileName || file.file?.name || file.filePath || '';
-  const isCsv = inferImportFileFormat(selectedFileName) === ImportExportFileType.CSV;
+  const fileFormat = inferImportFileFormat(selectedFileName);
+  const isCsv = fileFormat === ImportExportFileType.CSV;
+  const isJson = fileFormat === ImportExportFileType.JSON;
+  const isExcel = fileFormat === ImportExportFileType.XLS || fileFormat === ImportExportFileType.XLSX;
+  const emptyAsNull = isCsv ? csvOptions.emptyAsNull : isJson ? jsonOptions.emptyAsNull : excelOptions.emptyAsNull;
+  const setEmptyAsNull = (value: boolean) => {
+    if (isCsv) setCsvOptions((current) => ({ ...current, emptyAsNull: value }));
+    else if (isJson) setJsonOptions((current) => ({ ...current, emptyAsNull: value }));
+    else setExcelOptions((current) => ({ ...current, emptyAsNull: value }));
+  };
+  const fileOptions = useMemo(
+    () => (isCsv ? { csvOptions } : isJson ? { jsonOptions } : { excelOptions }),
+    [isCsv, isJson, csvOptions, jsonOptions, excelOptions],
+  );
   const currentPreviewKey = JSON.stringify({
     dataSourceId,
     databaseName,
     schemaName,
     tableName,
     fileId,
-    csvOptions: isCsv ? csvOptions : undefined,
+    ...fileOptions,
   });
   const [loadedPreviewKey, setLoadedPreviewKey] = useState<string>();
   const resolveErrorMessage = useCallback(
     (requestError: unknown) =>
-      getImportPreviewErrorMessage(requestError, i18n('common.text.failure'), {
-        [ImportPreviewErrorCode.DUPLICATE_SOURCE_COLUMNS]: i18n('workspace.importExport.duplicateSourceColumns'),
+      getImportPreviewErrorMessage(requestError, i18n('workspace.importExport.previewFailed'), {
+        [ImportPreviewErrorCode.DUPLICATE_SOURCE_COLUMNS]: i18n(
+          'workspace.importExport.duplicateSourceColumns',
+        ),
         [ImportPreviewErrorCode.INVALID_CSV_OPTIONS]: i18n('workspace.importExport.invalidCsvOptions'),
       }),
     [],
@@ -78,6 +106,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
   useEffect(() => {
     let active = true;
     setFileId(undefined);
+    setSheets([]);
     setMode('STANDARD');
     setLoading(true);
     setError(null);
@@ -123,6 +152,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
         schemaName,
         tableName,
         fileId,
+        ...fileOptions,
         csvOptions: validatedCsvOptions,
       })
       .then((data) => {
@@ -148,6 +178,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
   }, [
     currentPreviewKey,
     csvOptions,
+    fileOptions,
     dataSourceId,
     databaseName,
     fileId,
@@ -156,6 +187,23 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
     schemaName,
     tableName,
   ]);
+
+  useEffect(() => {
+    if (!fileId || !isExcel) return;
+    let active = true;
+    sqlService
+      .getImportSheets({ dataSourceId, databaseName, schemaName, fileId })
+      .then((names) => {
+        if (active) setSheets(names);
+      })
+      .catch(() => {
+        // Worksheets only refine the selection; the preview below already reports file problems.
+        if (active) setSheets([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fileId, isExcel, dataSourceId, databaseName, schemaName, tableName, resolveErrorMessage]);
 
   const blockedColumns = useMemo(() => {
     if (!preview) return [];
@@ -175,13 +223,16 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
     duplicateMappings,
     blockedColumnNames: new Set(blockedColumns.map(({ name }) => name)),
     unmappedTarget,
-    csvOptions,
-    isCsv,
+    emptyAsNull,
+    emptyAsNullLabel: i18n(
+      isJson ? 'workspace.importExport.emptyStringAsNull' : 'workspace.importExport.emptyAsNull',
+    ),
     loading,
+    disabled: executing,
     onMappingChange: (sourceColumn, targetColumn) =>
       setMapping((current) => ({ ...current, [sourceColumn]: targetColumn })),
     onUnmappedTargetChange: setUnmappedTarget,
-    onCsvOptionsChange: setCsvOptions,
+    onEmptyAsNullChange: setEmptyAsNull,
   });
 
   const execute = () => {
@@ -229,6 +280,7 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
           .filter(([, target]) => target && target !== SKIP_IMPORT_SOURCE_FIELD)
           .map(([source, target]) => ({ sourceColumn: source, targetColumn: target })),
         unmappedTarget,
+        ...fileOptions,
         csvOptions: taskCsvOptions,
         mode,
       })
@@ -242,8 +294,8 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
       {modalContextHolder}
       <div className={styles.scrollContent}>
         {error && preview && <div className={styles.error}>{error}</div>}
-        {isCsv && (
-          <div className={styles.csvOptions}>
+        <div className={styles.csvOptions}>
+          {isCsv && (
             <CsvOptionsSections
               value={csvOptions}
               activeKeys={activeSections}
@@ -252,8 +304,29 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
               onChange={setCsvOptions}
               onActiveKeysChange={setActiveSections}
             />
-          </div>
-        )}
+          )}
+          {isJson && (
+            <JsonOptionsSections
+              value={jsonOptions}
+              disabled={executing}
+              activeKeys={activeSections}
+              onActiveKeysChange={setActiveSections}
+              dataItems={dataSectionItems}
+              onChange={setJsonOptions}
+            />
+          )}
+          {isExcel && (
+            <ExcelOptionsSections
+              value={excelOptions}
+              sheets={sheets}
+              disabled={executing}
+              activeKeys={activeSections}
+              onActiveKeysChange={setActiveSections}
+              dataItems={dataSectionItems}
+              onChange={setExcelOptions}
+            />
+          )}
+        </div>
         {!preview && (
           <div className={styles.previewState} role={error ? undefined : 'status'}>
             {error ? (
@@ -265,16 +338,6 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
               <Spin />
             )}
           </div>
-        )}
-        {!isCsv && preview && (
-          <Collapse
-            className={styles.sections}
-            ghost
-            size="small"
-            activeKey={activeSections}
-            onChange={(keys) => setActiveSections(Array.isArray(keys) ? keys : [keys])}
-            items={dataSectionItems}
-          />
         )}
       </div>
       {preview && (
@@ -289,7 +352,12 @@ const ImportMappingContent = ({ dataSourceId, databaseName, schemaName, tableNam
           <Button
             type="primary"
             loading={executing}
-            disabled={loading || !fileId || loadedPreviewKey !== currentPreviewKey}
+            disabled={
+              loading ||
+              !fileId ||
+              loadedPreviewKey !== currentPreviewKey ||
+              !Object.values(mapping).some((target) => target && target !== SKIP_IMPORT_SOURCE_FIELD)
+            }
             onClick={execute}
           >
             {i18n('common.button.execute')}

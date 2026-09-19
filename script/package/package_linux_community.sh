@@ -147,6 +147,14 @@ build_base_args() {
     while IFS= read -r opt; do
         [ -n "${opt}" ] && BASE_ARGS+=("--java-options" "${opt}")
     done < <(java_options)
+
+    local update_options
+    update_options=$(chat2db_update_java_options) || return 1
+    while IFS= read -r opt; do
+        if [ -n "${opt}" ]; then
+            BASE_ARGS+=("--java-options" "${opt}")
+        fi
+    done <<< "${update_options}"
 }
 
 move_single_artifact() {
@@ -259,6 +267,8 @@ build_appimage() {
         echo "Error: jpackage app-image directory not found." >&2
         exit 1
     fi
+
+    chat2db_verify_launcher_update_options "${app_dir}"
 
     prepare_appimage_dir "${app_dir}"
     download_appimagetool "${tool_path}"

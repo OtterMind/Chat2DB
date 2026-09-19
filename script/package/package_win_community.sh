@@ -105,6 +105,15 @@ for opt in "${JAVA_OPTS[@]}"; do
     JPACKAGE_ARGS+=(--java-options "${opt}")
 done
 
+UPDATE_OPTIONS=$(chat2db_update_java_options)
+while IFS= read -r opt; do
+    if [ -n "${opt}" ]; then
+        JPACKAGE_ARGS+=(--java-options "${opt}")
+    fi
+done <<< "${UPDATE_OPTIONS}"
+
+chat2db_verify_update_java_option_arguments "${JPACKAGE_ARGS[@]}"
+
 echo "[run] jpackage ${JPACKAGE_ARGS[*]}"
 jpackage "${JPACKAGE_ARGS[@]}"
 

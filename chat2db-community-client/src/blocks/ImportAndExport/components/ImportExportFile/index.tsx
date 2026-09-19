@@ -1,3 +1,5 @@
+import SqlImportOptionsFields from '../SqlImportOptionsFields';
+import { DEFAULT_SQL_IMPORT_OPTIONS } from '../../utils/importOptions';
 import { memo, useMemo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
 import UploadLocalFile, { type FileUrl } from '@/components/UploadLocalFile';
@@ -39,7 +41,8 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   const { setIsReady, onImportFileChange } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
-  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
+  const [sqlImportOptions, setSqlImportOptions] = useState(DEFAULT_SQL_IMPORT_OPTIONS);
+  const [selectedFiles, setSelectedFiles] = useState<FileUrl[]>([]);
   const [exportLocation, setExportLocation] = useState<string>('');
   const [formValue, setFormValue] = useState<ImportExportFormValue>({
     exportType: ImportExportFileType.CSV,
@@ -58,16 +61,25 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   useEffect(() => {
     if (importExportDataBoundInfo) {
       const { dataSourceName, databaseName, schemaName, tableName } = importExportDataBoundInfo;
-      const tableNameDisplay = [dataSourceName, databaseName, schemaName, tableName].filter(Boolean).join('/');
+      const tableNameDisplay = [
+        dataSourceName,
+        databaseName,
+        schemaName,
+        isImport && formValue.exportType === ImportExportFileType.SQL ? undefined : tableName,
+      ]
+        .filter(Boolean)
+        .join('/');
       form.setFieldsValue({
         tableNameDisplay: tableNameDisplay,
       });
     }
-  }, [importExportDataBoundInfo]);
+  }, [importExportDataBoundInfo, formValue.exportType, isImport]);
 
   // Gets the corresponding file type based on the export type
   const uploadLocalFileAccept = useMemo(() => {
-    return formValue.exportType ? exportTypeOptions.find((item) => item.value === formValue.exportType)?.accept : '';
+    return formValue.exportType
+      ? exportTypeOptions.find((item) => item.value === formValue.exportType)?.accept
+      : '';
   }, [formValue.exportType]);
 
   useEffect(() => {
@@ -76,10 +88,15 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
     }
   }, [exportLocation, formValue]);
 
-  const handleSelectedFilesChange = (files: FileUrl[]) => {
-    setSelectedFilePaths(files.map((item) => item.filePath).filter((path): path is string => !!path));
+  useEffect(() => {
     if (isImport) {
-      setIsReady?.(hasSelectedImportFile(files));
+      setIsReady?.(hasSelectedImportFile(selectedFiles));
+    }
+  }, [isImport, selectedFiles, setIsReady]);
+
+  const handleSelectedFilesChange = (files: FileUrl[]) => {
+    setSelectedFiles(files);
+    if (isImport) {
       onImportFileChange?.(files[0]);
     }
   };
@@ -110,7 +127,8 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
             ? ImportExportTaskType.SQL_FILE_IMPORT
             : ImportExportTaskType.DATA_FILE_IMPORT,
         tableName,
-        sourceFile: selectedFilePaths[0] || '',
+        sourceFile: selectedFiles[0]?.filePath || '',
+        ...(formValue.exportType === ImportExportFileType.SQL ? { sqlImportOptions } : {}),
       };
     },
   }));
@@ -137,7 +155,14 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       onValuesChange={handleFormChange}
       initialValues={formValue}
     >
-      <Form.Item label={`${i18n('workspace.importExport.targetTable')}:`} name="tableNameDisplay">
+      <Form.Item
+        label={`${i18n(
+          isImport && formValue.exportType === ImportExportFileType.SQL
+            ? 'workspace.importExport.executionEnvironment'
+            : 'workspace.importExport.targetTable',
+        )}:`}
+        name="tableNameDisplay"
+      >
         <Input autoComplete="off" disabled />
       </Form.Item>
       <Form.Item label={`${i18n('workspace.importExport.fileType')}:`} name="exportType">
@@ -160,6 +185,9 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
         <Form.Item>
           <UploadLocalFile fileUrlListChange={handleSelectedFilesChange} accept={uploadLocalFileAccept} />
         </Form.Item>
+      )}
+      {isImport && formValue.exportType === ImportExportFileType.SQL && (
+        <SqlImportOptionsFields value={sqlImportOptions} onChange={setSqlImportOptions} />
       )}
       {isDevelopment && isExport && (
         <Form.Item label="File URL" name="fileUrl">

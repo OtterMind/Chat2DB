@@ -3,12 +3,16 @@ package ai.chat2db.community.jcef.handler.mouse;
 import org.cef.browser.CefBrowser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Panel;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -61,6 +65,7 @@ class CursorHandlerTest {
     }
 
     @Test
+    @DisabledOnOs(OS.WINDOWS)
     void queuedSwingUpdateUsesLatestForcedCursor() throws Exception {
         CountDownLatch edtBlocked = new CountDownLatch(1);
         CountDownLatch releaseEdt = new CountDownLatch(1);
@@ -87,6 +92,48 @@ class CursorHandlerTest {
         });
 
         assertEquals(Cursor.E_RESIZE_CURSOR, component.getCursor().getType());
+    }
+
+    @Test
+    void windowsLeavesBrowserAndResizeCursorsToChromium() throws Exception {
+        String executable = org.cef.OS.isWindows() ? "java.exe" : "java";
+        Process process = new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", executable).toString(),
+                "-Djava.awt.headless=true",
+                "-Dos.name=Windows 11",
+                "-cp", System.getProperty("surefire.test.class.path", System.getProperty("java.class.path")),
+                WindowsCursorProbe.class.getName()
+        ).redirectErrorStream(true).start();
+        try {
+            assertTrue(process.waitFor(20, TimeUnit.SECONDS), "Windows cursor probe timed out");
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertEquals(0, process.exitValue(), output);
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
+    public static class WindowsCursorProbe {
+        public static void main(String[] args) throws Exception {
+            assertTrue(org.cef.OS.isWindows());
+            assertFalse(CursorHandler.isNativeCursorOverrideEnabled());
+            Component component = new Panel();
+            CefBrowser browser = (CefBrowser) Proxy.newProxyInstance(
+                    CefBrowser.class.getClassLoader(), new Class<?>[]{CefBrowser.class},
+                    (proxy, method, arguments) -> method.getName().equals("getUIComponent") ? component : null);
+            CursorHandler handler = new CursorHandler();
+            for (int type = Cursor.DEFAULT_CURSOR; type <= Cursor.MOVE_CURSOR; type++) {
+                assertFalse(handler.onCursorChange(browser, type));
+            }
+            SwingUtilities.invokeAndWait(() -> {
+            });
+            assertEquals(Cursor.MOVE_CURSOR, component.getCursor().getType());
+            CursorHandler.setForcedCursor(browser, "ns-resize", 1);
+            CursorHandler.setForcedCursor(browser, "ew-resize", 2);
+            CursorHandler.setForcedCursor(browser, "default", 3);
+            assertNull(CursorHandler.currentForcedCursorType());
+            assertEquals(0, CursorHandler.currentForcedCursorSequence());
+        }
     }
 
     @Test

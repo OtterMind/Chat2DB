@@ -12,12 +12,16 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import ai.chat2db.community.domain.api.model.task.ExcelOptions;
+import ai.chat2db.community.domain.api.model.task.JsonOptions;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.SourceColumnName;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ExcelImportReader;
 
 /**
  * Database-independent import preview. File parsing is delegated by format; this service
@@ -43,14 +47,22 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
     @Override
     public ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
                                  String tableName, File file, CsvOptions csvOptions) {
-        ImportPreviewFileParser.ParsedRows parsedRows = fileParser.parse(file, PREVIEW_ROW_LIMIT, csvOptions);
+        return preview(dataSourceId, databaseName, schemaName, tableName, file, csvOptions, null, null);
+    }
+
+    @Override
+    public ImportPreview preview(Long dataSourceId, String databaseName, String schemaName,
+                                 String tableName, File file, CsvOptions csvOptions,
+                                 ExcelOptions excelOptions, JsonOptions jsonOptions) {
+        ImportPreviewFileParser.ParsedRows parsedRows = fileParser.parse(file, PREVIEW_ROW_LIMIT,
+                csvOptions, excelOptions, jsonOptions);
         if (parsedRows.header().isEmpty()) {
             throw new BusinessException("import.preview.emptyFile");
         }
         Map<Integer, String> header = parsedRows.header();
         List<String> sourceNames = new ArrayList<>();
         for (int i = 0; i < header.size(); i++) {
-            String name = StringUtils.defaultIfBlank(header.get(i), "column_" + (i + 1));
+            String name = StringUtils.defaultIfBlank(header.get(i), SourceColumnName.of(i));
             sourceNames.add(name);
         }
         requireUniqueSourceColumns(sourceNames);
@@ -99,6 +111,11 @@ public class DbImportPreviewServiceImpl implements IDbImportPreviewService {
                 .suggestedMapping(suggested)
                 .previewLimit(PREVIEW_ROW_LIMIT)
                 .build();
+    }
+
+    @Override
+    public List<String> sheetNames(File file) {
+        return ExcelImportReader.sheets(file);
     }
 
     private static List<ImportTargetColumn> targetColumns(TableMetadataRequest target) {

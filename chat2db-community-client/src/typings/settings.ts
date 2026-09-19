@@ -88,12 +88,6 @@ export interface IUpdatePreferences {
   receiveBeta: boolean;
 }
 
-export interface IUpdateRecoveryStatus {
-  failed: boolean;
-  fromVersion: string;
-  toVersion: string;
-}
-
 export type McpRuntimeState = 'UNKNOWN' | 'STARTING' | 'RUNNING' | 'STOPPED' | 'FAILED';
 
 export interface McpStatus {

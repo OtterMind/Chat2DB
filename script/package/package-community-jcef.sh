@@ -48,6 +48,15 @@ COMMUNITY_LIB_ZIP="${SERVER_DIR}/chat2db-community-start/target/lib.zip"
 RELEASE_EPOCH="${COMMUNITY_RELEASE_EPOCH:-0}"
 UPDATE_KEY_ID="${COMMUNITY_UPDATE_KEY_ID:-}"
 UPDATE_PUBLIC_KEY="${COMMUNITY_UPDATE_PUBLIC_KEY_B64:-}"
+if { [ -n "${UPDATE_KEY_ID}" ] && [ -z "${UPDATE_PUBLIC_KEY}" ]; } || \
+   { [ -z "${UPDATE_KEY_ID}" ] && [ -n "${UPDATE_PUBLIC_KEY}" ]; }; then
+  echo "[error] COMMUNITY_UPDATE_KEY_ID and COMMUNITY_UPDATE_PUBLIC_KEY_B64 must be set together" >&2
+  exit 1
+fi
+# The desktop reads the key from its launcher configuration, so the platform
+# scripts receive it as jpackage java options.
+export CHAT2DB_UPDATE_KEY_ID="${UPDATE_KEY_ID}"
+export CHAT2DB_UPDATE_PUBLIC_KEY_B64="${UPDATE_PUBLIC_KEY}"
 UPDATE_HELPER=""
 if [[ ! "${RELEASE_EPOCH}" =~ ^[0-9]+$ ]]; then
   echo "[error] COMMUNITY_RELEASE_EPOCH must be a non-negative integer" >&2
@@ -301,8 +310,6 @@ stage_community_input() {
     mvn clean install -U -B \
       -Dmaven.test.skip=true \
       -Dchat2db.finalName=chat2db-community \
-      "-Dchat2db.community.update.key-id=${UPDATE_KEY_ID}" \
-      "-Dchat2db.community.update.public-key=${UPDATE_PUBLIC_KEY}" \
       -f "${SERVER_DIR}/pom.xml"
   fi
   require_file "${COMMUNITY_JAR}"

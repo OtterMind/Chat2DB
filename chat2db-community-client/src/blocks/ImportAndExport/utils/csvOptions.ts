@@ -1,4 +1,4 @@
-import type { ICsvOptions } from '@/typings/importExport';
+import type { ICsvOptions, IImportValueOptions } from '@/typings/importExport';
 import { ImportExportFileType, ImportPreviewErrorCode } from '@/constants/importExport';
 
 export const DEFAULT_CSV_OPTIONS: ICsvOptions = {
@@ -89,7 +89,7 @@ export function validateCsvOptions(options: ICsvOptions): ICsvOptions {
   return normalized;
 }
 
-export function getCsvDateTimeExamples(options: ICsvOptions): string[] {
+export function getCsvDateTimeExamples(options: IImportValueOptions): string[] {
   const values = [
     { year: '23', month: '8', day: '24' },
     { year: '2023', month: '8', day: '24' },

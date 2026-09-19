@@ -17,7 +17,7 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CsvOptions {
+public class CsvOptions implements ImportValueFormat {
 
     public static final String DEFAULT_ENCODING = "UTF-8";
     public static final String AUTO_ENCODING = "AUTO";

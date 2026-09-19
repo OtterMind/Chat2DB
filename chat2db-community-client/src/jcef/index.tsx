@@ -2,7 +2,6 @@ import createJcefApi from './base';
 import {
   IUpdateDetail,
   IUpdatePreferences,
-  IUpdateRecoveryStatus,
   McpRestartResult,
   McpStatus,
 } from '@/typings/settings';
@@ -176,12 +175,6 @@ const jcefApi = {
   },
   updatePreferences: (data?: { receiveBeta: boolean }) => {
     return createJcefApi<IUpdatePreferences>('update-preferences', data);
-  },
-  getUpdateRecoveryStatus: () => {
-    return createJcefApi<IUpdateRecoveryStatus>('update-recovery-status');
-  },
-  openUpdateRecoveryLog: () => {
-    return createJcefApi<boolean>('open-update-recovery-log');
   },
   // Restart app
   restartApp: (data?: { operationId?: string }) => {

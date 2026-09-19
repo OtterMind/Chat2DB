@@ -10,8 +10,13 @@ import ai.chat2db.community.updater.v2.verification.UpdateManifestVerifier;
 public final class GitHubReleaseDesktopUpdater {
     public static final String INDEX_URL =
         "https://github.com/OtterMind/Chat2DB/releases/latest/download/release-index.json";
+    // Beta releases are cached by the release workflow on a machine-owned branch, because a
+    // published release cannot have its assets replaced and a lightweight channel tag cannot
+    // be created by the workflow token.
+    private static final String BETA_INDEX_PATH =
+        "/OtterMind/Chat2DB/community-beta-index/release-index.json";
     public static final String BETA_INDEX_URL =
-        "https://github.com/OtterMind/Chat2DB/releases/download/community-beta/release-index.json";
+        "https://raw.githubusercontent.com" + BETA_INDEX_PATH;
 
     private GitHubReleaseDesktopUpdater() {
     }
@@ -28,6 +33,8 @@ public final class GitHubReleaseDesktopUpdater {
         String host = uri.getHost();
         return ("github.com".equalsIgnoreCase(host)
                 && uri.getPath().startsWith("/OtterMind/Chat2DB/releases/"))
+            || ("raw.githubusercontent.com".equalsIgnoreCase(host)
+                && BETA_INDEX_PATH.equals(uri.getPath()))
             || "release-assets.githubusercontent.com".equalsIgnoreCase(host)
             || "objects.githubusercontent.com".equalsIgnoreCase(host);
     }
@@ -36,7 +43,7 @@ public final class GitHubReleaseDesktopUpdater {
         HttpsUpdateTransport transport = new HttpsUpdateTransport(GitHubReleaseDesktopUpdater::isAllowedUrl);
         return FullPackageDesktopUpdater.create("COMMUNITY", "chat2db-community", transport,
             new UpdateDiscoveryService(transport,
-                new UpdateManifestVerifier(TrustedUpdateKeys.load("/chat2db-community-update-keys.properties", "chat2db.community.update")),
+                new UpdateManifestVerifier(TrustedUpdateKeys.load()),
                 GitHubReleaseDesktopUpdater::indexUrl));
     }
 }

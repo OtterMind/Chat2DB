@@ -21,12 +21,4 @@ public interface IDesktopUpdater {
     default boolean isBetaEnabled() {
         return false;
     }
-
-    default DesktopUpdateRecoveryStatus recoveryStatus() {
-        return DesktopUpdateRecoveryStatus.none();
-    }
-
-    default boolean openRecoveryLog() {
-        return false;
-    }
 }

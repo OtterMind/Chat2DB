@@ -12,7 +12,7 @@ class GitHubReleaseDesktopUpdaterTest {
     void resolvesIndependentStableAndBetaIndexes() {
         assertEquals("https://github.com/OtterMind/Chat2DB/releases/latest/download/release-index.json",
             GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.STABLE));
-        assertEquals("https://github.com/OtterMind/Chat2DB/releases/download/community-beta/release-index.json",
+        assertEquals("https://raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/release-index.json",
             GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.BETA));
         assertTrue(GitHubReleaseDesktopUpdater.isAllowedUrl(
             URI.create(GitHubReleaseDesktopUpdater.indexUrl(UpdateChannelEnum.BETA))));
@@ -25,6 +25,22 @@ class GitHubReleaseDesktopUpdaterTest {
             "https://release-assets.githubusercontent.com/asset?signature=example")));
         assertTrue(GitHubReleaseDesktopUpdater.isAllowedUrl(URI.create(
             "https://objects.githubusercontent.com/asset")));
+    }
+
+    @Test
+    void rejectsRawContentOutsideTheBetaIndexBranch() {
+        for (String url : java.util.List.of(
+                "https://raw.githubusercontent.com/OtterMind/Chat2DB/main/release-index.json",
+                "https://raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/other.json",
+                "https://raw.githubusercontent.com/other/repository/community-beta-index/release-index.json",
+                "https://raw.githubusercontent.com/OtterMind/OtherRepo/community-beta-index/release-index.json",
+                "http://raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/release-index.json",
+                "https://raw.githubusercontent.com.evil.example/OtterMind/Chat2DB/community-beta-index/release-index.json",
+                "https://raw.githubusercontent.com:8443/OtterMind/Chat2DB/community-beta-index/release-index.json",
+                "https://user@raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/release-index.json",
+                "https://raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/release-index.json#fragment")) {
+            assertFalse(GitHubReleaseDesktopUpdater.isAllowedUrl(URI.create(url)), url);
+        }
     }
 
     @Test

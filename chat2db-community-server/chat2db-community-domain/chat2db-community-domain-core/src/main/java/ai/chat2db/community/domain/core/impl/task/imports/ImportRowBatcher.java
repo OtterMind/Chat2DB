@@ -285,14 +285,15 @@ public final class ImportRowBatcher implements AutoCloseable {
             batchSizer.record(rows, elapsed);
             reportBatchSuccess(batch);
         } catch (RuntimeException | Error batchFailure) {
-            // Publish failure before decrementing in-flight work, so flush cannot report success.
-            recordFailure(batchFailure);
             if (!(batchFailure instanceof TaskCancelledException)) {
                 context.logError("IMPORT_BATCH_FAILED", "Could not import batch", Map.of(
                         "statementCount", rows,
                         "firstRow", batch.firstRowNumber(),
                         "message", StringUtils.defaultString(batchFailure.getMessage())));
             }
+            // Publish the failure only after its log entry, and before decrementing in-flight work:
+            // a caller that observes the failure then always sees the batch-failure event too.
+            recordFailure(batchFailure);
             throw batchFailure;
         } finally {
             if (workerPool != null) {

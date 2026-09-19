@@ -3,7 +3,8 @@ package ai.chat2db.community.domain.core.impl.task.imports;
 import ai.chat2db.community.domain.api.model.metadata.DataType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
-import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import ai.chat2db.community.domain.api.model.task.ImportValueFormat;
+import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
@@ -24,7 +25,7 @@ public final class ImportRowSqlBuilder {
     private final IValueProcessor valueProcessor;
     private final ConnectInfo connectInfo;
     private final ISqlBuilder sqlBuilder;
-    private final CsvOptions csvOptions;
+    private final ImportValueFormat valueOptions;
     private Map<String, Integer> headMap;
     private Map<String, Integer> mappedHeadMap;
     private List<TableColumn> tableColumns;
@@ -36,7 +37,14 @@ public final class ImportRowSqlBuilder {
         this.valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
         this.connectInfo = Chat2DBContext.getConnectInfo();
         this.sqlBuilder = Chat2DBContext.getSqlBuilder();
-        this.csvOptions = spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
+        this.valueOptions = valueOptions(spec);
+    }
+
+    /** Each importer writes the options of its own format back to the spec before building rows. */
+    private static ImportValueFormat valueOptions(ImportTaskSpec spec) {
+        if (spec.getExcelOptions() != null) return spec.getExcelOptions().validate();
+        if (spec.getJsonOptions() != null) return spec.getJsonOptions().validate();
+        return spec.getCsvOptions() == null ? null : spec.getCsvOptions().validate();
     }
 
     public void acceptHead(Map<Integer, String> headers) {
@@ -46,6 +54,12 @@ public final class ImportRowSqlBuilder {
     }
 
     public String build(Map<Integer, String> row, long sourceRowNumber) {
+        Map<Integer, ImportCell> cells = new LinkedHashMap<>();
+        row.forEach((index, value) -> cells.put(index, new ImportCell(value, true)));
+        return buildCells(cells, sourceRowNumber);
+    }
+
+    public String buildCells(Map<Integer, ImportCell> row, long sourceRowNumber) {
         return getInsertSql(getValueList(row, sourceRowNumber));
     }
 
@@ -74,7 +88,7 @@ public final class ImportRowSqlBuilder {
     }
 
 
-    private List<String> getValueList(Map<Integer, String> data, long sourceRowNumber) {
+    private List<String> getValueList(Map<Integer, ImportCell> data, long sourceRowNumber) {
         List<String> values = new ArrayList<>();
         for (TableColumn column : tableColumns) {
             Integer index = sourceIndex(column.getName());
@@ -82,12 +96,15 @@ public final class ImportRowSqlBuilder {
                 values.add(null);
                 continue;
             }
-            String value = data.get(index);
+            ImportCell cell = data.get(index);
+            String value = cell == null ? null : cell.display();
             if (value == null) {
                 values.add(null);
             } else {
-                if (csvOptions != null) {
-                    value = CsvImportValueNormalizer.normalize(value, column, csvOptions, sourceRowNumber);
+                if (cell != null && !cell.text()) {
+                    value = CsvImportValueNormalizer.nativeValue(cell.value(), column);
+                } else if (valueOptions != null) {
+                    value = CsvImportValueNormalizer.normalize(value, column, valueOptions, sourceRowNumber);
                 }
                 String stringValue = valueProcessor.getSqlValueString(getSQLDataValue(value, column));
                 values.add(stringValue);

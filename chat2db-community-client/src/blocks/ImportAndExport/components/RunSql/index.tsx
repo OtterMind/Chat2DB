@@ -1,3 +1,5 @@
+import SqlImportOptionsFields from '../SqlImportOptionsFields';
+import { DEFAULT_SQL_IMPORT_OPTIONS } from '../../utils/importOptions';
 import { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
 import UploadLocalFile from '@/components/UploadLocalFile';
@@ -32,12 +34,13 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   const { setIsReady } = props;
   const { styles } = useStyles();
   const [form] = Form.useForm();
+  const [sqlImportOptions, setSqlImportOptions] = useState(DEFAULT_SQL_IMPORT_OPTIONS);
   const [fileUrlList, setFileUrlList] = useState<string[]>([]);
   const [formValues, setFormValues] = useState<any>({});
 
   useEffect(() => {
-    setIsReady && setIsReady(!!fileUrlList.length || formValues.fileUrl);
-  }, [fileUrlList, formValues]);
+    setIsReady?.(!!(fileUrlList.length || formValues.fileUrl));
+  }, [fileUrlList, formValues, setIsReady]);
 
   const { runSqlBoundInfo } = useImportExportStore((state) => {
     return {
@@ -72,6 +75,7 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
         taskType: ImportExportTaskType.SQL_FILE_IMPORT,
         sourceFile: fileUrlList[0] || formValues.fileUrl,
         format: ImportExportFileType.SQL,
+        sqlImportOptions,
       };
     },
   }));
@@ -90,12 +94,16 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
         setFormValues(form.getFieldsValue());
       }}
     >
-      <Form.Item label={`${i18n('workspace.importExport.executionEnvironment')}:`} name="executionEnvironment">
+      <Form.Item
+        label={`${i18n('workspace.importExport.executionEnvironment')}:`}
+        name="executionEnvironment"
+      >
         <Input autoComplete="off" disabled />
       </Form.Item>
       <Form.Item>
         <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept=".sql" />
       </Form.Item>
+      <SqlImportOptionsFields value={sqlImportOptions} onChange={setSqlImportOptions} />
       {isDevelopment && (
         <Form.Item label="File URL" name="fileUrl">
           <Input autoComplete="off" />

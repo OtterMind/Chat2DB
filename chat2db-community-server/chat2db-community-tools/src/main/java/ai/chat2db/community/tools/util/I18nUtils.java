@@ -27,19 +27,27 @@ public class I18nUtils implements InitializingBean {
     }
 
     public static String getMessage(String messageCode, @Nullable Object[] args) {
+        MessageSource messageSource = messageSourceStatic;
+        if (messageSource == null) {
+            return messageCode + " : no message.";
+        }
         try {
-            return messageSourceStatic.getMessage(messageCode, args, LocaleContextHolder.getLocale());
+            return messageSource.getMessage(messageCode, args, LocaleContextHolder.getLocale());
         } catch (NoSuchMessageException e) {
             return messageCode + " : no message.";
         }
     }
 
     public static String getMessageByLang(String messageCode, Locale locale) {
-        try {
-            return messageSourceStatic.getMessage(messageCode, null, locale);
-        } catch (NoSuchMessageException e) {
+        MessageSource messageSource = messageSourceStatic;
+        if (messageSource == null) {
+            return messageCode + " : no message.";
         }
-        return messageSourceStatic.getMessage(DEFAULT_MESSAGE_CODE, null, locale);
+        try {
+            return messageSource.getMessage(messageCode, null, locale);
+        } catch (NoSuchMessageException e) {
+            return messageSource.getMessage(DEFAULT_MESSAGE_CODE, null, locale);
+        }
     }
 
 

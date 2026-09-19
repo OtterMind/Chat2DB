@@ -32,6 +32,12 @@ public class ImportTaskSpec implements TaskSpec {
 
     private CsvOptions csvOptions;
 
+    private ExcelOptions excelOptions;
+
+    private JsonOptions jsonOptions;
+
+    private SqlImportOptions sqlImportOptions;
+
     /** Optional mapping supplied by the import-preview workflow. */
     private List<ImportColumnMapping> columnMappings;
 

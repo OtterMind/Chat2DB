@@ -92,14 +92,6 @@ const UpdateDetection = () => {
       syncUpdatePreferences()
         .then(() => handleCheckUpdate())
         .catch(() => undefined);
-      jcefApi
-        .getUpdateRecoveryStatus()
-        .then((status) => {
-          if (status.failed) {
-            openRecoveryNotification(status.fromVersion, status.toVersion);
-          }
-        })
-        .catch(() => undefined);
     }
   }, [appConfig.isReady]);
 
@@ -161,33 +153,6 @@ const UpdateDetection = () => {
         </div>
       ),
       description: btn,
-      key,
-    });
-  };
-
-  const openRecoveryNotification = (fromVersion: string, toVersion: string) => {
-    const key = 'update-recovery-failed';
-    const btn = (
-      <Button
-        type="link"
-        size="small"
-        onClick={() => {
-          jcefApi.openUpdateRecoveryLog().catch(() => undefined);
-        }}
-      >
-        {i18n('setting.button.openUpdateLog')}
-      </Button>
-    );
-    notificationApi.error({
-      className: styles.notification,
-      duration: null,
-      message: i18n('setting.text.updateRecoveryFailedTitle'),
-      description: (
-        <div>
-          <div>{i18n('setting.text.updateRecoveryFailed', toVersion, fromVersion)}</div>
-          <div>{btn}</div>
-        </div>
-      ),
       key,
     });
   };

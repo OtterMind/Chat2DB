@@ -3,7 +3,7 @@
 Community desktop checks the stable index at
 `https://github.com/OtterMind/Chat2DB/releases/latest/download/release-index.json`.
 When **Receive Beta versions** is enabled, it also checks
-`https://github.com/OtterMind/Chat2DB/releases/download/community-beta/release-index.json`
+`https://raw.githubusercontent.com/OtterMind/Chat2DB/community-beta-index/release-index.json`
 and selects the highest eligible Stable or Beta version. The preference is off
 by default and is saved across restarts.
 Each signed manifest points to a full package attached to the same versioned
@@ -33,7 +33,9 @@ release_epoch: 1
 
 Choose a sequence greater than the last published Community release. Include
 the source commit and release inputs in the annotation so the build is
-reproducible. Tag-triggered builds publish only after every platform's packages
+reproducible. `docs/guides/community-release-tags.md` documents the tag names,
+the full annotation template and how to read the published epochs before
+tagging. Tag-triggered builds publish only after every platform's packages
 and the Docker job succeed. Manual builds use the explicit `release_epoch`
 workflow input and upload Actions artifacts without publishing a Release.
 
@@ -70,13 +72,18 @@ Manual Beta runs create a GitHub Pre-release with the installers and update
 resources after all platform jobs pass. They do not publish Docker images or
 stable/latest pointers. The release is explicitly marked prerelease and does
 not become the stable Community update source. After publishing the versioned
-release, the workflow updates `release-index.json` on the `community-beta`
-prerelease. This channel release holds only the index; its manifests and
-packages continue to point to immutable versioned releases. Publication is
-serialized and rejects an older or conflicting release sequence.
-Beta-tag pushes are rejected before signing/publication. Numeric Stable tags
-retain the formal release path. Builds with `publish_release=false` do not
-change either update channel.
+release, the workflow appends `release-index.json` to the `community-beta-index`
+branch, which is the Beta channel pointer. A published release cannot have its
+assets replaced, so that branch is the only mutable part of the channel; the
+versioned release itself stays immutable. The branch is machine-owned: only the
+release workflow writes it, it is never merged into `main`, and it is never
+reviewed. A run whose index is already on the branch makes no commit. The
+workflow appends commits (no force-push) and fails when the pointer cannot be
+updated. Pushing an annotated Beta tag takes the same route: it creates a
+prerelease on the Beta channel, requires `release_epoch` in the tag annotation,
+and never moves the stable `latest` pointer or the Docker images, so only clients that
+enabled Beta updates can see it. Numeric Stable tags retain the formal release
+path. Builds with `publish_release=false` do not change either update channel.
 
 For separate source and helper checkouts, `COMMUNITY_SOURCE_DIR` points to the
 application checkout; by default the packaging scripts use their own repository.
@@ -104,6 +111,38 @@ The packaging script accepts `COMMUNITY_RELEASE_EPOCH`,
 shared updater and stages `tools/chat2db-updater.jar` plus `version.json` in
 each native application. The helper is a standalone shaded artifact; the
 application depends on the ordinary updater module JAR.
+
+The desktop reads the update signing key from its launcher configuration: the
+`-Dchat2db.update.key-id` and `-Dchat2db.update.public-key` java options that
+`package-community-jcef.sh` derives from `COMMUNITY_UPDATE_KEY_ID` and
+`COMMUNITY_UPDATE_PUBLIC_KEY_B64` and the platform scripts pass to jpackage. A
+launcher configuration without those options can never verify a manifest, so
+each platform script fails the build when a supplied key pair is missing from
+the packaged application. No signing key is stored inside the application JARs.
+
+## Application layout
+
+Installation and full-package updates share one layout. A versioned-thin desktop
+application is laid out as follows, and both products keep this structure with
+product-specific names and values only:
+
+| Path | Content |
+| --- | --- |
+| `Contents/app/<App>.cfg` (Linux/Windows: `<App>.cfg` beside the launcher) | jpackage launcher configuration, including the update signing key options |
+| `app/runtime/<main jar>` | Thin launcher JAR, `chat2db-community.jar` for Community |
+| `app/runtime/launch.json` | Bootstrap contract: main JAR, main class, loader path, required paths |
+| `app/runtime/lib/` | All runtime dependencies |
+| `app/runtime/dist/` | Frontend assets |
+| `app/tools/chat2db-bootstrap.jar` | Native launcher entry point |
+| `app/tools/chat2db-updater.jar` | Standalone update helper |
+| `app/version.json` | `version`, `releaseEpoch`, `buildSha` |
+
+Product differences that are expected: the application, launcher configuration
+and main JAR names, the dependency set, product-specific resource files, the
+product identifier, the update source URL and the signing key material. The
+packaging scripts reject a stray JAR in the jpackage input root, because
+jpackage copies that directory into the application and a leftover file would
+ship inside the installed application.
 
 Windows packages are signed in order: MSI, then its Inno EXE wrapper. macOS
 updates contain an archive captured from the signed application in the

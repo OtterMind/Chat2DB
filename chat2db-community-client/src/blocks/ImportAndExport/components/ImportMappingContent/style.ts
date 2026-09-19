@@ -46,11 +46,8 @@ export const useStyles = createStyles(({ css, token }) => ({
     color: ${token.colorError};
     line-height: 1.6;
     text-align: center;
-    white-space: nowrap;
-
-    @media (max-width: 720px) {
-      white-space: normal;
-    }
+    white-space: normal;
+    overflow-wrap: anywhere;
   `,
   csvOptions: css`
     margin-bottom: 12px;

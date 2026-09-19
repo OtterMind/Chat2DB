@@ -1,5 +1,5 @@
 name: Build Community Desktop Release
-run-name: Community Desktop ${{ github.event_name == 'push' && 'release' || 'beta' }} ${{ inputs.version || github.ref_name }}
+run-name: Community Desktop ${{ (github.event_name == 'workflow_dispatch' || contains(github.ref_name, '-beta.')) && 'beta' || 'release' }} ${{ inputs.version || github.ref_name }}
 
 on:
   push:
@@ -73,11 +73,7 @@ jobs:
               exit 1
             fi
             version="${REF_NAME#v}"
-            channel=release
-            create_release=true
-            publish=true
-            prerelease=false
-            latest=true
+            tag_push=true
           else
             if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
               echo "Beta builds can only run from the protected main branch: ${GITHUB_REF}" >&2
@@ -88,11 +84,7 @@ jobs:
               exit 1
             fi
             version="${INPUT_VERSION}"
-            channel=beta
-            create_release="${PUBLISH_RELEASE}"
-            publish=false
-            prerelease=true
-            latest=false
+            tag_push=false
           fi
 
           native_version=$(bash script/package/community-version.sh "${version}")
@@ -103,13 +95,33 @@ jobs:
           fi
           update_channel=STABLE
           if [[ "${version}" == *-beta.* ]]; then update_channel=BETA; fi
-          if [ "${publish}" = true ] && [ "${update_channel}" != STABLE ]; then
-            echo 'Beta tags do not publish stable releases. Use a manual Beta build from main.' >&2
-            exit 1
-          fi
-          if [ "${publish}" = false ] && [ "${update_channel}" != BETA ]; then
-            echo 'Manual Beta builds require a version ending in -beta.N.' >&2
-            exit 1
+
+          # A Beta tag publishes a prerelease on the Beta channel, so only clients
+          # that opted into Beta updates can see it. A numeric tag stays the
+          # formal release route that updates the stable channel and Docker.
+          if [ "${tag_push}" = true ]; then
+            create_release=true
+            if [ "${update_channel}" = BETA ]; then
+              channel=beta
+              publish=false
+              prerelease=true
+              latest=false
+            else
+              channel=release
+              publish=true
+              prerelease=false
+              latest=true
+            fi
+          else
+            if [ "${update_channel}" != BETA ]; then
+              echo 'Manual Beta builds require a version ending in -beta.N.' >&2
+              exit 1
+            fi
+            channel=beta
+            create_release="${PUBLISH_RELEASE}"
+            publish=false
+            prerelease=true
+            latest=false
           fi
 
           {
@@ -135,12 +147,16 @@ jobs:
         id: update_metadata
         shell: bash
         env:
+          EVENT_NAME: ${{ github.event_name }}
           TAG_NAME: ${{ steps.metadata.outputs.tag_name }}
-          PUBLISH: ${{ steps.metadata.outputs.publish }}
           INPUT_EPOCH: ${{ inputs.release_epoch }}
         run: |
           set -euo pipefail
-          if [ "${PUBLISH}" = true ]; then
+          if [ "${EVENT_NAME}" = "push" ]; then
+            # actions/checkout fetches the tagged commit into the tag ref, which
+            # replaces the annotated tag object in this clone; fetch the tag
+            # itself before reading the release annotation.
+            git fetch --force origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
             test "$(git cat-file -t "refs/tags/${TAG_NAME}")" = tag
             epoch=$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)' | sed -n 's/^release_epoch: *//p')
           else
@@ -808,10 +824,37 @@ jobs:
             gh release edit "${TAG_NAME}" --draft=false --latest
           fi
           test "$(gh release view "${TAG_NAME}" --json isDraft --jq '.isDraft')" = "false"
-      - name: Publish Beta update index
+      - name: Update Beta channel pointer
         if: ${{ needs.resolve.outputs.channel == 'beta' }}
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          BUILD_SHA: ${{ needs.resolve.outputs.build_sha }}
-        run: bash script/package/publish_beta_update_index.sh release-assets/release-index.json "${BUILD_SHA}"
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CHANNEL_BRANCH: community-beta-index
+        run: |
+          set -euo pipefail
+          test -s release-assets/release-index.json
+
+          # A published release cannot have its assets replaced, so the Beta channel pointer
+          # lives on a machine-owned branch that this workflow appends to.
+          tip=""
+          if git fetch --quiet origin "refs/heads/${CHANNEL_BRANCH}"; then
+            tip=$(git rev-parse FETCH_HEAD)
+          fi
+
+          blob=$(git hash-object -w release-assets/release-index.json)
+          tree=$(printf '100644 blob %s\trelease-index.json\n' "${blob}" | git mktree)
+          if [ -n "${tip}" ] && [ "$(git rev-parse "${tip}^{tree}")" = "${tree}" ]; then
+            echo "Beta channel pointer already carries ${VERSION}; nothing to publish."
+            exit 0
+          fi
+
+          commit_args=(-m "chore(beta): publish ${VERSION} update index")
+          if [ -n "${tip}" ]; then
+            commit_args+=(-p "${tip}")
+          fi
+          commit=$(git \
+            -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit-tree "${tree}" "${commit_args[@]}")
+          git push origin "${commit}:refs/heads/${CHANNEL_BRANCH}"
+          echo "Published Beta channel pointer for ${VERSION}: ${commit}"

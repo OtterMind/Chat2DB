@@ -1,7 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task.imports.excel;
 
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
-import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import ai.chat2db.community.domain.api.model.task.ImportValueFormat;
 import ai.chat2db.community.tools.exception.BusinessException;
 
 import java.sql.Types;
@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import java.math.BigDecimal;
 
 public final class CsvImportValueNormalizer {
 
@@ -33,7 +35,7 @@ public final class CsvImportValueNormalizer {
     private CsvImportValueNormalizer() {
     }
 
-    public static String normalize(String value, TableColumn column, CsvOptions options, long sourceRow) {
+    public static String normalize(String value, TableColumn column, ImportValueFormat options, long sourceRow) {
         if (value == null || column == null) {
             return value;
         }
@@ -48,9 +50,26 @@ public final class CsvImportValueNormalizer {
             };
         } catch (RuntimeException e) {
             String displayValue = value.length() > 80 ? value.substring(0, 80) + "..." : value;
-            throw new BusinessException("import.csv.invalidValue",
+            throw new BusinessException(options instanceof CsvOptions
+                    ? "import.csv.invalidValue" : "import.value.invalidValue",
                     new Object[]{sourceRow, column.getName(), displayValue}, e);
         }
+    }
+
+    public static String nativeValue(Object value, TableColumn column) {
+        if (value instanceof LocalDateTime date) {
+            return switch (valueKind(column)) {
+                case DATE -> date.toLocalDate().toString();
+                case TIME -> date.toLocalTime().toString();
+                default -> date.toString().replace('T', ' ');
+            };
+        }
+        if (value instanceof Boolean bool && (valueKind(column) == ValueKind.NUMBER
+                || column.getDataType() != null && (column.getDataType() == Types.BOOLEAN || column.getDataType() == Types.BIT))) {
+            return bool ? "1" : "0";
+        }
+        return value instanceof BigDecimal number ? number.stripTrailingZeros().toPlainString()
+                : value == null ? null : value.toString();
     }
 
     private static ValueKind valueKind(TableColumn column) {
@@ -99,8 +118,13 @@ public final class CsvImportValueNormalizer {
         return ValueKind.TEXT;
     }
 
-    private static String normalizeNumber(String value, CsvOptions options) {
+    private static String normalizeNumber(String value, ImportValueFormat options) {
         if (!",".equals(options.getDecimalSymbol())) {
+            // A comma is either a decimal point the settings do not declare or a thousands
+            // separator; both would reach the database as a malformed numeric literal.
+            if (value.indexOf(',') >= 0) {
+                throw new IllegalArgumentException("value uses a comma but the decimal symbol is a dot");
+            }
             return value;
         }
         if (value.indexOf('.') >= 0 && value.indexOf(',') >= 0) {
@@ -109,7 +133,7 @@ public final class CsvImportValueNormalizer {
         return value.replace(',', '.');
     }
 
-    private static ParsedDateTime parseDateTime(String value, CsvOptions options) {
+    private static ParsedDateTime parseDateTime(String value, ImportValueFormat options) {
         List<String> tokens = new ArrayList<>(Arrays.asList(value.trim().split("\\s+", -1)));
         if (options.getDateTimeOrder().startsWith("DATE_TIME") && !tokens.isEmpty()) {
             int separator = tokens.get(0).indexOf('T');
@@ -134,7 +158,7 @@ public final class CsvImportValueNormalizer {
     }
 
     private static ParsedDateTime parsedDateTime(String[] parts, int dateIndex, int timeIndex, int zoneIndex,
-            CsvOptions options) {
+            ImportValueFormat options) {
         int expectedParts = zoneIndex < 0 ? 2 : 3;
         if (parts.length != expectedParts) {
             throw new IllegalArgumentException("date-time value does not match configured order");
@@ -151,7 +175,7 @@ public final class CsvImportValueNormalizer {
         return OffsetDateTime.of(parsed.dateTime(), parsed.offset()).toString().replace('T', ' ');
     }
 
-    private static LocalDate parseDate(String value, CsvOptions options) {
+    private static LocalDate parseDate(String value, ImportValueFormat options) {
         String order = options.getDateOrder();
         String[] components = splitDate(value.trim(), order, options);
         Map<Character, String> values = new HashMap<>();
@@ -164,7 +188,7 @@ public final class CsvImportValueNormalizer {
         return LocalDate.of(year, month, day);
     }
 
-    private static String[] splitDate(String value, String order, CsvOptions options) {
+    private static String[] splitDate(String value, String order, ImportValueFormat options) {
         String firstSeparator = separator(order.charAt(0), order.charAt(1), options);
         String secondSeparator = separator(order.charAt(1), order.charAt(2), options);
         Pattern pattern = Pattern.compile("^(.+?)" + Pattern.quote(firstSeparator) + "(.+?)"
@@ -176,11 +200,11 @@ public final class CsvImportValueNormalizer {
         return new String[]{matcher.group(1), matcher.group(2), matcher.group(3)};
     }
 
-    private static String separator(char left, char right, CsvOptions options) {
+    private static String separator(char left, char right, ImportValueFormat options) {
         return left == 'Y' || right == 'Y' ? options.getYearDelimiter() : options.getDateDelimiter();
     }
 
-    private static LocalTime parseTime(String value, CsvOptions options) {
+    private static LocalTime parseTime(String value, ImportValueFormat options) {
         String[] parts = value.trim().split(Pattern.quote(options.getTimeDelimiter()), -1);
         if (parts.length < 2 || parts.length > 3) {
             throw new IllegalArgumentException("time does not match configured delimiter");
