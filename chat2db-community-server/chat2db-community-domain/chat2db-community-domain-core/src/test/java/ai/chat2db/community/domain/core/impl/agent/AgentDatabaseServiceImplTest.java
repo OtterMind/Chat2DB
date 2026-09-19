@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.core.impl.agent;
 
+import ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.agent.tool.AgentToolExecutionContext;
 import ai.chat2db.community.domain.api.model.metadata.*;
@@ -438,7 +439,9 @@ class AgentDatabaseServiceImplTest {
                         decisions++;
                         ((Runnable) a[2]).run();
                         if (cancelDuringApproval) active.set(false);
-                        return approved && ((BooleanSupplier) a[3]).getAsBoolean();
+                        return approved && ((BooleanSupplier) a[3]).getAsBoolean()
+                                ? AgentApprovalDecision.ALLOW_ONCE
+                                : AgentApprovalDecision.DENY;
                     }), proxy(IAiAgentChartService.class, (method, arguments) -> arguments[0]));
         }
     }

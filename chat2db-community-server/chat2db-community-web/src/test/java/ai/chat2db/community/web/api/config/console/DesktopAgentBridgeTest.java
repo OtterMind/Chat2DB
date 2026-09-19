@@ -110,8 +110,9 @@ class DesktopAgentBridgeTest {
     @Test
     void supportsApprovalsQuestionsAndHistoryRoutes() {
         ok("get", "/api/v3/ai/sessions/s/approvals", "{}");
-        ok("post", "/api/v3/ai/sessions/s/approvals", "{\"approvalId\":\"a\",\"approved\":false}");
-        assertEquals(Arrays.asList("s", "a", -1L, false), calls.get("decide"));
+        ok("post", "/api/v3/ai/sessions/s/approvals", "{\"approvalId\":\"a\",\"decision\":\"DENY\"}");
+        assertEquals(Arrays.asList("s", "a", -1L, ai.chat2db.community.domain.api.enums.agent.AgentApprovalDecision.DENY),
+                calls.get("decide"));
         ok("get", "/api/v3/ai/sessions/s/questions", "{}");
         ok("post", "/api/v3/ai/sessions/s/questions/answer", "{\"questionId\":\"q\",\"text\":\"answer\"}");
         assertEquals("s", calls.get("answer").get(0));

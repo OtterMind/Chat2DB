@@ -138,7 +138,7 @@ class AiAgentSkillServiceImplTest {
                 var second = executor.submit(() -> { barrier.await(); return two.prepare(); });
                 assertEquals(first.get(10, java.util.concurrent.TimeUnit.SECONDS), second.get(10, java.util.concurrent.TimeUnit.SECONDS));
                 try (var entries = Files.list(builtinRoot)) {
-                    assertEquals(List.of("chart", "skill-manager"),
+                    assertEquals(List.of("chart", "mcp-manager", "skill-manager"),
                             entries.map(path -> path.getFileName().toString()).sorted().toList());
                 }
             }
@@ -151,7 +151,7 @@ class AiAgentSkillServiceImplTest {
         var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"),
                 temporaryDirectory.resolve("builtin"), userRoot);
         assertNull(service.userDirectory());
-        assertEquals(List.of("chart", "skill-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
+        assertEquals(List.of("chart", "skill-manager", "mcp-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
         assertEquals("chart", service.resolve(new AiAgentSkillResolveRequest("/skill:chart go")).skillName());
     }
 
@@ -162,7 +162,7 @@ class AiAgentSkillServiceImplTest {
         Files.setLastModifiedTime(abandoned, java.nio.file.attribute.FileTime.from(java.time.Instant.now().minus(java.time.Duration.ofHours(2))));
         Path fresh = Files.createDirectories(builtinRoot.resolve(".retired-fresh"));
         var service = new AiAgentSkillServiceImpl(new ClassPathResource("skills/catalog.json"), builtinRoot);
-        assertEquals(List.of("chart", "skill-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
+        assertEquals(List.of("chart", "skill-manager", "mcp-manager"), service.prepare().stream().map(AiAgentSkill::name).toList());
         assertFalse(Files.exists(abandoned));
         assertTrue(Files.exists(fresh));
     }
