@@ -18,7 +18,7 @@ public class SelectDirectoryHandler implements IJcefActionHandler {
     @Override
     public void handle(ConsoleMessage consoleMessage, ConsoleResult wsResult, CefQueryCallback callback) throws Exception {
         String fileName = OSOperateUtil.openNativeDirChooser(JcefContext.getInstance().getFrame_(), MenuI18n.getString("fileChooser.select.dir.title"));
-        ResponseBuilder.buildSuccessJcef(Map.of("data", fileName), callback);
+        ResponseBuilder.buildSuccessJcef(java.util.Collections.singletonMap("data", fileName), callback);
     }
 
 }

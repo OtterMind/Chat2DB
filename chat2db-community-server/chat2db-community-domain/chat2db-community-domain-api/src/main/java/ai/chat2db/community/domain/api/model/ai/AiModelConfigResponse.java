@@ -15,6 +15,8 @@ public class AiModelConfigResponse {
 
     private String model;
 
+    private String agentApi;
+
     private String baseUrl;
 
     private String projectId;

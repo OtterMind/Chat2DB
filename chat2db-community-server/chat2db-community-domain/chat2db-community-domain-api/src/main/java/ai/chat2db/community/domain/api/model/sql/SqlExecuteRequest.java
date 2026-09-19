@@ -75,4 +75,9 @@ public class SqlExecuteRequest {
 
     private boolean explain;
 
+    /** Internal opt-in used by Agent v2; ordinary queries retain display previews. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @com.alibaba.fastjson2.annotation.JSONField(serialize = false, deserialize = false)
+    private boolean fullResultValues;
+
 }

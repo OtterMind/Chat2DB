@@ -3,7 +3,7 @@ import { AUTO_REFRESH, ChartType, LineType, OrderByRule, OrderByType } from '@/b
 
 // normalized data format
 export type INormalizedData = {
-  [key: string]: string | number;
+  [key: string]: string | number | null;
 }[];
 
 // automatic refresh rules

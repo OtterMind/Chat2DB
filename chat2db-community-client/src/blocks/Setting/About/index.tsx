@@ -42,6 +42,7 @@ export default function AboutUs() {
     openWebPage(CHANGE_LOG_URL);
   };
 
+
   const checkUpdate = () => {
     handleCheckUpdate().then((available) => {
       if (available) {

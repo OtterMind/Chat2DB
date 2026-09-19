@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { SuggestionItem } from './interface';
+import { SuggestionItem, SuggestionSelectionIntent } from './interface';
 import { useEvent, useMergedState } from 'rc-util';
 import { Cascader, CascaderProps } from 'antd';
 import useActive from './useActive';
 import { useStyles } from './style';
 import { IconfontSvg } from '@chat2db/ui';
+import { BookOpen, Command } from 'lucide-react';
 
 export interface RenderChildrenProps<T> {
   /**
@@ -24,7 +25,7 @@ export interface AIAtMetionProps<T> {
 
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  onSelect?: (item: SuggestionItem) => void;
+  onSelect?: (item: SuggestionItem, intent: SuggestionSelectionIntent) => void;
   children?: (props: RenderChildrenProps<T>) => React.ReactElement;
   /**
    * list of suggestions
@@ -78,11 +79,11 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
   const itemList = useMemo(() => (typeof items === 'function' ? items(info) : items), [items, info]);
 
   // =========================== Cascader ===========================
-  const onInternalChange = (valuePath: string[]) => {
+  const onInternalChange = (valuePath: string[], intent: SuggestionSelectionIntent = 'execute') => {
     const value = valuePath.at(-1);
     const item = itemList.find((candidate) => candidate.value === value);
     if (onSelect && item) {
-      onSelect(item);
+      onSelect(item, intent);
     }
     triggerOpen(false);
   };
@@ -91,15 +92,20 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
   const [activePath, onKeyDown] = useActive(itemList, mergedOpen, onInternalChange, onClose);
 
   const optionRender: CascaderProps<SuggestionItem>['optionRender'] = (node) => {
-    return (
-      <div className={styles.optionRow}>
-        <div className={styles.optionTitle}>
+    const icon = node.kind === 'skill' ? <BookOpen size={16} aria-hidden="true" />
+      : node.kind === 'command' ? <Command size={16} aria-hidden="true" />
+        : (
           <IconfontSvg
             size="md"
             existDark={true}
             appearance={appearance}
             code={node.tableType === 'TABLE' ? 'icon-colourful-table' : 'icon-colourful-table-view'}
           />
+        );
+    return (
+      <div className={styles.optionRow}>
+        <div className={styles.optionTitle}>
+          {icon}
           <span className={styles.optionLabel} title={node.label}>
             {node.label}
           </span>
@@ -125,7 +131,7 @@ function AIAtMetion<T>(props: AIAtMetionProps<T>) {
       open={mergedOpen}
       value={activePath}
       optionRender={optionRender}
-      onChange={onInternalChange}
+      onChange={(valuePath) => onInternalChange(valuePath)}
       onDropdownVisibleChange={(nextOpen) => {
         if (!nextOpen) {
           onClose();

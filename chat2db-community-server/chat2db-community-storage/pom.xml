@@ -30,6 +30,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.google.re2j</groupId>
+            <artifactId>re2j</artifactId>
+            <version>1.8</version>
+        </dependency>
+        <dependency>
             <groupId>ai.chat2db</groupId>
             <artifactId>chat2db-community-domain-api</artifactId>
         </dependency>

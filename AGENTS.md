@@ -64,6 +64,9 @@ Instruction authority and factual evidence are separate:
   JCEF, SPI, plugin, tools, and startup modules.
 - `chat2db-community-server/chat2db-community-start/`: executable backend,
   configuration, assembled frontend resources, and final jar.
+- `chat2db-community-server/chat2db-community-agent/`: agent runtime adapters,
+  installation, process/RPC transport, and runtime resources. It depends only
+  on tools and third-party libraries; start assembles it with business services.
 - `chat2db-community-server/chat2db-community-plugins/`: database-specific
   implementations. Keep dialect-specific behavior inside the owning plugin.
 - `docker/`: Community image, Compose file, and local image build entry point.

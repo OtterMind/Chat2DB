@@ -12,6 +12,7 @@ import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
+import ai.chat2db.spi.model.value.ResultValueBudget;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -110,6 +111,120 @@ class DefaultSQLExecutorLargeCellTest {
     }
 
     @Test
+    void v2CanReadCompleteValuesWithoutChangingTheDefaultQueryPreview() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:agent_v2_complete_values")) {
+            putContext(connection);
+            try (var statement = connection.createStatement()) {
+                statement.execute("CREATE TABLE doc (content CLOB)");
+            }
+            String body = "数据".repeat(400000);
+            try (var statement = connection.prepareStatement("INSERT INTO doc VALUES (?)")) {
+                statement.setCharacterStream(1, new StringReader(body), body.length());
+                statement.executeUpdate();
+            }
+            var command = new ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest();
+            command.setScript("SELECT content FROM doc");
+            command.setSingle(true);
+            command.setPageNo(1);
+            command.setPageSize(1);
+            command.setDatabaseName(connection.getCatalog());
+            command.setSchemaName("PUBLIC");
+            var executor = new DefaultSQLExecutor();
+            var legacy = executor.execute(command).get(0);
+            assertTrue(legacy.getSuccess(), legacy.getMessage());
+            assertTrue(legacy.getDataList().get(0).stream().anyMatch(ResultCell::isTruncated));
+            command.setFullResultValues(true);
+            var complete = executor.execute(command).get(0);
+            assertTrue(complete.getSuccess(), complete.getMessage());
+            assertTrue(complete.getDataList().get(0).stream().anyMatch(cell -> body.equals(cell.getValue())));
+            assertFalse(complete.getDataList().get(0).stream().anyMatch(ResultCell::isTruncated));
+            command.setFullResultValues(false);
+            assertTrue(executor.execute(command).get(0).getDataList().get(0).stream().anyMatch(ResultCell::isTruncated));
+        }
+    }
+
+    @Test
+    void v2SharesCaptureBudgetAcrossRowsAndPreservesRealPartialMetadata() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:agent_v2_capture_rows")) {
+            putContext(connection);
+            try (var statement = connection.createStatement()) {
+                statement.execute("CREATE TABLE doc (id INT, content CLOB, nullable_value CLOB)");
+            }
+            String body = "数据😀".repeat(10000);
+            try (var statement = connection.prepareStatement("INSERT INTO doc VALUES (?, ?, NULL)")) {
+                for (int i = 1; i <= 3; i++) {
+                    statement.setInt(1, i);
+                    statement.setCharacterStream(2, new StringReader(body), body.length());
+                    statement.executeUpdate();
+                }
+            }
+            var command = agentCommand(connection, "SELECT content, nullable_value FROM doc ORDER BY id", 3);
+            long cap = body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 1024;
+            var result = boundedExecutor(cap).execute(command).get(0);
+            assertTrue(result.getSuccess(), result.getMessage());
+            assertEquals(3, result.getDataList().size());
+            long retained = result.getDataList().stream().flatMap(java.util.Collection::stream)
+                    .filter(cell -> cell.getLoadedBytes() != null).mapToLong(ResultCell::getLoadedBytes).sum();
+            assertTrue(retained <= cap);
+            var first = result.getDataList().get(0).stream().filter(cell -> "TEXT".equals(cell.getValueType()) && cell.getValue() != null).findFirst().orElseThrow();
+            assertEquals(body, first.getValue());
+            assertFalse(first.isTruncated());
+            var partial = result.getDataList().get(1).stream().filter(ResultCell::isTruncated).findFirst().orElseThrow();
+            assertTrue(body.startsWith(partial.getValue()));
+            org.junit.jupiter.api.Assertions.assertNull(partial.getSizeChars());
+            assertTrue(partial.getUnsupportedReason().startsWith("CAPTURE_BUDGET_EXCEEDED"));
+            assertFalse(partial.getValue().endsWith("\uD83D"));
+            assertTrue(result.getDataList().get(2).stream().anyMatch(cell -> cell.getValue() == null && !cell.isTruncated()));
+            command.setFullResultValues(false);
+            var legacy = boundedExecutor(1).execute(command).get(0);
+            assertTrue(legacy.getDataList().get(0).stream().anyMatch(cell -> cell.isTruncated() && cell.getUnsupportedReason() == null));
+        }
+    }
+
+    @Test
+    void v2BoundsVarcharAndBinaryAndRetainsScalarFormatting() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:agent_v2_capture_types")) {
+            putContext(connection);
+            try (var statement = connection.createStatement()) {
+                statement.execute("CREATE TABLE doc (amount DECIMAL(30,4), text_value VARCHAR, binary_value BLOB)");
+            }
+            try (var statement = connection.prepareStatement("INSERT INTO doc VALUES (?, ?, ?)")) {
+                statement.setBigDecimal(1, new java.math.BigDecimal("9007199254740993.1200"));
+                statement.setString(2, "x".repeat(50000));
+                statement.setBinaryStream(3, new java.io.ByteArrayInputStream(new byte[50000]), 50000);
+                statement.executeUpdate();
+            }
+            var text = boundedExecutor(1024).execute(agentCommand(connection, "SELECT amount, text_value FROM doc", 1)).get(0);
+            assertTrue(text.getDataList().get(0).stream().anyMatch(cell -> "9007199254740993.1200".equals(cell.getValue())));
+            var clippedText = text.getDataList().get(0).stream().filter(ResultCell::isTruncated).findFirst().orElseThrow();
+            assertTrue(clippedText.getLoadedBytes() < 1024);
+            var binary = boundedExecutor(1024).execute(agentCommand(connection, "SELECT binary_value FROM doc", 1)).get(0);
+            var clippedBinary = binary.getDataList().get(0).stream().filter(ResultCell::isTruncated).findFirst().orElseThrow();
+            assertTrue(clippedBinary.getValue().startsWith("0x"));
+            assertEquals(1024L, clippedBinary.getLoadedBytes());
+        }
+    }
+
+    private static DefaultSQLExecutor boundedExecutor(long bytes) {
+        return new DefaultSQLExecutor() {
+            @Override protected ResultValueBudget createAgentValueBudget() { return new ResultValueBudget(bytes); }
+        };
+    }
+
+    private static ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest agentCommand(Connection connection,
+            String sql, int pageSize) throws Exception {
+        var command = new ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest();
+        command.setScript(sql);
+        command.setSingle(true);
+        command.setPageNo(1);
+        command.setPageSize(pageSize);
+        command.setDatabaseName(connection.getCatalog());
+        command.setSchemaName("PUBLIC");
+        command.setFullResultValues(true);
+        return command;
+    }
+
+    @Test
     void smallValuesRemainInlineEditableCells() throws Exception {
         try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:sql_executor_small_cell;DB_CLOSE_DELAY=-1")) {
             putContext(connection);
@@ -130,6 +245,25 @@ class DefaultSQLExecutorLargeCellTest {
             assertEquals("small", cell.getValue());
             assertFalse(cell.isLargeValue());
             assertEquals(Types.VARCHAR, cell.getSqlType());
+        }
+    }
+
+    @Test
+    void legacyQueriesStillInvokeTheExistingResultReaderOverride() throws Exception {
+        class LegacyExecutor extends DefaultSQLExecutor {
+            @Override
+            protected ExecuteResponse generateQueryExecuteResponse(java.sql.Statement statement, boolean limit,
+                    Integer offset, Integer count) {
+                return ExecuteResponse.builder().success(true)
+                        .dataList(java.util.List.of(java.util.List.of(ResultCell.of("legacy reader")))).build();
+            }
+            java.util.List<ExecuteResponse> run(Connection connection) throws Exception {
+                return executeMulti(new ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement("SELECT 1"),
+                        connection, true, 0, 10, null);
+            }
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:default_legacy_reader")) {
+            assertEquals("legacy reader", new LegacyExecutor().run(connection).get(0).getDataList().get(0).get(0).getValue());
         }
     }
 

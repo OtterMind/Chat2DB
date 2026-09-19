@@ -12,6 +12,7 @@ import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.model.value.ResultValueBudget;
 import ai.chat2db.spi.util.SqlUtils;
 import com.alibaba.druid.DbType;
 import org.apache.commons.collections4.CollectionUtils;
@@ -146,14 +147,21 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
                                                boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
                                                ExecutionContext executionContext) throws SQLException {
+        return executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId, executionContext, null);
+    }
+
+    @Override
+    protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
+            boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
+            ExecutionContext executionContext, ResultValueBudget valueBudget) throws SQLException {
         List<String> sqlList = splitByGO(simpleSqlStatement.getSql());
         if (sqlList.size() <= 1) {
             simpleSqlStatement.setSql(removeSpecialGO(simpleSqlStatement.getSql()));
             return super.executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
-                    executionContext);
+                    executionContext, valueBudget);
         }
         return executeSqlServerBatch(simpleSqlStatement.getSql(), sqlList, connection, limitRowSize, offset, count,
-                resultSetId);
+                resultSetId, valueBudget);
     }
 
     private ExecuteResponse executeSqlServerBatch(String originalSql, List<String> sqlList, Connection connection,
@@ -170,6 +178,12 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
     private List<ExecuteResponse> executeSqlServerBatch(String originalSql, List<String> sqlList, Connection connection,
                                                       boolean limitRowSize, Integer offset, Integer count,
                                                       Integer resultSetId)
+            throws SQLException {
+        return executeSqlServerBatch(originalSql, sqlList, connection, limitRowSize, offset, count, resultSetId, null);
+    }
+
+    private List<ExecuteResponse> executeSqlServerBatch(String originalSql, List<String> sqlList, Connection connection,
+            boolean limitRowSize, Integer offset, Integer count, Integer resultSetId, ResultValueBudget valueBudget)
             throws SQLException {
         List<ExecuteResponse> executeResults = new ArrayList<>();
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(originalSql).success(Boolean.TRUE).build();
@@ -188,7 +202,9 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
                         resultCount++;
                         if (resultSetId == null || resultCount == resultSetId) {
                             long fetchStartedNanos = System.nanoTime();
-                            executeResult = generateQueryExecuteResponse(stmt, limitRowSize, offset, count);
+                            executeResult = valueBudget == null
+                                    ? generateQueryExecuteResponse(stmt, limitRowSize, offset, count)
+                                    : generateQueryExecuteResponse(stmt, limitRowSize, offset, count, valueBudget);
                             fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
                             executeResult.setResultSetId(resultCount);
                         }

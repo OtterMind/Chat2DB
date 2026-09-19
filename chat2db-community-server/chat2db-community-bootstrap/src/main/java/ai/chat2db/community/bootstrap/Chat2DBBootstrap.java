@@ -81,6 +81,9 @@ public final class Chat2DBBootstrap {
         }
         URLClassLoader classLoader = runtimeClassLoader(launch);
         Thread.currentThread().setContextClassLoader(classLoader);
+        if (launch.mainClass().startsWith("org.springframework.boot.loader.launch.")) {
+            RuntimeUrlStreamHandlerProvider.register(classLoader);
+        }
         try {
             Class<?> mainClass = Class.forName(launch.mainClass(), true, classLoader);
             Method main = mainClass.getMethod("main", String[].class);

@@ -97,5 +97,11 @@ export const useStyles = createStyles(({ css, token }) => {
       flex-direction: column;
       gap: 10px;
     `,
+    featureDiagnostic: css`
+      color: ${token.colorError};
+      font-size: 12px;
+      line-height: 18px;
+      overflow-wrap: anywhere;
+    `,
   };
 });

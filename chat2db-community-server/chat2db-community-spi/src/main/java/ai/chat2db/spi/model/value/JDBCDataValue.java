@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.enums.value.LargeValueTypeEnum;
 import ai.chat2db.community.domain.api.enums.value.LobUnitEnum;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.spi.util.ResultSetUtils;
+import ai.chat2db.spi.IValueProcessor;
 import com.google.common.io.BaseEncoding;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -286,6 +287,11 @@ public class JDBCDataValue {
                 .loadedChars(largeValueInfo.largeValue && displayValue != null ? (long) displayValue.length() : null)
                 .truncated(largeValueInfo.largeValue)
                 .build();
+    }
+
+    /** Used exclusively by V2 captures with an invocation-scoped memory budget. */
+    public ResultCell buildBoundedResultCell(ResultValueBudget budget, IValueProcessor processor) {
+        return BoundedJdbcValueReader.read(this, budget, processor);
     }
 
     public String getBinaryDataString() {
