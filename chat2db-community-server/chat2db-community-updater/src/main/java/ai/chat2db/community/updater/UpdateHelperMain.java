@@ -62,6 +62,7 @@ public final class UpdateHelperMain {
         NativePackageInstaller nativeInstaller = new NativePackageInstaller();
         Process trialProcess = null;
         Process normalProcess = null;
+        boolean switched = false;
         Path healthFile = UpdateStartupCoordinator.healthFile(layout, plan.transactionId());
         try {
             audit.critical("QUIESCING", "WAIT_OLD_PROCESS", "pid=" + plan.oldProcessId());
@@ -85,9 +86,11 @@ public final class UpdateHelperMain {
             } else {
                 audit.critical("SWITCHING", "DIRECT_SWITCH_INTENT",
                     "packageType=" + plan.packageType());
-                switcher.switchToCandidate(plan.transactionId(), plan.packageType());
+                ensureNoOtherInstance(plan, layout, audit);
+                Path backup = switcher.switchToCandidate(plan.transactionId(), plan.packageType());
+                switched = true;
                 audit.critical("SWITCHING", "DIRECT_SWITCH_COMPLETE",
-                    "packageType=" + plan.packageType());
+                    "packageType=" + plan.packageType() + " backup=" + backup);
             }
             verifyInstalledTarget(layout, transaction, plan.packageType());
             verifyNativeInstalledLauncher(layout, plan);
@@ -110,11 +113,6 @@ public final class UpdateHelperMain {
             stopProcess(trialProcess);
             trialProcess = null;
             Files.deleteIfExists(healthFile);
-            try {
-                switcher.commit(plan.transactionId());
-            } catch (RuntimeException cleanupFailure) {
-                audit.warn("POSTCHECKING", "CLEANUP_FAILED", cleanupFailure.getMessage());
-            }
             transaction = transition(transaction, UpdatePhaseEnum.RESTARTING_NORMAL, audit);
             normalProcess = startApplication(plan, layout, LaunchMode.NORMAL);
             audit.critical("RESTARTING_NORMAL", "PROCESS_STARTED",
@@ -123,6 +121,13 @@ public final class UpdateHelperMain {
             audit.critical("RESTARTING_NORMAL", "HEALTHY",
                 "normal health confirmed pid=" + normalProcess.pid());
             Files.deleteIfExists(healthFile);
+            // The backup is only released once the relaunched application is healthy, so a
+            // failed restart can still be rolled back to the previously installed package.
+            try {
+                switcher.commit(plan.transactionId());
+            } catch (RuntimeException cleanupFailure) {
+                audit.warn("POSTCHECKING", "CLEANUP_FAILED", cleanupFailure.getMessage());
+            }
             transaction = transition(transaction, UpdatePhaseEnum.COMMITTED, audit);
             try {
                 audit.status(UpdateAuditLog.STATUS_SUCCESS, UpdatePhaseEnum.COMMITTED.name(), "update committed");
@@ -134,9 +139,66 @@ public final class UpdateHelperMain {
             audit.error(transaction.phase().name(), "UPDATE_FAILED", failure);
             stopFailedProcess(trialProcess, "STARTING_CANDIDATE", failure, audit);
             stopFailedProcess(normalProcess, "RESTARTING_NORMAL", failure, audit);
+            if (switched) {
+                rollbackToPreviousPackage(switcher, plan, layout, audit, failure);
+            }
             persistTerminalFailure(transaction, failure, audit);
             return 1;
         }
+    }
+
+    /**
+     * Restores and relaunches the package that was installed before this
+     * transaction. Without it a candidate that never becomes healthy leaves the
+     * user without a working application.
+     */
+    private static void rollbackToPreviousPackage(FullPackageSwitcher switcher, UpdateHelperPlan plan,
+            UpdateLayout layout, UpdateAuditLog audit, Exception failure) {
+        try {
+            if (!switcher.rollback(plan.transactionId(), plan.packageType())) {
+                audit.warn("ROLLING_BACK", "NO_BACKUP", "no previous package backup is available");
+                return;
+            }
+            audit.critical("ROLLING_BACK", "RESTORED",
+                "restored the previously installed package after " + failureMessage(failure));
+            Process previous = startApplication(plan, layout, null);
+            audit.critical("ROLLING_BACK", "PROCESS_STARTED", "pid=" + previous.pid());
+        } catch (Exception rollbackFailure) {
+            audit.error("ROLLING_BACK", "ROLLBACK_FAILED", rollbackFailure);
+            failure.addSuppressed(rollbackFailure);
+        }
+    }
+
+    /**
+     * Refuses to switch while another process still runs the installed
+     * application. A second instance keeps the single-instance lock and makes the
+     * trial candidate exit immediately, which is indistinguishable from a broken
+     * package unless it is detected here.
+     */
+    static void ensureNoOtherInstance(UpdateHelperPlan plan, UpdateLayout layout, UpdateAuditLog audit) {
+        List<String> launchCommand = candidateLaunchCommand(plan, layout);
+        String expected = String.join(" ", launchCommand);
+        if (expected.isBlank()) {
+            audit.warn("QUIESCING", "INSTANCE_CHECK", "skipped=the application launcher command is unknown");
+            return;
+        }
+        List<Long> running = ProcessHandle.allProcesses()
+            .filter(handle -> handle.pid() != ProcessHandle.current().pid())
+            .filter(handle -> handle.pid() != plan.oldProcessId())
+            .filter(handle -> handle.info().commandLine()
+                .map(line -> matchesLaunchCommand(line, expected))
+                .orElse(false))
+            .map(ProcessHandle::pid)
+            .toList();
+        if (!running.isEmpty()) {
+            throw new IllegalStateException(
+                "Another instance of the installed application is still running: " + running);
+        }
+        audit.critical("QUIESCING", "INSTANCE_CHECK", "no other instance is running");
+    }
+
+    private static boolean matchesLaunchCommand(String commandLine, String expected) {
+        return commandLine.equals(expected) || commandLine.startsWith(expected + " ");
     }
 
     private static void persistTerminalFailure(UpdateTransaction transaction,
@@ -216,7 +278,7 @@ public final class UpdateHelperMain {
         if (mode == LaunchMode.TRIAL) {
             builder.environment().put(UpdateStartupCoordinator.TRANSACTION_ENV, plan.transactionId());
             builder.environment().remove(UpdateStartupCoordinator.NORMAL_TRANSACTION_ENV);
-        } else {
+        } else if (mode == LaunchMode.NORMAL) {
             builder.environment().remove(UpdateStartupCoordinator.TRANSACTION_ENV);
             builder.environment().put(
                 UpdateStartupCoordinator.NORMAL_TRANSACTION_ENV,
@@ -312,7 +374,8 @@ public final class UpdateHelperMain {
     private static void waitForHealthyProcess(UpdateHelperPlan plan, UpdateLayout layout, Process process,
             String expectedStatus) throws Exception {
         Path healthFile = UpdateStartupCoordinator.healthFile(layout, plan.transactionId());
-        long deadline = System.nanoTime() + Duration.ofSeconds(plan.healthTimeoutSeconds()).toNanos();
+        long startedAt = System.nanoTime();
+        long deadline = startedAt + Duration.ofSeconds(plan.healthTimeoutSeconds()).toNanos();
         while (System.nanoTime() < deadline) {
             if (Files.isRegularFile(healthFile)) {
                 UpdateHealth health = OBJECT_MAPPER.readValue(healthFile.toFile(), UpdateHealth.class);
@@ -322,18 +385,29 @@ public final class UpdateHelperMain {
                         && process.pid() == health.processId()) {
                     if (!process.isAlive()) {
                         throw new IllegalStateException(
-                            "Application exited while reporting " + expectedStatus);
+                            "Application exited while reporting " + expectedStatus
+                                + describeProcess(process, startedAt));
                     }
                     return;
                 }
-                throw new IllegalStateException("Application health marker is invalid for " + expectedStatus);
+                throw new IllegalStateException("Application health marker is invalid for " + expectedStatus
+                    + " (marker=" + health.status() + " version=" + health.version()
+                    + " pid=" + health.processId() + ", expected pid=" + process.pid() + ")");
             }
             if (!process.isAlive()) {
-                throw new IllegalStateException("Application exited before reporting " + expectedStatus);
+                throw new IllegalStateException("Application exited before reporting " + expectedStatus
+                    + describeProcess(process, startedAt));
             }
             Thread.sleep(200L);
         }
-        throw new IllegalStateException("Application health confirmation timed out for " + expectedStatus);
+        throw new IllegalStateException("Application health confirmation timed out for " + expectedStatus
+            + describeProcess(process, startedAt));
+    }
+
+    private static String describeProcess(Process process, long startedAtNanos) {
+        long elapsedMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L;
+        String exit = process.isAlive() ? "alive" : String.valueOf(process.exitValue());
+        return " (pid=" + process.pid() + " exit=" + exit + " afterMs=" + elapsedMillis + ")";
     }
 
     private enum LaunchMode {

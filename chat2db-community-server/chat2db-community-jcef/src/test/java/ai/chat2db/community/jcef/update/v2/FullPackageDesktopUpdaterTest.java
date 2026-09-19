@@ -32,6 +32,7 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.DosFileAttributeView;
+import java.time.Duration;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Signature;
@@ -108,6 +109,62 @@ class FullPackageDesktopUpdaterTest {
     }
 
     @Test
+    void failedHandoffKeepsTheApplicationAliveWhenTheHelperNeverAcknowledges() throws Exception {
+        UpdateLayout layout = layout();
+        UpdatePlatformEnum platform = RuntimePlatformDetector.platform();
+        UpdatePackageTypeEnum packageType = directPackageType(platform);
+        KeyPair keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        UpdateManifest manifest = signedManifest(keyPair, platform,
+            RuntimePlatformDetector.architecture(), packageType);
+        StubTransport transport = new StubTransport();
+        FullPackageDesktopUpdater updater = new FullPackageDesktopUpdater(layout, "COMMUNITY", packageType,
+            transport, new UpdateDiscoveryService(transport,
+                new UpdateManifestVerifier(Map.of("release", keyPair.getPublic())), BASE));
+        UpdateTransaction prepared = new UpdateTransaction("tx-ack", "5.3.3", manifest.version(),
+            manifest.releaseEpoch(), manifest.packageSha256(), UpdatePhaseEnum.PRECHECKED, 10, 20, null);
+        Field transactionField = field("preparedTransaction");
+        transactionField.set(updater, prepared);
+        field("preparedManifest").set(updater, manifest);
+        UpdateAuditLog audit = UpdateAuditLog.open(layout, prepared.transactionId(), "TEST");
+        field("auditLog").set(updater, audit);
+        field("helperAckTimeout").set(updater, Duration.ofMillis(400L));
+        AtomicBoolean helperStartRequested = new AtomicBoolean();
+        AtomicBoolean helperUnloaded = new AtomicBoolean();
+        field("helperStarter").set(updater, (FullPackageDesktopUpdater.HelperStarter)
+            (command, workDirectory, stdout, stderr, id) -> {
+                helperStartRequested.set(true);
+                return () -> helperUnloaded.set(true);
+            });
+        Path fakeRuntime = Files.createDirectories(temporaryDirectory.resolve("fake-runtime/bin"));
+        Files.writeString(fakeRuntime.resolve("java"), "java");
+        Path helperSource = layout.appDirectory().resolve("tools/chat2db-updater.jar");
+        Files.createDirectories(helperSource.getParent());
+        Files.writeString(helperSource, "helper");
+        String javaHome = System.getProperty("java.home");
+        boolean installed;
+        try {
+            System.setProperty("java.home", temporaryDirectory.resolve("fake-runtime").toString());
+            installed = (boolean) method("installPreparedUpdate").invoke(updater);
+        } finally {
+            System.setProperty("java.home", javaHome);
+        }
+
+        assertTrue(helperStartRequested.get(), "the prepared handoff must ask the starter to run the helper");
+        assertTrue(helperUnloaded.get(),
+            "a helper that never acknowledged must be unloaded so it cannot switch anything later");
+        assertFalse(installed, "a helper that never acknowledges must fail the handoff");
+        assertFalse((boolean) field("helperStarted").get(updater),
+            "a failed handoff must keep the application running instead of exiting into a dead end");
+        UpdateTransaction failed = (UpdateTransaction) transactionField.get(updater);
+        assertEquals(UpdatePhaseEnum.FAILED, failed.phase());
+        assertTrue(failed.failureMessage().contains("did not acknowledge"), failed.failureMessage());
+        String log = Files.readString(layout.auditLogFile(prepared.transactionId()));
+        assertTrue(log.contains("stage=HANDOFF event=ACK_WAIT"), log);
+        assertTrue(log.contains("helperAck=false"), log);
+        assertTrue(log.contains("stage=HANDOFF event=FAILED"), log);
+    }
+
+    @Test
     void pendingLaunchBlocksInstallationAndFailedHandoffRestoresLaunchDelivery() throws Exception {
         String executable = System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java";
         Path output = temporaryDirectory.resolve("installation.log");
@@ -167,6 +224,18 @@ class FullPackageDesktopUpdaterTest {
 
         assertEquals("new-helper", Files.readString(target));
         assertFalse(targetAttributes.readAttributes().isReadOnly());
+    }
+
+    private static Field field(String name) throws Exception {
+        Field field = FullPackageDesktopUpdater.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field;
+    }
+
+    private static java.lang.reflect.Method method(String name) throws Exception {
+        java.lang.reflect.Method method = FullPackageDesktopUpdater.class.getDeclaredMethod(name);
+        method.setAccessible(true);
+        return method;
     }
 
     private static String readOutput(Path output) {

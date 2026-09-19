@@ -162,6 +162,20 @@ public final class UpdateLayout {
         return updateWorkspace().resolve("candidate");
     }
 
+    /**
+     * Same-volume backup of the installed package. The switch renames the
+     * installed package here before copying the candidate, so a failed switch or
+     * a candidate that never becomes healthy can be rolled back.
+     */
+    public Path previousPackage() {
+        Path target = installTarget();
+        Path name = target.getFileName();
+        if (name == null) {
+            throw new IllegalStateException("Install target has no file name: " + target);
+        }
+        return target.resolveSibling(name + ".chat2db-previous");
+    }
+
     public Path workDirectory() {
         return updateWorkspace().resolve("helper");
     }

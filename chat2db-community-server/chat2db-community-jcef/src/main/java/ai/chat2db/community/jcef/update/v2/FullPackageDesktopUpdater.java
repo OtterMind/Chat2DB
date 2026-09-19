@@ -2,8 +2,10 @@ package ai.chat2db.community.jcef.update.v2;
 
 import ai.chat2db.community.updater.v2.audit.UpdateAuditLog;
 import ai.chat2db.community.updater.v2.installation.FullPackageStager;
+import ai.chat2db.community.updater.v2.installation.MacLaunchAgentHandoff;
 import ai.chat2db.community.updater.v2.model.InstalledAppVersion;
 import ai.chat2db.community.updater.v2.runtime.InstalledAppVersionReader;
+import ai.chat2db.community.updater.v2.runtime.UpdateHelperAck;
 import ai.chat2db.community.updater.v2.installation.RuntimePackageDetector;
 import ai.chat2db.community.updater.v2.runtime.RuntimePlatformDetector;
 import ai.chat2db.community.updater.v2.enums.UpdateChannelEnum;
@@ -38,6 +40,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributeView;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,7 @@ public final class FullPackageDesktopUpdater implements IDesktopUpdater {
 
     private static final int UPDATER_PROTOCOL_VERSION = 3;
     private static final int DEFAULT_HEALTH_TIMEOUT_SECONDS = 120;
+    private static final Duration HELPER_ACK_TIMEOUT = Duration.ofSeconds(30L);
 
     private final UpdateLayout layout;
     private final String product;
@@ -65,6 +69,8 @@ public final class FullPackageDesktopUpdater implements IDesktopUpdater {
     private UpdateManifest preparedManifest;
     private UpdateAuditLog auditLog;
     private int lastLoggedProgressBucket = -1;
+    private HelperStarter helperStarter = this::startHelperProcess;
+    private Duration helperAckTimeout = HELPER_ACK_TIMEOUT;
     private boolean helperStarted;
 
     public static FullPackageDesktopUpdater create(String product, String linuxPackageName,
@@ -251,15 +257,27 @@ public final class FullPackageDesktopUpdater implements IDesktopUpdater {
                 "bin",
                 RuntimePlatformDetector.platform() == UpdatePlatformEnum.WINDOWS ? "java.exe" : "java"
             );
+            Path helperStdout = workDirectory.resolve("helper-stdout.log");
+            Path helperStderr = workDirectory.resolve("helper-stderr.log");
             auditLog.critical("HANDOFF", "INTENT",
                 "helper plan persisted oldPid=" + ProcessHandle.current().pid());
-            new ProcessBuilder(javaExecutable.toString(), "-jar", helperCopy.toString(), planFile.toString())
-                .directory(workDirectory.toFile())
-                .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .start();
+            List<String> helperCommand = List.of(
+                javaExecutable.toString(), "-jar", helperCopy.toString(), planFile.toString());
+            Runnable helperAbort = helperStarter.start(helperCommand, workDirectory, helperStdout,
+                helperStderr, preparedTransaction.transactionId());
+            boolean helperAcknowledged = UpdateHelperAck.await(
+                layout.auditLogFile(preparedTransaction.transactionId()), helperAckTimeout);
+            auditLog.critical("HANDOFF", "ACK_WAIT",
+                "helperAck=" + helperAcknowledged
+                    + " stdoutTail=" + logTail(helperStdout)
+                    + " stderrTail=" + logTail(helperStderr));
+            if (!helperAcknowledged) {
+                abortHelper(helperAbort);
+                throw new IllegalStateException("Update helper did not acknowledge the persisted plan within "
+                    + helperAckTimeout.toSeconds() + "s");
+            }
             auditLog.status(UpdateAuditLog.STATUS_PENDING, "HANDOFF", "helper process started");
-            auditLog.critical("HANDOFF", "STARTED", "helper process started; application will exit");
+            auditLog.critical("HANDOFF", "STARTED", "helper accepted the plan; application will exit");
             helperStarted = true;
             DesktopRestartSupport.exitCurrentProcessAfterResponse();
             return true;
@@ -387,6 +405,88 @@ public final class FullPackageDesktopUpdater implements IDesktopUpdater {
             packageType,
             product
         );
+    }
+
+    /**
+     * Loads the helper as a per-transaction LaunchAgent on macOS. A helper spawned
+     * as a plain child of this application is reclaimed together with the
+     * application, which exits right after the handoff and kills the helper before
+     * its JVM has started.
+     */
+    private Runnable startHelperProcess(List<String> helperCommand, Path workDirectory, Path stdout,
+            Path stderr, String transactionId) throws Exception {
+        if (RuntimePlatformDetector.platform() == UpdatePlatformEnum.MACOS) {
+            return startHelperAsLaunchAgent(helperCommand, workDirectory, stdout, stderr, transactionId);
+        }
+        new ProcessBuilder(helperCommand)
+            .directory(workDirectory.toFile())
+            .redirectErrorStream(true)
+            .redirectOutput(stdout.toFile())
+            .start();
+        return null;
+    }
+
+    private void abortHelper(Runnable helperAbort) {
+        if (helperAbort == null) {
+            return;
+        }
+        try {
+            helperAbort.run();
+        } catch (RuntimeException abortFailure) {
+            auditLog.warn("HANDOFF", "ABORT_FAILED", failureMessage(abortFailure));
+        }
+    }
+
+    private Runnable startHelperAsLaunchAgent(List<String> helperCommand, Path workDirectory,
+            Path stdout, Path stderr, String transactionId) throws Exception {
+        MacLaunchAgentHandoff handoff = MacLaunchAgentHandoff.forCurrentUser(
+            Path.of(System.getProperty("user.home")), MacLaunchAgentHandoff.processRunner());
+        List<String> stale = handoff.bootoutStale(transactionId);
+        if (!stale.isEmpty()) {
+            auditLog.info("HANDOFF", "STALE_AGENTS", "unloaded=" + stale);
+        }
+        int bootstrapExit = handoff.bootstrap(
+            transactionId, helperCommand, workDirectory, stdout, stderr);
+        auditLog.critical("HANDOFF", "BOOTSTRAP",
+            "launchctl bootstrap exit=" + bootstrapExit
+                + " agent=" + handoff.agentFile(transactionId)
+                + " stdout=" + stdout);
+        if (bootstrapExit != 0) {
+            throw new IllegalStateException("Cannot load the update helper agent: exit=" + bootstrapExit);
+        }
+        return () -> {
+            try {
+                handoff.bootout(transactionId);
+            } catch (Exception bootoutFailure) {
+                auditLog.warn("HANDOFF", "ABORT_FAILED", failureMessage(bootoutFailure));
+            }
+        };
+    }
+
+
+    /**
+     * Starts the prepared helper. The handoff owns the wait for the helper's
+     * acknowledgement, so a starter that cannot be observed is a failed handoff.
+     */
+    interface HelperStarter {
+        /**
+         * @return an action that unloads a helper that never acknowledged, or
+         *         null when the started helper needs no cleanup.
+         */
+        Runnable start(List<String> helperCommand, Path workDirectory, Path stdout, Path stderr,
+            String transactionId) throws Exception;
+    }
+
+    private static String logTail(Path logFile) {
+        try {
+            if (!Files.isRegularFile(logFile)) {
+                return "<no output>";
+            }
+            String text = Files.readString(logFile).replace('\n', '|');
+            return text.length() <= 800 ? text : text.substring(text.length() - 800);
+        } catch (Exception unreadable) {
+            return "<unreadable " + unreadable.getClass().getSimpleName() + ">";
+        }
     }
 
     private static void copyRuntime(Path source, Path target) throws Exception {

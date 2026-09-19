@@ -33,13 +33,18 @@ class UpdateHelperMainTest {
     Path temporaryDirectory;
 
     @AfterEach
-    void awaitNormalCandidateExitBeforeDeletingItsWorkingDirectory() throws Exception {
+    void awaitSpawnedApplicationsExitBeforeDeletingTheWorkingDirectory() throws Exception {
         Path pidFile = temporaryDirectory.resolve("success-install/normal.pid");
         if (Files.isRegularFile(pidFile)) {
             ProcessHandle process = ProcessHandle.of(Long.parseLong(Files.readString(pidFile))).orElse(null);
             if (process != null) {
                 process.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS);
             }
+        }
+        // A relaunched application uses the install target as its working directory, and Windows
+        // cannot delete a directory that a running process still uses.
+        for (ProcessHandle descendant : ProcessHandle.current().descendants().toList()) {
+            descendant.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS);
         }
     }
 
@@ -59,6 +64,8 @@ class UpdateHelperMainTest {
             Files.readString(fixture.layout().installTarget().resolve("normal-restarted.txt")));
         assertFalse(Files.exists(fixture.layout().healthFile("tx-1")));
         assertFalse(Files.exists(fixture.layout().updateWorkspace().resolve("health.json")));
+        assertFalse(Files.exists(fixture.layout().previousPackage()),
+            "the committed transaction must release the rollback copy");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         for (UpdatePhaseEnum phase : List.of(
                 UpdatePhaseEnum.READY_TO_SWITCH,
@@ -81,13 +88,18 @@ class UpdateHelperMainTest {
         int exitCode = UpdateHelperMain.run(fixture.planFile());
 
         assertEquals(1, exitCode);
-        assertEquals("new", Files.readString(fixture.layout().installTarget().resolve("version.txt")));
+        assertEquals("old", Files.readString(fixture.layout().installTarget().resolve("version.txt")),
+            "a candidate that never becomes healthy must be rolled back");
+        waitForFile(fixture.layout().installTarget().resolve("rollback-restarted.txt"));
         assertEquals("migrated-schema", Files.readString(fixture.storage().resolve("chat2db.db")));
+        assertFalse(Files.exists(fixture.layout().previousPackage()),
+            "the rollback consumes the backup of the previous package");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         assertTrue(audit.contains("stage=SWITCHING"));
         assertTrue(audit.contains("stage=STARTING_CANDIDATE"));
         assertTrue(audit.contains("phase=FAILED"));
         assertTrue(audit.contains("exited before reporting TRIAL_HEALTHY"));
+        assertTrue(audit.contains("stage=ROLLING_BACK event=RESTORED"));
         assertTrue(audit.contains("outcome=FAILED"));
     }
 
@@ -98,9 +110,12 @@ class UpdateHelperMainTest {
         int exitCode = UpdateHelperMain.run(fixture.planFile());
 
         assertEquals(1, exitCode);
+        assertEquals("old", Files.readString(fixture.layout().installTarget().resolve("version.txt")),
+            "a relaunched application that never reports health must be rolled back");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         assertTrue(audit.contains("stage=RESTARTING_NORMAL"));
         assertTrue(audit.contains("phase=FAILED"));
+        assertTrue(audit.contains("stage=ROLLING_BACK event=RESTORED"));
         assertFalse(audit.contains("phase=COMMITTED"));
         assertFalse(audit.contains("outcome=SUCCESS"));
     }

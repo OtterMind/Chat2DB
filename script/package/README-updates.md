@@ -166,6 +166,27 @@ their respective operating systems.
 An existing desktop without this updater must first install a version that
 includes it. Test an installed version A updating to B; successfully building B
 alone does not verify automatic updates. The helper records success only after
-both the trial and normal application report healthy startup. Installation or
-startup failures are recorded in the product update log; there is no automatic
-rollback.
+both the trial and normal application report healthy startup.
+
+### Handoff and rollback
+
+The application prepares the helper runtime, the helper JAR and `plan.json`, then
+waits until the helper acknowledges the persisted plan before it exits; a helper
+that never acknowledges fails the handoff and leaves the application running.
+On macOS the helper is loaded as a per-transaction LaunchAgent
+(`~/Library/LaunchAgents/com.chat2db.updater.<transaction>.plist`) with
+`AbandonProcessGroup`. A helper spawned as a plain child of the application is
+reclaimed together with the application, which exits right after the handoff
+while the helper JVM is still starting, and `AbandonProcessGroup` keeps the
+relaunched application alive once the helper exits.
+
+Before the switch the installed package is moved aside to
+`<install target>.chat2db-previous` on the same volume, so the switch no longer
+deletes the only working copy. The transaction commits only after the trial and
+the relaunched application both report healthy startup, and that commit releases
+the backup. Any failure after the switch restores and relaunches the previous
+package and records `stage=ROLLING_BACK` in the product update log. The helper
+also refuses to switch while another instance of the installed application is
+still running, because such an instance makes the trial candidate exit
+immediately. A transaction that fails without a rollback copy leaves the update
+log as the only record; installation and startup failures are appended to it.

@@ -27,10 +27,82 @@ class FullPackageSwitcherTest {
 
         assertEquals("new", Files.readString(layout.installTarget().resolve("version.txt")));
         assertEquals("new", Files.readString(stagedPackage.resolve("version.txt")));
+        assertTrue(switcher.hasBackup(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE),
+            "the previous package must stay available until the candidate is healthy");
 
         switcher.commit("tx-1");
 
         assertEquals("new", Files.readString(layout.installTarget().resolve("version.txt")));
+        assertFalse(Files.exists(layout.previousPackage()),
+            "a committed transaction must release the previous package backup");
+    }
+
+    @Test
+    void keepsThePreviousPackageOutsideTheInstallTarget() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-backup");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        Path backup = switcher.switchToCandidate("tx-backup", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertEquals(layout.previousPackage(), backup);
+        assertEquals("old", Files.readString(backup.resolve("version.txt")));
+        assertEquals("old-java", Files.readString(backup.resolve("old-runtime/bin/java")));
+        assertFalse(Files.exists(layout.installTarget().resolve("old-runtime/bin/java")),
+            "the install target must contain only the candidate after the switch");
+    }
+
+    @Test
+    void rollsBackToThePreviousPackage() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-rollback");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+        switcher.switchToCandidate("tx-rollback", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertTrue(switcher.rollback("tx-rollback", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+
+        assertEquals("old", Files.readString(layout.installTarget().resolve("version.txt")));
+        assertEquals("old-java", Files.readString(layout.installTarget().resolve("old-runtime/bin/java")));
+        assertFalse(Files.exists(layout.previousPackage()), "the backup is consumed by the rollback");
+    }
+
+    @Test
+    void refusesToDropALeftoverBackupWhenTheInstalledPackageIsUnreadable() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-leftover");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+        Files.createDirectories(layout.previousPackage());
+        Files.writeString(layout.previousPackage().resolve("version.txt"), "last-good");
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> switcher.switchToCandidate("tx-leftover", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+
+        assertTrue(failure.getMessage().contains("refusing to switch"), failure.getMessage());
+        assertEquals("last-good", Files.readString(layout.previousPackage().resolve("version.txt")));
+        assertTrue(Files.exists(layout.installTarget().resolve("version.txt")));
+    }
+
+    @Test
+    void dropsALeftoverBackupWhenTheInstalledPackageIsStillUsable() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-stale");
+        Files.createDirectories(layout.previousPackage());
+        Files.writeString(layout.previousPackage().resolve("version.txt"), "stale");
+        Files.createDirectories(layout.appDirectory());
+        Files.writeString(layout.appDirectory().resolve("version.json"),
+            "{\"version\":\"5.3.3\",\"releaseEpoch\":100,\"buildSha\":\"test\"}");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        switcher.switchToCandidate("tx-stale", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertEquals("old", Files.readString(layout.previousPackage().resolve("version.txt")),
+            "the freshly moved backup replaces the stale one");
+    }
+
+    @Test
+    void rollbackWithoutBackupIsANoOp() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-none");
+        Files.createDirectories(layout.installTarget());
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        assertFalse(switcher.rollback("tx-none", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+        assertFalse(switcher.hasBackup(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
     }
 
     @Test
