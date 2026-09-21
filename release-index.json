@@ -1,71 +1,71 @@
 {
   "schemaVersion": 2,
-  "releaseEpoch": 1,
+  "releaseEpoch": 2,
   "status": "ACTIVE",
   "channel": "BETA",
   "releases": [
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "ARM64",
       "packageType": "LINUX_APPIMAGE",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-arm64-linux-appimage.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-arm64-linux-appimage.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "ARM64",
       "packageType": "LINUX_DEB",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-arm64-linux-deb.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-arm64-linux-deb.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "ARM64",
       "packageType": "LINUX_RPM",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-arm64-linux-rpm.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-arm64-linux-rpm.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "X64",
       "packageType": "LINUX_APPIMAGE",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-x64-linux-appimage.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-x64-linux-appimage.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "X64",
       "packageType": "LINUX_DEB",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-x64-linux-deb.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-x64-linux-deb.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "LINUX",
       "arch": "X64",
       "packageType": "LINUX_RPM",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-linux-x64-linux-rpm.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-linux-x64-linux-rpm.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "MACOS",
       "arch": "ARM64",
       "packageType": "MACOS_APP_ARCHIVE",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-macos-arm64-macos-app-archive.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-macos-arm64-macos-app-archive.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "MACOS",
       "arch": "X64",
       "packageType": "MACOS_APP_ARCHIVE",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-macos-x64-macos-app-archive.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-macos-x64-macos-app-archive.json"
     },
     {
-      "version": "5.3.7-beta.3",
+      "version": "5.3.7-beta.4",
       "platform": "WINDOWS",
       "arch": "X64",
       "packageType": "WINDOWS_EXE",
-      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.3/manifest-community-windows-x64-windows-exe.json"
+      "manifestUrl": "https://github.com/OtterMind/Chat2DB/releases/download/v5.3.7-beta.4/manifest-community-windows-x64-windows-exe.json"
     }
   ]
 }
