@@ -102,9 +102,11 @@ import {
 import {
   areWorkspacePaneContentBoundsEqual,
   resolveActiveWorkspaceTabPaneIds,
+  resolveWorkspaceTabContentActivation,
   resolveWorkspacePaneContentBounds,
   type WorkspacePaneContentBoundsMap,
 } from './workspaceTabContentLayout';
+import { WorkspaceTabContentInteraction } from './workspaceTabContentInteraction';
 
 const SplitPaneAny = SplitPane as any;
 const MAIN_WORKSPACE_TAB_PANE: WorkspaceTabPaneId = 'main';
@@ -1990,7 +1992,7 @@ const WorkspaceTabs = memo(() => {
   // Tab list.
   const workspaceTabItems = useMemo(() => {
     return getWorkspaceTabItems(workspaceTabList || []);
-  }, [workspaceTabList, activeConsoleId, dataSourceList]);
+  }, [workspaceTabList, activeConsoleId, dataSourceList, runtimeAvailabilityByDataSourceId]);
   const workspaceTabItemMap = useMemo(
     () => new Map(workspaceTabItems.map((item) => [item.key, item])),
     [workspaceTabItems],
@@ -2202,11 +2204,28 @@ const WorkspaceTabs = memo(() => {
           if (item.destroyOnHide && !isActive) {
             return null;
           }
+          const activateWorkspaceTabContent = () => {
+            const activation = resolveWorkspaceTabContentActivation({
+              paneId,
+              tabId: item.key,
+              activePaneId: workspaceTabSplitLayout?.activePane || MAIN_WORKSPACE_TAB_PANE,
+              activeConsoleId,
+            });
+            if (activation) {
+              onPaneTabChange(activation.paneId, activation.tabId);
+            }
+          };
           return (
-            <div
+            <WorkspaceTabContentInteraction
               key={item.key}
               aria-hidden={!isVisible}
               className={`${styles.workspaceTabContentItem} ${isVisible ? styles.workspaceTabContentItemActive : ''}`}
+              isActive={
+                paneId === (workspaceTabSplitLayout?.activePane || MAIN_WORKSPACE_TAB_PANE) &&
+                item.key === activeConsoleId
+              }
+              isVisible={isVisible}
+              onActivate={activateWorkspaceTabContent}
               style={
                 fillsSinglePane
                   ? {
@@ -2226,7 +2245,7 @@ const WorkspaceTabs = memo(() => {
               }
             >
               {item.children}
-            </div>
+            </WorkspaceTabContentInteraction>
           );
         })}
       </div>
