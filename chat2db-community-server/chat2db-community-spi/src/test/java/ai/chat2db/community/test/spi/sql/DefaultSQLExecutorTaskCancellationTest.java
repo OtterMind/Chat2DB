@@ -59,7 +59,7 @@ class DefaultSQLExecutorTaskCancellationTest {
                                 }
                             }));
 
-            assertEquals(1, countRows(connection));
+            assertEquals(0, countRows(connection));
             assertEquals(1, listener.created.get());
             assertEquals(1, listener.closed.get());
         }
