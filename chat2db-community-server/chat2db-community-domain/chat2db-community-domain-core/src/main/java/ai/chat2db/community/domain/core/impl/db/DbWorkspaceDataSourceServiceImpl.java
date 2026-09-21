@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.model.datasource.DataSourceIdentityColorU
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePreConnectRequest;
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import ai.chat2db.community.domain.api.service.db.IDbDataSourceService;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
@@ -70,22 +71,100 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
 
     @Override
     public WorkspaceDataSource queryDisplayDataSourceById(Long id, Boolean requestPassword) {
-        WorkspaceDataSource dataSource = environmentEnricher.enrich(queryDataSourceById(id, requestPassword));
-        decryptSensitiveFields(dataSource);
+        WorkspaceDataSource dataSource = copyDataSource(environmentEnricher.enrich(queryDataSourceById(id, requestPassword)));
+        if (Boolean.TRUE.equals(requestPassword)) {
+            decryptPassword(dataSource);
+        }
+        redactSslSecrets(dataSource);
         return dataSource;
     }
 
     @Override
     public void preConnect(DbDataSourcePreConnectRequest request) {
         WorkspaceDataSource savedDataSource = request.getId() == null ? null
-                : queryDisplayDataSourceById(request.getId(), true);
+                : queryDataSourceById(request.getId(), true);
+        decryptSensitiveFields(savedDataSource);
         if (request.getId() != null
                 && (request.getPassword() == null || request.getPassword().isEmpty())
                 && savedDataSource != null
                 && !AuthenticationTypeEnum.NONE.getCode().equals(request.getAuthenticationType())) {
             request.setPassword(savedDataSource.getPassword());
         }
+        if (request.getId() != null
+                && savedDataSource != null) {
+            request.setSsl(mergeSslForConnect(request.getSsl(), savedDataSource.getSsl()));
+        }
         dataSourceService.preConnect(request);
+    }
+
+    private SSLInfo mergeSslForConnect(SSLInfo incoming, SSLInfo saved) {
+        if (incoming == null) {
+            return saved;
+        }
+        if (StringUtils.isBlank(incoming.getTlsMode())
+                || "DISABLED".equalsIgnoreCase(incoming.getTlsMode())) {
+            return incoming;
+        }
+        if (saved == null) {
+            normalizeSslSources(incoming);
+            return incoming;
+        }
+
+        boolean trustStoreSupplied = StringUtils.isNotBlank(incoming.getTrustStoreBytes());
+        boolean trustPemSupplied = !trustStoreSupplied && StringUtils.isNotBlank(incoming.getCaPem());
+        boolean clientStoreSupplied = StringUtils.isNotBlank(incoming.getKeyStoreBytes());
+        boolean clientPemSupplied = !clientStoreSupplied
+                && (StringUtils.isNotBlank(incoming.getClientCertPem())
+                || StringUtils.isNotBlank(incoming.getClientPrivateKeyPem()));
+
+        if (!trustPemSupplied) {
+            incoming.setTrustStoreBytes(mergeOmittedSecret(incoming.getTrustStoreBytes(), saved.getTrustStoreBytes()));
+            incoming.setTrustStorePassword(mergeOmittedSecret(
+                    incoming.getTrustStorePassword(), saved.getTrustStorePassword()));
+        }
+        if (clientPemSupplied) {
+            incoming.setClientPrivateKeyPem(mergeOmittedSecret(
+                    incoming.getClientPrivateKeyPem(), saved.getClientPrivateKeyPem()));
+            incoming.setClientKeyPassword(mergeOmittedSecret(
+                    incoming.getClientKeyPassword(), saved.getClientKeyPassword()));
+        } else if (!clientStoreSupplied) {
+            incoming.setClientPrivateKeyPem(mergeOmittedSecret(
+                    incoming.getClientPrivateKeyPem(), saved.getClientPrivateKeyPem()));
+            incoming.setClientKeyPassword(mergeOmittedSecret(
+                    incoming.getClientKeyPassword(), saved.getClientKeyPassword()));
+            incoming.setKeyStoreBytes(mergeOmittedSecret(incoming.getKeyStoreBytes(), saved.getKeyStoreBytes()));
+            incoming.setKeyStorePassword(mergeOmittedSecret(
+                    incoming.getKeyStorePassword(), saved.getKeyStorePassword()));
+        } else {
+            incoming.setKeyStorePassword(mergeOmittedSecret(
+                    incoming.getKeyStorePassword(), saved.getKeyStorePassword()));
+        }
+        normalizeSslSources(incoming);
+        return incoming;
+    }
+
+    private String mergeOmittedSecret(String incoming, String saved) {
+        return incoming == null ? saved : incoming;
+    }
+
+    private void normalizeSslSources(SSLInfo ssl) {
+        if (StringUtils.isNotBlank(ssl.getTrustStoreBytes())) {
+            ssl.setCaPem(null);
+        } else if (StringUtils.isNotBlank(ssl.getCaPem())) {
+            ssl.setTrustStoreType(null);
+            ssl.setTrustStoreBytes(null);
+            ssl.setTrustStorePassword(null);
+        }
+        if (StringUtils.isNotBlank(ssl.getKeyStoreBytes())) {
+            ssl.setClientCertPem(null);
+            ssl.setClientPrivateKeyPem(null);
+            ssl.setClientKeyPassword(null);
+        } else if (StringUtils.isNotBlank(ssl.getClientCertPem())
+                || StringUtils.isNotBlank(ssl.getClientPrivateKeyPem())) {
+            ssl.setKeyStoreType(null);
+            ssl.setKeyStoreBytes(null);
+            ssl.setKeyStorePassword(null);
+        }
     }
 
     @Override
@@ -192,6 +271,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         }
         if (ConfigUtils.isCommunity()) {
             dataSource.setPassword(null);
+            redactSslSecrets(dataSource);
             dataSource.setSpaceId(null);
             return dataSource;
         }
@@ -217,6 +297,16 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
             copy = new WorkspaceDataSource();
         }
         BeanUtils.copyProperties(dataSource, copy);
+        copy.setSsl(copySsl(dataSource.getSsl()));
+        return copy;
+    }
+
+    private SSLInfo copySsl(SSLInfo ssl) {
+        if (ssl == null) {
+            return null;
+        }
+        SSLInfo copy = new SSLInfo();
+        BeanUtils.copyProperties(ssl, copy);
         return copy;
     }
 
@@ -226,6 +316,7 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         }
         if ("LOCAL".equalsIgnoreCase(dataSource.getStorageType()) || ConfigUtils.isLocalPersistence()) {
             dataSource.setPassword(decryptString(dataSource.getPassword()));
+            decryptSslSensitiveFields(dataSource.getSsl(), false, null);
             return;
         }
         Context context = ContextUtils.queryContext();
@@ -245,6 +336,62 @@ public class DbWorkspaceDataSourceServiceImpl implements IDbWorkspaceDataSourceS
         if (StringUtils.isNotBlank(dataSource.getUser())) {
             dataSource.setUser(decryptToken(dataSource.getUser(), privateKey));
         }
+        decryptSslSensitiveFields(dataSource.getSsl(), true, privateKey);
+    }
+
+    private void decryptPassword(WorkspaceDataSource dataSource) {
+        if (dataSource == null) {
+            return;
+        }
+        if ("LOCAL".equalsIgnoreCase(dataSource.getStorageType()) || ConfigUtils.isLocalPersistence()) {
+            dataSource.setPassword(decryptString(dataSource.getPassword()));
+            return;
+        }
+        Context context = ContextUtils.queryContext();
+        if (context == null || context.getOrganizationToken() == null) {
+            throw new NeedLoggedInBusinessException();
+        }
+        PrivateKey privateKey = stringToPrivateKey(context.getOrganizationToken());
+        if (StringUtils.isNotBlank(dataSource.getPassword())) {
+            dataSource.setPassword(decryptToken(dataSource.getPassword(), privateKey));
+        }
+    }
+
+    private void redactSslSecrets(WorkspaceDataSource dataSource) {
+        if (dataSource == null || dataSource.getSsl() == null) {
+            return;
+        }
+        SSLInfo ssl = dataSource.getSsl();
+        ssl.setClientPrivateKeyPem(null);
+        ssl.setClientKeyPassword(null);
+        ssl.setTrustStoreBytes(null);
+        ssl.setTrustStorePassword(null);
+        ssl.setKeyStoreBytes(null);
+        ssl.setKeyStorePassword(null);
+    }
+
+    /**
+     * Decrypt the secret TLS fields. LOCAL storage uses the shared AES key (same AAD as the
+     * datasource password); cloud storage uses the organization RSA token. Public material
+     * (CA/client cert PEM, keystore type, mode) is stored cleartext and left untouched.
+     */
+    private void decryptSslSensitiveFields(SSLInfo ssl, boolean cloud, PrivateKey privateKey) {
+        if (ssl == null) {
+            return;
+        }
+        ssl.setClientPrivateKeyPem(decryptSecret(ssl.getClientPrivateKeyPem(), cloud, privateKey));
+        ssl.setClientKeyPassword(decryptSecret(ssl.getClientKeyPassword(), cloud, privateKey));
+        ssl.setTrustStoreBytes(decryptSecret(ssl.getTrustStoreBytes(), cloud, privateKey));
+        ssl.setTrustStorePassword(decryptSecret(ssl.getTrustStorePassword(), cloud, privateKey));
+        ssl.setKeyStoreBytes(decryptSecret(ssl.getKeyStoreBytes(), cloud, privateKey));
+        ssl.setKeyStorePassword(decryptSecret(ssl.getKeyStorePassword(), cloud, privateKey));
+    }
+
+    private String decryptSecret(String value, boolean cloud, PrivateKey privateKey) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        return cloud ? decryptToken(value, privateKey) : decryptString(value);
     }
 
     private PrivateKey stringToPrivateKey(String privateKeyString) {

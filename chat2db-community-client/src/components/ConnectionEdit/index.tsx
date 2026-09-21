@@ -20,6 +20,12 @@ import { applyConnectionIdentityColorUpdate } from './identityColorUpdate';
 import styles from './index.less';
 import { SubmissionGuard } from './submissionGuard';
 import { formatJdbcHostForUrl, normalizeJdbcHostFromUrl, shouldSyncJdbcUrlForField } from './utils/jdbcUrl';
+import {
+  collectMysqlTlsPayload,
+  expandMysqlTlsConfig,
+  mysqlTlsFileTypes,
+  readBrowserTlsFile,
+} from './utils/mysqlTls';
 
 // ----- store -----
 import { clientRuntime } from '@client-runtime';
@@ -162,6 +168,7 @@ function normalizeConnectionData(connectionData?: IConnectionDetails | null) {
     ...(resolvedType && resolvedType !== connectionData.type ? { type: resolvedType } : {}),
     watermarkEnabled: connectionData.watermarkEnabled === true,
     watermarkContent: connectionData.watermarkContent || '',
+    ...expandMysqlTlsConfig(connectionData),
   };
 }
 
@@ -358,6 +365,112 @@ function FilePathInput(props: IFilePathInputProps) {
   );
 }
 
+interface IFileContentTextAreaProps {
+  value?: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  fileTypes?: string[];
+  mode?: 'text' | 'base64';
+  rows?: number;
+  maxLength?: number;
+}
+
+function FileContentTextArea(props: IFileContentTextAreaProps) {
+  const {
+    value,
+    onChange,
+    placeholder,
+    disabled,
+    mode = 'text',
+    rows = 3,
+    maxLength,
+  } = props;
+  const webFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [selecting, setSelecting] = useState(false);
+  const fileTypes = props.fileTypes?.length ? props.fileTypes : mysqlTlsFileTypes(mode);
+
+  function triggerChange(content: string) {
+    onChange?.(content);
+  }
+
+  async function selectLocalFile() {
+    if (disabled || selecting) {
+      return;
+    }
+
+    if (typeof window.javaQuery === 'function') {
+      setSelecting(true);
+      try {
+        const data = await jcefApi.selectTlsFileContent({ fileTypeList: fileTypes, mode });
+        if (data?.content) {
+          triggerChange(data.content);
+        }
+        return;
+      } catch (error) {
+        console.error('select TLS file content by jcef error', error);
+        staticMessage.error(i18n('common.text.selectFileFailed'));
+        return;
+      } finally {
+        setSelecting(false);
+      }
+    }
+
+    webFileInputRef.current?.click();
+  }
+
+  async function onWebFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setSelecting(true);
+    try {
+      triggerChange(await readBrowserTlsFile(file, mode));
+    } catch (error) {
+      console.error('read TLS file content by browser error', error);
+      staticMessage.error(i18n('common.text.selectFileFailed'));
+    } finally {
+      setSelecting(false);
+      event.target.value = '';
+    }
+  }
+
+  return (
+    <div className={styles.fileContentInputBox}>
+      <Input.TextArea
+        className={styles.fileContentTextArea}
+        disabled={disabled}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        rows={rows}
+        value={value}
+        onChange={(event) => triggerChange(event.target.value)}
+      />
+      <Button
+        className={styles.fileContentSelectButton}
+        disabled={disabled || selecting}
+        htmlType="button"
+        icon={<FolderOpenOutlined />}
+        loading={selecting}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={selectLocalFile}
+      >
+        {i18n('common.text.selectFile')}
+      </Button>
+      <input
+        ref={webFileInputRef}
+        accept={fileTypes.map((fileType) => `.${fileType}`).join(',')}
+        className={styles.hiddenFileInput}
+        tabIndex={-1}
+        type="file"
+        hidden
+        onChange={onWebFileChange}
+      />
+    </div>
+  );
+}
+
 export enum submitType {
   UPDATE = 'update',
   SAVE = 'save',
@@ -415,7 +528,7 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
       }
     }
     return data;
-  }, [backfillData, curOrg?.type]);
+  }, [backfillData, curOrg]);
 
   const { curIsPersonalOrg } = useOrgStore((s) => ({
     curIsPersonalOrg: s.curIsPersonalOrg,
@@ -484,6 +597,9 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
     if (baseInfo.host) {
       baseInfo.host = normalizeJdbcHostFromUrl(baseInfo.host);
     }
+    const ssl = backfillData.type === DatabaseTypeCode.MYSQL
+      ? collectMysqlTlsPayload(baseInfo, backfillData.ssl)
+      : undefined;
     const extendInfo: any = [];
     extendTableData.map((t: any) => {
       if (t.label || t.value) {
@@ -502,6 +618,9 @@ const ConnectionEdit = forwardRef((props: IProps, ref: ForwardedRef<ICreateConne
       connectionEnvType: ConnectionEnvType.DAILY,
       type: backfillData.type,
     };
+    if (ssl) {
+      data.ssl = ssl;
+    }
 
     if (backfillData.id) {
       data.id = backfillData.id;
@@ -720,6 +839,7 @@ function RenderForm(props: IRenderFormProps) {
   useEffect(() => {
     form.resetFields();
     changeDataSourceFormConfig(backfillData);
+    form.setFieldsValue(backfillData);
     formDataRef.current = backfillData;
   }, [backfillData.id, backfillData.type]);
 
@@ -947,6 +1067,24 @@ function RenderForm(props: IRenderFormProps) {
     const inputControl = (
       <Input disabled={props.disabled} maxLength={t.maxLength} placeholder={placeholder} />
     );
+    const textareaControl = t.fileContentMode ? (
+      <FileContentTextArea
+        disabled={props.disabled}
+        fileTypes={t.fileTypes}
+        maxLength={t.maxLength}
+        mode={t.fileContentMode}
+        placeholder={placeholder}
+        rows={t.rows || 3}
+        onChange={handleFormItemValueChange}
+      />
+    ) : (
+      <Input.TextArea
+        disabled={props.disabled}
+        maxLength={t.maxLength}
+        placeholder={placeholder}
+        rows={t.rows || 3}
+      />
+    );
     const selectControl = (
       <Select
         placeholder={placeholder}
@@ -995,6 +1133,7 @@ function RenderForm(props: IRenderFormProps) {
 
       const controls: Partial<Record<InputType, React.ReactNode>> = {
         [InputType.INPUT]: inputControl,
+        [InputType.TEXTAREA]: textareaControl,
         [InputType.SELECT]: selectControl,
         [InputType.COLOR]: (
           <DataSourceColorPicker
@@ -1025,6 +1164,17 @@ function RenderForm(props: IRenderFormProps) {
           labelAlign={labelAlign}
         >
           {inputControl}
+        </Form.Item>
+      ),
+
+      [InputType.TEXTAREA]: () => (
+        <Form.Item
+          label={label}
+          name={name}
+          style={{ '--form-label-width': labelWidth } as any}
+          labelAlign={labelAlign}
+        >
+          {textareaControl}
         </Form.Item>
       ),
 
@@ -1128,8 +1278,10 @@ function RenderForm(props: IRenderFormProps) {
         noStyle
         shouldUpdate={(previous, current) => previous[t.visibleWhen!.name] !== current[t.visibleWhen!.name]}
       >
-        {({ getFieldValue }) =>
-          getFieldValue(t.visibleWhen!.name) === t.visibleWhen!.value ? (
+        {({ getFieldValue }) => {
+          const visibleValue = getFieldValue(t.visibleWhen!.name);
+          const visibleValues = t.visibleWhen!.values || [t.visibleWhen!.value];
+          return visibleValues.includes(visibleValue) ? (
             renderedItem
           ) : (
             <div
@@ -1140,8 +1292,8 @@ function RenderForm(props: IRenderFormProps) {
               )}
               style={width ? { width } : undefined}
             />
-          )
-        }
+          );
+        }}
       </Form.Item>
     );
   }

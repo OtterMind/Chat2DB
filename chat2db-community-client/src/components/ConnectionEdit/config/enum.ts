@@ -1,6 +1,7 @@
 export enum InputType {
   INPUT = 'input',
   PASSWORD = 'password',
+  TEXTAREA = 'textarea',
   SELECT = 'select',
   FILE = 'file',
   COLOR = 'color',
