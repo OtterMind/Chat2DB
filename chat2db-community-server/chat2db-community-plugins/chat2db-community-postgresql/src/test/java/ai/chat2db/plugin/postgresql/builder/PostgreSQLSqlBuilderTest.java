@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PostgreSQLSqlBuilderTest {
 
@@ -102,6 +103,39 @@ class PostgreSQLSqlBuilderTest {
 
         assertEquals("ALTER TABLE \"sales\".\"orders\"\tRENAME TO \"Orders\";\n",
                 builder.buildAlterTable(oldTable, newTable));
+    }
+
+    @Test
+    void shouldAcceptTemporaryViewStorageSynonym() {
+        PostgreSQLSqlBuilder builder = new PostgreSQLSqlBuilder();
+        ModifyView view = createView(null, "session_orders", null);
+        view.setStorageClause("temporary");
+
+        assertEquals("CREATE TEMPORARY VIEW \"session_orders\"\n"
+                        + "AS \n"
+                        + "SELECT 1 ;",
+                builder.buildCreateView(view));
+    }
+
+    @Test
+    void shouldAcceptLocalTempViewStorageSynonym() {
+        PostgreSQLSqlBuilder builder = new PostgreSQLSqlBuilder();
+        ModifyView view = createView(null, "session_orders", null);
+        view.setStorageClause("local temporary");
+
+        assertEquals("CREATE LOCAL TEMPORARY VIEW \"session_orders\"\n"
+                        + "AS \n"
+                        + "SELECT 1 ;",
+                builder.buildCreateView(view));
+    }
+
+    @Test
+    void shouldRejectUnsafeViewStorageClause() {
+        PostgreSQLSqlBuilder builder = new PostgreSQLSqlBuilder();
+        ModifyView view = createView(null, "session_orders", null);
+        view.setStorageClause("TEMP; DROP VIEW session_orders");
+
+        assertThrows(IllegalArgumentException.class, () -> builder.buildCreateView(view));
     }
 
     private static ModifyView createView(String schemaName, String viewName, String comment) {
