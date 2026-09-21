@@ -10,6 +10,7 @@ import ai.chat2db.community.domain.api.model.task.extension.ExportCellContext;
 import ai.chat2db.community.domain.api.service.db.extension.ISqlExecutionPolicy;
 import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.IPlugin;
@@ -38,6 +39,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DbDmlExportServicePolicyTest {
@@ -155,19 +158,106 @@ class DbDmlExportServicePolicyTest {
         assertEquals(2, sql.lines().filter(line -> !line.isBlank()).count(), sql);
     }
 
+    @Test
+    void csvExportRejectsDdlSql() {
+        assertRejectsNonSelectExport("CSV", "CREATE TABLE orders (id INT)");
+    }
+
+    @Test
+    void csvExportRejectsDmlSql() {
+        assertRejectsNonSelectExport("CSV", "UPDATE orders SET email = 'blocked@example.com'");
+    }
+
+    @Test
+    void xlsxExportRejectsDdlSql() {
+        assertRejectsNonSelectExport("EXCEL", "DROP TABLE orders");
+    }
+
+    @Test
+    void xlsxExportRejectsDmlSql() {
+        assertRejectsNonSelectExport("EXCEL", "DELETE FROM orders");
+    }
+
+    @Test
+    void csvExportRejectsNonSelectSqlWhenDatasourceIsNotDruidSupported() {
+        assertRejectsNonSelectExportForDatasource("REDIS", "DEL export_guard");
+    }
+
+    @Test
+    void csvExportRejectsNonSelectSqlWhenSyntaxPluginIsUnavailable() {
+        assertRejectsNonSelectExportForDatasource("SNOWFLAKE", "DELETE FROM export_guard");
+    }
+
+    private void assertRejectsNonSelectExportForDatasource(String databaseType, String sql) {
+        Chat2DBContext.getConnectInfo().setDbType(databaseType);
+        DbDmlExportServiceImpl selectValidationService = selectValidationService();
+        DbDmlExportRequest request = new DbDmlExportRequest();
+        request.setSql(sql);
+        request.setOriginalSql(sql);
+        request.setExportSize("ALL");
+        request.setExportType("CSV");
+        request.setDatabaseName("shop");
+
+        DbDmlExportPlan plan = selectValidationService.prepareExport(request);
+
+        assertThrows(BusinessException.class,
+                () -> selectValidationService.export(plan.getExportRequest(), new ByteArrayOutputStream(), null, () -> {},
+                        ignored -> {}, () -> {}));
+        assertNull(jdbcExecution.executedSql);
+    }
+
+    @Test
+    void csvExportAcceptsSelectSql() throws Exception {
+        ByteArrayOutputStream output = export("CSV", ORIGINAL_SQL);
+
+        assertTrue(output.toString(StandardCharsets.UTF_8).contains("id,email"));
+    }
+
+    @Test
+    void xlsxExportAcceptsSelectSql() throws Exception {
+        ByteArrayOutputStream output = export("EXCEL", ORIGINAL_SQL);
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(output.toByteArray()))) {
+            assertEquals("id", workbook.getSheetAt(0).getRow(0).getCell(0).getStringCellValue());
+        }
+    }
+
     private ByteArrayOutputStream export(String exportType) throws Exception {
+        return export(exportType, ORIGINAL_SQL);
+    }
+
+    private ByteArrayOutputStream export(String exportType, String originalSql) throws Exception {
         DbDmlExportRequest request = new DbDmlExportRequest();
         request.setSql("SELECT 1");
-        request.setOriginalSql(ORIGINAL_SQL);
+        request.setOriginalSql(originalSql);
         request.setExportSize("ALL");
         request.setExportType(exportType);
         request.setDatabaseName("shop");
 
         DbDmlExportPlan plan = service.prepareExport(request);
-        assertEquals(ORIGINAL_SQL, plan.getExportRequest().getSql());
+        assertEquals(originalSql, plan.getExportRequest().getSql());
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         service.export(plan.getExportRequest(), output, null, () -> {}, ignored -> {}, () -> {});
         return output;
+    }
+
+    private void assertRejectsNonSelectExport(String exportType, String originalSql) {
+        DbDmlExportRequest request = new DbDmlExportRequest();
+        request.setSql("SELECT 1");
+        request.setOriginalSql(originalSql);
+        request.setExportSize("ALL");
+        request.setExportType(exportType);
+        request.setDatabaseName("shop");
+
+        DbDmlExportPlan plan = service.prepareExport(request);
+
+        assertThrows(BusinessException.class,
+                () -> selectValidationService().export(plan.getExportRequest(), new ByteArrayOutputStream(), null, () -> {},
+                        ignored -> {}, () -> {}));
+    }
+
+    private DbDmlExportServiceImpl selectValidationService() {
+        return new DbDmlExportServiceImpl(new SqlExecutionPolicyManager(List.of()), new ExportCellProcessorChain(List.of()));
     }
 
     private void assertExecutionContract() {
