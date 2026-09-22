@@ -7,6 +7,7 @@ import es from '@/i18n/es-ES/setting';
 import { toolDescription } from './model';
 import type { AgentToolState } from '@/service/agent';
 
+const piTools = ['bash', 'read', 'edit', 'write', 'grep', 'find', 'ls', 'powershell'] as const;
 const tool: AgentToolState = { name: 'bash', description: 'Bash', category: 'BUILTIN', status: 'DISABLED' };
 let messages: Record<string, string> = zh;
 const translate = (key: string) => messages[key] || key;
@@ -14,12 +15,14 @@ assert.equal(toolDescription(tool, translate), zh['setting.agent.tool.bash']);
 messages = en;
 assert.equal(toolDescription(tool, translate), en['setting.agent.tool.bash']);
 assert.notEqual(toolDescription(tool, translate), zh['setting.agent.tool.bash']);
-for (const locale of [zh, en, ja, ko, es]) {
+for (const locale of [zh, en, ja, ko, es] as const) {
+  for (const name of piTools) {
+    assert.ok(locale[`setting.agent.tool.${name}`], name);
+  }
   assert.ok(locale['setting.agent.toolStatus.UNAVAILABLE']);
   assert.ok(locale['setting.agent.workingDirectory.hint']);
   assert.ok(locale['setting.agent.workingDirectory.choose']);
   assert.ok(locale['setting.agent.tool.enable']);
-  assert.ok(locale['setting.agent.tool.execute_sql']);
   assert.ok(locale['setting.agent.tools.userFilesHint']);
 }
 assert.equal(toolDescription({ ...tool, name: 'custom_tool', description: 'Custom tool description' }, translate),
