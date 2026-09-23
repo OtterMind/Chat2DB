@@ -16,9 +16,10 @@ import { formatSql } from '../../helper/utils';
 import ContextMenu from '../../components/ContextMenu';
 import * as monaco from 'monaco-editor';
 import { useGlobalStore } from '@/store/global';
-import { ChatSourceType, QuestionType } from '@/constants/chat';
+import { QuestionType } from '@/constants/chat';
 import { useWorkspaceStore } from '@/store/workspace';
 import { useAIStore } from '@/store/ai';
+import { sendAgentEntry } from '@/blocks/AI/agentEntrySend';
 import sqlService, { type IRoutineMigrationParams } from '@/service/sql';
 import { DatabaseCapability, OperationColumn, TreeNodeType, WorkspaceTabType } from '@/constants';
 import { EditorTableIdentifier } from '../../helper/tableIdentifier';
@@ -675,24 +676,13 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
     }[actionType];
     if (!scenario) return;
 
-    useAIStore.getState().setShowPanel(true);
-    window.setTimeout(
-      () =>
-        window.dispatchEvent(
-          new CustomEvent('stream:sendMessage', {
-            detail: {
-              ...scenario,
-              source: ChatSourceType.DATASOURCE_CHAT,
-              dataSourceId,
-              databaseName,
-              schemaName,
-              databaseType,
-              sql: selectSQL,
-            },
-          }),
-        ),
-      0,
-    );
+    sendAgentEntry({
+      intent: scenario.questionType,
+      input: scenario.input,
+      scope: dbInfo,
+      currentTable: dbInfo?.tableName || dbInfo?.viewName ? dbInfo : null,
+      payload: { sql: selectSQL },
+    });
   };
 
   const handleCopy = useCallback(() => {

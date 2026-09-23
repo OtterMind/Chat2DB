@@ -6,10 +6,8 @@ import i18n from '@/i18n';
 import { copyToClipboard } from '@/utils/copy';
 import SQLPreview from '@/components/SQLPreview';
 import { getDatabaseInfo } from '@/constants';
-import { useAIStore } from '@/store/ai';
-import { useGlobalStore } from '@/store/global';
-import { useWorkspaceStore } from '@/store/workspace';
 import { QuestionType } from '@/constants/chat';
+import { sendAgentEntry } from '@/blocks/AI/agentEntrySend';
 import {
   ConsoleOutputEmpty,
   ConsoleOutputLine,
@@ -54,7 +52,6 @@ export default memo<IProps>(
       readExecutionConsoleOrder(getExecutionConsolePreferenceStorage(), ORDER_STORAGE_KEY),
     );
     const [followLatest, setFollowLatest] = useState(true);
-    const setCurrentWorkspaceExtend = useWorkspaceStore((state) => state.setCurrentWorkspaceExtend);
     const orderedRecords = useMemo(() => orderExecutionLogRecords(records, order), [records, order]);
 
     const plainText = useMemo(() => buildPlainText(orderedRecords), [orderedRecords]);
@@ -88,20 +85,15 @@ export default memo<IProps>(
     };
 
     const handleAIDiagnose = (record: SqlExecutionLogRecord, errorMessage: string) => {
-      const page = useGlobalStore.getState().mainPageActiveTab as 'workspace' | 'dashboard' | 'chat' | 'stream';
-      setCurrentWorkspaceExtend(null);
-      useAIStore.getState().setCascaderData(page, record.context);
-      useAIStore.getState().setShowPanel(true);
-      window.setTimeout(() => {
-        window.dispatchEvent(
-          new CustomEvent('stream:prefillMessage', {
-            detail: {
-              input: i18n('ai.sqlDebug.prefill', record.sql || '', errorMessage),
-              questionType: QuestionType.SQL_DEBUG,
-            },
-          }),
-        );
-      }, 100);
+      sendAgentEntry(
+        {
+          intent: QuestionType.SQL_DEBUG,
+          input: i18n('ai.sqlDebug.prefill', record.sql || '', errorMessage),
+          scope: record.context,
+          payload: { sql: record.sql, errorMessage },
+        },
+        'prefill',
+      );
     };
 
     return (

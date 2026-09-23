@@ -94,10 +94,7 @@ const ContextMenu = memo((props: IProps) => {
           : [];
 
       const editMenus: MenuEntry[] = [
-        // createMenuItem(SQLOptType.NL_2_SQL, 'monaco.text.nl2sql'),
-        // createMenuItem(SQLOptType.SQL_EXPLAIN, 'monaco.text.sqlExplain'),
-        // createMenuItem(SQLOptType.SQL_OPTIMIZER, 'monaco.text.sqlOptimizer'),
-        // { isSeparator: true },
+        // NL_2_SQL stays off: it turns a description into SQL, so it does not need a selection.
         createMenuItem(SQLOptType.COPY, 'monaco.text.copy', ShortcutAction.SqlCopy),
         // createMenuItem(SQLOptType.PASTE, 'monaco.text.paste', [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV]),
         createMenuItem(SQLOptType.PASTE, 'monaco.text.paste', ShortcutAction.SqlPaste),
@@ -120,6 +117,9 @@ const ContextMenu = memo((props: IProps) => {
 
       return [
         ...editMenus,
+        createMenuItem(SQLOptType.SQL_EXPLAIN, 'monaco.text.sqlExplain'),
+        createMenuItem(SQLOptType.SQL_OPTIMIZER, 'monaco.text.sqlOptimizer'),
+        { isSeparator: true },
         createMenuItem(SQLOptType.PASTE_AS_SQL_IN_VALUES, 'monaco.text.pasteAsSqlInValues'),
         createMenuItem(SQLOptType.CASE_CONVERT, 'monaco.text.caseConvert', ShortcutAction.SqlCaseConvert),
         createMenuItem(SQLOptType.FORMAT_SQL, 'monaco.text.formatSQL', ShortcutAction.SqlFormat),
