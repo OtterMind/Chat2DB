@@ -253,6 +253,7 @@ export default {
   'setting.title.checkUpdate': '업데이트 확인',
   'setting.text.downloadProgress': '다운로드 진행률',
   'setting.text.notAvailable': '사용 가능한 새 버전이 없습니다',
+  'setting.text.checkUpdateFailed': '업데이트 확인에 실패했습니다. 네트워크를 확인한 뒤 다시 시도하세요',
   'setting.text.latestVersion': '최신 버전',
   'setting.text.buildTime': '빌드 시간',
   'setting.text.alertNewVersion': '새 버전을 찾으면 알림 표시',

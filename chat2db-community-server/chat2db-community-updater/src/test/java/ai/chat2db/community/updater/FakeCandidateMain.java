@@ -10,6 +10,11 @@ public final class FakeCandidateMain {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 1 && "--hold".equals(args[0])) {
+            // Stands in for a running application so the instance check has something to find.
+            Thread.sleep(30_000L);
+            return;
+        }
         Path installRoot = Path.of(args[0]);
         Path storageDirectory = Path.of(args[1]);
         boolean failTrial = Boolean.parseBoolean(args[2]);

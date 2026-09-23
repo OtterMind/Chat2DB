@@ -42,6 +42,17 @@ class UpdateLayoutTest {
     }
 
     @Test
+    void keepsTheRollbackCopyNextToTheInstallTarget() {
+        UpdateLayout layout = new UpdateLayout(Path.of("Applications", "Chat2DB Community.app"), "COMMUNITY");
+
+        Path backup = layout.previousPackage();
+
+        assertEquals(layout.installTarget().resolveSibling("Chat2DB Community.app.chat2db-previous"), backup);
+        assertEquals("Chat2DB Community.app.chat2db-previous", backup.getFileName().toString());
+        assertEquals(layout.installTarget().getParent(), backup.getParent());
+    }
+
+    @Test
     void keepsEveryTransactionArtifactUnderOneCacheDirectory() {
         UpdateLayout layout = testLayout("COMMUNITY");
 

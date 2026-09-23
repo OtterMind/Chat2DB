@@ -213,6 +213,7 @@ export default {
   'setting.title.checkUpdate': '更新を確認',
   'setting.text.downloadProgress': 'ダウンロード進捗状況',
   'setting.text.notAvailable': '新しいバージョンはありません',
+  'setting.text.checkUpdateFailed': '更新の確認に失敗しました。ネットワークを確認して再試行してください',
   'setting.text.latestVersion': '最新バージョン',
   'setting.text.buildTime': 'ビルド日時',
   'setting.text.alertNewVersion': '新しいバージョンが見つかったら警告してください',

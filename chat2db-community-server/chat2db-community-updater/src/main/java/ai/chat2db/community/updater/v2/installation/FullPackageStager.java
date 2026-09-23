@@ -20,12 +20,18 @@ import java.util.concurrent.TimeUnit;
 
 public final class FullPackageStager {
 
+    /** Records which package a staging directory was produced from. */
+    static final String SOURCE_SHA_MARKER = ".source-sha256";
     private static final int MAX_ENTRY_COUNT = 100_000;
     private static final long EXTRACT_TIMEOUT_SECONDS = 180;
 
     public Path stage(Path downloadedPackage, UpdateManifest manifest, UpdateLayout layout) {
         Path stagingRoot = layout.stagingDirectory();
         try {
+            Path staged = reuseStagedPackage(stagingRoot, manifest, layout);
+            if (staged != null) {
+                return staged;
+            }
             deleteRecursively(stagingRoot);
             Files.createDirectories(stagingRoot);
             Path candidate;
@@ -47,6 +53,7 @@ public final class FullPackageStager {
             if (manifest.packageType().directReplacement()) {
                 requireCandidateLauncher(candidate, manifest);
             }
+            Files.writeString(stagingRoot.resolve(SOURCE_SHA_MARKER), manifest.packageSha256());
             return candidate;
         } catch (Exception exception) {
             try {
@@ -125,6 +132,36 @@ public final class FullPackageStager {
                 }
             }
         }
+    }
+
+    /**
+     * Returns the already staged package when the staging directory was produced from
+     * exactly this package, so a restart does not unpack the same archive again. The
+     * staged content is re-validated before it is trusted.
+     */
+    private Path reuseStagedPackage(Path stagingRoot, UpdateManifest manifest, UpdateLayout layout)
+            throws IOException {
+        Path marker = stagingRoot.resolve(SOURCE_SHA_MARKER);
+        if (!Files.isRegularFile(marker)
+                || !Files.readString(marker).trim().equalsIgnoreCase(manifest.packageSha256())) {
+            return null;
+        }
+        Path candidate = manifest.packageType() == UpdatePackageTypeEnum.MACOS_APP_ARCHIVE
+            ? stagingRoot.resolve("package")
+            : layout.stagedPackage(manifest.packageType());
+        boolean present = manifest.packageType() == UpdatePackageTypeEnum.MACOS_APP_ARCHIVE
+            ? Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)
+            : Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS);
+        if (!present) {
+            return null;
+        }
+        if (manifest.packageType() == UpdatePackageTypeEnum.MACOS_APP_ARCHIVE) {
+            validateSymlinks(candidate);
+        }
+        if (manifest.packageType().directReplacement()) {
+            requireCandidateLauncher(candidate, manifest);
+        }
+        return candidate;
     }
 
     private static void requireCandidateLauncher(Path candidate, UpdateManifest manifest) throws IOException {

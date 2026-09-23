@@ -227,7 +227,9 @@ jobs:
   build:
     name: Build ${{ matrix.artifact_name }}
     needs: resolve
-    environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
+    # Stable and beta releases share the signing environment: the keys, the Windows
+    # signing connection and the macOS notarization credentials are the same.
+    environment: community-beta-signing
     strategy:
       fail-fast: false
       matrix:
@@ -644,7 +646,9 @@ jobs:
       - resolve
       - build
     if: ${{ needs.resolve.outputs.create_release == 'true' }}
-    environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
+    # Stable and beta releases share the signing environment: the keys, the Windows
+    # signing connection and the macOS notarization credentials are the same.
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -794,7 +798,9 @@ jobs:
       - stage_release
       - docker
     if: ${{ always() && needs.stage_release.result == 'success' && needs.resolve.outputs.create_release == 'true' && (needs.resolve.outputs.channel == 'beta' || needs.docker.result == 'success') }}
-    environment: ${{ needs.resolve.outputs.channel == 'release' && 'community-release' || 'community-beta-signing' }}
+    # Stable and beta releases share the signing environment: the keys, the Windows
+    # signing connection and the macOS notarization credentials are the same.
+    environment: community-beta-signing
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,6 +1,9 @@
 import { ColorProps, ThemeAppearance } from '@chat2db/ui';
 import { LangType, UpdatedStatus } from '@/constants/settings';
 
+/** Why an update check ran; forwarded to the desktop usage report. */
+export type UpdateCheckTrigger = 'startup' | 'scheduled' | 'manual';
+
 export interface CountryItem {
   code: string;
   name: string;

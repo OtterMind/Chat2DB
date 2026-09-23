@@ -253,6 +253,7 @@ export default {
   'setting.title.checkUpdate': 'Check for updates',
   'setting.text.downloadProgress': 'Download progress',
   'setting.text.notAvailable': 'No new version available',
+  'setting.text.checkUpdateFailed': 'Failed to check for updates. Check your network and try again',
   'setting.text.latestVersion': 'Latest version',
   'setting.text.buildTime': 'Build time',
   'setting.text.alertNewVersion': 'Alert me when you find a new version',

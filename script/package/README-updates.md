@@ -166,6 +166,74 @@ their respective operating systems.
 An existing desktop without this updater must first install a version that
 includes it. Test an installed version A updating to B; successfully building B
 alone does not verify automatic updates. The helper records success only after
-both the trial and normal application report healthy startup. Installation or
-startup failures are recorded in the product update log; there is no automatic
-rollback.
+both the trial and normal application report healthy startup.
+
+### Download, staging and resume
+
+A check never discards a downloaded update. The updater remembers the signed manifest
+and its transaction in `<cache root>/update/prepared-update.json`, and the verified
+package stays in `<cache root>/update/package.<extension>`. A later session verifies the
+remembered manifest with the bundled key, checks the cached package against the size and
+SHA-256 that manifest names, and offers the update for installation without contacting
+the update source again, recording `stage=DISCOVERY event=PREPARED_UPDATE_RESTORED`. A
+remembered update whose release epoch no longer advances the installed one is spent and
+is dropped with `event=PREPARED_UPDATE_CONSUMED`. A manifest that no longer verifies or
+a package that changed is discarded with `event=PREPARED_UPDATE_DISCARDED` and is
+downloaded again.
+
+Downloading the same release twice reuses the verified package (`stage=DOWNLOADING
+event=CACHE_HIT`) and reuses the staging directory that was produced from exactly that
+package, which is recorded in `<cache root>/update/candidate/.source-sha256`; the staged
+content is re-validated before it is trusted. A download request for an update that is
+already prepared reports success and the completed progress instead of downloading it
+again, and an update check cannot discard a prepared update or a running download.
+
+### Handoff and rollback
+
+The application prepares the helper runtime, the helper JAR and `plan.json`, then
+waits up to 30 seconds for the helper to acknowledge the persisted plan before it
+exits, recording `stage=HANDOFF event=ACK_WAIT` with the helper console tail. A
+helper that never acknowledges fails the handoff with `stage=HANDOFF event=FAILED`
+and leaves the application running, so the failure is visible and the update can
+be retried against the same transaction.
+
+On macOS the helper is loaded as a per-product LaunchAgent
+(`~/Library/LaunchAgents/com.chat2db.updater.<product>.plist`) with
+`AbandonProcessGroup`. This matters because a helper spawned as a plain child of
+the application is reclaimed together with the application, which exits right
+after the handoff while the helper JVM is still starting, and
+`AbandonProcessGroup` keeps the relaunched application alive once the helper
+exits. The agent uses one stable label per product and stays registered. It is loaded
+with `RunAtLoad` disabled and started with `launchctl kickstart`: macOS reports a
+newly registered background item to the user once, so registering the label again
+on every update, or unloading it after every update, would notify the user each
+time. Later updates reuse the loaded job and only rewrite the plist and kickstart
+it. Because `RunAtLoad` is disabled, the plist that stays behind cannot replay an
+outdated plan at the next login. The helper deletes the consumed `plan.json` when
+it finishes.
+
+When launchd refuses the agent, for example in a restricted session or under a
+managed policy, the handoff records `stage=HANDOFF event=AGENT_FALLBACK` and
+starts the helper directly. That path keeps the previous timing behaviour: the
+helper can still be reclaimed together with the application, and the
+acknowledgement only proves that it started. A handoff that times out also ends
+the helper it started, so a helper that never acknowledged cannot switch
+anything later.
+
+Before the switch the installed package is moved aside to
+`<install target>.chat2db-previous` on the same volume, so the switch no longer
+deletes the only working copy. The transaction commits only after the trial and
+the relaunched application both report healthy startup, and that commit releases
+the backup. For direct-replacement packages any failure after the switch
+restores and relaunches the previous package and records `stage=ROLLING_BACK`;
+when the restore itself fails, the failure message names the backup that still
+holds the last usable copy. Native installers (Windows EXE/MSI, DEB, RPM) have no
+backup and therefore no rollback. The helper also refuses to switch a
+direct-replacement package while another instance of the installed application is
+still running, because such an instance makes the trial candidate exit
+immediately.
+
+A rollback restores the package only: data and schema changes the candidate
+already applied while starting are not reverted. A transaction that fails
+otherwise leaves the update log as the only record; installation and startup
+failures are appended to it.

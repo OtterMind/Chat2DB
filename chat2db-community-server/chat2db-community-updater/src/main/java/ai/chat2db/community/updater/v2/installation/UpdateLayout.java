@@ -158,8 +158,31 @@ public final class UpdateLayout {
             : stagingDirectory().resolve("package." + packageType.fileExtension());
     }
 
+    /**
+     * Persisted description of a downloaded, staged update: the signed manifest plus
+     * the transaction it belongs to, so a later session can install it without
+     * downloading the package again.
+     */
+    public Path preparedUpdateFile() {
+        return updateWorkspace().resolve("prepared-update.json");
+    }
+
     public Path stagingDirectory() {
         return updateWorkspace().resolve("candidate");
+    }
+
+    /**
+     * Same-volume backup of the installed package. The switch renames the
+     * installed package here before copying the candidate, so a failed switch or
+     * a candidate that never becomes healthy can be rolled back.
+     */
+    public Path previousPackage() {
+        Path target = installTarget();
+        Path name = target.getFileName();
+        if (name == null) {
+            throw new IllegalStateException("Install target has no file name: " + target);
+        }
+        return target.resolveSibling(name + ".chat2db-previous");
     }
 
     public Path workDirectory() {

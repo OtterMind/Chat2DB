@@ -255,6 +255,7 @@ export default {
   'setting.title.checkUpdate': 'Buscar actualizaciones',
   'setting.text.downloadProgress': 'Progreso de descarga',
   'setting.text.notAvailable': 'No hay ninguna versión nueva disponible',
+  'setting.text.checkUpdateFailed': 'No se pudo buscar actualizaciones. Comprueba la red e inténtalo de nuevo',
   'setting.text.latestVersion': 'Versión más reciente',
   'setting.text.buildTime': 'Fecha de compilación',
   'setting.text.alertNewVersion': 'Avisarme cuando se encuentre una versión nueva',

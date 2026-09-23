@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -33,13 +34,18 @@ class UpdateHelperMainTest {
     Path temporaryDirectory;
 
     @AfterEach
-    void awaitNormalCandidateExitBeforeDeletingItsWorkingDirectory() throws Exception {
+    void awaitSpawnedApplicationsExitBeforeDeletingTheWorkingDirectory() throws Exception {
         Path pidFile = temporaryDirectory.resolve("success-install/normal.pid");
         if (Files.isRegularFile(pidFile)) {
             ProcessHandle process = ProcessHandle.of(Long.parseLong(Files.readString(pidFile))).orElse(null);
             if (process != null) {
                 process.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS);
             }
+        }
+        // A relaunched application uses the install target as its working directory, and Windows
+        // cannot delete a directory that a running process still uses.
+        for (ProcessHandle descendant : ProcessHandle.current().descendants().toList()) {
+            descendant.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS);
         }
     }
 
@@ -54,11 +60,16 @@ class UpdateHelperMainTest {
         }
         assertEquals("new", Files.readString(fixture.layout().installTarget().resolve("version.txt")));
         assertEquals("migrated-schema", Files.readString(fixture.storage().resolve("chat2db.db")));
-        waitForFile(fixture.layout().installTarget().resolve("normal-restarted.txt"));
+        awaitFile(fixture.layout().installTarget().resolve("normal-restarted.txt"),
+            fixture.layout().auditLogFile("tx-1"));
         assertEquals("normal",
             Files.readString(fixture.layout().installTarget().resolve("normal-restarted.txt")));
         assertFalse(Files.exists(fixture.layout().healthFile("tx-1")));
         assertFalse(Files.exists(fixture.layout().updateWorkspace().resolve("health.json")));
+        assertFalse(Files.exists(fixture.layout().workDirectory().resolve("plan.json")),
+            "a consumed plan must not be left behind for a later login to replay");
+        assertFalse(Files.exists(fixture.layout().previousPackage()),
+            "the committed transaction must release the rollback copy");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         for (UpdatePhaseEnum phase : List.of(
                 UpdatePhaseEnum.READY_TO_SWITCH,
@@ -81,13 +92,19 @@ class UpdateHelperMainTest {
         int exitCode = UpdateHelperMain.run(fixture.planFile());
 
         assertEquals(1, exitCode);
-        assertEquals("new", Files.readString(fixture.layout().installTarget().resolve("version.txt")));
+        assertEquals("old", Files.readString(fixture.layout().installTarget().resolve("version.txt")),
+            "a candidate that never becomes healthy must be rolled back");
+        awaitFile(fixture.layout().installTarget().resolve("rollback-restarted.txt"),
+            fixture.layout().auditLogFile("tx-1"));
         assertEquals("migrated-schema", Files.readString(fixture.storage().resolve("chat2db.db")));
+        assertFalse(Files.exists(fixture.layout().previousPackage()),
+            "the rollback consumes the backup of the previous package");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         assertTrue(audit.contains("stage=SWITCHING"));
         assertTrue(audit.contains("stage=STARTING_CANDIDATE"));
         assertTrue(audit.contains("phase=FAILED"));
         assertTrue(audit.contains("exited before reporting TRIAL_HEALTHY"));
+        assertTrue(audit.contains("stage=ROLLING_BACK event=RESTORED"));
         assertTrue(audit.contains("outcome=FAILED"));
     }
 
@@ -98,11 +115,49 @@ class UpdateHelperMainTest {
         int exitCode = UpdateHelperMain.run(fixture.planFile());
 
         assertEquals(1, exitCode);
+        assertEquals("old", Files.readString(fixture.layout().installTarget().resolve("version.txt")),
+            "a relaunched application that never reports health must be rolled back");
         String audit = Files.readString(fixture.layout().auditLogFile("tx-1"));
         assertTrue(audit.contains("stage=RESTARTING_NORMAL"));
         assertTrue(audit.contains("phase=FAILED"));
+        assertTrue(audit.contains("stage=ROLLING_BACK event=RESTORED"));
         assertFalse(audit.contains("phase=COMMITTED"));
         assertFalse(audit.contains("outcome=SUCCESS"));
+    }
+
+    @Test
+    void refusesToSwitchWhileAnotherInstanceIsStillRunning() throws Exception {
+        assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"),
+            "the instance check reads other processes' command lines, which Windows does not expose");
+        Fixture fixture = fixture(false, false);
+        Path testClasses = Path.of(FakeCandidateMain.class.getProtectionDomain()
+            .getCodeSource().getLocation().toURI());
+        Path javaExecutable = Path.of(System.getProperty("java.home"), "bin",
+            System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
+        List<String> holdCommand = List.of(javaExecutable.toString(), "-cp", testClasses.toString(),
+            FakeCandidateMain.class.getName(), "--hold");
+        UpdateHelperPlan plan = new UpdateHelperPlan(
+            transaction("tx-instance"), fixture.layout().installRoot().toString(), "COMMUNITY",
+            fixture.layout().cacheRoot().toString(), fixture.layout().supportRoot().toString(),
+            Long.MAX_VALUE, UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db", List.of(),
+            holdCommand, 5);
+        Process otherInstance = new ProcessBuilder(holdCommand)
+            .redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .start();
+        try {
+            Thread.sleep(500L);
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> UpdateHelperMain.ensureNoOtherInstance(plan, fixture.layout(),
+                    UpdateAuditLog.open(fixture.layout(), "tx-1", "TEST")));
+
+            assertTrue(failure.getMessage().contains("Another instance"), failure.getMessage());
+            assertEquals("old", Files.readString(fixture.layout().installTarget().resolve("version.txt")),
+                "refusing to switch must leave the installed package untouched");
+        } finally {
+            otherInstance.destroyForcibly();
+            otherInstance.waitFor();
+        }
     }
 
     @Test
@@ -161,6 +216,8 @@ class UpdateHelperMainTest {
             .transition(UpdatePhaseEnum.PRECHECKED, 5L)
             .transition(UpdatePhaseEnum.QUIESCING, 6L);
         UpdateAuditLog.open(layout, transaction.transactionId(), "TEST").state(transaction);
+        Files.createDirectories(layout.workDirectory());
+        Files.writeString(layout.workDirectory().resolve("plan.json"), "{}");
         Files.createDirectories(layout.updateWorkspace());
         Files.writeString(layout.updateWorkspace().resolve("health.json"),
             "{\"transactionId\":\"stale-tx\",\"version\":\"5.3.3\","
@@ -236,10 +293,20 @@ class UpdateHelperMainTest {
         );
     }
 
-    private static void waitForFile(Path file) throws Exception {
+    private static void awaitFile(Path file, Path auditLog) throws Exception {
         long deadline = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
         while (!Files.exists(file) && System.nanoTime() < deadline) {
             Thread.sleep(20L);
+        }
+        assertTrue(Files.isRegularFile(file),
+            () -> "expected " + file + "\n" + readQuietly(auditLog));
+    }
+
+    private static String readQuietly(Path file) {
+        try {
+            return Files.readString(file);
+        } catch (Exception unreadable) {
+            return unreadable.toString();
         }
     }
 

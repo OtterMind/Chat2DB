@@ -11,6 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OracleSqlBuilderTest {
 
     @Test
+    void shouldWrapPlainStatementWithExplainPlan() {
+        assertEquals("EXPLAIN PLAN FOR SELECT * FROM EMPLOYEE",
+                new OracleSqlBuilder().buildExplain("SELECT * FROM EMPLOYEE"));
+    }
+
+    @Test
+    void shouldNotWrapStatementThatAlreadyExplains() {
+        assertEquals("EXPLAIN PLAN FOR SELECT * FROM EMPLOYEE",
+                new OracleSqlBuilder().buildExplain("EXPLAIN PLAN FOR SELECT * FROM EMPLOYEE"));
+    }
+
+    @Test
     void shouldLimitFirstPageWithoutExposingSyntheticRowId() {
         OracleSqlBuilder builder = new OracleSqlBuilder();
 

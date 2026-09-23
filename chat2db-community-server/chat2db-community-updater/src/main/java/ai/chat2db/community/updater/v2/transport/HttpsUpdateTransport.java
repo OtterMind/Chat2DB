@@ -126,8 +126,34 @@ public final class HttpsUpdateTransport implements UpdateTransport {
         if (!"https".equalsIgnoreCase(finalUri.getScheme())) {
             throw new IllegalStateException("Update request redirected away from HTTPS: " + requestedUrl);
         }
+        if (response.statusCode() == 404) {
+            throw new MissingUpdateResourceException(
+                "Update server returned HTTP " + response.statusCode());
+        }
         if (response.statusCode() != 200) {
             throw new IllegalStateException("Update server returned HTTP " + response.statusCode());
         }
+    }
+
+    /**
+     * A release index or manifest that the update source does not publish. A channel that has not
+     * published its index yet is not a failure the user can act on, unlike a timeout or a server
+     * error, so the update check reports the two cases differently.
+     */
+    public static final class MissingUpdateResourceException extends IllegalStateException {
+
+        public MissingUpdateResourceException(String message) {
+            super(message);
+        }
+    }
+
+    /** Whether the failure is only a missing release index or manifest. */
+    public static boolean isMissingResource(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof MissingUpdateResourceException) {
+                return true;
+            }
+        }
+        return false;
     }
 }

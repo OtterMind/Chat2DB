@@ -8,6 +8,7 @@ import ai.chat2db.plugin.oracle.enums.type.OracleDefaultValueEnum;
 import ai.chat2db.plugin.oracle.enums.type.OracleIndexTypeEnum;
 import ai.chat2db.plugin.oracle.value.OracleValueProcessor;
 import ai.chat2db.community.tools.util.I18nUtils;
+import ai.chat2db.spi.ICommandExecutor;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
@@ -493,6 +494,11 @@ public class OracleMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
         return ORACLE_SQL_IDENTIFIER_PROCESSOR;
+    }
+
+    @Override
+    public ICommandExecutor getCommandExecutor() {
+        return OracleCommandExecutor.INSTANCE;
     }
 
     @Override

@@ -21,4 +21,9 @@ public interface IDesktopUpdater {
     default boolean isBetaEnabled() {
         return false;
     }
+
+    /** Installed version from the update layout ({@code <app>/version.json}); empty when unknown. */
+    default String installedVersion() {
+        return "";
+    }
 }

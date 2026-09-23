@@ -2,6 +2,7 @@ import createJcefApi from './base';
 import {
   IUpdateDetail,
   IUpdatePreferences,
+  UpdateCheckTrigger,
   McpRestartResult,
   McpStatus,
 } from '@/typings/settings';
@@ -162,8 +163,8 @@ const jcefApi = {
     return createJcefApi<boolean>('is-window-full-screen');
   },
   // Check for updates
-  appCheckUpdate: () => {
-    return createJcefApi<IUpdateDetail>('app-check-update');
+  appCheckUpdate: (data?: { trigger?: UpdateCheckTrigger; offlineActivation?: boolean }) => {
+    return createJcefApi<IUpdateDetail>('app-check-update', data);
   },
   // Start downloading hot updates
   triggerDownload: () => {

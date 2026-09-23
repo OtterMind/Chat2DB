@@ -232,6 +232,7 @@ export default {
   'setting.title.checkUpdate': '检查更新',
   'setting.text.downloadProgress': '下载进度',
   'setting.text.notAvailable': '没有可用的新版本',
+  'setting.text.checkUpdateFailed': '检查更新失败，请检查网络后重试',
   'setting.text.latestVersion': '最新版本',
   'setting.text.buildTime': '构建时间',
   'setting.text.alertNewVersion': '发现新版本时提醒我',

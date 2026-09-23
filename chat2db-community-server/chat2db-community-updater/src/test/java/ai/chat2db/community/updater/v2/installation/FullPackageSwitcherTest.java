@@ -4,8 +4,11 @@ import ai.chat2db.community.updater.v2.enums.UpdatePackageTypeEnum;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,10 +30,126 @@ class FullPackageSwitcherTest {
 
         assertEquals("new", Files.readString(layout.installTarget().resolve("version.txt")));
         assertEquals("new", Files.readString(stagedPackage.resolve("version.txt")));
+        assertTrue(Files.isDirectory(layout.previousPackage()),
+            "the previous package must stay available until the candidate is healthy");
 
         switcher.commit("tx-1");
 
         assertEquals("new", Files.readString(layout.installTarget().resolve("version.txt")));
+        assertFalse(Files.exists(layout.previousPackage()),
+            "a committed transaction must release the previous package backup");
+    }
+
+    @Test
+    void keepsThePreviousPackageOutsideTheInstallTarget() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-backup");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        Path backup = switcher.switchToCandidate("tx-backup", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertEquals(layout.previousPackage(), backup);
+        assertEquals("old", Files.readString(backup.resolve("version.txt")));
+        assertEquals("old-java", Files.readString(backup.resolve("old-runtime/bin/java")));
+        assertFalse(Files.exists(layout.installTarget().resolve("old-runtime/bin/java")),
+            "the install target must contain only the candidate after the switch");
+    }
+
+    @Test
+    void rollsBackToThePreviousPackage() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-rollback");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+        switcher.switchToCandidate("tx-rollback", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertTrue(switcher.rollback("tx-rollback", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+
+        assertEquals("old", Files.readString(layout.installTarget().resolve("version.txt")));
+        assertEquals("old-java", Files.readString(layout.installTarget().resolve("old-runtime/bin/java")));
+        assertFalse(Files.exists(layout.previousPackage()), "the backup is consumed by the rollback");
+    }
+
+    @Test
+    void refusesToDropALeftoverBackupWhenTheInstalledPackageIsUnreadable() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-leftover");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+        Files.createDirectories(layout.previousPackage());
+        Files.writeString(layout.previousPackage().resolve("version.txt"), "last-good");
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> switcher.switchToCandidate("tx-leftover", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+
+        assertTrue(failure.getMessage().contains("refusing to switch"), failure.getMessage());
+        assertEquals("last-good", Files.readString(layout.previousPackage().resolve("version.txt")));
+        assertTrue(Files.exists(layout.installTarget().resolve("version.txt")));
+    }
+
+    @Test
+    void dropsALeftoverBackupWhenTheInstalledPackageIsStillUsable() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-stale");
+        Files.createDirectories(layout.previousPackage());
+        Files.writeString(layout.previousPackage().resolve("version.txt"), "stale");
+        Files.createDirectories(layout.appDirectory());
+        Files.writeString(layout.appDirectory().resolve("version.json"),
+            "{\"version\":\"5.3.3\",\"releaseEpoch\":100,\"buildSha\":\"test\"}");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        switcher.switchToCandidate("tx-stale", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+
+        assertEquals("old", Files.readString(layout.previousPackage().resolve("version.txt")),
+            "the freshly moved backup replaces the stale one");
+    }
+
+    @Test
+    void swapsASingleFilePackageEvenWhenALeftoverBackupExists() throws Exception {
+        Path target = temporaryDirectory.resolve("Applications/Chat2DB.AppImage");
+        UpdateLayout layout = testLayout(target);
+        Files.createDirectories(target.getParent());
+        Files.writeString(target, "old-image");
+        Files.writeString(layout.previousPackage(), "leftover-image");
+        Path staged = layout.stagedPackage(UpdatePackageTypeEnum.LINUX_APPIMAGE);
+        Files.createDirectories(staged.getParent());
+        Files.writeString(staged, "new-image");
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        switcher.switchToCandidate("tx-image-leftover", UpdatePackageTypeEnum.LINUX_APPIMAGE);
+
+        assertEquals("new-image", Files.readString(target));
+        assertEquals("old-image", Files.readString(layout.previousPackage()));
+    }
+
+    @Test
+    void restoresTheInstallTargetWhenCopyingTheCandidateFails() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-copy-failure");
+        Path stagedPackage = layout.stagedPackage(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE);
+        Path unreadable = stagedPackage.resolve("blocked.bin");
+        Files.writeString(unreadable, "blocked");
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"),
+            "a copy failure is triggered with posix permissions");
+        assumeTrue(unreadable.toFile().setReadable(false, false), "cannot make a file unreadable here");
+        Files.setPosixFilePermissions(stagedPackage, java.nio.file.attribute.PosixFilePermissions.fromString("r-xr-xr-x"));
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+        try {
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> switcher.switchToCandidate("tx-copy-failure", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+
+            assertTrue(failure.getMessage().contains("previous package is kept at")
+                    || failure.getMessage().contains("Cannot switch full application package"),
+                failure.getMessage());
+            assertEquals("old", Files.readString(layout.installTarget().resolve("version.txt")),
+                "a failed copy must not leave the install target without the previous package");
+        } finally {
+            Files.setPosixFilePermissions(stagedPackage, java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
+            unreadable.toFile().setReadable(true, false);
+        }
+    }
+
+    @Test
+    void rollbackWithoutBackupIsANoOp() throws Exception {
+        UpdateLayout layout = prepareArchiveLayout("tx-none");
+        Files.createDirectories(layout.installTarget());
+        FullPackageSwitcher switcher = new FullPackageSwitcher(layout);
+
+        assertFalse(switcher.rollback("tx-none", UpdatePackageTypeEnum.MACOS_APP_ARCHIVE));
+        assertFalse(Files.exists(layout.previousPackage()));
     }
 
     @Test

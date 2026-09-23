@@ -66,6 +66,7 @@ async function run() {
   };
   const state: any = {
     updateDetail: { status: UpdatedStatus.Updated },
+    offlineActivation: false,
     hotUpdateConfig: {
       remindMe: true,
       autoDownload: false,
@@ -84,8 +85,10 @@ async function run() {
 
   try {
     let desktopBridgeCalls = 0;
-    jcefApi.appCheckUpdate = async () => {
+    let lastCheckRequest: any;
+    jcefApi.appCheckUpdate = async (request?: any) => {
       desktopBridgeCalls += 1;
+      lastCheckRequest = request;
       return { status: UpdatedStatus.Available, version: '5.3.1' } as any;
     };
     jcefApi.triggerInstallation = async () => {
@@ -102,11 +105,21 @@ async function run() {
     };
 
     await state.updateAndRestartApp();
-    assert.equal(await state.handleCheckUpdate(), true);
+    // The check only reports whether an update exists, so the installation that is running keeps
+    // its own status: the test starts the availability part from a neutral state.
+    state.updateDetail.status = UpdatedStatus.Default;
+    assert.equal(await state.handleCheckUpdate('startup'), true);
+    assert.deepEqual(lastCheckRequest, { trigger: 'startup', offlineActivation: false });
+
+    state.offlineActivation = true;
+    assert.equal(await state.handleCheckUpdate('scheduled'), true);
+    assert.deepEqual(lastCheckRequest, { trigger: 'scheduled', offlineActivation: true });
+    state.setOfflineActivation(false);
+
     await state.syncUpdatePreferences();
     await state.updateHotUpdateConfig('receiveBeta', true);
 
-    assert.equal(desktopBridgeCalls, 5);
+    assert.equal(desktopBridgeCalls, 6);
     assert.equal(state.updateDetail.status, UpdatedStatus.Available);
     assert.equal(state.hotUpdateConfig.receiveBeta, true);
 
@@ -123,6 +136,74 @@ async function run() {
     await state.updateAndRestartApp();
     assert.equal(restarts, 0);
     assert.equal(state.updateDetail.status, UpdatedStatus.UpdateFailed);
+
+    // A check must never erase the progress the desktop updater already reported.
+    let checkStatus = UpdatedStatus.NotAvailable;
+    let checkVersion = '5.3.1';
+    jcefApi.appCheckUpdate = async () => ({ status: checkStatus, version: checkVersion }) as any;
+
+    state.updateDetail.status = UpdatedStatus.Updating;
+    assert.equal(await state.handleCheckUpdate('scheduled'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Updating);
+
+    state.updateDetail.status = UpdatedStatus.Installing;
+    assert.equal(await state.handleCheckUpdate('scheduled'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Installing);
+
+    state.updateDetail.status = UpdatedStatus.Updated;
+    assert.equal(await state.handleCheckUpdate('scheduled'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+
+    // A failed check must not report a failed download or installation either.
+    jcefApi.appCheckUpdate = async () => {
+      throw new Error('desktop bridge failed');
+    };
+    assert.equal(await state.handleCheckUpdate('scheduled'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+
+    // A check that cannot reach the update source reports a failure, not "no update".
+    state.updateDetail.status = UpdatedStatus.Default;
+    assert.equal(await state.handleCheckUpdate('manual'), false);
+    assert.equal(state.updateDetail.status, UpdatedStatus.UpdateFailed);
+
+    jcefApi.appCheckUpdate = async () => ({ status: checkStatus, version: checkVersion }) as any;
+
+    // A downloaded update is offered to the user instead of being reported as "no update".
+    checkStatus = UpdatedStatus.Updated;
+    state.updateDetail.status = UpdatedStatus.Default;
+    assert.equal(await state.handleCheckUpdate('manual'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Updated);
+
+    // A later release can still be discovered after the prepared one was discarded.
+    checkStatus = UpdatedStatus.Available;
+    checkVersion = '5.3.2';
+    state.updateDetail.status = UpdatedStatus.Updated;
+    assert.equal(await state.handleCheckUpdate('manual'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Available);
+    assert.equal(state.updateDetail.version, '5.3.2');
+
+    // A discovered update is still reported after a failed download.
+    state.updateDetail.status = UpdatedStatus.UpdateFailed;
+    assert.equal(await state.handleCheckUpdate('manual'), true);
+    assert.equal(state.updateDetail.status, UpdatedStatus.Available);
+
+    // Overlapping triggers share the running desktop check instead of queueing more.
+    let checks = 0;
+    let resolveCheck: (value: any) => void = () => undefined;
+    jcefApi.appCheckUpdate = async () => {
+      checks += 1;
+      return new Promise((resolve) => {
+        resolveCheck = resolve;
+      });
+    };
+    const first = state.handleCheckUpdate('manual');
+    const second = state.handleCheckUpdate('manual');
+    const scheduled = state.handleCheckUpdate('scheduled');
+    assert.equal(checks, 1);
+    resolveCheck({ status: UpdatedStatus.Available, version: '5.3.3' });
+    assert.deepEqual(await Promise.all([first, second, scheduled]), [true, true, true]);
+    assert.equal(checks, 1);
+    assert.equal(state.updateDetail.version, '5.3.3');
 
     console.log('Community hot update integration tests passed');
   } finally {

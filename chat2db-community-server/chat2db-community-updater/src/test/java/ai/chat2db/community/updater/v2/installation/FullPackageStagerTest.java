@@ -83,6 +83,104 @@ class FullPackageStagerTest {
         assertTrue(Files.isExecutable(staged));
     }
 
+    @Test
+    void reusesTheStagedPackageWhenItComesFromTheSameManifest() throws Exception {
+        Path source = temporaryDirectory.resolve("reuse-source");
+        writeExecutable(source.resolve("package/bin/chat2db"), "launcher");
+        Path archive = archive(source, "package");
+        UpdateLayout layout = testLayout("installed");
+        UpdateManifest manifest = manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db");
+        FullPackageStager stager = new FullPackageStager();
+
+        Path staged = stager.stage(archive, manifest, layout);
+        Path sentinel = staged.resolve("staged-by-the-first-attempt");
+        Files.writeString(sentinel, "kept");
+
+        Path reused = stager.stage(archive, manifest, layout);
+
+        assertEquals(staged, reused);
+        assertTrue(Files.exists(sentinel),
+            "a restart must reuse the staged package instead of unpacking the archive again");
+    }
+
+    @Test
+    void restagesWhenTheStagedPackageBelongsToAnotherManifest() throws Exception {
+        Path source = temporaryDirectory.resolve("restage-source");
+        writeExecutable(source.resolve("package/bin/chat2db"), "launcher");
+        Path archive = archive(source, "package");
+        UpdateLayout layout = testLayout("installed");
+        FullPackageStager stager = new FullPackageStager();
+
+        Path staged = stager.stage(archive, manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db"), layout);
+        Path sentinel = staged.resolve("staged-by-the-first-attempt");
+        Files.writeString(sentinel, "stale");
+        UpdateManifest other = manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db", "b".repeat(64));
+
+        Path restaged = stager.stage(archive, other, layout);
+
+        assertEquals(staged, restaged);
+        assertFalse(Files.exists(sentinel),
+            "a staging directory produced from another package must be thrown away");
+        assertTrue(Files.isRegularFile(restaged.resolve("bin/chat2db")));
+    }
+
+    @Test
+    void restagesWhenTheStagedPackageDisappeared() throws Exception {
+        Path source = temporaryDirectory.resolve("missing-candidate-source");
+        writeExecutable(source.resolve("package/bin/chat2db"), "launcher");
+        Path archive = archive(source, "package");
+        UpdateLayout layout = testLayout("installed");
+        UpdateManifest manifest = manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db");
+        FullPackageStager stager = new FullPackageStager();
+
+        Path staged = stager.stage(archive, manifest, layout);
+        deleteRecursively(staged);
+
+        Path restaged = stager.stage(archive, manifest, layout);
+
+        assertTrue(Files.isRegularFile(restaged.resolve("bin/chat2db")),
+            "a marker without the staged content must trigger a fresh extraction");
+    }
+
+    @Test
+    void restagesWhenTheMarkerIsMissing() throws Exception {
+        Path source = temporaryDirectory.resolve("no-marker-source");
+        writeExecutable(source.resolve("package/bin/chat2db"), "launcher");
+        Path archive = archive(source, "package");
+        UpdateLayout layout = testLayout("installed");
+        UpdateManifest manifest = manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db");
+        FullPackageStager stager = new FullPackageStager();
+
+        Path staged = stager.stage(archive, manifest, layout);
+        Path sentinel = staged.resolve("staged-by-the-first-attempt");
+        Files.writeString(sentinel, "stale");
+        Files.delete(layout.stagingDirectory().resolve(FullPackageStager.SOURCE_SHA_MARKER));
+
+        Path restaged = stager.stage(archive, manifest, layout);
+
+        assertEquals(staged, restaged);
+        assertFalse(Files.exists(sentinel),
+            "without the marker the staged content must not be trusted");
+    }
+
+    @Test
+    void rejectsASymlinkInAReusedStagedPackage() throws Exception {
+        Assumptions.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path source = temporaryDirectory.resolve("reused-symlink-source");
+        writeExecutable(source.resolve("package/bin/chat2db"), "launcher");
+        Path archive = archive(source, "package");
+        UpdateLayout layout = testLayout("installed");
+        UpdateManifest manifest = manifest(UpdatePackageTypeEnum.MACOS_APP_ARCHIVE, "bin/chat2db");
+        FullPackageStager stager = new FullPackageStager();
+
+        Path staged = stager.stage(archive, manifest, layout);
+        Files.createSymbolicLink(staged.resolve("outside"), Path.of("../../outside"));
+
+        assertThrows(IllegalStateException.class, () -> stager.stage(archive, manifest, layout),
+            "reusing a staging directory must re-validate it");
+        assertFalse(Files.exists(layout.stagingDirectory()));
+    }
+
     private Path archive(Path source, String topLevel) throws Exception {
         Path archive = temporaryDirectory.resolve(topLevel + "-" + System.nanoTime() + ".tar.gz");
         Process process = new ProcessBuilder(
@@ -100,13 +198,25 @@ class FullPackageStagerTest {
     }
 
     private static UpdateManifest manifest(UpdatePackageTypeEnum packageType, String launcher) {
+        return manifest(packageType, launcher, "a".repeat(64));
+    }
+
+    private static UpdateManifest manifest(UpdatePackageTypeEnum packageType, String launcher, String packageSha256) {
         return new UpdateManifest(
             2, 1, ReleaseStatusEnum.ACTIVE, "COMMUNITY", UpdateChannelEnum.STABLE, "5.3.4", "5.3.401", "sha",
             packageType == UpdatePackageTypeEnum.LINUX_APPIMAGE ? UpdatePlatformEnum.LINUX : UpdatePlatformEnum.MACOS,
             UpdateArchitectureEnum.ARM64, UpdateScopeEnum.FULL_PACKAGE, packageType,
-            "https://example.com/package." + packageType.fileExtension(), 1024, "a".repeat(64), launcher,
+            "https://example.com/package." + packageType.fileExtension(), 1024, packageSha256, launcher,
             3, 3, "https://example.com/notes", "key", "signature"
         );
+    }
+
+    private static void deleteRecursively(Path path) throws Exception {
+        try (var entries = Files.walk(path)) {
+            for (Path entry : entries.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(entry);
+            }
+        }
     }
 
     private UpdateLayout testLayout(String installName) {
