@@ -3,6 +3,7 @@ package ai.chat2db.plugin.redis;
 import ai.chat2db.plugin.redis.config.RedisScanConfig;
 import ai.chat2db.plugin.redis.constant.RedisCommandTemplates;
 import ai.chat2db.plugin.redis.constant.RedisConstants;
+import ai.chat2db.plugin.redis.enums.type.RedisDataType;
 import ai.chat2db.plugin.redis.model.RedisKey;
 import ai.chat2db.plugin.redis.model.RedisKeyScanResult;
 import ai.chat2db.plugin.redis.type.RedisScanStoppedReason;
@@ -96,7 +97,7 @@ public final class RedisKeyScanner {
     private RedisKey buildKeyHandle(String keyName) {
         RedisKey redisKey = new RedisKey();
         redisKey.setName(keyName);
-        redisKey.setType(RedisScriptExecutor.getInstance().getKeyType(keyName));
+        redisKey.setType(RedisDataType.normalizeCode(RedisScriptExecutor.getInstance().getKeyType(keyName)));
         String ttl = RedisScriptExecutor.getInstance().getTtl(keyName);
         if (StringUtils.isNotBlank(ttl)) {
             redisKey.setTtl(Long.parseLong(ttl));
