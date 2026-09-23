@@ -25,6 +25,8 @@ Chat2DB Community 是一款免费的跨平台数据库客户端,支持 Windows�
 - **数据库管理** —— 元数据浏览、表和对象管理(DDL/DML)、在线编辑数据。
 - **数据导入导出**、**Dashboard 与图表**,以及支持 **[MCP 的开源 CLI](https://github.com/OtterMind/Chat2DB-CLI)**。
 
+桌面端 MCP 的启用方式、客户端配置、可用工具和 curl 示例请参阅 [MCP 使用指南](docs/guides/mcp.md)。
+
 <div align="center">
 
 [![Chat2DB 工作台:SQL 编辑器与 AI 助手 —— 点击观看介绍视频](https://cdn.chat2db-ai.com/website/img/first_video_cover.webp)](https://cdn.chat2db-ai.com/website/video/first_sceen_en.mp4)
