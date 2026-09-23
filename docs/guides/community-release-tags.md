@@ -10,24 +10,28 @@ depend on what is already published stay a human responsibility.
 | Path | How it starts | Update channel | GitHub Release |
 | --- | --- | --- | --- |
 | Stable | Push an annotated `v<version>` tag | `STABLE` | Published and marked as the repository `latest` release |
-| Beta | Push an annotated `v<version>-beta.<n>` tag, or run *Build Community Desktop Release* from `main` | `BETA` | A prerelease with `latest=false`; the manual run needs `publish_release=true` |
+| Beta | Push an annotated `v<version>-beta.<n>` tag, or run *Build Community Desktop Release* from `main` | `BETA` | A normal release with `latest=false` whose notes say it is a Beta build; the manual run needs `publish_release=true` |
 
-A tag push creates the release itself: a numeric tag takes the Stable channel
-and the repository `latest` pointer, a `-beta.N` tag resolves to `channel=beta`,
-`prerelease=true`, `latest=false` and `publish=false`, so it creates a
-prerelease, leaves the stable index and the Docker images untouched, and only
-reaches clients that enabled Beta updates. Both tag routes require the annotated
-`release_epoch:` line. The manual run is the alternative for artwork-only
-builds: it requires `-beta.N` (`Manual Beta builds require a version ending in
--beta.N.`) and the protected `main` branch, and publishes only with
-`publish_release=true`.
+A tag push creates the release itself: a numeric tag takes the Stable channel and
+the repository `latest` pointer, a `-beta.N` tag resolves to `channel=beta`,
+`latest=false` and `publish=false`, so it leaves the stable index, the Docker
+images and the `latest` pointer untouched, and only reaches clients that enabled
+Beta updates. Both tag routes require the annotated `release_epoch:` line. The
+manual run is the alternative for artwork-only builds: it requires `-beta.N`
+(`Manual Beta builds require a version ending in -beta.N.`) and the protected
+`main` branch, and publishes only with `publish_release=true`.
+
+A Beta build is published as an ordinary release, not as a GitHub prerelease, so
+it appears in the release list next to the stable ones; its notes start with the
+Beta statement and the `-beta.<n>` version is what tells the two apart. The
+workflow reuses the stable signing environment for both channels.
 
 ## Tag names
 
 - Stable: `v<major>.<minor>.<patch>`, for example `v5.3.7`. The major version
   must be at least 4; older numbers are rejected.
 - Beta: `v<major>.<minor>.<patch>-beta.<n>`, for example `v5.3.7-beta.3`. Push it
-  to publish the Beta prerelease and to update the Beta channel index. The manual
+  to publish the Beta release and to update the Beta channel index. The manual
   run builds the same version from `source_ref`, which must name a branch, tag or
   commit that exists on the remote, so reference `main` or a reviewed commit.
   When a manual run creates the release itself, it creates this tag on the built
@@ -143,13 +147,33 @@ release workflow. This has consequences for anyone touching tags or releases:
   Beta shipped with epoch `1`, the next Stable tag needs `release_epoch: 2` or
   higher.
 
+## Beta lines and abandoned lines
+
+A feature line that has to ship before it reaches `main` keeps its own branch and
+publishes its Beta tags there:
+
+- The tag trigger accepts `v*` on any branch and builds the tagged commit, so a
+  Beta tag pushed on a release side line does not need the workflow to run from
+  `main`. The manual route still requires `main` and takes the side line as
+  `source_ref`.
+- Merge `main` into the side line before each Beta so the line does not drift.
+  Promotion stays one `main` merge, after which the stable tag is pushed on
+  `main`.
+- Reserve the version for the line — `5.4.0` for a feature release — so the
+  mainline keeps publishing patches and never ships a higher version without it.
+  A Stable release with a higher version is offered to the Beta clients and takes
+  them off the line.
+- Published versions stay published. When a line is abandoned, publish a higher
+  version instead of deleting anything: the next Stable release, or a higher Beta
+  on the mainline, is what moves those clients back.
+
 ## What the workflow checks
 
 - The tag name starts with `v` and the major version is at least 4.
 - The tag is annotated and carries a positive `release_epoch:`.
 - A tag push derives its channel from the version: numeric tags publish a stable,
-  `latest` release on the Stable channel, `-beta.N` tags publish a prerelease on
-  the Beta channel and update the Beta index.
+  `latest` release on the Stable channel, `-beta.N` tags publish a Beta release
+  that keeps `latest` on the stable one and updates the Beta index.
 - A manual run starts from `main`, needs an explicit `source_ref` and a
   `-beta.N` version, and never updates the stable `latest` pointer.
 - Every release carries exactly nine manifests (macOS arm64/x64, Windows x64,

@@ -21,7 +21,7 @@ on:
         required: true
         type: string
       publish_release:
-        description: 'Create and publish a GitHub prerelease after all platforms pass'
+        description: 'Create and publish a GitHub Beta release after all platforms pass'
         required: true
         type: boolean
         default: false
@@ -43,9 +43,9 @@ jobs:
       update_channel: ${{ steps.metadata.outputs.update_channel }}
       tag_name: ${{ steps.metadata.outputs.tag_name }}
       channel: ${{ steps.metadata.outputs.channel }}
+      tag_push: ${{ steps.metadata.outputs.tag_push }}
       create_release: ${{ steps.metadata.outputs.create_release }}
       publish: ${{ steps.metadata.outputs.publish }}
-      prerelease: ${{ steps.metadata.outputs.prerelease }}
       latest: ${{ steps.metadata.outputs.latest }}
       release_epoch: ${{ steps.update_metadata.outputs.release_epoch }}
       build_sha: ${{ steps.update_metadata.outputs.build_sha }}
@@ -96,20 +96,19 @@ jobs:
           update_channel=STABLE
           if [[ "${version}" == *-beta.* ]]; then update_channel=BETA; fi
 
-          # A Beta tag publishes a prerelease on the Beta channel, so only clients
-          # that opted into Beta updates can see it. A numeric tag stays the
-          # formal release route that updates the stable channel and Docker.
+          # A Beta tag publishes a release on the Beta channel while the Latest pointer keeps
+          # naming the stable release, so only clients that opted into Beta updates receive it.
+          # A numeric tag stays the formal release route that updates the stable channel and
+          # Docker.
           if [ "${tag_push}" = true ]; then
             create_release=true
             if [ "${update_channel}" = BETA ]; then
               channel=beta
               publish=false
-              prerelease=true
               latest=false
             else
               channel=release
               publish=true
-              prerelease=false
               latest=true
             fi
           else
@@ -120,7 +119,6 @@ jobs:
             channel=beta
             create_release="${PUBLISH_RELEASE}"
             publish=false
-            prerelease=true
             latest=false
           fi
 
@@ -130,9 +128,9 @@ jobs:
             echo "update_channel=${update_channel}"
             echo "tag_name=v${version}"
             echo "channel=${channel}"
+            echo "tag_push=${tag_push}"
             echo "create_release=${create_release}"
             echo "publish=${publish}"
-            echo "prerelease=${prerelease}"
             echo "latest=${latest}"
           } >> "${GITHUB_OUTPUT}"
 
@@ -609,7 +607,7 @@ jobs:
                   "Chat2DB Community beta release completed",
                   f"Version: {version}",
                   f"Build result: {build_result}",
-                  "Distribution: GitHub prerelease and Actions artifacts" if os.environ.get("CREATE_RELEASE") == "true" else "Distribution: GitHub Actions artifacts only",
+                  "Distribution: GitHub Beta release and Actions artifacts" if os.environ.get("CREATE_RELEASE") == "true" else "Distribution: GitHub Actions artifacts only",
                   f"Workflow run: {run_url}",
               ]
           else:
@@ -750,7 +748,7 @@ jobs:
           TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
           VERSION: ${{ needs.resolve.outputs.version }}
           BUILD_SHA: ${{ needs.resolve.outputs.build_sha }}
-          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
+          TAG_PUSH: ${{ needs.resolve.outputs.tag_push }}
         run: |
           set -euo pipefail
           RELEASE_TITLE="Chat2DB v${VERSION}"
@@ -764,18 +762,37 @@ jobs:
             gh release upload "${TAG_NAME}" release-assets/* --clobber
           else
             release_args=("${TAG_NAME}" release-assets/* --draft --title "${RELEASE_TITLE}" --target "${BUILD_SHA}")
-            if [ "${PRERELEASE}" = true ]; then
-              release_args+=(--prerelease --latest=false --notes "Chat2DB Community Beta ${VERSION}")
-            else
-              release_args+=(--verify-tag --generate-notes)
+            # Only a tag push has a tag to verify; a manual Beta run creates the release itself.
+            if [ "${TAG_PUSH}" = true ]; then
+              release_args+=(--verify-tag)
             fi
-            gh release create "${release_args[@]}"
+            gh release create "${release_args[@]}" --generate-notes
           fi
 
           test "$(gh release view "${TAG_NAME}" --json name --jq '.name')" = "${RELEASE_TITLE}"
           find release-assets -maxdepth 1 -type f -exec basename {} \; | sort > expected-assets.txt
           gh release view "${TAG_NAME}" --json assets --jq '.assets[].name' | sort > actual-assets.txt
           diff -u expected-assets.txt actual-assets.txt
+
+      - name: State that a Beta build is not the stable release
+        if: ${{ needs.resolve.outputs.channel == 'beta' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          statement="**This is a Beta build, not the stable release.** The Latest release stays the stable one, and this build reaches clients only after Beta updates are enabled in the app; everyone else can install it from the files below."
+
+          body=$(gh release view "${TAG_NAME}" --json body --jq '.body')
+          if [[ "${body}" == "${statement}"* ]]; then
+            echo "Beta statement already present on ${TAG_NAME}"
+            exit 0
+          fi
+
+          printf '%s\n\n%s\n' "${statement}" "${body}" > beta-notes.md
+          gh release edit "${TAG_NAME}" --notes-file beta-notes.md
 
   docker:
     name: Publish Docker image
@@ -821,11 +838,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.resolve.outputs.tag_name }}
-          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
+          CHANNEL: ${{ needs.resolve.outputs.channel }}
         run: |
           set -euo pipefail
-          if [ "${PRERELEASE}" = true ]; then
-            gh release edit "${TAG_NAME}" --draft=false --prerelease --latest=false
+          # The Latest pointer follows the channel, not the release kind: a Beta build is a normal
+          # release that must never take it away from the stable one.
+          if [ "${CHANNEL}" = beta ]; then
+            gh release edit "${TAG_NAME}" --draft=false --latest=false
           else
             gh release edit "${TAG_NAME}" --draft=false --latest
           fi

@@ -58,8 +58,8 @@ class CommunityBetaWorkflowTest < Minitest::Test
     assert status.success?, error
     assert_equal({'version' => '5.3.7-beta.3', 'native_version' => '5.3.703',
                   'update_channel' => 'BETA', 'tag_name' => 'v5.3.7-beta.3',
-                  'channel' => 'beta', 'create_release' => 'false', 'publish' => 'false',
-                  'prerelease' => 'true', 'latest' => 'false'}, values)
+                  'channel' => 'beta', 'tag_push' => 'false', 'create_release' => 'false',
+                  'publish' => 'false', 'latest' => 'false'}, values)
   end
 
   def test_manual_beta_release_is_explicitly_opt_in
@@ -82,20 +82,38 @@ class CommunityBetaWorkflowTest < Minitest::Test
     assert status.success?, error
     assert_equal 'true', values['publish']
     assert_equal 'true', values['create_release']
-    assert_equal 'false', values['prerelease']
+    assert_equal 'true', values['tag_push']
     assert_equal 'true', values['latest']
     assert_equal 'release', values['channel']
     assert_equal 'STABLE', values['update_channel']
     assert_equal '5.3.799', values['native_version']
   end
 
-  def test_beta_tag_publishes_a_prerelease_on_the_beta_channel
+  def test_beta_tag_publishes_a_release_that_never_takes_latest
     values, status, error = metadata('', event: 'push', ref: 'refs/tags/v5.3.7-beta.3', source: '')
     assert status.success?, error
     assert_equal({'version' => '5.3.7-beta.3', 'native_version' => '5.3.703',
                   'update_channel' => 'BETA', 'tag_name' => 'v5.3.7-beta.3',
-                  'channel' => 'beta', 'create_release' => 'true', 'publish' => 'false',
-                  'prerelease' => 'true', 'latest' => 'false'}, values)
+                  'channel' => 'beta', 'tag_push' => 'true', 'create_release' => 'true',
+                  'publish' => 'false', 'latest' => 'false'}, values)
+  end
+
+  def test_beta_release_keeps_the_latest_pointer_and_says_so
+    stage = WORKFLOW['jobs']['stage_release']['steps']
+    create = stage.find { |step| step['name'] == 'Create or refresh draft Release' }
+    statement = stage.find { |step| step['name'] == 'State that a Beta build is not the stable release' }
+    publish = WORKFLOW['jobs']['publish_release']['steps']
+    publish_step = publish.find { |step| step['name'] == 'Publish validated Release' }
+
+    # A Beta tag publishes a normal release, so nothing may mark it as a prerelease.
+    refute_includes WORKFLOW.to_yaml, '--prerelease'
+    assert_includes create['run'], 'if [ "${TAG_PUSH}" = true ]'
+    assert_includes create['run'], '--generate-notes'
+    assert_equal "${{ needs.resolve.outputs.channel == 'beta' }}", statement['if']
+    assert_includes statement['run'], '--notes-file'
+    assert_includes publish_step['run'], 'if [ "${CHANNEL}" = beta ]'
+    assert_includes publish_step['run'], '--draft=false --latest=false'
+    assert_includes publish_step['run'], '--draft=false --latest'
   end
 
   def test_release_epoch_comes_from_the_annotated_tag_on_tag_pushes

@@ -68,10 +68,11 @@ versions use this numeric form. Beta update manifests use channel `BETA` and
 the same native version. Keep this mapping for subsequent Stable packages to
 avoid a native-version downgrade after installing a Beta.
 
-Manual Beta runs create a GitHub Pre-release with the installers and update
+Manual Beta runs create a GitHub release with the installers and update
 resources after all platform jobs pass. They do not publish Docker images or
-stable/latest pointers. The release is explicitly marked prerelease and does
-not become the stable Community update source. After publishing the versioned
+stable/latest pointers. The release is an ordinary release, not a GitHub
+prerelease: its notes state that it is a Beta build, and it does not become the
+stable Community update source. After publishing the versioned
 release, the workflow appends `release-index.json` to the `community-beta-index`
 branch, which is the Beta channel pointer. A published release cannot have its
 assets replaced, so that branch is the only mutable part of the channel; the
@@ -79,9 +80,9 @@ versioned release itself stays immutable. The branch is machine-owned: only the
 release workflow writes it, it is never merged into `main`, and it is never
 reviewed. A run whose index is already on the branch makes no commit. The
 workflow appends commits (no force-push) and fails when the pointer cannot be
-updated. Pushing an annotated Beta tag takes the same route: it creates a
-prerelease on the Beta channel, requires `release_epoch` in the tag annotation,
-and never moves the stable `latest` pointer or the Docker images, so only clients that
+updated. Pushing an annotated Beta tag takes the same route: it publishes a Beta
+release, requires `release_epoch` in the tag annotation, and never moves the
+stable `latest` pointer or the Docker images, so only clients that
 enabled Beta updates can see it. Numeric Stable tags retain the formal release
 path. Builds with `publish_release=false` do not change either update channel.
 
