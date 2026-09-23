@@ -41,6 +41,14 @@ Chat2DB Community is a free, cross-platform database client for Windows, macOS, 
 | --- | --- |
 | ![Visual data management](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![Data import and export](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
+## Early preview
+
+The next feature line ships as an early preview before it reaches the regular Beta channel:
+
+- **[Chat2DB Community 5.4.0-beta.1 (early preview)](https://github.com/OtterMind/Chat2DB/releases/tag/v5.4.0-beta.1)** — installers for macOS, Windows and Linux.
+- It adds an optional local agent runtime with skills, external MCP servers, and file and terminal tools; choose **Pi Agent** in the AI input's runtime selector to enable it (the first selection asks for confirmation and downloads the runtime).
+- This preview is neither the stable nor the regular Beta release: `Latest` stays on the stable build, and the regular Beta line continues with `5.3.8-beta.x`. Enable **Receive Beta versions** in **Settings → About Us** to receive it in the app.
+
 ## Quick Start
 
 ### Option 1: Desktop App

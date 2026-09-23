@@ -41,6 +41,14 @@ Chat2DB Community は、Windows、macOS、Linux に対応した無料のクロ�
 | --- | --- |
 | ![ビジュアルデータ管理](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![データのインポートとエクスポート](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
+## アーリープレビュー
+
+次の機能ラインは、通常の Beta チャネルに届く前にアーリープレビューとして公開されます。
+
+- **[Chat2DB Community 5.4.0-beta.1（アーリープレビュー）](https://github.com/OtterMind/Chat2DB/releases/tag/v5.4.0-beta.1)** — macOS、Windows、Linux のインストーラー。
+- スキル、外部 MCP サーバー、ファイル／ターミナルツールを含むオプションのローカルエージェントランタイムを追加します。AI 入力欄のランタイムセレクターで **Pi Agent** を選ぶと有効になります（初回は確認のうえランタイムをダウンロードします）。
+- このプレビューは安定版でも通常の Beta でもありません。`Latest` は安定版のままで、通常の Beta ラインは `5.3.8-beta.x` として続きます。アプリ内で受け取るには **設定 → 私たちについて** で **Beta バージョンを受け取る** を有効にします。
+
 ## クイックスタート
 
 ### オプション 1: デスクトップアプリ

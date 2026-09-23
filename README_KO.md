@@ -41,6 +41,14 @@ Chat2DB Community는 Windows, macOS, Linux를 지원하는 무료 크로스 플�
 | --- | --- |
 | ![시각적 데이터 관리](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![데이터 가져오기 및 내보내기](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
+## 얼리 프리뷰
+
+다음 기능 라인은 정규 Beta 채널에 도달하기 전에 얼리 프리뷰로 공개됩니다.
+
+- **[Chat2DB Community 5.4.0-beta.1(얼리 프리뷰)](https://github.com/OtterMind/Chat2DB/releases/tag/v5.4.0-beta.1)** — macOS, Windows, Linux 설치 파일.
+- 스킬, 외부 MCP 서버, 파일 및 터미널 도구를 포함한 선택적 로컬 에이전트 런타임을 추가합니다. AI 입력창의 런타임 선택기에서 **Pi Agent**를 선택하면 활성화됩니다(처음 선택할 때 확인 후 런타임을 내려받습니다).
+- 이 프리뷰는 안정 버전도, 정규 Beta도 아닙니다. `Latest`는 안정 버전으로 유지되고 정규 Beta 라인은 `5.3.8-beta.x`로 이어집니다. 앱에서 받으려면 **설정 → Chat2DB 정보**에서 **Beta 버전 받기**를 켜세요.
+
 ## 빠른 시작
 
 ### 옵션 1: 데스크톱 앱

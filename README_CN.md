@@ -41,6 +41,14 @@ Chat2DB Community 是一款免费的跨平台数据库客户端,支持 Windows�
 | --- | --- |
 | ![可视化数据管理](https://cdn.chat2db-ai.com/website/img/visual_data_mnagement_en.png) | ![数据导入导出](https://cdn.chat2db-ai.com/website/img/import_export_data_en.png) |
 
+## 超前预览
+
+下一条功能线在进入常规 Beta 通道之前，先以超前预览的形式发布：
+
+- **[Chat2DB Community 5.4.0-beta.1（超前预览）](https://github.com/OtterMind/Chat2DB/releases/tag/v5.4.0-beta.1)** —— 提供 macOS、Windows、Linux 安装包。
+- 它带来可选的本地 Agent 运行时，包含技能、外部 MCP Server、文件与终端工具；在 AI 输入框的运行时选择器里选 **Pi Agent** 即可启用（首次选择会确认并下载运行时）。
+- 该预览版既不是稳定版，也不是常规 Beta：`Latest` 仍是稳定版，常规 Beta 线继续走 `5.3.8-beta.x`。想在应用内收到它，请在**设置 → 关于我们**开启**接收 Beta 版本**。
+
 ## 快速开始
 
 ### 方式一:桌面应用
