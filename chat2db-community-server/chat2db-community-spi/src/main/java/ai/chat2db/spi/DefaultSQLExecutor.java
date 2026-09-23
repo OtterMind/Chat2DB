@@ -367,6 +367,11 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
     protected ExecuteResponse generateQueryExecuteResponse(Statement stmt, boolean limitRowSize, Integer offset,
                                                      Integer count) throws SQLException {
+        return generateQueryExecuteResponse(stmt, limitRowSize, offset, count, null);
+    }
+
+    protected ExecuteResponse generateQueryExecuteResponse(Statement stmt, boolean limitRowSize, Integer offset,
+            Integer count, ResultValueBudget valueBudget) throws SQLException {
         ExecuteResponse executeResult = ExecuteResponse.builder().success(Boolean.TRUE).build();
         executeResult.setDescription(I18nUtils.getMessage("sqlResult.success"));
         ResultSet rs = null;
@@ -379,7 +384,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
             int chat2dbAutoRowIdIndex = getChat2dbAutoRowIdIndex(headerList);
             List<List<ResultCell>> dataList = generateDataList(rs, col, chat2dbAutoRowIdIndex, limitRowSize,
-                    offset, count);
+                    offset, count, valueBudget);
 
             executeResult.setHeaderList(headerList);
             executeResult.setDataList(dataList);
@@ -390,7 +395,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     private List<List<ResultCell>> generateDataList(ResultSet rs, int col, int chat2dbAutoRowIdIndex,
-                                          boolean limitRowSize, Integer offset, Integer count) throws SQLException {
+                                          boolean limitRowSize, Integer offset, Integer count,
+                                          ResultValueBudget valueBudget) throws SQLException {
         List<List<ResultCell>> dataList = Lists.newArrayList();
 
         if (offset == null || offset < 0) {
@@ -415,9 +421,12 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     continue;
                 }
                 JDBCDataValue jdbcDataValue = new JDBCDataValue(rs, rs.getMetaData(), i, limitRowSize);
-                String value = valueProcessor.getJdbcValue(jdbcDataValue);
-                ResultCell cell = jdbcDataValue.buildResultCell(value);
-                row.add(cell);
+                if (valueBudget == null) {
+                    String value = valueProcessor.getJdbcValue(jdbcDataValue);
+                    row.add(jdbcDataValue.buildResultCell(value));
+                } else {
+                    row.add(jdbcDataValue.buildBoundedResultCell(valueBudget, valueProcessor));
+                }
             }
             if (count != null && count > 0 && rowCount++ >= count) {
                 break;
@@ -659,12 +668,13 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         if (command.isExplain()) {
             setExplain(simpleSqlStatements);
         }
+        ResultValueBudget valueBudget = command.isFullResultValues() ? createAgentValueBudget() : null;
         int statementSequence = 0;
         for (SimpleSqlStatement simpleSqlStatement : simpleSqlStatements) {
             statementSequence++;
             String sqlType = simpleSqlStatement.getSqlType();
             List<ExecuteResponse> executeResults = executeSQL(simpleSqlStatement, dbType, command, connection,
-                    executionContextCursor.current());
+                    executionContextCursor.current(), valueBudget);
             advanceExecutionContext(executionContextCursor, connection, simpleSqlStatement, executeResults);
             boolean errorOccurred = false;
             for (ExecuteResponse executeResult : executeResults) {
@@ -910,9 +920,13 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
+    protected ResultValueBudget createAgentValueBudget() {
+        return ResultValueBudget.forAgent();
+    }
+
     private List<ExecuteResponse> executeSQL(SimpleSqlStatement simpleSqlStatement, DbType dbType,
                                               SqlExecuteRequest param, Connection connection,
-                                              ExecutionContext executionContext) {
+                                              ExecutionContext executionContext, ResultValueBudget valueBudget) {
         String originalSql = simpleSqlStatement.getSql();
         long startedAtEpochMs = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
@@ -937,8 +951,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
                         simpleSqlStatement.setSql(buildPageLimit);
                     }
-                    executeResults = executeMulti(simpleSqlStatement, connection, true, 0, count,
-                            param.getResultSetId(), executionContext);
+                    executeResults = valueBudget == null
+                            ? executeMulti(simpleSqlStatement, connection, true, 0, count, param.getResultSetId(), executionContext)
+                            : executeMulti(simpleSqlStatement, connection, false, 0, count, param.getResultSetId(), executionContext, valueBudget);
                     if (CollectionUtils.isNotEmpty(executeResults)) {
                         for (ExecuteResponse executeResult : executeResults) {
                             executeResult.setSqlType(sqlType.getCode());
@@ -960,8 +975,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         simpleSqlStatement.setSql(originalSql + ";");
                     }
                 }
-                executeResults = executeMulti(simpleSqlStatement, connection, true, offset, count,
-                        param.getResultSetId(), executionContext);
+                executeResults = valueBudget == null
+                        ? executeMulti(simpleSqlStatement, connection, true, offset, count, param.getResultSetId(), executionContext)
+                        : executeMulti(simpleSqlStatement, connection, false, offset, count, param.getResultSetId(), executionContext, valueBudget);
                 for (ExecuteResponse executeResult : executeResults) {
                     executeResult.setSql(originalSql);
                 }
@@ -1105,6 +1121,12 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
                                              boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
                                              ExecutionContext executionContext) throws SQLException {
+        return executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId, executionContext, null);
+    }
+
+    protected List<ExecuteResponse> executeMulti(SimpleSqlStatement simpleSqlStatement, Connection connection,
+            boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
+            ExecutionContext executionContext, ResultValueBudget valueBudget) throws SQLException {
         String sql = simpleSqlStatement.getSql();
         String type = simpleSqlStatement.getSqlType();
         Assert.notNull(sql, "SQL must not be null");
@@ -1133,7 +1155,9 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     resultCount++;
                     if (Objects.isNull(resultSetId) || resultCount == resultSetId) {
                         long fetchStartedNanos = System.nanoTime();
-                        executeResult = generateQueryExecuteResponse(stmt, limitRowSize, offset, count);
+                        executeResult = valueBudget == null
+                                ? generateQueryExecuteResponse(stmt, limitRowSize, offset, count)
+                                : generateQueryExecuteResponse(stmt, limitRowSize, offset, count, valueBudget);
                         fetchDurationNanos = ExecutionTiming.elapsedNanos(fetchStartedNanos);
                         executeResult.setResultSetId(resultCount);
                     }

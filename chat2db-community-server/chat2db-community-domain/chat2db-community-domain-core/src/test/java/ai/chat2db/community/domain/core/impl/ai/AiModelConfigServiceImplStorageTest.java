@@ -76,6 +76,22 @@ class AiModelConfigServiceImplStorageTest {
     }
 
     @Test
+    void preservesAgentProtocolAcrossSaveReloadAndRuntimeResolution() {
+        AiModelConfigServiceImpl service = service(KEY);
+        AiModelConfigSaveRequest request = saveRequest("compatible", API_KEY);
+        request.setAgentApi("openai-completions");
+        AiModelConfigResponse saved = service.saveCurrentUserConfig(request);
+        assertEquals("openai-completions", saved.getAgentApi());
+
+        AiModelConfigServiceImpl reloaded = service(KEY);
+        reloaded.init();
+        AiChatRuntimeResolveRequest resolve = new AiChatRuntimeResolveRequest();
+        resolve.setModelConfigId(saved.getId());
+        assertEquals("openai-completions", reloaded.resolveRuntimeModel(resolve).getAgentApi());
+        assertEquals("openai-completions", reloaded.listCurrentUserConfigs().get(0).getAgentApi());
+    }
+
+    @Test
     void springSelectsTheProductionConstructor() {
         DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
         AutowiredAnnotationBeanPostProcessor postProcessor = new AutowiredAnnotationBeanPostProcessor();

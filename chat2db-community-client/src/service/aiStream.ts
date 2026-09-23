@@ -1,4 +1,5 @@
 import createRequest from './base';
+import pi from './pi';
 import { IChatAttachment } from './aiAttachment';
 
 export interface IModelCatalogItem {
@@ -19,8 +20,14 @@ export interface IModelOptionItem {
 export interface IChatSession {
   id: string;
   title: string;
+  sessionVersion: 1 | 2;
+  runtimeType?: 'PI' | 'CODEX' | 'DSH';
+  agentStatus?: string;
+  modelConfigId?: string;
   gmtCreate: string;
   gmtModified: string;
+  /** Last durable event sequence of a V2 session, so history can load its newest page first. */
+  lastEventSequence?: number;
 }
 
 export interface IChatMessage {
@@ -35,14 +42,23 @@ export interface IChatMessage {
 
 const getModelCatalog = createRequest<void, IModelCatalogItem[]>('/api/v3/ai/model/list');
 const getModelOptions = createRequest<void, IModelOptionItem[]>('/api/v3/ai/model/options');
-const getChatSessions = createRequest<void, IChatSession[]>('/api/v3/ai/chat/history/sessions');
+const getChatSessions = createRequest<void, IChatSession[]>('/api/v3/ai/sessions');
 const getChatMessages = createRequest<{ sessionId: string }, IChatMessage[]>('/api/v3/ai/chat/history/messages');
-const deleteChatSession = createRequest<{ id: string }, void>('/api/v3/ai/chat/history/session/delete', {
+const deleteV1ChatSession = createRequest<{ id: string }, void>('/api/v3/ai/chat/history/session/delete', {
   method: 'post',
 });
-const renameChatSession = createRequest<{ id: string; title: string }, void>('/api/v3/ai/chat/history/session/rename', {
+const renameV1ChatSession = createRequest<{ id: string; title: string }, void>('/api/v3/ai/chat/history/session/rename', {
   method: 'post',
 });
+const deleteChatSession = ({ id, sessionVersion }: Pick<IChatSession, 'id' | 'sessionVersion'>) =>
+  sessionVersion === 2 ? pi.sessions.delete({ sessionId: id }) : deleteV1ChatSession({ id });
+
+const renameChatSession = ({
+  id,
+  title,
+  sessionVersion,
+}: Pick<IChatSession, 'id' | 'title' | 'sessionVersion'>) =>
+  sessionVersion === 2 ? pi.sessions.rename({ sessionId: id, title }) : renameV1ChatSession({ id, title });
 
 export default {
   getModelCatalog,

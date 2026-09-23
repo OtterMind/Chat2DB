@@ -119,7 +119,7 @@ const EChartsContainer = (props: ChartProps) => {
 
   return (
     <div ref={wrapperRef} className={cx(className, styles.wrapper)} {...rest}>
-      <div ref={chartContainerRef} className={styles.chartContainer} />;
+      <div ref={chartContainerRef} className={styles.chartContainer} />
     </div>
   );
 };

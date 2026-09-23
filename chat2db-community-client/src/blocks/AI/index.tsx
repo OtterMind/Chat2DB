@@ -13,6 +13,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ChartCardBox from '@/blocks/BI/ChartCardBox';
+import { AgentChart, updateAgentCharts } from './agentCharts';
+import { captureAgentContext, agentContextDatabaseType, agentContextSummary } from './agentContext';
 import { IChartItem } from '@/typings/dashboard';
 import { ChartSchema } from '@/blocks/BI/Chart/typings';
 import { ChartType, LineType, OrderByType, OrderByRule } from '@/blocks/BI/Chart/constants';
@@ -25,7 +27,6 @@ import aiStreamService, {
   IChatSession,
   IModelOptionItem,
 } from '@/service/aiStream';
-import { IChatAttachment } from '@/service/aiAttachment';
 import { useAIStore } from '@/store/ai';
 import { useTreeStore } from '@/store/tree';
 import { useGlobalStore } from '@/store/global';
@@ -35,14 +36,16 @@ import { OperationColumn } from '@/constants/tree';
 import { compatibleDataBaseName } from '@/utils/database';
 import { DatabaseTypeCode } from '@/constants';
 import SQLPreview from '@/components/SQLPreview';
+import ScrollableTable from '@/components/ScrollableTable';
 import { useStyles } from './style';
 import i18n from '@/i18n';
-import { keyboardKey } from '@/utils';
+import { copyToClipboard, keyboardKey } from '@/utils';
+import type { ConversationCommand } from './chatCommands';
 import { cx } from 'antd-style';
 import AIModelConfigModal from './components/AIModelConfigModal';
 import { resolveSelectedModel } from './components/AIModelSelect/modelSelectOptions';
 import { ErrorCode } from '@/constants/request';
-import { listAvailableModelOptions, resolveModelRequestPayload } from '@/service/aiModelConfig';
+import { listAvailableModelOptions, prepareAgentModelOption, resolveModelRequestPayload } from '@/service/aiModelConfig';
 import { isDesktop } from '@/utils/env';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
@@ -53,6 +56,17 @@ import { buildUserMessageNavigationItems } from './messageNavigation';
 import { Pencil } from 'lucide-react';
 import MessageNavigationRail from './components/MessageNavigationRail';
 import InlineRenameInput from '@/components/InlineRenameInput';
+import type { QuestionResponse } from '@/types/question';
+import { AgentQuestionItem, updateAgentQuestions } from './agentQuestions';
+import pi, { AgentEvent } from '@/service/pi';
+import importExportService from '@/service/importExport';
+import { useImportExportStore } from '@/store/importExport';
+import { confirmBetaFeature } from '@/utils/confirmBetaFeature';
+import { AgentApprovalDecision, AgentApprovalItem, updateAgentApprovals, agentErrorText, agentEventTrace, appendAgentText, appendAgentTimeline, buildAgentTranscript, mergeAgentEvents, AgentTimelineEntry } from './agentEvents';
+import { activeAgentRunId, followAgentRun, readAgentHistoryBefore, readAgentHistoryTail, traceAgentStage }
+  from './agentEventStream';
+import { getChatSessionId, getChatSessionUrl, resolveChatSessionVersion } from './chatSessionRoute';
+import AgentV2Session, { AgentV2Message } from './components/AgentV2Session';
 
 /** detects unclosed text in flowing text ```chart block, return chart and whether there are any unfinished diagrams */
 function splitIncompleteChartBlock(text: string): { textBeforeChart: string; hasIncompleteChart: boolean } {
@@ -317,21 +331,40 @@ function MarkdownCodeBlock({ className, children }: { className?: string; childr
 
 /** is sent each time AI The maximum number of historical rounds carried (one round = (one question and one answer) */
 const MAX_HISTORY_ROUNDS = 5;
-const SCROLL_BOTTOM_THRESHOLD = 24;
+const SCROLL_BOTTOM_THRESHOLD = 1;
+/** Reaching this close to the top reads one more page of older events. */
+const EARLIER_HISTORY_LOAD_OFFSET = 240;
 const INITIAL_VIEWPORT_ANIMATION_MS = 260;
 const PROGRAMMATIC_SCROLL_LOCK_MS = 120;
 const MESSAGE_TOP_ALIGNMENT_GAP = 20;
 const COLLAPSED_THOUGHT_PREVIEW_MAX_LENGTH = 48;
+const AI_RUNTIME_STORAGE_KEY = 'chat2db-ai-runtime';
+const ACTIVE_AGENT_SESSION_KEY = 'chat2db-active-agent-session';
+
+const agentRequestId = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+
+interface AgentOperation {
+  controller: AbortController;
+  sessionId?: string;
+  runId?: string;
+  cancelRequested: boolean;
+}
+
+const createAgentOperation = (sessionId?: string): AgentOperation => ({
+  controller: new AbortController(), sessionId, cancelRequested: false,
+});
 
 type ChatRole = 'user' | 'assistant';
 
-interface IChatItem {
-  id: string;
-  role: ChatRole;
-  content: string;
-  attachments?: IChatAttachment[];
-  traceEntries?: ITraceEntry[];
-}
+type IChatItem = AgentV2Message;
+
+const MarkdownTable = ({ children }: React.PropsWithChildren) => (
+  <ScrollableTable aria-label={i18n('stream.chart.queryData')}>{children}</ScrollableTable>
+);
 
 interface IChatRound {
   key: string;
@@ -356,6 +389,7 @@ interface IInProgressSessionSnapshot {
   messages: IChatItem[];
   streamingText: string;
   traceEntries: ITraceEntry[];
+  timeline: AgentTimelineEntry[];
   currentRoundUserMessageId: string | null;
 }
 
@@ -486,6 +520,23 @@ function truncateCollapsedThoughtPreview(text?: string, maxLength = COLLAPSED_TH
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function formatTraceValue(value?: string) {
+  if (!value) return '';
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === 'string') {
+      try {
+        return JSON.stringify(JSON.parse(parsed), null, 2);
+      } catch {
+        return parsed;
+      }
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+}
+
 function isLikelySameSessionFromPrefix(serverMessages: IChatItem[], snapshotMessages: IChatItem[]) {
   if (!serverMessages.length || !snapshotMessages.length) {
     return false;
@@ -520,6 +571,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [messages, setMessages] = useState<IChatItem[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamTraceEntries, setStreamTraceEntries] = useState<ITraceEntry[]>([]);
+  const [streamTimelineEntries, setStreamTimelineEntries] = useState<AgentTimelineEntry[]>([]);
   const [expandedTraceMap, setExpandedTraceMap] = useState<Record<string, boolean>>({});
   const [streamThoughtPulse, setStreamThoughtPulse] = useState(false);
   const [prefillInputState, setPrefillInputState] = useState<{
@@ -530,17 +582,40 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const [currentRoundUserMessageId, setCurrentRoundUserMessageId] = useState<string | null>(null);
   const [highlightedUserMessageId, setHighlightedUserMessageId] = useState<string | null>(null);
   const [messageListContentHeight, setMessageListContentHeight] = useState(0);
+  const [hasOlderHistory, setHasOlderHistory] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [prependCount, setPrependCount] = useState(0);
+  const historyLoadingRef = useRef(false);
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const historyEventsRef = useRef<AgentEvent[]>([]);
+  const historyControllerRef = useRef<AbortController | null>(null);
+  /** Set by the effect below; both the scroll handler and the wheel handler ask it for the previous page. */
+  const loadEarlierRef = useRef<() => void>(() => {});
 
   // Session management.
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState<string>('');
+  const agentSessionRef = useRef<{ id: string; sequence: number }>();
+  const agentOperationRef = useRef<AgentOperation>();
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentCancelling, setAgentCancelling] = useState(false);
+  const [agentCharts, setAgentCharts] = useState<AgentChart[]>([]);
+  const [agentApprovals, setAgentApprovals] = useState<AgentApprovalItem[]>([]);
+  const [agentQuestions, setAgentQuestions] = useState<AgentQuestionItem[]>([]);
+  const [runtimeChoice, setRuntimeChoice] = useState<'DEFAULT' | 'PI'>(() =>
+    clientRuntime.usesLocalPersistence && localStorage.getItem(AI_RUNTIME_STORAGE_KEY) === 'PI' ? 'PI' : 'DEFAULT',
+  );
+  const [runtimeSwitching, setRuntimeSwitching] = useState(false);
+  const unmountedRef = useRef(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [panelRenamingSessionId, setPanelRenamingSessionId] = useState<string | null>(null);
-  const isEmptyState = !messages.length && !streamingText && !streamTraceEntries.length;
+  const isEmptyState = !messages.length && !streamingText
+    && !streamTraceEntries.length && !streamTimelineEntries.length;
 
   const streamingRef = useRef('');
   const streamTraceEntriesRef = useRef<ITraceEntry[]>([]);
+  const streamTimelineEntriesRef = useRef<AgentTimelineEntry[]>([]);
   const previousStatusRef = useRef<SSERequestStatus>(SSERequestStatus.IDLE);
   const previousStreamThoughtPreviewRef = useRef('');
   const streamThoughtPulseTimerRef = useRef<number | null>(null);
@@ -554,7 +629,6 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   const chatInputRef = useRef<ChatInputPropsRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
-  const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const messageElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingViewportAnchorRef = useRef<string | null>(null);
   const currentRoundBlockRef = useRef<HTMLDivElement | null>(null);
@@ -632,7 +706,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         }, INITIAL_VIEWPORT_ANIMATION_MS);
       } else {
         requestAnimationFrame(() => {
-          correctMessageTopAlignment(messageId);
+          if (suppressScrollTrackingRef.current) correctMessageTopAlignment(messageId);
         });
       }
 
@@ -647,16 +721,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       if (!container) {
         return;
       }
+      const bottom = Math.max(container.scrollHeight - container.clientHeight, 0);
+      if (Math.abs(bottom - container.scrollTop) <= SCROLL_BOTTOM_THRESHOLD) return;
       lockScrollTracking(behavior);
-      if (bottomSentinelRef.current) {
-        bottomSentinelRef.current.scrollIntoView({
-          block: 'end',
-          behavior,
-        });
-        return;
-      }
       container.scrollTo({
-        top: container.scrollHeight,
+        top: bottom,
         behavior,
       });
     },
@@ -734,6 +803,20 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     }
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
     setAutoFollow(isAtBottom);
+    loadEarlierRef.current();
+  }, [setAutoFollow]);
+
+  const interruptMessageAutoScroll = useCallback(() => {
+    setAutoFollow(false);
+    suppressScrollTrackingRef.current = false;
+    pendingInitialBottomSyncRef.current = false;
+    pendingViewportAnchorRef.current = null;
+    initialViewportAnimatingRef.current = false;
+    for (const timer of [programmaticScrollTimerRef, topAlignmentTimerRef,
+      initialBottomSyncTimerRef, initialViewportAnimationTimerRef]) {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = null;
+    }
   }, [setAutoFollow]);
 
   const setMessageElement = useCallback(
@@ -941,8 +1024,141 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     statusRef.current = status;
   }, [status]);
 
+  const stopAgentPolling = useCallback((cancelRun = false) => {
+    if (!cancelRun) setAgentCharts([]);
+    setAgentApprovals([]);
+    setAgentQuestions((current) => cancelRun ? current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item) : []);
+    const operation = agentOperationRef.current;
+    if (!operation) return;
+    operation.cancelRequested = cancelRun;
+    traceAgentStage('conversation.detached', { sessionId: operation.sessionId, runId: operation.runId, cancelRun });
+    operation.controller.abort();
+    agentOperationRef.current = undefined;
+    setAgentRunning(false);
+    setAgentCancelling(false);
+    if (cancelRun && operation.runId && operation.sessionId) {
+      void pi.runs.cancel({ runId: operation.runId, sessionId: operation.sessionId }).catch((error) => {
+        feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+      });
+    }
+  }, []);
+
+  const finishAgentReply = useCallback((error?: unknown, runStatus?: AgentV2Message['status']) => {
+    setAgentQuestions((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
+    setAgentApprovals((current) => current.map((item) => item.status === 'pending' ? { ...item, status: 'closed' } : item));
+    const content = streamingRef.current;
+    const traceEntries = [...streamTraceEntriesRef.current];
+    const timeline = [...streamTimelineEntriesRef.current];
+    if (error) traceEntries.push({ type: 'error', content: agentErrorText(error) || i18n('stream.agent.sendFailed') });
+    if (runStatus || content.trim() || traceEntries.length || timeline.length || agentOperationRef.current?.runId) {
+      const message: IChatItem = { id: agentRequestId(), runId: agentOperationRef.current?.runId, role: 'assistant', content, traceEntries,
+        ...(timeline.length ? { timeline } : {}),
+        status: runStatus || (error ? 'failed' : undefined),
+        ...(error ? { error: agentErrorText(error) || i18n('stream.agent.sendFailed') } : {}) };
+      setMessages((previous) => {
+        const next = [...previous, message];
+        messagesRef.current = next;
+        return next;
+      });
+    }
+    streamingRef.current = '';
+    setStreamingText('');
+    streamTraceEntriesRef.current = [];
+    setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
+    setCurrentRoundUserMessageId(null);
+    currentRoundUserMessageIdRef.current = null;
+  }, []);
+
+  const decideAgentApproval = async (approval: AgentApprovalItem, decision: AgentApprovalDecision) => {
+    const operation = agentOperationRef.current;
+    if (!operation || operation.controller.signal.aborted || operation.sessionId !== approval.sessionId
+        || operation.runId !== approval.runId) throw new Error(i18n('stream.approval.closed'));
+    await pi.approvals.decide({ sessionId: approval.sessionId, approvalId: approval.id, decision },
+      { signal: operation.controller.signal });
+    if (!operation.controller.signal.aborted) {
+      setAgentApprovals((current) => current.map((item) => item.id === approval.id && item.status === 'pending'
+        ? { ...item, status: decision === 'DENY' ? 'denied' : 'approved' } : item));
+    }
+  };
+
+  const respondToAgentQuestion = async (question: AgentQuestionItem, response?: QuestionResponse) => {
+    const operation = agentOperationRef.current;
+    if (!operation || operation.controller.signal.aborted || operation.sessionId !== question.sessionId
+        || operation.runId !== question.runId) throw new Error(i18n('stream.question.closed'));
+    if (!response) {
+      await pi.runs.cancel({ sessionId: question.sessionId, runId: question.runId });
+      return;
+    }
+    const answer = await pi.questions.answer(
+      { sessionId: question.sessionId, questionId: question.id, ...response },
+      { signal: operation.controller.signal });
+    if (!operation.controller.signal.aborted) {
+      setAgentQuestions((current) => current.map((item) =>
+        item.id === question.id ? { ...item, status: 'answered', answer } : item));
+    }
+  };
+
+  const applyAgentEvents = useCallback((events: AgentEvent[]) => {
+    const session = agentSessionRef.current;
+    if (!session || !events.length) return;
+    session.sequence = Math.max(session.sequence, ...events.map((event) => event.sequence));
+    const accepted = events.find((event) => event.type === 'RUN_ACCEPTED');
+    if (accepted) {
+      const summary = agentContextSummary(accepted.payload.context);
+      const contextDatabaseType = agentContextDatabaseType(accepted.payload.context);
+      setMessages((current) => current.map((message) => message.id === currentRoundUserMessageIdRef.current
+        ? { ...message, contextSummary: summary, contextDatabaseType } : message));
+    }
+    const text = appendAgentText(streamingRef.current, events);
+    if (text !== streamingRef.current) {
+      streamingRef.current = text;
+      setStreamingText(streamingRef.current);
+    }
+    const timeline = appendAgentTimeline(streamTimelineEntriesRef.current, events);
+    streamTimelineEntriesRef.current = timeline;
+    setStreamTimelineEntries(timeline);
+    const traces = events.map(agentEventTrace).filter((trace): trace is ITraceEntry => !!trace);
+    if (traces.length) {
+      streamTraceEntriesRef.current = [...streamTraceEntriesRef.current, ...traces];
+      setStreamTraceEntries(streamTraceEntriesRef.current);
+    }
+    setAgentCharts((current) => updateAgentCharts(current, events));
+    setAgentApprovals((current) => updateAgentApprovals(current, events));
+    setAgentQuestions((current) => updateAgentQuestions(current, events));
+  }, []);
+
+  const pollAgentRun = useCallback(async (operation: AgentOperation, sessionId: string, runId: string) => {
+    try {
+      const terminal = await followAgentRun(pi.events.list, sessionId, runId,
+        agentSessionRef.current?.sequence || 0, operation.controller.signal, applyAgentEvents);
+      if (!operation.controller.signal.aborted && terminal) {
+        finishAgentReply(undefined, terminal.type === 'RUN_CANCELLED' ? 'cancelled'
+          : terminal.type === 'RUN_FAILED' ? 'failed' : terminal.type === 'RUN_OUTCOME_UNKNOWN' ? 'unknown' : undefined);
+        if (terminal.type === 'RUN_FAILED' || terminal.type === 'RUN_OUTCOME_UNKNOWN') {
+          feedback.error(agentErrorText(terminal.payload) || i18n('stream.agent.sendFailed'));
+        }
+      }
+      if (terminal) traceAgentStage('run.terminal', { sessionId, runId, type: terminal.type });
+    } catch (error) {
+      if (!operation.controller.signal.aborted) {
+        finishAgentReply(error);
+        feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+      }
+    } finally {
+      if (agentOperationRef.current === operation) {
+        operation.controller.abort();
+        agentOperationRef.current = undefined;
+        setAgentRunning(false);
+        setAgentCancelling(false);
+      }
+    }
+  }, [applyAgentEvents, finishAgentReply]);
+
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
       if (streamThoughtPulseTimerRef.current !== null) {
         window.clearTimeout(streamThoughtPulseTimerRef.current);
         streamThoughtPulseTimerRef.current = null;
@@ -967,8 +1183,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         window.clearTimeout(messageHighlightTimerRef.current);
         messageHighlightTimerRef.current = null;
       }
+      stopAgentPolling();
     };
-  }, []);
+  }, [stopAgentPolling]);
 
   useEffect(() => {
     const previewText = getTracePreview(streamTraceEntries[streamTraceEntries.length - 1]);
@@ -1059,26 +1276,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   // URL helpers for the /stream/:chatId path format.
 
   const getChatIdFromPath = useCallback(() => {
-    const parts = window.location.pathname.split('/');
-    // pathname: /stream/2a7b72bc-...
-    if (parts[1] === 'stream' && parts[2]) {
-      return parts[2];
-    }
-    return null;
+    return getChatSessionId(window.location);
   }, []);
 
   const setChatIdInPath = useCallback((chatId: string) => {
-    // Update only from a /stream path so other page URLs are not overwritten.
-    if (window.location.pathname.startsWith('/stream')) {
-      window.history.pushState({}, '', `/stream/${chatId}`);
-    }
+    const url = getChatSessionUrl(window.location, chatId);
+    if (url) window.history.replaceState(window.history.state, '', url);
   }, []);
 
   const clearChatIdFromPath = useCallback(() => {
-    // Reset to /stream only from /stream/:chatId so other page URLs remain intact.
-    if (window.location.pathname.startsWith('/stream/')) {
-      window.history.pushState({}, '', '/stream');
-    }
+    const url = getChatSessionUrl(window.location);
+    if (url) window.history.replaceState(window.history.state, '', url);
   }, []);
 
   // Add the AI response locally and update the session ID when SSE completes.
@@ -1152,6 +1360,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     setStreamingText('');
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setCurrentRoundUserMessageId(null);
@@ -1201,31 +1411,20 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         pendingViewportAnchorRef.current = null;
       }
     }
-    if (initialViewportAnimatingRef.current) {
-      return;
-    }
-    if (!isCurrentRoundOverflowingViewport()) {
-      return;
-    }
-    if (!autoFollowRef.current) {
-      return;
-    }
-    scrollMessageListToBottom();
   }, [
     messages,
-    streamingText,
-    streamTraceEntries.length,
     currentRoundUserMessageId,
-    messageListContentHeight,
-    isCurrentRoundOverflowingViewport,
-    scrollMessageListToBottom,
     scrollMessageToTop,
   ]);
 
   // Start a new conversation.
 
   const handleNewChat = useCallback(() => {
+    sessionStorage.removeItem(ACTIVE_AGENT_SESSION_KEY);
     stop();
+    stopAgentPolling(true);
+    setSessionLoading(false);
+    agentSessionRef.current = undefined;
     setAutoFollow(true);
     chatInputRef.current?.resetAttachments();
     pendingViewportAnchorRef.current = null;
@@ -1249,6 +1448,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     streamingRef.current = '';
     streamTraceEntriesRef.current = [];
     setStreamTraceEntries([]);
+    streamTimelineEntriesRef.current = [];
+    setStreamTimelineEntries([]);
     previousStreamThoughtPreviewRef.current = '';
     setStreamThoughtPulse(false);
     setExpandedTraceMap({});
@@ -1270,7 +1471,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       clearChatIdFromPath();
     }
     onSessionChange?.();
-  }, [isPanel, clearChatIdFromPath, onSessionChange, stop]);
+  }, [clearChatIdFromPath, isPanel, onSessionChange, stop, stopAgentPolling]);
 
   const startPanelHistoryRename = useCallback((session: IChatSession) => {
     setPanelRenamingSessionId(session.id);
@@ -1278,7 +1479,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const renamePanelHistorySession = useCallback(async (sessionId: string, title: string) => {
     try {
-      await aiStreamService.renameChatSession({ id: sessionId, title });
+      const session = sessionList.find((item) => item.id === sessionId);
+      if (!session) return;
+      await aiStreamService.renameChatSession({ ...session, title });
       setSessionList((prev) => prev.map((item) => (item.id === sessionId ? { ...item, title } : item)));
       if (currentSessionIdRef.current === sessionId) {
         setCurrentSessionTitle(title);
@@ -1294,12 +1497,14 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       feedback.error(i18n('stream.sidebar.renameFailed'));
       throw error;
     }
-  }, []);
+  }, [sessionList]);
 
   const handleDeleteHistorySession = useCallback(
     async (sessionId: string) => {
       try {
-        await aiStreamService.deleteChatSession({ id: sessionId });
+        const session = sessionList.find((item) => item.id === sessionId);
+        if (!session) return;
+        await aiStreamService.deleteChatSession(session);
         setSessionList((prev) => prev.filter((item) => item.id !== sessionId));
 
         if (currentSessionIdRef.current === sessionId || newSessionIdRef.current === sessionId) {
@@ -1312,7 +1517,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         feedback.error(i18n('stream.sidebar.deleteFailed'));
       }
     },
-    [handleNewChat],
+    [handleNewChat, sessionList],
   );
 
   const confirmDeleteHistorySession = useCallback(
@@ -1332,6 +1537,11 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   const handleLoadSessionById = useCallback(
     async (sessionId: string, title?: string) => {
+      stopAgentPolling();
+      agentSessionRef.current = undefined;
+      setRuntimeChoice('DEFAULT');
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'DEFAULT');
+      sessionStorage.removeItem(ACTIVE_AGENT_SESSION_KEY);
       const isGenerating = statusRef.current === SSERequestStatus.LOADING;
       if (isGenerating) {
         const activeSessionId = currentSessionIdRef.current || '';
@@ -1343,6 +1553,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             messages: [...messagesRef.current],
             streamingText: streamingRef.current,
             traceEntries: [...streamTraceEntriesRef.current],
+            timeline: [...streamTimelineEntriesRef.current],
             currentRoundUserMessageId: currentRoundUserMessageIdRef.current,
           };
         }
@@ -1376,6 +1587,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       streamingRef.current = '';
       streamTraceEntriesRef.current = [];
       setStreamTraceEntries([]);
+      streamTimelineEntriesRef.current = [];
+      setStreamTimelineEntries([]);
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1400,6 +1613,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         streamingRef.current = inProgressSession.streamingText;
         setStreamTraceEntries(inProgressSession.traceEntries);
         streamTraceEntriesRef.current = [...inProgressSession.traceEntries];
+        setStreamTimelineEntries(inProgressSession.timeline);
+        streamTimelineEntriesRef.current = [...inProgressSession.timeline];
         setCurrentRoundUserMessageId(inProgressSession.currentRoundUserMessageId);
         currentRoundUserMessageIdRef.current = inProgressSession.currentRoundUserMessageId;
         if (!title && inProgressSession.title) {
@@ -1467,27 +1682,189 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         setSessionLoading(false);
       }
     },
-    [onSessionChange, stop],
+    [onSessionChange, stop, stopAgentPolling],
   );
+
+  const handleLoadAgentSessionById = useCallback(
+    async (sessionId: string, title?: string) => {
+      stop();
+      stopAgentPolling();
+      const operation = createAgentOperation(sessionId);
+      agentOperationRef.current = operation;
+      // History loading must not depend on a live run: an idle session has no operation.
+      historyControllerRef.current?.abort();
+      historyControllerRef.current = new AbortController();
+      historyLoadingRef.current = true;
+      setSessionLoading(true);
+      try {
+        const session = await pi.sessions.get({ sessionId, sessionVersion: 2 },
+          { signal: operation.controller.signal });
+        // Open a long conversation on its newest events instead of replaying every streamed delta.
+        const [events, approvals, questions, availableModels] = await Promise.all([
+          readAgentHistoryTail(pi.events.list, sessionId, operation.controller.signal,
+            session.lastEventSequence ?? 0),
+          pi.approvals.list({ sessionId }, { signal: operation.controller.signal }),
+          pi.questions.list({ sessionId }, { signal: operation.controller.signal }),
+          listAvailableModelOptions(),
+        ]);
+        if (operation.controller.signal.aborted) return;
+        const activeRunId = activeAgentRunId(events);
+        const charts = updateAgentCharts([], events);
+        setAgentCharts(charts);
+        const transcript = buildAgentTranscript(events)
+          .filter((message) => message.status || message.content || message.traceEntries.length
+            || message.timeline?.length
+            || charts.some((chart) => chart.runId === message.runId));
+        setAgentApprovals(updateAgentApprovals([], events).map((item) =>
+          item.status === 'pending' && !approvals.some((approval) => approval.id === item.id)
+            ? { ...item, status: 'closed' } : item));
+        setAgentQuestions(updateAgentQuestions([], events).map((item) =>
+          item.status === 'pending' && !questions.some((question) => question.id === item.id)
+            ? { ...item, status: 'closed' } : item));
+        const activeReply = activeRunId
+          ? transcript.find((item) => item.role === 'assistant' && item.runId === activeRunId)
+          : undefined;
+        const restoredMessages = transcript.filter((item) => item !== activeReply);
+        setMessages(restoredMessages);
+        messagesRef.current = restoredMessages;
+        streamingRef.current = activeReply?.content || '';
+        setStreamingText(streamingRef.current);
+        streamTraceEntriesRef.current = activeReply?.traceEntries || [];
+        setStreamTraceEntries(streamTraceEntriesRef.current);
+        streamTimelineEntriesRef.current = activeReply?.timeline || [];
+        setStreamTimelineEntries(streamTimelineEntriesRef.current);
+        setRuntimeChoice('PI');
+        localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'PI');
+        sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, sessionId);
+        agentSessionRef.current = { id: sessionId,
+          sequence: events.length ? events[events.length - 1].sequence : 0 };
+        traceAgentStage('session.restored', { sessionId, events: events.length, activeRunId });
+        const selected = availableModels.find((option) => option.modelConfigId === session.modelConfigId);
+        if (selected) setSelectedModel({ value: selected.value, label: selected.label });
+        setCurrentSessionId(sessionId);
+        currentSessionIdRef.current = sessionId;
+        setCurrentSessionTitle(session.title || title || '');
+        currentSessionTitleRef.current = session.title || title || '';
+        historyEventsRef.current = events;
+        setHasOlderHistory((events[0]?.sequence ?? 1) > 1);
+        if (activeRunId) {
+          operation.runId = activeRunId;
+          const userMessageId = transcript.find((item) => item.role === 'user' && item.runId === activeRunId)?.id || null;
+          setCurrentRoundUserMessageId(userMessageId);
+          currentRoundUserMessageIdRef.current = userMessageId;
+          setAgentRunning(true);
+          void pollAgentRun(operation, sessionId, activeRunId);
+        } else {
+          setCurrentRoundUserMessageId(null);
+          currentRoundUserMessageIdRef.current = null;
+          agentOperationRef.current = undefined;
+        }
+      } catch (error) {
+        if (agentOperationRef.current === operation) agentOperationRef.current = undefined;
+        if (!operation.controller.signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
+      } finally {
+        historyLoadingRef.current = false;
+        setSessionLoading(false);
+      }
+    },
+    [pollAgentRun, setSelectedModel, stop, stopAgentPolling],
+  );
+
+  /**
+   * Reads the page just before the oldest loaded event and prepends it. It never rebuilds the visible
+   * rounds and never touches streaming state, so it also works while a run is streaming.
+   */
+  const handleLoadEarlierHistory = useCallback(async () => {
+    const sessionId = currentSessionIdRef.current;
+    const loaded = historyEventsRef.current;
+    const signal = historyControllerRef.current?.signal;
+    const oldest = loaded.length ? loaded[0].sequence : 0;
+    if (!sessionId || !signal || historyLoadingRef.current || oldest <= 1) return;
+    historyLoadingRef.current = true;
+    setLoadingEarlier(true);
+    const container = messageListRef.current;
+    prependAnchorRef.current = container ? { height: container.scrollHeight, top: container.scrollTop } : null;
+    try {
+      const earlier = await readAgentHistoryBefore(pi.events.list, sessionId, signal, oldest);
+      if (signal.aborted) return;
+      if (earlier.length === 0) {
+        setHasOlderHistory(false);
+        return;
+      }
+      historyEventsRef.current = mergeAgentEvents(earlier, loaded);
+      const older = buildAgentTranscript(earlier).filter((message) => message.status || message.content
+        || message.traceEntries.length || message.timeline?.length);
+      setMessages((current) => {
+        const prepended = [...older.filter((message) => !current.some((item) => item.id === message.id)), ...current];
+        messagesRef.current = prepended;
+        return prepended;
+      });
+      setAgentCharts(updateAgentCharts([], historyEventsRef.current));
+      setHasOlderHistory((historyEventsRef.current[0]?.sequence ?? 1) > 1);
+      setPrependCount((count) => count + 1);
+      traceAgentStage('history.prepended', { sessionId, events: earlier.length, total: historyEventsRef.current.length });
+    } catch (error) {
+      if (!signal.aborted) feedback.error(agentErrorText(error) || i18n('stream.error.loadSessionMessages'));
+    } finally {
+      historyLoadingRef.current = false;
+      setLoadingEarlier(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadEarlierRef.current = () => {
+      const container = messageListRef.current;
+      if (!hasOlderHistory || sessionLoading || !container) return;
+      // Paging costs one range read now, so reading into the top zone simply asks for the next page.
+      if (container.scrollTop > EARLIER_HISTORY_LOAD_OFFSET) return;
+      void handleLoadEarlierHistory();
+    };
+  }, [handleLoadEarlierHistory, hasOlderHistory, sessionLoading]);
+
+  // Restores the reading position after older rounds were inserted above it.
+  React.useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current;
+    if (!anchor) return;
+    prependAnchorRef.current = null;
+    const container = messageListRef.current;
+    if (!container) return;
+    suppressScrollTrackingRef.current = true;
+    container.scrollTop = Math.max(0, anchor.top + (container.scrollHeight - anchor.height));
+    window.setTimeout(() => { suppressScrollTrackingRef.current = false; }, PROGRAMMATIC_SCROLL_LOCK_MS);
+  }, [prependCount]);
 
   // Restore the conversation from the path when first opening /stream/:chatId.
 
-  const mountedRef = useRef(false);
   useEffect(() => {
-    if (mountedRef.current) return;
-    mountedRef.current = true;
-    if (!isPanel) {
-      const chatId = getChatIdFromPath();
+    let active = true;
+    const probeController = new AbortController();
+    {
+      const chatId = isPanel ? sessionStorage.getItem(ACTIVE_AGENT_SESSION_KEY) : getChatIdFromPath();
       if (chatId) {
-        handleLoadSessionById(chatId);
+        const resolveAndLoad = async (sessions?: IChatSession[]) => {
+          const session = await resolveChatSessionVersion(chatId, sessions,
+            () => pi.sessions.get(
+              { sessionId: chatId, sessionVersion: 2 }, { signal: probeController.signal }));
+          if (!active || probeController.signal.aborted) return;
+          if (session.sessionVersion === 2) {
+            void handleLoadAgentSessionById(session.id, session.title);
+            return;
+          }
+          void handleLoadSessionById(chatId, session.title);
+        };
+        aiStreamService.getChatSessions(undefined as void)
+          .then((sessions) => resolveAndLoad(sessions || []))
+          .catch(() => resolveAndLoad());
       }
     }
-  }, []);
+    return () => { active = false; probeController.abort(); };
+  }, [getChatIdFromPath, handleLoadAgentSessionById, handleLoadSessionById, isPanel]);
 
   // Handle stream:newChat in every mode, including the Cmd+L shortcut.
 
   useEffect(() => {
     const handleNewChatEvent = () => {
+      agentSessionRef.current = undefined;
       handleNewChat();
     };
     window.addEventListener('stream:newChat', handleNewChatEvent);
@@ -1502,7 +1879,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     if (isPanel) return;
 
     const handleLoadEvent = (e: Event) => {
-      const { sessionId, title } = (e as CustomEvent).detail;
+      const { sessionId, title, sessionVersion } = (e as CustomEvent).detail;
+      if (sessionVersion === 2) {
+        void handleLoadAgentSessionById(sessionId, title);
+        return;
+      }
+      agentSessionRef.current = undefined;
+      setRuntimeChoice('DEFAULT');
       handleLoadSessionById(sessionId, title);
     };
 
@@ -1510,7 +1893,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return () => {
       window.removeEventListener('stream:loadSession', handleLoadEvent);
     };
-  }, [isPanel, handleLoadSessionById]);
+  }, [handleLoadAgentSessionById, handleLoadSessionById, isPanel]);
 
   useEffect(() => {
     const handleSessionRenamed = (event: Event) => {
@@ -1529,12 +1912,33 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     return () => window.removeEventListener('stream:sessionRenamed', handleSessionRenamed);
   }, []);
 
+  const handleConversationCommand = (command: ConversationCommand) => {
+    if (command === 'new') { handleNewChat(); return; }
+    if (command === 'copy') {
+      const reply = [...messagesRef.current].reverse().find((message) => message.role === 'assistant' && message.content);
+      if (!reply) throw new Error(i18n('stream.command.noReply'));
+      if (!copyToClipboard(reply.content)) throw new Error(i18n('stream.command.failed'));
+      feedback.success(i18n('stream.codeBlock.copied'));
+      return;
+    }
+    if (!messagesRef.current.length) throw new Error(i18n('stream.command.noMessages'));
+    const text = messagesRef.current.map((message) =>
+      `## ${message.role}\n\n${message.content}`).join('\n\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `conversation-${currentSessionIdRef.current || 'chat'}.md`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   // Send a message.
 
   const handleSend = useCallback(
     async (params: SendParams) => {
       const content = (params.input || '').trim();
-      if (!content) return;
+      const context = params.agentContext || captureAgentContext(params, params, []);
+      if (!content || (runtimeChoice === 'PI' && agentOperationRef.current)) return;
 
       const selectedValue = params.model || selectedModel?.value;
       if (!selectedValue) {
@@ -1549,6 +1953,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
       setStreamTraceEntries([]);
       streamTraceEntriesRef.current = [];
+      setStreamTimelineEntries([]);
+      streamTimelineEntriesRef.current = [];
       previousStreamThoughtPreviewRef.current = '';
       setStreamThoughtPulse(false);
       setExpandedTraceMap({});
@@ -1582,11 +1988,62 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
             role: 'user' as const,
             content,
             attachments: params.attachments,
+            contextSummary: runtimeChoice === 'PI' ? agentContextSummary(context) : undefined,
+            contextDatabaseType: runtimeChoice === 'PI' ? agentContextDatabaseType(context) : undefined,
           },
         ];
         messagesRef.current = next;
         return next;
       });
+
+      if (runtimeChoice === 'PI') {
+        const operation = createAgentOperation();
+        traceAgentStage('run.preparing', { requestId: userMessageId, modelConfigId: selectedOption.modelConfigId });
+        agentOperationRef.current = operation;
+        setAgentRunning(true);
+        try {
+          const model = await prepareAgentModelOption(selectedOption);
+          if (operation.controller.signal.aborted) return;
+          if (operation.cancelRequested) { finishAgentReply(undefined, 'cancelled'); return; }
+          const modelConfigId = model.modelConfigId || model.value;
+          let session = agentSessionRef.current;
+          if (!session) {
+            const created = await pi.sessions.create({ message: content, runtimeType: 'PI', modelConfigId });
+            if (operation.controller.signal.aborted) return;
+            if (operation.cancelRequested) { finishAgentReply(undefined, 'cancelled'); return; }
+            session = { id: created.id, sequence: 0 };
+            traceAgentStage('session.created', { sessionId: created.id, modelConfigId });
+            agentSessionRef.current = session;
+            sessionStorage.setItem(ACTIVE_AGENT_SESSION_KEY, created.id);
+            setCurrentSessionId(created.id);
+            currentSessionIdRef.current = created.id;
+            setCurrentSessionTitle(created.title);
+            currentSessionTitleRef.current = created.title;
+            window.dispatchEvent(new CustomEvent('stream:sessionsChanged'));
+          }
+          operation.sessionId = session.id;
+          if (!isPanel) setChatIdInPath(session.id);
+          const run = await pi.runs.start({ sessionId: session.id, modelConfigId,
+            message: content, idempotencyKey: userMessageId, context });
+          operation.runId = run.id;
+          traceAgentStage('run.accepted', { sessionId: session.id, runId: run.id, status: run.status });
+          if (operation.cancelRequested && ['ACCEPTED', 'RUNNING'].includes(run.status)) {
+            await pi.runs.cancel({ runId: run.id, sessionId: session.id });
+          }
+          if (!operation.controller.signal.aborted) await pollAgentRun(operation, session.id, run.id);
+        } catch (error) {
+          if (!operation.controller.signal.aborted) finishAgentReply(error);
+        } finally {
+          if (agentOperationRef.current === operation) {
+            agentOperationRef.current = undefined;
+            setAgentRunning(false);
+            setAgentCancelling(false);
+            setCurrentRoundUserMessageId(null);
+            currentRoundUserMessageIdRef.current = null;
+          }
+        }
+        return;
+      }
 
       // Let the backend load history for an existing session; otherwise send local history.
       const historyPayload = currentSessionId
@@ -1647,11 +2104,16 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
     [
       currentSessionId,
       isCurrentRoundOverflowingViewport,
+      isPanel,
       messages,
       modelOptionMap,
+      runtimeChoice,
       selectedModel?.value,
       request,
+      pollAgentRun,
+      finishAgentReply,
       scrollMessageListToBottom,
+      setChatIdInPath,
     ],
   );
 
@@ -1813,7 +2275,9 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
       <PinSqlContext.Provider value={handlePinSql}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          components={{ code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>> }}
+          components={{
+            code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>, table: MarkdownTable,
+          }}
         >
           {normalizeAiMarkdown(preprocessTableRefs(content))}
         </ReactMarkdown>
@@ -1859,7 +2323,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         <div key={`${entry.type}-${entry.id || index}`} className={styles.traceEntry}>
           <div className={styles.traceEntryTag}>{i18n('stream.trace.toolCall')}</div>
           <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.unknownTool')}</div>
-          {entry.arguments && <pre className={styles.traceCodeBlock}>{entry.arguments}</pre>}
+          {entry.arguments && <pre className={styles.traceCodeBlock}>{formatTraceValue(entry.arguments)}</pre>}
         </div>
       );
     }
@@ -1869,7 +2333,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
         <div key={`${entry.type}-${index}`} className={styles.traceEntry}>
           <div className={styles.traceEntryTag}>{i18n('stream.trace.toolResult')}</div>
           <div className={styles.traceEntryTitle}>{entry.name || i18n('stream.trace.defaultToolResult')}</div>
-          <pre className={styles.traceCodeBlock}>{entry.content}</pre>
+          <pre className={styles.traceCodeBlock}>{formatTraceValue(entry.content)}</pre>
         </div>
       );
     }
@@ -1915,6 +2379,28 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
   };
 
   const renderMessages = () => {
+    if (runtimeChoice === 'PI') {
+      return <AgentV2Session
+        sessionId={currentSessionId || undefined}
+        messages={messages}
+        currentRoundUserMessageId={currentRoundUserMessageId}
+        streamingText={streamingText}
+        streamTimelineEntries={streamTimelineEntries}
+        activeRunId={agentOperationRef.current?.runId}
+        charts={agentCharts}
+        approvals={agentApprovals}
+        questions={agentQuestions}
+        running={agentRunning}
+        cancelling={agentCancelling}
+        onInspectTools={() => setAutoFollow(false)}
+        highlightedUserMessageId={highlightedUserMessageId}
+        renderMarkdown={renderMarkdown}
+        onDecideApproval={decideAgentApproval}
+        onAnswerQuestion={respondToAgentQuestion}
+        onUserMessageRef={setMessageElement}
+        onLastRoundRef={(node) => { currentRoundBlockRef.current = node; }}
+             />;
+    }
     const rounds: IChatRound[] = [];
     let pendingRound: IChatRound | null = null;
 
@@ -2025,6 +2511,7 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                         ) : (
                           renderMarkdown(streamingText)
                         )}
+
                       </div>
                     </div>
                   );
@@ -2038,9 +2525,85 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
 
   // Panel-mode header.
 
+  const handleRuntimeChange = async (value: 'DEFAULT' | 'PI') => {
+    if (runtimeSwitching || !clientRuntime.usesLocalPersistence) return;
+    if (value === 'DEFAULT') {
+      setRuntimeChoice(value);
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, value);
+      handleNewChat();
+      return;
+    }
+    setRuntimeSwitching(true);
+    try {
+      let state = await pi.runtime.check();
+      if (!state.enabled) {
+        const confirmed = await confirmBetaFeature(modal, {
+          title: i18n('setting.agent.pi.confirmTitle'),
+          content: i18n('setting.agent.pi.confirmContent'),
+          okText: i18n('common.button.confirm'),
+          cancelText: i18n('common.button.cancel'),
+        });
+        if (!confirmed) return;
+        const result = await pi.runtime.enable({ confirmed: true });
+        state = result.state;
+        if (result.taskId) {
+          void useImportExportStore.getState().getTaskList();
+          const deadline = Date.now() + 5 * 60 * 1000;
+          let task = await importExportService.getTaskDetails({ taskId: result.taskId });
+          while (task && ['PENDING', 'RUNNING'].includes(task.status) && Date.now() < deadline && !unmountedRef.current) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1000));
+            task = await importExportService.getTaskDetails({ taskId: result.taskId });
+          }
+          if (task && ['PENDING', 'RUNNING'].includes(task.status)) {
+            feedback.error(task.errorMessage || i18n('setting.agent.enableFailed'));
+            return;
+          }
+          if (task?.status !== 'SUCCESS') {
+            feedback.error(task?.errorMessage || i18n('setting.agent.enableFailed'));
+            return;
+          }
+          state = (await pi.runtime.enable({ confirmed: true })).state;
+        }
+        if (!state.enabled) {
+          feedback.error(state.environment.diagnostics.reason || i18n('setting.agent.enableFailed'));
+          return;
+        }
+      }
+      setRuntimeChoice(value);
+      localStorage.setItem(AI_RUNTIME_STORAGE_KEY, value);
+      handleNewChat();
+    } catch (error) {
+      feedback.error(agentErrorText(error) || i18n('setting.agent.enableFailed'));
+    } finally {
+      setRuntimeSwitching(false);
+    }
+  };
+
+  const handleStop = async () => {
+    const operation = agentOperationRef.current;
+    if (runtimeChoice !== 'PI' || !operation) {
+      stop();
+      return;
+    }
+    if (operation.cancelRequested) return;
+    operation.cancelRequested = true;
+    setAgentCancelling(true);
+    traceAgentStage('run.cancel.requested', { sessionId: operation.sessionId, runId: operation.runId });
+    if (!operation.runId || !operation.sessionId) return;
+    try {
+      await pi.runs.cancel({ runId: operation.runId, sessionId: operation.sessionId });
+    } catch (error) {
+      operation.cancelRequested = false;
+      setAgentCancelling(false);
+      feedback.error(agentErrorText(error) || i18n('stream.agent.sendFailed'));
+    }
+  };
+
   const renderPanelHeader = () => (
     <div className={styles.panelHeader}>
-      <span className={styles.panelHeaderTitle}>{currentSessionTitle || i18n('stream.session.title')}</span>
+      <Flex gap={8} align="center" className={styles.panelHeaderLeading}>
+        <span className={styles.panelHeaderTitle}>{currentSessionTitle || i18n('stream.session.title')}</span>
+      </Flex>
       <Flex gap={4} align="center">
         <button
           className={styles.panelHeaderBtn}
@@ -2063,7 +2626,13 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                   title={item.title || i18n('stream.session.title')}
                   onClick={() => {
                     if (panelRenamingSessionId !== item.id) {
-                      handleLoadSessionById(item.id, item.title);
+                      if (item.sessionVersion === 2) {
+                        void handleLoadAgentSessionById(item.id, item.title);
+                      } else {
+                        setRuntimeChoice('DEFAULT');
+                        localStorage.setItem(AI_RUNTIME_STORAGE_KEY, 'DEFAULT');
+                        handleLoadSessionById(item.id, item.title);
+                      }
                     }
                   }}
                 >
@@ -2150,10 +2719,20 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 items={userMessageNavigationItems}
                 onNavigate={handleNavigateToUserMessage}
               />
-              <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}>
+              <div className={styles.messageList} ref={messageListRef} onScroll={handleMessageListScroll}
+                onWheelCapture={(event) => {
+                  if (event.ctrlKey || !event.deltaY) return;
+                  interruptMessageAutoScroll();
+                  // A wheel that can no longer move the list still asks for the previous page.
+                  if (event.deltaY > 0) handleMessageListScroll();
+                  else loadEarlierRef.current();
+                }}
+                onTouchMoveCapture={interruptMessageAutoScroll}
+                onTouchEndCapture={handleMessageListScroll}
+              >
                 <div className={styles.contentWidth} ref={messageContentRef}>
+                  {loadingEarlier && <div className={styles.topLoadingBar} />}
                   {renderMessages()}
-                  <div ref={bottomSentinelRef} aria-hidden="true" />
                 </div>
               </div>
             </div>
@@ -2189,14 +2768,17 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                 ref={chatInputRef}
                 className={styles.chatInput}
                 chatInputAreaClassName={`${styles.chatInputAreaRounded} ${
-                  status === SSERequestStatus.LOADING ? styles.chatInputAreaLoading : ''
+                  status === SSERequestStatus.LOADING || agentRunning ? styles.chatInputAreaLoading : ''
                 }`}
-                loading={status === SSERequestStatus.LOADING}
+                loading={status === SSERequestStatus.LOADING || agentRunning}
+                sendDisabled={runtimeSwitching}
                 onContextChange={() => {
-                  handleNewChat();
+                  if (runtimeChoice !== 'PI') handleNewChat();
                 }}
                 onChatSend={handleSend}
-                onStop={stop}
+                onCommand={handleConversationCommand}
+                onStop={handleStop}
+                stopping={agentCancelling}
                 autoSize={
                   isPanel
                     ? { minRows: 2, maxRows: 4 }
@@ -2205,6 +2787,8 @@ export default function AI({ variant = 'page', onTableClick, onPinSql, onSession
                     : { minRows: 2, maxRows: 6 }
                 }
                 modelOptions={modelOptions}
+                runtimeChoice={clientRuntime.usesLocalPersistence ? runtimeChoice : undefined}
+                onRuntimeChange={runtimeSwitching ? undefined : handleRuntimeChange}
                 showCustomModelEntry={canManageCustomModels}
                 onCustomModelClick={canManageCustomModels ? () => setOpenSettings(true) : undefined}
                 customModelText={i18n('setting.modelConfig.entry')}

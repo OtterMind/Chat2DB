@@ -1,0 +1,43 @@
+{
+  "skills": [
+    {
+      "name": "chart",
+      "files": [
+        "SKILL.md",
+        "references/area-line.md",
+        "references/bar.md",
+        "references/column.md",
+        "references/combo.md",
+        "references/common.md",
+        "references/errors.md",
+        "references/examples.md",
+        "references/funnel.md",
+        "references/line.md",
+        "references/pie.md",
+        "references/ring-pie.md",
+        "references/rose-pie.md",
+        "references/scatter.md",
+        "references/statistics.md"
+      ]
+    },
+    {
+      "name": "skill-manager",
+      "files": [
+        "SKILL.md",
+        "references/creation.md",
+        "references/installation.md",
+        "LICENSE.txt"
+      ]
+    },
+    {
+      "name": "mcp-manager",
+      "files": [
+        "SKILL.md",
+        "references/http.md",
+        "references/policy.md",
+        "references/stdio.md",
+        "references/troubleshooting.md"
+      ]
+    }
+  ]
+}

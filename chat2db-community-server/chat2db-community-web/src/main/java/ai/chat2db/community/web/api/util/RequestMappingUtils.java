@@ -2,11 +2,14 @@ package ai.chat2db.community.web.api.util;
 
 import ai.chat2db.community.web.api.config.console.RequestMappingInfo;
 
-import jakarta.servlet.ServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
 import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.context.ApplicationContext;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.util.AntPathMatcher;
+import org.springframework.web.util.UriUtils;
+import java.nio.charset.StandardCharsets;
 import org.springframework.web.bind.annotation.*;
 
 import java.lang.reflect.Method;
@@ -23,6 +26,7 @@ public class RequestMappingUtils {
 
     private static volatile Map<String, List<RequestMappingInfo>> requestMappingInfoMap = Collections.emptyMap();
     private static volatile boolean initialized = false;
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     private static synchronized void init() {
         if (initialized) {
@@ -37,32 +41,15 @@ public class RequestMappingUtils {
         Map<String, Object> beansWithAnnotation = context.getBeansWithAnnotation(RestController.class);
         for (Object bean : beansWithAnnotation.values()) {
             Class<?> beanClass = AopProxyUtils.ultimateTargetClass(bean);
-            RequestMapping restController = beanClass.getAnnotation(RequestMapping.class);
-            String prefixUrl = "";
-            if (restController != null && restController.value().length > 0) {
-                prefixUrl = restController.value()[0];
-            }
-            Method[] methods = beanClass.getDeclaredMethods();
-            for (Method method : methods) {
-                if (method.isAnnotationPresent(RequestMapping.class)) {
-                    RequestMapping annotation = method.getAnnotation(RequestMapping.class);
-                    addRequestMappingInfoMap(mappings, prefixUrl, beanClass, method, annotation.value(), annotation.method());
-                }
-                if (method.isAnnotationPresent(PostMapping.class)) {
-                    PostMapping annotation = method.getAnnotation(PostMapping.class);
-                    addRequestMappingInfoMap(mappings, prefixUrl, beanClass, method, annotation.value(), RequestMethod.POST);
-                }
-                if (method.isAnnotationPresent(GetMapping.class)) {
-                    GetMapping annotation = method.getAnnotation(GetMapping.class);
-                    addRequestMappingInfoMap(mappings, prefixUrl, beanClass, method, annotation.value(), RequestMethod.GET);
-                }
-                if (method.isAnnotationPresent(DeleteMapping.class)) {
-                    DeleteMapping annotation = method.getAnnotation(DeleteMapping.class);
-                    addRequestMappingInfoMap(mappings, prefixUrl, beanClass, method, annotation.value(), RequestMethod.DELETE);
-                }
-                if (method.isAnnotationPresent(PutMapping.class)) {
-                    PutMapping annotation = method.getAnnotation(PutMapping.class);
-                    addRequestMappingInfoMap(mappings, prefixUrl, beanClass, method, annotation.value(), RequestMethod.PUT);
+            RequestMapping controllerMapping = AnnotatedElementUtils.findMergedAnnotation(beanClass, RequestMapping.class);
+            String[] prefixes = controllerMapping == null || controllerMapping.value().length == 0
+                    ? new String[]{""} : controllerMapping.value();
+            for (Method method : beanClass.getMethods()) {
+                RequestMapping mapping = AnnotatedElementUtils.findMergedAnnotation(method, RequestMapping.class);
+                if (mapping == null) continue;
+                for (String prefix : prefixes) {
+                    addRequestMappingInfoMap(mappings, prefix, beanClass, method,
+                            mapping.value().length == 0 ? new String[]{""} : mapping.value(), mapping.method());
                 }
             }
         }
@@ -81,9 +68,6 @@ public class RequestMappingUtils {
                     requestMappingInfo.setRequestMethods(names);
                 }
                 Class<?>[] parameterTypes = method.getParameterTypes();
-                if (!StringUtils.isEmpty(value) && !value.startsWith("/") || countRequestParameters(parameterTypes) > 1) {
-                    log.error("-----RequestMappingUtils addRequestMappingInfoMap error, beanClass:" + beanClass);
-                }
                 String url = prefixUrl + value;
                 requestMappingInfo.setUrl(url);
                 requestMappingInfo.setController(beanClass);
@@ -99,31 +83,23 @@ public class RequestMappingUtils {
         }
     }
 
-    private static long countRequestParameters(Class<?>[] parameterTypes) {
-        if (parameterTypes == null || parameterTypes.length == 0) {
-            return 0L;
-        }
-        return Arrays.stream(parameterTypes)
-                .filter(parameterType -> !ServletResponse.class.isAssignableFrom(parameterType))
-                .count();
+    public static Map<String, String> pathVariables(RequestMappingInfo mapping, String url) {
+        Map<String, String> variables = new HashMap<>(PATH_MATCHER.extractUriTemplateVariables(mapping.getUrl(), url));
+        variables.replaceAll((name, value) -> UriUtils.decode(value, StandardCharsets.UTF_8));
+        return variables;
     }
 
     public static RequestMappingInfo getRequestMappingInfo(String url, String requestMethod) {
         if (!initialized) {
             init();
         }
-        List<RequestMappingInfo> requestMappingInfos = requestMappingInfoMap.get(url);
-        if (CollectionUtils.isEmpty(requestMappingInfos)) {
-            return null;
-        }
-        if (requestMethod != null) {
-            requestMethod = requestMethod.toUpperCase();
-        }
-        for (RequestMappingInfo requestMappingInfo : requestMappingInfos) {
-            if (CollectionUtils.isEmpty(requestMappingInfo.getRequestMethods()) || requestMappingInfo.getRequestMethods().contains(requestMethod)) {
-                return requestMappingInfo;
-            }
-        }
-        return null;
+        // Literal routes take precedence; select the most specific matching template for this verb.
+        return requestMappingInfoMap.keySet().stream()
+                .filter(pattern -> PATH_MATCHER.match(pattern, url))
+                .sorted(PATH_MATCHER.getPatternComparator(url))
+                .flatMap(pattern -> requestMappingInfoMap.get(pattern).stream())
+                .filter(mapping -> CollectionUtils.isEmpty(mapping.getRequestMethods())
+                        || mapping.getRequestMethods().stream().anyMatch(verb -> verb.equalsIgnoreCase(requestMethod)))
+                .findFirst().orElse(null);
     }
 }

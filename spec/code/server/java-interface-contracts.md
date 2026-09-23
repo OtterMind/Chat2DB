@@ -56,6 +56,7 @@ Allowed top-level domain prefixes:
 | Database plugin implementation | `chat2db-community-plugins/*` | Implements SPI interfaces |
 | HTTP entry point | `chat2db-community-web` | Controllers, request/response DTOs, converters, adapters, and web facades |
 | Cross-cutting support | `chat2db-community-tools` | Shared utilities, exceptions, and runtime helpers; not business contracts |
+| Agent runtime implementation | `chat2db-community-agent` | Implements shared runtime contracts from tools; no JCEF, business, or storage dependencies |
 
 `domain-api` defines business contracts, contract models, and contract enums only. Do not add support packages such as `exception` or `util`, and do not hide `*Exception` types under business packages such as `model`. Shared exceptions and utilities belong in `chat2db-community-tools`, for example `ai.chat2db.community.tools.exception` and `ai.chat2db.community.tools.util`.
 

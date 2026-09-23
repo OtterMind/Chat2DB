@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener
 import ai.chat2db.plugin.dm.parser.DMExecutableSql;
 import ai.chat2db.plugin.dm.parser.DMSqlParser;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.model.value.ResultValueBudget;
 import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.sql.Chat2DBContext;
 
@@ -37,9 +38,16 @@ public final class DMCommandExecutor extends DefaultSQLExecutor {
                                                  boolean limitRowSize, Integer offset, Integer count,
                                                  Integer resultSetId, ExecutionContext executionContext)
             throws SQLException {
+        return executeMulti(statement, connection, limitRowSize, offset, count, resultSetId, executionContext, null);
+    }
+
+    @Override
+    protected List<ExecuteResponse> executeMulti(SimpleSqlStatement statement, Connection connection,
+            boolean limitRowSize, Integer offset, Integer count, Integer resultSetId,
+            ExecutionContext executionContext, ResultValueBudget valueBudget) throws SQLException {
         DMExecutableSql parsed = parseExecutableSql(statement.getSql());
         if (!parsed.isExplain()) {
-            return super.executeMulti(statement, connection, limitRowSize, offset, count, resultSetId, executionContext);
+            return super.executeMulti(statement, connection, limitRowSize, offset, count, resultSetId, executionContext, valueBudget);
         }
 
         markStatementAsExplain(statement);
@@ -48,7 +56,9 @@ public final class DMCommandExecutor extends DefaultSQLExecutor {
         long executeStartedNanos = System.nanoTime();
         String plan = explainClient.getExplainInfo(connection, parsed.executableSql());
         long executeDurationNanos = ExecutionTiming.elapsedNanos(executeStartedNanos);
-        return List.of(buildExplainResponse(parsed, plan, executionContext, startedAtEpochMs, executeDurationNanos));
+        ExecuteResponse response = buildExplainResponse(parsed, plan, executionContext, startedAtEpochMs, executeDurationNanos);
+        if (valueBudget != null) response.setDataList(List.of(List.of(valueBudget.captureText(plan))));
+        return List.of(response);
     }
 
     @Override

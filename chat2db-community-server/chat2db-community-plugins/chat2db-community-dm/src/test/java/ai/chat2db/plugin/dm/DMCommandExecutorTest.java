@@ -138,6 +138,23 @@ class DMCommandExecutorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void v2KeepsDmExplainApiAndAppliesItsCaptureBudget() throws Exception {
+        Method method = DMCommandExecutor.class.getDeclaredMethod("executeMulti", SimpleSqlStatement.class,
+                Connection.class, boolean.class, Integer.class, Integer.class, Integer.class,
+                ai.chat2db.community.domain.api.model.result.ExecutionContext.class,
+                ai.chat2db.spi.model.value.ResultValueBudget.class);
+        method.setAccessible(true);
+        var results = (List<ExecuteResponse>) method.invoke(DMCommandExecutor.INSTANCE,
+                new SimpleSqlStatement("EXPLAIN SELECT * FROM SYSOBJECTS"), dmExplainConnection(), false,
+                0, 10, null, null, new ai.chat2db.spi.model.value.ResultValueBudget(4));
+        var cell = results.get(0).getDataList().get(0).get(0);
+        assertEquals("plan", cell.getValue());
+        assertTrue(cell.isTruncated());
+        assertTrue(cell.getUnsupportedReason().startsWith("CAPTURE_BUDGET_EXCEEDED"));
+    }
+
+    @Test
     void explainButtonShouldBuildExplainOnceAndCallGetExplainInfo() throws Exception {
         Connection connection = dmExplainConnection();
         putContext(connection);

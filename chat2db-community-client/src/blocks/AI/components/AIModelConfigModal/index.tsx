@@ -11,7 +11,7 @@ import {
   saveAIModelConfig,
   testAIModelConfig,
 } from '@/service/aiModelConfig';
-import { resolveBaseUrlOnProviderChange, resolveProviderBaseUrl } from './modelConfigDefaults';
+import { resolveBaseUrlOnProviderChange, resolveProviderBaseUrl, resolveAgentModelApi } from './modelConfigDefaults';
 import { useStyles } from './style';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
@@ -32,6 +32,7 @@ const providerOptions = [
 const emptyFormValues: IAIModelConfigSaveRequest = {
   name: '',
   provider: 'OPENAI',
+  agentApi: 'openai-responses',
   model: '',
   apiKey: '',
   baseUrl: '',
@@ -52,6 +53,7 @@ const toFormValues = (config?: Partial<IAIModelConfigSaveRequest>): IAIModelConf
   return {
     ...values,
     baseUrl: resolveProviderBaseUrl(values.provider, values.baseUrl),
+    agentApi: resolveAgentModelApi(values.provider, config?.agentApi, values.baseUrl),
   };
 };
 
@@ -112,7 +114,9 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
   };
 
   const handleProviderChange = (provider: AIProvider) => {
-    form.setFieldValue('baseUrl', resolveBaseUrlOnProviderChange(provider, form.getFieldValue('baseUrl')));
+    const baseUrl = resolveBaseUrlOnProviderChange(provider, form.getFieldValue('baseUrl'));
+    form.setFieldValue('baseUrl', baseUrl);
+    form.setFieldValue('agentApi', resolveAgentModelApi(provider, undefined, baseUrl));
   };
 
   const handleSave = async () => {

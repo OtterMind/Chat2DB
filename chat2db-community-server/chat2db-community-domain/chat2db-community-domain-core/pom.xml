@@ -12,7 +12,22 @@
 
     <artifactId>chat2db-community-domain-core</artifactId>
 
+    <build>
+        <testResources>
+            <testResource><directory>src/test/resources</directory></testResource>
+            <testResource>
+                <directory>${project.basedir}/../../../skills</directory>
+                <targetPath>skills</targetPath>
+                <filtering>false</filtering>
+            </testResource>
+        </testResources>
+    </build>
+
     <dependencies>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
         <dependency>
             <groupId>ai.chat2db</groupId>
             <artifactId>chat2db-community-domain-api</artifactId>

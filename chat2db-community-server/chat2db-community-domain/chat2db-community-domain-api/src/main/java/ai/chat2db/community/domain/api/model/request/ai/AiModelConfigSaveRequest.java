@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.api.model.request.ai;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 @Data
@@ -16,6 +17,9 @@ public class AiModelConfigSaveRequest {
 
     @NotBlank
     private String model;
+
+    @Pattern(regexp = "openai-completions|openai-responses|anthropic-messages|google-generative-ai")
+    private String agentApi;
 
     private String apiKey;
 

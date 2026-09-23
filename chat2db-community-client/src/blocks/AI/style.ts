@@ -60,6 +60,16 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       min-width: 0;
     `,
 
+    panelHeaderLeading: css`
+      min-width: 0;
+      flex: 1;
+    `,
+
+    runtimeSelect: css`
+      width: 108px;
+      flex: 0 0 108px;
+    `,
+
     panelHeaderBtn: css`
       display: inline-flex;
       align-items: center;
@@ -597,6 +607,16 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
     `,
 
     // Chart card.
+    userContext: css`
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: ${token.colorTextSecondary};
+      margin-bottom: 4px;
+      overflow-wrap: anywhere;
+    `,
+
     chartCard: css`
       margin: 10px 0;
       width: 100%;
@@ -909,6 +929,8 @@ export const useStyles = createStyles(({ css, token, prefixCls }) => {
       white-space: pre-wrap;
       word-break: break-word;
       overflow-x: auto;
+      max-height: 280px;
+      overflow-y: auto;
       font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Courier New', monospace;
     `,
 

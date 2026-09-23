@@ -171,6 +171,38 @@ class SqlServerExecutorTest {
     }
 
     @Test
+    void v2KeepsGoBatchHandlingAndSharesItsCaptureBudget() throws Exception {
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:sqlserver_go_capture_budget")) {
+            putContext(connection);
+            var results = new TestSqlServerExecutor().executeBounded("SELECT 'abcdef';\nGO\nSELECT 'uvwxyz';", connection);
+            assertEquals(2, results.size());
+            assertEquals("abcdef", results.get(0).getDataList().get(0).get(0).getValue());
+            assertEquals("uv", results.get(1).getDataList().get(0).get(0).getValue());
+            assertTrue(results.get(1).getDataList().get(0).get(0).isTruncated());
+        }
+    }
+
+    @Test
+    void legacyGoBatchStillInvokesTheExistingResultReaderOverride() throws Exception {
+        class LegacyExecutor extends SqlServerExecutor {
+            @Override
+            protected ExecuteResponse generateQueryExecuteResponse(Statement statement, boolean limit,
+                    Integer offset, Integer count) {
+                return ExecuteResponse.builder().success(true)
+                        .dataList(List.of(List.of(ResultCell.of("legacy reader")))).build();
+            }
+            List<ExecuteResponse> run(Connection connection) throws Exception {
+                return executeMulti(new SimpleSqlStatement("SELECT 1;\nGO\nSELECT 2;"), connection, true, 0, 10, null);
+            }
+        }
+        try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:sqlserver_go_legacy_reader")) {
+            var results = new LegacyExecutor().run(connection);
+            assertEquals(2, results.size());
+            assertTrue(results.stream().allMatch(result -> "legacy reader".equals(result.getDataList().get(0).get(0).getValue())));
+        }
+    }
+
+    @Test
     void topLevelStreamingTreatsGoBatchesAsIndependentStatements() throws Exception {
         List<String> preparedSql = new ArrayList<>();
         String[] catalog = {"source_database"};
@@ -396,6 +428,11 @@ class SqlServerExecutorTest {
     }
 
     private static final class TestSqlServerExecutor extends SqlServerExecutor {
+
+        private List<ExecuteResponse> executeBounded(String sql, Connection connection) throws Exception {
+            return executeMulti(new SimpleSqlStatement(sql), connection, false, 0, 10, null, null,
+                    new ai.chat2db.spi.model.value.ResultValueBudget(8));
+        }
 
         private List<ExecuteResponse> executeAll(String sql, Connection connection) throws Exception {
             return executeMulti(new SimpleSqlStatement(sql), connection, true, 0, 10, null);

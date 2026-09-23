@@ -1,0 +1,33 @@
+package ai.chat2db.community.domain.api.service.agent;
+
+import ai.chat2db.community.domain.api.model.agent.AgentSession;
+import ai.chat2db.community.domain.api.model.agent.AgentRun;
+import ai.chat2db.community.domain.api.model.agent.AgentEvent;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRunCancelCommand;
+import ai.chat2db.community.domain.api.model.request.agent.AgentRunStartCommand;
+import ai.chat2db.community.domain.api.model.request.agent.AgentSessionCreateCommand;
+
+import java.util.List;
+import java.util.concurrent.CompletionStage;
+
+public interface AgentService {
+
+    AgentSession createSession(AgentSessionCreateCommand command);
+
+    AgentSession getSession(String sessionId, Long userId);
+
+    List<AgentSession> listSessions(Long userId);
+
+    CompletionStage<AgentRun> startRun(AgentRunStartCommand command);
+
+    CompletionStage<AgentRun> cancelRun(AgentRunCancelCommand command);
+
+    List<AgentEvent> listEvents(String sessionId, Long userId, long afterSequence, int limit);
+
+    /** The newest events before {@code beforeSequence}, so a long conversation opens on its last page. */
+    List<AgentEvent> listEventsBefore(String sessionId, Long userId, long beforeSequence, int limit);
+
+    AgentSession renameSession(String sessionId, Long userId, String title);
+
+    void deleteSession(String sessionId, Long userId);
+}

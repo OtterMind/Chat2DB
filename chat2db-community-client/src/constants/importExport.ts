@@ -18,6 +18,7 @@ export enum ImportExportTaskType {
   TABLE_DATA_EXPORT = 'TABLE_DATA_EXPORT',
   DATA_FILE_IMPORT = 'DATA_FILE_IMPORT',
   SQL_FILE_IMPORT = 'SQL_FILE_IMPORT',
+  PI_RUNTIME_INSTALL = 'PI_RUNTIME_INSTALL',
 }
 
 export enum ImportExportTaskStatus {
