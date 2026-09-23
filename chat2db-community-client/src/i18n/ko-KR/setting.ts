@@ -4,11 +4,8 @@ export default {
   "setting.agent.tool.enable": "활성화",
   "setting.agent.workingDirectory.choose": "폴더 선택",
   "setting.agent.tools.title": "Pi Agent 도구",
-  "setting.agent.toolStatus.ENABLED": "활성화됨",
-  "setting.agent.toolStatus.DISABLED": "비활성화됨",
   "setting.agent.toolStatus.UNAVAILABLE": "사용 불가",
   "setting.agent.workingDirectory": "도구 작업 디렉터리",
-  "setting.agent.workingDirectory.default": "기본값: 대화별 개별 디렉터리",
   "setting.agent.workingDirectory.hint": "파일 도구의 작업 디렉터리이며 Bash/PowerShell을 제한하지 않습니다.",
   "setting.agent.tool.bash": "shell 명령을 실행합니다. 작업 디렉터리는 샌드박스가 아니며 실행마다 승인이 필요합니다.",
   "setting.agent.tool.read": "파일을 읽습니다. 긴 파일은 오프셋과 커서로 페이지를 나눌 수 있습니다.",
@@ -307,14 +304,8 @@ export default {
   'setting.modelConfig.placeholder.location': '예: us-central1',
   'setting.modelConfig.placeholder.temperature': '예: 0.7',
   'setting.modelConfig.placeholder.maxTokens': '예: 4096',
-  'setting.agent.title': 'Agent',
-  'setting.agent.pi.label': 'Pi Agent 사용',
   'setting.agent.pi.confirmTitle': 'Pi Agent를 사용하시겠습니까?',
   'setting.agent.pi.confirmContent':
     '필요할 때 Pi를 다운로드하고 별도 프로세스로 실행합니다. 플랫폼 호환성 문제가 있을 수 있습니다.',
-  'setting.agent.bash.label': 'Bash 사용',
-  'setting.agent.bash.confirmTitle': 'Bash를 사용하시겠습니까?',
-  'setting.agent.bash.confirmContent':
-    'Agent가 제어된 Shell 명령을 요청할 수 있습니다. 환경 격리와 위험 승인은 계속 적용됩니다.',
   'setting.agent.enableFailed': '현재 환경에서는 이 기능을 사용할 수 없습니다',
 };

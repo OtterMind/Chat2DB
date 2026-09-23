@@ -4,11 +4,8 @@ export default {
   "setting.agent.tool.enable": "Enable",
   "setting.agent.workingDirectory.choose": "Choose folder",
   "setting.agent.tools.title": "Pi Agent tools",
-  "setting.agent.toolStatus.ENABLED": "Enabled",
-  "setting.agent.toolStatus.DISABLED": "Disabled",
   "setting.agent.toolStatus.UNAVAILABLE": "Unavailable",
   "setting.agent.workingDirectory": "Tool working directory",
-  "setting.agent.workingDirectory.default": "Default: a separate directory for each conversation",
   "setting.agent.workingDirectory.hint": "Working directory for the file tools above; it does not confine Bash or PowerShell.",
   "setting.agent.tool.bash": "Starts shell commands; the working directory is not a sandbox and every execution requires approval.",
   "setting.agent.tool.read": "Reads a file, with offset and cursor paging for long files.",
@@ -307,14 +304,8 @@ export default {
   'setting.modelConfig.placeholder.location': 'e.g. us-central1',
   'setting.modelConfig.placeholder.temperature': 'e.g. 0.7',
   'setting.modelConfig.placeholder.maxTokens': 'e.g. 4096',
-  'setting.agent.title': 'Agent',
-  'setting.agent.pi.label': 'Enable Pi Agent',
   'setting.agent.pi.confirmTitle': 'Enable Pi Agent?',
   'setting.agent.pi.confirmContent':
     'Chat2DB will download and run a separate Pi process on demand. Platform compatibility may vary.',
-  'setting.agent.bash.label': 'Enable Bash',
-  'setting.agent.bash.confirmTitle': 'Enable Bash?',
-  'setting.agent.bash.confirmContent':
-    'The Agent may request controlled shell commands. Environment isolation and risk approval still apply.',
   'setting.agent.enableFailed': 'This feature is unavailable in the current environment',
 };

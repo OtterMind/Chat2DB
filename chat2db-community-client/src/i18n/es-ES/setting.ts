@@ -4,11 +4,8 @@ export default {
   "setting.agent.tool.enable": "Activar",
   "setting.agent.workingDirectory.choose": "Elegir carpeta",
   "setting.agent.tools.title": "Herramientas de Pi Agent",
-  "setting.agent.toolStatus.ENABLED": "Activada",
-  "setting.agent.toolStatus.DISABLED": "Desactivada",
   "setting.agent.toolStatus.UNAVAILABLE": "No disponible",
   "setting.agent.workingDirectory": "Directorio de trabajo de las herramientas",
-  "setting.agent.workingDirectory.default": "Predeterminado: un directorio por conversación",
   "setting.agent.workingDirectory.hint": "Directorio de trabajo de las herramientas de archivo; no limita Bash ni PowerShell.",
   "setting.agent.tool.bash": "Inicia comandos de shell; el directorio de trabajo no es un sandbox y cada ejecución requiere aprobación.",
   "setting.agent.tool.read": "Lee un archivo, con paginación por desplazamiento y cursor en archivos largos.",
@@ -309,14 +306,8 @@ export default {
   'setting.modelConfig.placeholder.location': 'p. ej., us-central1',
   'setting.modelConfig.placeholder.temperature': 'p. ej., 0.7',
   'setting.modelConfig.placeholder.maxTokens': 'p. ej., 4096',
-  'setting.agent.title': 'Agent',
-  'setting.agent.pi.label': 'Activar Pi Agent',
   'setting.agent.pi.confirmTitle': '¿Activar Pi Agent?',
   'setting.agent.pi.confirmContent':
     'Chat2DB descargará Pi cuando sea necesario y lo ejecutará como un proceso independiente. Puede haber problemas de compatibilidad.',
-  'setting.agent.bash.label': 'Activar Bash',
-  'setting.agent.bash.confirmTitle': '¿Activar Bash?',
-  'setting.agent.bash.confirmContent':
-    'El Agent podrá solicitar comandos de Shell controlados. Se seguirán aplicando el aislamiento y la aprobación de riesgos.',
   'setting.agent.enableFailed': 'Esta función no está disponible en el entorno actual',
 };
