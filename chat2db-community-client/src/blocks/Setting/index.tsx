@@ -9,6 +9,7 @@ import EditorSetting from './EditorSetting';
 import McpSetting from './McpSetting';
 import NetworkProxySetting from './NetworkProxySetting';
 import SettingLayout, { type SettingMenuItem } from './SettingLayout';
+import SqlxSetting from './SqlxSetting';
 
 // ---- store -----
 import { clientRuntime } from '@client-runtime';
@@ -69,6 +70,18 @@ function Setting() {
               iconCode: 'icon-mcp',
               body: <McpSetting />,
               code: 'mcp',
+            },
+          ]
+        : []),
+      ...(clientRuntime.showSqlxSetting
+        ? [
+            {
+              title: i18n('setting.nav.cli'),
+              describe: i18n('setting.nav.cliDescribe'),
+              group: 'services' as const,
+              icon: Terminal,
+              body: <SqlxSetting />,
+              code: 'cli',
             },
           ]
         : []),

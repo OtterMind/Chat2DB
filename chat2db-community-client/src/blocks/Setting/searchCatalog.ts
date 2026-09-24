@@ -89,6 +89,32 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
           keywords: ['mcp token', 'authentication', 'reset token'],
         },
       ];
+    case 'cli':
+      return [
+        {
+          targetId: 'sqlx.install',
+          title: i18n('setting.title.sqlxCli'),
+          keywords: [
+            i18n('setting.sqlx.button.install'),
+            i18n('setting.sqlx.button.checkUpdate'),
+            i18n('setting.sqlx.button.redetect'),
+            'sqlx',
+            'cli',
+            'command line',
+            'install',
+          ],
+        },
+        {
+          targetId: 'sqlx.datasource',
+          title: i18n('setting.sqlx.section.datasource'),
+          keywords: ['sqlx', 'datasource', 'import', 'agent'],
+        },
+        {
+          targetId: 'sqlx.agent',
+          title: i18n('setting.sqlx.section.agent'),
+          keywords: ['sqlx', 'skill', 'agent', 'claude', 'codex'],
+        },
+      ];
     case 'networkProxy':
       return [
         {

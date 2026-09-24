@@ -5,6 +5,9 @@ import {
   UpdateCheckTrigger,
   McpRestartResult,
   McpStatus,
+  SqlxDatasourceState,
+  SqlxImportSummary,
+  SqlxStatus,
 } from '@/typings/settings';
 import { LangType } from '@/constants/settings';
 import type { LocalFileReadResult } from '@/utils/localFileEncoding';
@@ -233,6 +236,31 @@ const jcefApi = {
   },
   setMcpEnabled: (data: { operationId: string; enabled: boolean }) => {
     return createJcefApi<McpStatus>('set-mcp-enabled', data);
+  },
+  // SQLX command line integration
+  getSqlxStatus: (data?: { operationId?: string }) => {
+    return createJcefApi<SqlxStatus>('get-sqlx-status', data);
+  },
+  installSqlx: (data: { operationId: string; version?: string }) => {
+    return createJcefApi<SqlxStatus>('install-sqlx', data);
+  },
+  updateSqlx: (data: { operationId: string }) => {
+    return createJcefApi<SqlxStatus>('update-sqlx', data);
+  },
+  checkSqlxUpdate: (data: { operationId: string }) => {
+    return createJcefApi<SqlxStatus>('check-sqlx-update', data);
+  },
+  cancelSqlxOperation: (data: { operationId: string }) => {
+    return createJcefApi<SqlxStatus>('cancel-sqlx-operation', data);
+  },
+  setSqlxBinary: (data: { path: string }) => {
+    return createJcefApi<SqlxStatus>('set-sqlx-binary', data);
+  },
+  importSqlxDatasources: (data: { ids: number[] }) => {
+    return createJcefApi<SqlxImportSummary>('import-sqlx-datasources', data);
+  },
+  getSqlxDatasourceStates: (data: { ids: number[] }) => {
+    return createJcefApi<SqlxDatasourceState[]>('get-sqlx-datasource-states', data);
   },
 };
 

@@ -140,3 +140,74 @@ export type SelectionMetricId =
   | 'uniquePercentage'
   | 'earliest'
   | 'latest';
+
+export type SqlxPlatform = 'mac' | 'windows' | 'linux';
+
+export type SqlxInstallState = 'notInstalled' | 'installed' | 'conflict' | 'unsupported';
+
+export type SqlxBinarySource = 'chat2db' | 'external';
+
+export type SqlxUpdateState = 'unknown' | 'upToDate' | 'updateAvailable' | 'checkFailed';
+
+export interface SqlxLatestVersion {
+  status: SqlxUpdateState;
+  version?: string;
+  checkedAt?: number;
+  error?: string;
+}
+
+export type SqlxOperationStep =
+  | 'downloading'
+  | 'verifying'
+  | 'extracting'
+  | 'validating'
+  | 'installing'
+  | 'updating'
+  | 'failed';
+
+export interface SqlxOperation {
+  operationId: string;
+  kind: 'install' | 'update';
+  step: SqlxOperationStep;
+  percent?: number;
+  message?: string;
+}
+
+export interface SqlxStatus {
+  state: SqlxInstallState;
+  platform: SqlxPlatform;
+  version?: string;
+  path?: string;
+  source?: SqlxBinarySource;
+  onPath: boolean;
+  installDir: string;
+  latest: SqlxLatestVersion;
+  operation?: SqlxOperation;
+  message?: string;
+}
+
+export interface SqlxImportSkipped {
+  name?: string;
+  reason?: string;
+  detail?: string;
+}
+
+export interface SqlxImportSummary {
+  added: number;
+  updated: number;
+  unchanged: number;
+  total: number;
+  datasources?: unknown[];
+  skipped?: SqlxImportSkipped[];
+}
+
+/** How one Chat2DB datasource stands against the local SQLX store. */
+export type SqlxDatasourceStateValue = 'imported' | 'ready' | 'unsupported' | 'incomplete';
+
+export interface SqlxDatasourceState {
+  id: number;
+  state: SqlxDatasourceStateValue;
+  /** Skip code explaining a state the user has to fix; mirrors the import report reasons. */
+  reason?: string;
+  detail?: string;
+}

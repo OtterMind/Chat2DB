@@ -17,6 +17,7 @@ These boundaries apply only to Chat2DB modules. They do not restrict third-party
 | `chat2db-community-spi` | Define database plugin extension contracts and shared plugin-side models | Depend on web, domain-core, storage, or concrete plugin implementations |
 | `chat2db-community-plugins/*` | Implement database-specific plugin capabilities | Depend on web, domain-core, or storage |
 | `chat2db-community-web` | Provide HTTP, MCP, and CLI adapters, request/response DTOs, controllers, and web converters | Depend on domain-core, storage, SPI, or plugins |
+| `chat2db-community-sqlx` | Install and run the external SQLX command line for the desktop settings page | Contain domain business logic, or depend on web, domain-core, storage, SPI, or plugins |
 | `chat2db-community-jcef` | Provide desktop-shell adapters | Contain domain business logic or depend on web, domain-core, storage, SPI, or plugins |
 | `chat2db-community-start` | Provide the startup entry point and runtime assembly | Contain business logic |
 
@@ -31,8 +32,9 @@ These boundaries apply only to Chat2DB modules. They do not restrict third-party
 | `chat2db-community-spi` | `chat2db-community-domain-api`, `chat2db-community-tools` |
 | `chat2db-community-plugins/*` | `chat2db-community-spi`, other `chat2db-community-plugins/*` modules |
 | `chat2db-community-web` | `chat2db-community-domain-api`, `chat2db-community-tools` |
+| `chat2db-community-sqlx` | `chat2db-community-domain-api`, `chat2db-community-tools` |
 | `chat2db-community-jcef` | `chat2db-community-tools` |
-| `chat2db-community-start` | `chat2db-community-web`, `chat2db-community-jcef`, `chat2db-community-domain-core`, `chat2db-community-storage`, `chat2db-community-plugins/*` |
+| `chat2db-community-start` | `chat2db-community-web`, `chat2db-community-jcef`, `chat2db-community-sqlx`, `chat2db-community-domain-core`, `chat2db-community-storage`, `chat2db-community-plugins/*` |
 
 ## 4. Prohibited Dependencies
 
