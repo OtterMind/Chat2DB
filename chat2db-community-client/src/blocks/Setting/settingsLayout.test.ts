@@ -29,6 +29,8 @@ assert.match(settingLayoutSource, /aria-current=\{isActive \? 'page'/);
 
 assert.match(settingSource, /clientExtension\.settings\?\.items/);
 assert.match(settingSource, /body: <TerminalSetting \/>/);
+assert.match(settingSource, /body: <SqlxSetting \/>/);
+assert.match(settingSource, /clientRuntime\.showSqlxSetting/);
 assert.doesNotMatch(clientExtensionSource, /settings:/);
 assert.doesNotMatch(settingSource, /Personal|Invite|PurchaseDetails|DeviceCer|License/);
 
@@ -63,6 +65,9 @@ for (const targetId of [
   'mcp.token',
   'networkProxy.mode',
   'networkProxy.test',
+  'sqlx.install',
+  'sqlx.datasource',
+  'sqlx.agent',
 ]) {
   assert.ok(searchCatalogSource.includes(`'${targetId}'`), `${targetId} is indexed for settings search`);
 }

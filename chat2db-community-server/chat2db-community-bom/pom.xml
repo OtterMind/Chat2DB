@@ -109,6 +109,11 @@
                 <version>${revision}</version>
             </dependency>
             <dependency>
+                <groupId>ai.chat2db</groupId>
+                <artifactId>chat2db-community-sqlx</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
                 <groupId>net.java.dev.jna</groupId>
                 <artifactId>jna-platform</artifactId>
                 <version>5.17.0</version>

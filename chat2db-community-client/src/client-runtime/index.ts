@@ -2,7 +2,7 @@ import { APP_URL_CONFIG_COMMUNITY } from '@/constants/appConfig';
 import { COMMUNITY_IDENTITY, COMMUNITY_WORKSPACE_CONTEXT } from '@/constants/community';
 import type { ClientIdentity, ClientWorkspaceContext } from '@/client-context/types';
 import type { GlobalAppConfig } from '@/typings/settings';
-import { isDesktop } from '@/utils/env';
+import { isDesktop, isDevelopment } from '@/utils/env';
 
 export interface ClientRuntime {
   runtimeKey: string;
@@ -23,6 +23,7 @@ export interface ClientRuntime {
   enableAutoUpdate: boolean;
   supportsBetaUpdates?: boolean;
   showMcpSetting: boolean;
+  showSqlxSetting: boolean;
   showNetworkProxySetting: boolean;
   showLicenseSetting: boolean;
   showDashboard: boolean;
@@ -81,6 +82,8 @@ export const clientRuntime: ClientRuntime = {
   enableAutoUpdate: isDesktop,
   supportsBetaUpdates: true,
   showMcpSetting: isDesktop,
+  // The SQLX entry installs and inspects a local command line, so a browser preview only offers it in development.
+  showSqlxSetting: isDesktop || isDevelopment,
   showNetworkProxySetting: isDesktop,
   showLicenseSetting: false,
   showDashboard: true,

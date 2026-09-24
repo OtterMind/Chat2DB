@@ -6,10 +6,15 @@ import ai.chat2db.community.jcef.context.JcefContext;
 import ai.chat2db.community.jcef.frame.MainJFrame;
 import ai.chat2db.community.jcef.utils.CallJsFunctionUtil;
 import ai.chat2db.community.jcef.utils.SingleInstanceUtil;
+import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
+import ai.chat2db.community.sqlx.SqlxDataSourceReader;
+import ai.chat2db.community.sqlx.SqlxStatusService;
 import ai.chat2db.community.tools.console.ConsoleCodec;
 import ai.chat2db.community.tools.console.ConsoleOutboundRegistry;
 import ai.chat2db.community.tools.console.bridge.JcefServerBridgeRegistry;
 import ai.chat2db.community.tools.security.AesGcmUtil;
+import ai.chat2db.community.tools.sqlx.SqlxBridge;
+import ai.chat2db.community.tools.sqlx.SqlxBridgeRegistry;
 import ai.chat2db.community.tools.util.SystemSettingsUtil;
 import ai.chat2db.community.tools.network.NetworkProxyUtil;
 import ai.chat2db.community.tools.util.ConfigUtils;
@@ -18,6 +23,7 @@ import ai.chat2db.community.web.api.config.console.WebJcefServerBridge;
 import io.micrometer.context.ContextRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
@@ -53,6 +59,7 @@ public class Application {
         filterPrintln();
         initializeContextPropagation();
         initializeDesktopBridge();
+        initializeSqlxBridge();
         NetworkProxyUtil.applySavedSettingsToJvm();
         boolean cliRuntimeMode = isCliRuntimeMode();
         UpdateStartupCoordinator.configureProduct("COMMUNITY");
@@ -71,7 +78,7 @@ public class Application {
             app.setWebApplicationType(WebApplicationType.NONE);
         }
         try {
-            app.run(args);
+            attachSqlxDataSourceReader(app.run(args));
             McpRuntimeStatus.markReady();
             if (!cliRuntimeMode && ConfigUtils.isDesktop() && ConfigUtils.isShowGUI()) {
                 UpdateStartupCoordinator.reportReadyWhen(ApplicationExitCoordinator::isFrontendReady);
@@ -106,6 +113,34 @@ public class Application {
         } catch (IllegalArgumentException ignored) {
         }
         Hooks.enableAutomaticContextPropagation();
+    }
+
+    /** The settings page installs and runs the SQLX command line, which only exists on the desktop. */
+    private static void initializeSqlxBridge() {
+        log.info("SQLX bridge registration: chat2db.mode={}, desktop={}", System.getProperty("chat2db.mode"),
+                ConfigUtils.isDesktop());
+        if (!ConfigUtils.isDesktop()) {
+            return;
+        }
+        SqlxBridgeRegistry.register(new SqlxStatusService());
+    }
+
+    /**
+     * Hand the bridge the service that reads saved connections.
+     * <p>
+     * The startup module assembles the implementations, so the desktop shell never reaches a domain
+     * module on its own. Attaching twice is harmless.
+     */
+    private static void attachSqlxDataSourceReader(ConfigurableApplicationContext context) {
+        if (!ConfigUtils.isDesktop() || !SqlxBridgeRegistry.isRegistered()) {
+            return;
+        }
+        IDbWorkspaceDataSourceService dataSourceService = context.getBean(IDbWorkspaceDataSourceService.class);
+        SqlxBridge bridge = SqlxBridgeRegistry.getBridge();
+        if (bridge instanceof SqlxStatusService service) {
+            service.attach(new SqlxDataSourceReader(dataSourceService));
+            log.info("SQLX bridge datasource reader attached by the startup module");
+        }
     }
 
     private static void initializeDesktopBridge() {
