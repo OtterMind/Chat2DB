@@ -4,14 +4,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
+import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.cli.CliConnectionTestResponse;
 import ai.chat2db.community.domain.api.model.cli.CliDataSource;
-import ai.chat2db.community.tools.exception.cli.CliDomainException;
 import ai.chat2db.community.domain.api.model.cli.CliPage;
-import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import ai.chat2db.community.domain.api.model.request.cli.CliConnectionTestRequest;
 import ai.chat2db.community.domain.api.model.request.cli.CliDataSourceCreateRequest;
@@ -19,14 +17,16 @@ import ai.chat2db.community.domain.api.model.request.cli.CliDataSourceListReques
 import ai.chat2db.community.domain.api.model.request.cli.CliDataSourceUpdateRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePageQueryRequest;
 import ai.chat2db.community.domain.api.model.request.datasource.DbDataSourcePreConnectRequest;
+import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
+import ai.chat2db.community.domain.api.service.cli.ICliDataSourceService;
 import ai.chat2db.community.domain.api.service.db.IDbDataSourceService;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
-import ai.chat2db.community.domain.api.service.cli.ICliDataSourceService;
 import ai.chat2db.community.domain.api.service.storage.IWorkspaceStorageFacade;
-import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.core.converter.CliDataSourceConverter;
-import ai.chat2db.community.tools.util.JdbcUrlUtils;
+import ai.chat2db.community.tools.exception.cli.CliErrorMessages;
+import ai.chat2db.community.tools.exception.cli.CliDomainException;
 import ai.chat2db.community.tools.util.ConfigUtils;
+import ai.chat2db.community.tools.util.JdbcUrlUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -86,9 +86,11 @@ public class CliDataSourceServiceImpl implements ICliDataSourceService {
             dataSourceService.preConnect(param);
             response.setCanConnect(Boolean.TRUE);
         } catch (Exception exception) {
+            log.error("CLI datasource connection test failed, exceptionType={}",
+                    exception.getClass().getName());
             response.setCanConnect(Boolean.FALSE);
-            response.setErrorCode("datasource_connection_failed");
-            response.setErrorMessage(exception.getMessage());
+            response.setErrorCode(CliErrorMessages.DATASOURCE_CONNECTION_FAILED);
+            response.setErrorMessage(CliErrorMessages.DATASOURCE_CONNECTION_FAILED_MESSAGE);
         } finally {
             response.setDurationMs(System.currentTimeMillis() - startedAt);
         }
@@ -102,13 +104,8 @@ public class CliDataSourceServiceImpl implements ICliDataSourceService {
         normalizeCreateRequest(request);
         CliConnectionTestResponse connectionTest = preConnectForCreate(request);
         if (!Boolean.TRUE.equals(connectionTest.getCanConnect())) {
-            throw new CliDomainException("datasource_connection_failed",
-                    firstNonBlank(connectionTest.getErrorMessage(), "Datasource connection test failed."),
-                    Map.of(
-                            "errorCode", StringUtils.defaultString(connectionTest.getErrorCode()),
-                            "errorDetail", StringUtils.defaultString(connectionTest.getErrorDetail()),
-                            "durationMs", connectionTest.getDurationMs() == null ? 0L : connectionTest.getDurationMs()
-                    ));
+            throw new CliDomainException(CliErrorMessages.DATASOURCE_CONNECTION_FAILED,
+                    CliErrorMessages.DATASOURCE_CONNECTION_FAILED_MESSAGE);
         }
         WorkspaceDataSource dataSource = cliDataSourceConverter.create2storage(request);
         validateCreate(dataSource);
@@ -260,9 +257,11 @@ public class CliDataSourceServiceImpl implements ICliDataSourceService {
             dataSourceService.preConnect(param);
             response.setCanConnect(Boolean.TRUE);
         } catch (Exception exception) {
+            log.error("CLI datasource create pre-connect failed, exceptionType={}",
+                    exception.getClass().getName());
             response.setCanConnect(Boolean.FALSE);
-            response.setErrorCode("datasource_connection_failed");
-            response.setErrorMessage(exception.getMessage());
+            response.setErrorCode(CliErrorMessages.DATASOURCE_CONNECTION_FAILED);
+            response.setErrorMessage(CliErrorMessages.DATASOURCE_CONNECTION_FAILED_MESSAGE);
         } finally {
             response.setDurationMs(System.currentTimeMillis() - startedAt);
         }
