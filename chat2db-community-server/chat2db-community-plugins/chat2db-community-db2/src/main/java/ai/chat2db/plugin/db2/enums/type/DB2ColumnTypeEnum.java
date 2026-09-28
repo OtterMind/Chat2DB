@@ -37,7 +37,8 @@ public enum DB2ColumnTypeEnum implements IColumnBuilder {
     CLOB("CLOB", false, false, true, false, false, false, true, true, false, false),
 
 
-    COURSE("COURSE", false, false, true, false, false, false, true, true, false, false),
+    // COURSE removed — DB2 has no built-in type named COURSE; it was a stray/wrong
+    // enum constant that would produce invalid DDL if a column mapped to it.
 
 
     DATE("DATE", false, false, true, false, false, false, true, true, false, false),
