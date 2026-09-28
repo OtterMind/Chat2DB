@@ -281,6 +281,9 @@ public enum ClickHouseColumnTypeEnum implements IColumnBuilder {
     private String buildDataType(TableColumn column, ClickHouseColumnTypeEnum type) {
         String columnType = type.columnType.getTypeName();
         if (Arrays.asList(FixedString).contains(type)) {
+            if (column.getColumnSize() == null) {
+                return columnType;
+            }
             return StringUtils.join(columnType, "(", column.getColumnSize(), ")");
         }
 
