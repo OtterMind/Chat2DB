@@ -60,7 +60,7 @@
         <pty4j.version>0.13.12</pty4j.version>
         <classgraph.version>4.8.168</classgraph.version>
         <flatlaf.version>3.6</flatlaf.version>
-        <jackson.version>2.15.3</jackson.version>
+        <jackson.version>2.18.10</jackson.version>
         <jackson-afterburner.version>2.15.0</jackson-afterburner.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <vavr.version>0.10.4</vavr.version>
