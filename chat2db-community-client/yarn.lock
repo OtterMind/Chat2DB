@@ -12054,15 +12054,15 @@ prettier-linter-helpers@^1.0.0:
   dependencies:
     fast-diff "^1.1.2"
 
-prettier-plugin-organize-imports@^2:
-  version "2.3.4"
-  resolved "https://registry.npmmirror.com/prettier-plugin-organize-imports/-/prettier-plugin-organize-imports-2.3.4.tgz#65473861ae5ab7960439fff270a2258558fbe9ba"
-  integrity sha512-R8o23sf5iVL/U71h9SFUdhdOEPsi3nm42FD/oDYIZ2PQa4TNWWuWecxln6jlIQzpZTDMUeO1NicJP6lLn2TtRw==
-
 prettier-plugin-organize-imports@^3.2.2:
   version "3.2.4"
   resolved "https://registry.npmmirror.com/prettier-plugin-organize-imports/-/prettier-plugin-organize-imports-3.2.4.tgz#77967f69d335e9c8e6e5d224074609309c62845e"
   integrity sha512-6m8WBhIp0dfwu0SkgfOxJqh+HpdyfqSSLfKKRZSFbDuEQXDDndb8fTpRWkUrX/uBenkex3MgnVk0J3b3Y5byog==
+
+prettier-plugin-organize-imports@^4:
+  version "4.3.0"
+  resolved "https://registry.npmmirror.com/prettier-plugin-organize-imports/-/prettier-plugin-organize-imports-4.3.0.tgz#e8d392e2040b3e5fc1476967d669487dde0eea76"
+  integrity sha512-FxFz0qFhyBsGdIsb697f/EkvHzi5SZOhWAjxcx2dLt+Q532bAlhswcXGYB1yzjZ69kW8UoadFBw7TyNwlq96Iw==
 
 prettier-plugin-packagejson@2.4.3:
   version "2.4.3"
