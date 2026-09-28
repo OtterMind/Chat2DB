@@ -1,18 +1,16 @@
 package ai.chat2db.community.web.api.model.request.driver;
 
-import java.util.List;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
-public class JdbcDriverRequest {
+public class JdbcDriverDeleteRequest {
     @NotBlank
-    String jdbcDriverClass;
-    @NotBlank
-    String dbType;
+    private String dbType;
 
     @NotEmpty
-    List<@NotBlank String> jdbcDriver;
+    private List<@NotBlank String> jdbcDriver;
 }

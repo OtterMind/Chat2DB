@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.service.db.IDbDiffService;
 import ai.chat2db.community.tools.wrapper.result.DataResult;
 import ai.chat2db.community.web.api.aspect.connection.ConnectionInfoAspect;
@@ -33,7 +35,7 @@ public class DbDiffController {
      * @return data result containing string.
      */
     @PostMapping("/sql")
-    public DataResult<String> diff(@RequestBody StructureDiffRequest  request) {
+    public DataResult<String> diff(@Valid @RequestBody StructureDiffRequest  request) {
         return DataResult.of(diffService.diff(diffConverter.structureInfo2param(request.getSource()),
                 diffConverter.structureInfo2param(request.getTarget())));
     }
