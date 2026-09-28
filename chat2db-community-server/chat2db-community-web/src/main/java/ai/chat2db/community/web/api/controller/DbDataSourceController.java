@@ -122,7 +122,7 @@ public class DbDataSourceController {
      *
      * @return data result containing progress response.
      */
-    @RequestMapping(value = "/datasource/import_community", method = {RequestMethod.POST, RequestMethod.GET})
+    @RequestMapping(value = "/datasource/import_community", method = {RequestMethod.POST})
     public DataResult<ProgressResponse> importChat2db() {
         dataSourceImportService.importCommunityDataSources();
         return DataResult.of(dataSourceWebConverter.importProgress());
