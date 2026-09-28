@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
+const vm = require('node:vm');
 
 const clientRoot = path.resolve(__dirname, '..');
 const repositoryRoot = path.resolve(clientRoot, '..');
@@ -30,69 +30,52 @@ function listTypeScriptModules(locale) {
     .sort();
 }
 
-function unwrapExpression(expression) {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isTypeAssertionExpression(current) ||
-    ts.isSatisfiesExpression(current)
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
-
-function readStringExpression(expression) {
-  const value = unwrapExpression(expression);
-  if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
-    return value.text;
-  }
-  if (ts.isBinaryExpression(value) && value.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = readStringExpression(value.left);
-    const right = readStringExpression(value.right);
-    if (left !== undefined && right !== undefined) {
-      return left + right;
+function findDuplicateKeys(filePath, sourceText) {
+  const seen = new Set();
+  const duplicateKeys = new Set();
+  const propertyPattern = /^\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_$][\w$]*))\s*:/gm;
+  let match;
+  while ((match = propertyPattern.exec(sourceText)) !== null) {
+    const key = match[1] ?? match[2] ?? match[3];
+    if (seen.has(key)) {
+      duplicateKeys.add(key);
+    } else {
+      seen.add(key);
     }
   }
-  return undefined;
-}
-
-function readPropertyName(name) {
-  if (ts.isStringLiteral(name) || ts.isNumericLiteral(name) || ts.isIdentifier(name)) {
-    return name.text;
+  for (const key of duplicateKeys) {
+    addError(`${path.relative(repositoryRoot, filePath)}: duplicate key ${key}`);
   }
-  return undefined;
 }
 
 function parseLocaleModule(filePath) {
   const sourceText = fs.readFileSync(filePath, 'utf8');
-  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const exportAssignment = sourceFile.statements.find(ts.isExportAssignment);
-  if (!exportAssignment) {
+  findDuplicateKeys(filePath, sourceText);
+  if (!/^\s*export\s+default\s+/.test(sourceText)) {
     addError(`${path.relative(repositoryRoot, filePath)}: missing default export`);
     return new Map();
   }
-  const exportedValue = unwrapExpression(exportAssignment.expression);
-  if (!ts.isObjectLiteralExpression(exportedValue)) {
+  const scriptText = sourceText.replace(/^\s*export\s+default\s+/, 'module.exports = ');
+  const sandbox = {module: {exports: undefined}, exports: {}};
+  let exportedValue;
+  try {
+    new vm.Script(scriptText, {filename: filePath}).runInNewContext(sandbox, {timeout: 1000});
+    exportedValue = sandbox.module.exports;
+  } catch (error) {
+    addError(`${path.relative(repositoryRoot, filePath)}: ${error.message}`);
+    return new Map();
+  }
+
+  if (!exportedValue || typeof exportedValue !== 'object' || Array.isArray(exportedValue)) {
     addError(`${path.relative(repositoryRoot, filePath)}: default export must be an object literal`);
     return new Map();
   }
 
   const entries = new Map();
-  for (const property of exportedValue.properties) {
-    if (!ts.isPropertyAssignment(property)) {
-      addError(`${path.relative(repositoryRoot, filePath)}: unsupported non-property entry`);
-      continue;
-    }
-    const key = readPropertyName(property.name);
-    const value = readStringExpression(property.initializer);
-    if (key === undefined || value === undefined) {
+  for (const [key, value] of Object.entries(exportedValue)) {
+    if (typeof value !== 'string') {
       addError(`${path.relative(repositoryRoot, filePath)}: keys and values must be static strings`);
       continue;
-    }
-    if (entries.has(key)) {
-      addError(`${path.relative(repositoryRoot, filePath)}: duplicate key ${key}`);
     }
     entries.set(key, value);
   }
