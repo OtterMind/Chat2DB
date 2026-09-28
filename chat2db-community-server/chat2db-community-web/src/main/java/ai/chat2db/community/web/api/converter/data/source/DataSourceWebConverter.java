@@ -21,6 +21,7 @@ import ai.chat2db.community.web.api.model.response.data.source.DataSourceRespons
 import ai.chat2db.community.web.api.model.response.data.source.DataSourceIdentityColorResponse;
 import ai.chat2db.community.web.api.model.response.data.source.DatabaseResponse;
 import ai.chat2db.community.web.api.model.response.data.source.ProgressResponse;
+import ai.chat2db.community.web.api.util.DataSourceSslRedactionUtils;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.Database;
 import ai.chat2db.community.domain.api.model.datasource.KeyValue;
@@ -29,10 +30,11 @@ import ai.chat2db.community.domain.api.model.datasource.SSLInfo;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.Mappings;
-import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
 
@@ -95,7 +97,6 @@ public abstract class DataSourceWebConverter {
         String url1 = rs.getString("url");
         String userName = rs.getString("user_name");
         String password = rs.getString("password");
-        String envType = rs.getString("env_type");
         String host = rs.getString("host");
         String port = rs.getString("port");
         String ssh = rs.getString("ssh");
@@ -105,7 +106,6 @@ public abstract class DataSourceWebConverter {
         String jdbcUrl = rs.getString("jdbc");
         String driverConfig = rs.getString("driver_config");
         String env = rs.getString("environment_id");
-        String kind = rs.getString("kind");
         String serviceName = rs.getString("service_name");
         String serviceType = rs.getString("service_type");
         String extendInfo = rs.getString("extend_info");
@@ -139,6 +139,42 @@ public abstract class DataSourceWebConverter {
         } catch (NumberFormatException e) {
             log.warn("Ignoring invalid environment_id '{}' from legacy datasource row", env);
             return null;
+        }
+    }
+
+    @AfterMapping
+    protected void redactDtoSslSecrets(DataSource dataSource, @MappingTarget DataSourceResponse response) {
+        if (dataSource != null) {
+            redactSslSecrets(response);
+        }
+    }
+
+    @AfterMapping
+    protected void redactStorageSslSecrets(WorkspaceDataSource dataSource, @MappingTarget DataSourceResponse response) {
+        if (dataSource != null) {
+            redactSslSecrets(response);
+        }
+    }
+
+    @AfterMapping
+    protected void redactCreateRequestSslSecrets(DataSourceCreateRequest request,
+                                                  @MappingTarget DataSourceResponse response) {
+        if (request != null) {
+            redactSslSecrets(response);
+        }
+    }
+
+    @AfterMapping
+    protected void redactUpdateRequestSslSecrets(DataSourceUpdateRequest request,
+                                                  @MappingTarget DataSourceResponse response) {
+        if (request != null) {
+            redactSslSecrets(response);
+        }
+    }
+
+    private static void redactSslSecrets(DataSourceResponse response) {
+        if (response != null) {
+            response.setSsl(DataSourceSslRedactionUtils.redactedCopy(response.getSsl()));
         }
     }
 

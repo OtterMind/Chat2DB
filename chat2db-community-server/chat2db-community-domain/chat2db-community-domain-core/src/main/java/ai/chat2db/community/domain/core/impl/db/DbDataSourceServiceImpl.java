@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.model.datasource.KeyValue;
 import ai.chat2db.community.domain.api.model.datasource.SSHInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectionPool;
+import ai.chat2db.spi.sql.MySqlTlsTranslator;
 import ai.chat2db.spi.ssh.SSHManager;
 import ai.chat2db.spi.util.JdbcUtils;
 import com.jcraft.jsch.Session;
@@ -59,6 +60,7 @@ public class DbDataSourceServiceImpl implements IDbDataSourceService {
             map.put("OAuthType","0");
             map.put("OAuthPvtKeyPath",param.getKeyfile());
         }
+        MySqlTlsTranslator.apply(param.getSsl(), driverConfig, map);
 
         DataSourceConnect dataSourceConnect = JdbcUtils.testConnect(testParam.getUrl(), testParam.getHost(),
                 testParam.getPort(),

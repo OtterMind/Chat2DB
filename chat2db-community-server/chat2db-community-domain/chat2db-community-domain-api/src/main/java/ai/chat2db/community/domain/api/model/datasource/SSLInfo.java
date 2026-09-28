@@ -1,9 +1,74 @@
-
 package ai.chat2db.community.domain.api.model.datasource;
 
 import lombok.Data;
+import lombok.ToString;
 
 
 @Data
+@ToString(exclude = {
+        "clientPrivateKeyPem",
+        "clientKeyPassword",
+        "keyStoreBytes",
+        "keyStorePassword",
+        "trustStoreBytes",
+        "trustStorePassword"
+})
 public class SSLInfo {
+
+    /**
+     * TLS verification mode. See {@code MySqlTlsMode}. Blank/null is treated as DISABLED.
+     */
+    private String tlsMode;
+
+    /**
+     * CA certificate PEM content (one-way TLS). Public material, stored cleartext.
+     */
+    private String caPem;
+
+    /**
+     * Client certificate PEM content (mutual TLS). Public material, stored cleartext.
+     */
+    private String clientCertPem;
+
+    /**
+     * PKCS#8 private key PEM content (mutual TLS). Secret — encrypted at rest.
+     */
+    private String clientPrivateKeyPem;
+
+    /**
+     * Private key password (mutual TLS). Secret — encrypted at rest.
+     */
+    private String clientKeyPassword;
+
+    /**
+     * Optional trust-store type override (PKCS12/JKS) when a pre-built trust store is supplied
+     * instead of CA PEM. Blank when PEM is used.
+     */
+    private String trustStoreType;
+
+    /**
+     * Optional trust-store bytes, Base64-encoded (server trust material). Secret — encrypted at rest.
+     */
+    private String trustStoreBytes;
+
+    /**
+     * Trust-store password. Secret — encrypted at rest.
+     */
+    private String trustStorePassword;
+
+    /**
+     * Optional keystore type override (PKCS12/JKS) when a pre-built keystore is supplied
+     * instead of PEM. Blank when PEM is used.
+     */
+    private String keyStoreType;
+
+    /**
+     * Optional keystore bytes, Base64-encoded (mutual TLS). Secret — encrypted at rest.
+     */
+    private String keyStoreBytes;
+
+    /**
+     * Keystore password. Secret — encrypted at rest.
+     */
+    private String keyStorePassword;
 }

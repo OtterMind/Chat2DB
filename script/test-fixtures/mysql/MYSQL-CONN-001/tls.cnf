@@ -1,0 +1,5 @@
+[mysqld]
+require_secure_transport=ON
+ssl_ca=/certs/ca.pem
+ssl_cert=/certs/server-cert.pem
+ssl_key=/certs/server-key.pem

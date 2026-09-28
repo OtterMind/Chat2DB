@@ -42,13 +42,16 @@ export interface IFormItem {
     labelWidth?: ILocalizedConnectionText;
     labelAlign?: string; // Label alignment; defaults to left.
   },
+  rows?: number;
   hidden?: boolean;
   fileTypes?: string[];
+  fileContentMode?: 'text' | 'base64';
   maxLength?: number;
   helpKey?: 'workspace.identityColor.help' | 'workspace.watermark.help';
   visibleWhen?: {
     name: string;
-    value: any;
+    value?: any;
+    values?: any[];
   };
   layoutGroup?: 'dataSourceIdentity';
 }

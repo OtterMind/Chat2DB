@@ -51,7 +51,7 @@ import {
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
 import { Modal, staticMessage } from '@chat2db/ui';
-import { PanelRight, SquareSquare, X } from 'lucide-react';
+import { PanelRight, PanelsTopLeft, X } from 'lucide-react';
 import {
   applyResultSearchVisibilityAction,
   getResultSearchVisibility,
@@ -807,7 +807,7 @@ export default memo<IProps>(
                   aria-label={switchLabel}
                   icon={
                     mode === 'sidebar'
-                      ? <SquareSquare size={16} strokeWidth={1.75} />
+                      ? <PanelsTopLeft size={16} strokeWidth={1.75} />
                       : <PanelRight size={16} strokeWidth={1.75} />
                   }
                   onClick={handleInspectorModeSwitch}
