@@ -31,6 +31,7 @@ public final class TaskLifecyclePolicy {
         }
         if (TaskStatus.RUNNING.name().equals(source)) {
             return TaskStatus.SUCCESS.name().equals(target) || TaskStatus.FAILED.name().equals(target)
+                    || TaskStatus.CANCELLED.name().equals(target)
                     || (TaskStatus.PENDING.name().equals(target) && patch != null
                     && TaskStage.RESUMING.name().equals(patch.getStage()));
         }

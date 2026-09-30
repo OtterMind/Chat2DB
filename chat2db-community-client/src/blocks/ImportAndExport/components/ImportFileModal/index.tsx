@@ -1,12 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Modal } from '@chat2db/ui';
-import { Button } from 'antd';
+import { Button, Dropdown, type MenuProps } from 'antd';
 import i18n from '@/i18n';
 import ImportExportFile, { ImportExportFileRef } from '../ImportExportFile';
 import MultiTableImportWizard from '../MultiTableImportWizard';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices, {
+  artifactDownloadUrl,
   type ExportTaskParams,
   type ImportTaskParams,
 } from '@/service/importExport';
@@ -28,6 +29,11 @@ import {
   prepareImportSubmission,
   type ImportSubmissionIdentity,
 } from './submission';
+import { Download, FolderOpen } from 'lucide-react';
+import {
+  getDownloadableTaskArtifacts,
+  shouldShowLegacyPrimaryArtifact,
+} from '../LogModal/artifactVisibility';
 
 interface IProps {
   className?: string;
@@ -148,26 +154,66 @@ export default memo<IProps>((_props) => {
     );
   };
 
-  const handleOpenFile = () => {
-    if (!taskDetails?.artifactId) return;
+  const handleOpenFile = (artifactId?: string) => {
+    if (!taskDetails) return;
+    const localArtifact = artifactId || taskDetails.artifactId;
     if (isDesktop) {
-      jcefApi.revealInExplorer(taskDetails.artifactId);
+      if (localArtifact) jcefApi.revealInExplorer(localArtifact);
       return;
     }
-    window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
+    window.open(artifactDownloadUrl({ taskId: taskDetails.id, artifactId }), '_blank');
   };
+
+  const downloadableArtifacts = getDownloadableTaskArtifacts(taskDetails);
+  const artifactMenuItems: MenuProps['items'] = downloadableArtifacts.map((artifact) => {
+    const fileName = artifact.artifactId.split(/[\\/]/).pop() || artifact.artifactId;
+    return {
+      // artifactId is unique per task (task_artifact primary key), so the click target stays
+      // correct when a refresh reorders the artifact list.
+      key: artifact.artifactId,
+      icon: isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />,
+      label: (
+        <span
+          title={fileName}
+          style={{ display: 'block', maxWidth: 'min(70vw, 420px)', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {fileName}
+        </span>
+      ),
+    };
+  });
 
   const logRenderFooter = () => (
     <ModalFooterButton
       footerLeft={
         <>
-          {importExportDataBoundInfo?.type === ImportExportType.EXPORT &&
-            taskDetails?.status === ImportExportTaskStatus.SUCCESS &&
-            taskDetails.artifactId && (
-              <Button type="primary" onClick={handleOpenFile}>
+          {downloadableArtifacts.length ? (
+            <Dropdown
+              trigger={['click']}
+              overlayStyle={{ maxWidth: 'calc(100vw - 32px)', maxHeight: 'min(60vh, 360px)', overflowY: 'auto' }}
+              menu={{
+                items: artifactMenuItems,
+                onClick: ({ key }) => handleOpenFile(String(key)),
+              }}
+            >
+              <Button
+                type={downloadableArtifacts.some(({ role }) => role === 'OUTPUT') ? 'primary' : 'default'}
+                icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+              >
+                {i18n('workspace.importExport.taskArtifacts')} ({downloadableArtifacts.length})
+              </Button>
+            </Dropdown>
+          ) : (
+            shouldShowLegacyPrimaryArtifact(taskDetails) && (
+              <Button
+                type="primary"
+                icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+                onClick={() => handleOpenFile()}
+              >
                 {i18n('workspace.text.openFile')}
               </Button>
-            )}
+            )
+          )}
         </>
       }
       footerRight={

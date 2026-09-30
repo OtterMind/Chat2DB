@@ -69,8 +69,13 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void checkpoint(ResumeState state) {
-        checkCancelled();
-        taskStorage.saveResumeState(taskId, state);
+        runningTask.completionLock().lock();
+        try {
+            checkCancelled();
+            taskStorage.saveResumeState(taskId, state);
+        } finally {
+            runningTask.completionLock().unlock();
+        }
     }
 
     @Override
@@ -114,15 +119,14 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
 
     @Override
     public void enterCommitPhase() {
-        runningTask.completionLock().lock();
-        try {
-            checkCancelled();
-            if (!runningTask.enterCommitPhase()) {
-                throw new TaskCancelledException();
-            }
-        } finally {
-            runningTask.completionLock().unlock();
+        if (!runningTask.enterCommitPhase()) {
+            throw new TaskCancelledException();
         }
+    }
+
+    @Override
+    public void exitCommitPhase() {
+        runningTask.exitCommitPhase();
     }
 
     @Override

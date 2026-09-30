@@ -198,7 +198,7 @@ class CSVImporterColumnMappingTest {
     }
 
     @Test
-    void failedImportRetainsStagedSourceForRecovery(@TempDir Path directory) throws Exception {
+    void terminalFailedImportReleasesStagedSource(@TempDir Path directory) throws Exception {
         Path input = Files.writeString(directory.resolve("staged.csv"), "name\nAlice\n");
         var executor = new ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor();
         var released = new ArrayList<String>();
@@ -212,7 +212,8 @@ class CSVImporterColumnMappingTest {
         ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
                 .importFileId("staged-id").format("SQL").build();
         assertThrows(RuntimeException.class, () -> executor.execute(spec, new RecordingTaskExecutionContext()));
-        assertEquals(List.of(), released);
+        executor.cleanupTerminalResources(spec, null);
+        assertEquals(List.of("staged-id"), released);
         org.junit.jupiter.api.Assertions.assertTrue(Files.isReadable(input));
     }
 

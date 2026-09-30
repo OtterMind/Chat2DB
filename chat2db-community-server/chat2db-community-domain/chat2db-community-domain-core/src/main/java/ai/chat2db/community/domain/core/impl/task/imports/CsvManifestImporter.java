@@ -167,12 +167,16 @@ public final class CsvManifestImporter {
             csvImporter.run(shardSpec, shardContext);
             shardContext.enterCommitPhase();
             try {
-                connection.commit();
-            } catch (java.sql.SQLException commitFailure) {
-                commitOutcomeUnknown = true;
-                throw new ImportManifestScheduler.CommitOutcomeUnknownException(
-                        "Shard commit outcome is unknown; verify target data before retrying: "
-                                + shard.getShardId(), commitFailure);
+                try {
+                    connection.commit();
+                } catch (java.sql.SQLException commitFailure) {
+                    commitOutcomeUnknown = true;
+                    throw new ImportManifestScheduler.CommitOutcomeUnknownException(
+                            "Shard commit outcome is unknown; verify target data before retrying: "
+                                    + shard.getShardId(), commitFailure);
+                }
+            } finally {
+                shardContext.exitCommitPhase();
             }
             committed = true;
             summary.markCommitted(verification.rows());
@@ -440,6 +444,7 @@ public final class CsvManifestImporter {
             cancellationCheck.run();
             delegate.enterCommitPhase();
         }
+        @Override public void exitCommitPhase() { delegate.exitCommitPhase(); }
         @Override public void registerCancelable(TaskCancelable resource) { delegate.registerCancelable(resource); }
         @Override public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
             return delegate.createArtifact(outputDirectory, fileName, mediaType);

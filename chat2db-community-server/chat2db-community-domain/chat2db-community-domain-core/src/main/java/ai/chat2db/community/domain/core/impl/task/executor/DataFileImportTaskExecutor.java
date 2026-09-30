@@ -53,9 +53,7 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
 
     @Override
     public void execute(ImportTaskSpec spec, TaskExecutionContext context) {
-        boolean completed = false;
         ImportManifest manifest = null;
-        CsvManifestPreparer manifestPreparer = null;
         try {
             boolean scopedManifest = ImportTaskSourceSupport.isMultiTable(spec);
             List<ImportTableSource> sources = ImportTaskSourceSupport.effectiveSources(spec);
@@ -88,8 +86,7 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                     : taskStorage.loadImportManifest(context.taskId()).orElse(null);
             if (manifest == null && TaskFileFormat.CSV.name().equals(format)
                     && (TaskExecutionMode.isUltraFast(spec.getMode()) || scopedManifest || stagingRequested)) {
-                manifestPreparer = new CsvManifestPreparer(taskStorage);
-                manifest = manifestPreparer.prepare(spec, context);
+                manifest = new CsvManifestPreparer(taskStorage).prepare(spec, context);
             }
             if (manifest != null) {
                 if (!TaskFileFormat.CSV.name().equals(format)
@@ -106,37 +103,62 @@ public class DataFileImportTaskExecutor implements TaskExecutor<ImportTaskSpec> 
                     new CsvManifestImporter(taskStorage).execute(spec, context, manifest);
                 }
                 context.reportProgress(95, TaskStage.IMPORTING.name(), "Manifest import completed");
-                completed = true;
                 return;
             }
             IImportStrategy strategy = ImportFactory.get(format);
             strategy.run(spec, context);
             context.reportProgress(95, TaskStage.IMPORTING.name(), "Data import completed");
-            completed = true;
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
             throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
                     "Could not import data file", e);
-        } finally {
-            // Interrupted imports still need the exact staged source to resume from checkpoints.
-            if (completed) {
-                Set<String> stagedFileIds = new LinkedHashSet<>();
-                if (StringUtils.isNotBlank(spec.getImportFileId())) {
-                    stagedFileIds.add(spec.getImportFileId());
-                }
-                if (spec.getTableSources() != null) {
-                    spec.getTableSources().stream().filter(java.util.Objects::nonNull)
-                            .map(ImportTableSource::getImportFileId).filter(StringUtils::isNotBlank)
-                            .forEach(stagedFileIds::add);
-                }
-                stagedFileIds.forEach(importFileStagingService::release);
-            }
-            if (completed && manifest != null) {
-                (manifestPreparer == null ? new CsvManifestPreparer(taskStorage) : manifestPreparer)
-                        .cleanup(manifest);
+        }
+    }
+
+    @Override
+    public void cleanupTerminalResources(ImportTaskSpec spec, Long taskId) {
+        Set<String> stagedFileIds = new LinkedHashSet<>();
+        if (spec != null && StringUtils.isNotBlank(spec.getImportFileId())) {
+            stagedFileIds.add(spec.getImportFileId());
+        }
+        if (spec != null && spec.getTableSources() != null) {
+            spec.getTableSources().stream().filter(java.util.Objects::nonNull)
+                    .map(ImportTableSource::getImportFileId).filter(StringUtils::isNotBlank)
+                    .forEach(stagedFileIds::add);
+        }
+        RuntimeException cleanupFailure = null;
+        for (String stagedFileId : stagedFileIds) {
+            try {
+                importFileStagingService.release(stagedFileId);
+            } catch (RuntimeException releaseFailure) {
+                cleanupFailure = recordCleanupFailure(cleanupFailure, releaseFailure);
             }
         }
+        if (taskId != null && taskStorage != null) {
+            try {
+                taskStorage.loadImportManifest(taskId)
+                        .ifPresent(manifest -> new CsvManifestPreparer(taskStorage).cleanup(manifest));
+            } catch (RuntimeException manifestFailure) {
+                cleanupFailure = recordCleanupFailure(cleanupFailure, manifestFailure);
+            }
+            try {
+                taskStorage.clearResumeStates(taskId);
+            } catch (RuntimeException stateFailure) {
+                cleanupFailure = recordCleanupFailure(cleanupFailure, stateFailure);
+            }
+        }
+        if (cleanupFailure != null) {
+            throw cleanupFailure;
+        }
+    }
+
+    private static RuntimeException recordCleanupFailure(RuntimeException existing, RuntimeException next) {
+        if (existing == null) {
+            return next;
+        }
+        existing.addSuppressed(next);
+        return existing;
     }
 
     static boolean stagingFeaturesRequested(ImportTaskSpec spec) {

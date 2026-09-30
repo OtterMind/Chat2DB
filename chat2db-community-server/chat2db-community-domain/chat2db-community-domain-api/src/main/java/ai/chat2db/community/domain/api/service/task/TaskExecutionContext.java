@@ -30,12 +30,16 @@ public interface TaskExecutionContext extends ISqlExecutionStatementListener {
     void checkCancelled();
 
     /**
-     * Atomically crosses the task's irreversible database commit boundary. Once this method
-     * returns, lifecycle cancellation must no longer interrupt or preempt the task's terminal
-     * result; the executor remains responsible for reporting an uncertain commit outcome.
+     * Atomically enters a database commit boundary. Lifecycle cancellation cannot interrupt an
+     * active boundary; executors with more cancel-safe work must pair this with
+     * {@link #exitCommitPhase()} after the commit outcome is known.
      */
     default void enterCommitPhase() {
         checkCancelled();
+    }
+
+    /** Leaves a scoped commit boundary. A final task-wide commit may intentionally omit this. */
+    default void exitCommitPhase() {
     }
 
     void registerCancelable(TaskCancelable resource);

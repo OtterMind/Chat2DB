@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
@@ -102,6 +103,43 @@ class TaskExecutorRegistryTest {
     }
 
     @Test
+    void ordinaryFailureCleansTerminalResourcesOnlyAfterFailedStatusIsPersisted() {
+        RecordingTaskStorage storage = new RecordingTaskStorage();
+        Task task = storage.create(Task.builder()
+                        .type(TaskType.QUERY_RESULT_EXPORT.name())
+                        .name("Export result")
+                        .target(target())
+                        .build(),
+                TaskEvent.builder().message("Task created").build());
+        AtomicLong cleanupCalls = new AtomicLong();
+        AtomicReference<String> statusObservedByCleanup = new AtomicReference<>();
+        RunningTask runningTask = new RunningTask(task.getId(), () -> {
+            cleanupCalls.incrementAndGet();
+            statusObservedByCleanup.set(storage.get(task.getId()).orElseThrow().getStatus());
+        });
+        RunningTaskRegistry runningTaskRegistry = new RunningTaskRegistry();
+        runningTaskRegistry.register(runningTask);
+        TaskExecutor<ExportTaskSpec> executor = exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
+                (spec, context) -> {
+                    throw new TaskExecutionException(TaskErrorCode.EXPORT_FAILED.name(), "Export failed");
+                });
+        TaskRunner<ExportTaskSpec> runner = new TaskRunner<>(
+                new TaskSubmission<>(task.getId(), exportSpec(), null, null,
+                        new TaskSubmissionContext(task.getId(), TaskType.QUERY_RESULT_EXPORT, null,
+                                null, null, List.of(), TaskOperation.EXPORT).toExecutionContext()),
+                runningTask, runningTaskRegistry, storage, executor, new ArtifactService(),
+                emptyExtensionManager());
+
+        runner.run();
+
+        assertEquals(TaskStatus.FAILED.name(), storage.get(task.getId()).orElseThrow().getStatus());
+        assertEquals(1L, cleanupCalls.get());
+        assertEquals(TaskStatus.FAILED.name(), statusObservedByCleanup.get());
+        assertTrue(runningTask.isClosed());
+        assertTrue(runningTaskRegistry.get(task.getId()) == null);
+    }
+
+    @Test
     void artifactPublishFailureDoesNotMarkTaskSuccessful(@TempDir Path tempDirectory) throws IOException {
         RecordingTaskStorage storage = new RecordingTaskStorage();
         Task task = storage.create(Task.builder()
@@ -110,7 +148,7 @@ class TaskExecutorRegistryTest {
                         .target(target())
                         .build(),
                 TaskEvent.builder().message("Task created").build());
-        RunningTask runningTask = new RunningTask(task.getId());
+        RunningTask runningTask = new RunningTask(task.getId(), () -> { });
         RunningTaskRegistry runningTaskRegistry = new RunningTaskRegistry();
         runningTaskRegistry.register(runningTask);
         AtomicReference<ArtifactDraft> draftReference = new AtomicReference<>();

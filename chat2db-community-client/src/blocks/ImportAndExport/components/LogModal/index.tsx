@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { Modal } from '@chat2db/ui';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
-import { Button } from 'antd';
+import { Button, Dropdown, type MenuProps } from 'antd';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
@@ -11,6 +11,7 @@ import { isDesktop } from '@/utils/env';
 import { ImportExportTaskStatus } from '@/constants/importExport';
 import importExportServices, { artifactDownloadUrl } from '@/service/importExport';
 import { Download, FolderOpen } from 'lucide-react';
+import { getDownloadableTaskArtifacts, shouldShowLegacyPrimaryArtifact } from './artifactVisibility';
 
 interface IProps {
   className?: string;
@@ -46,6 +47,25 @@ const LogModal = (_props: IProps) => {
     });
   };
 
+  const downloadableArtifacts = getDownloadableTaskArtifacts(taskDetails);
+  const artifactMenuItems: MenuProps['items'] = downloadableArtifacts.map((artifact) => {
+    const fileName = artifact.artifactId.split(/[\\/]/).pop() || artifact.artifactId;
+    return {
+      // artifactId is unique per task (task_artifact primary key), so the click target stays
+      // correct when a refresh reorders the artifact list.
+      key: artifact.artifactId,
+      icon: isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />,
+      label: (
+        <span
+          title={fileName}
+          style={{ display: 'block', maxWidth: 'min(70vw, 420px)', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          {fileName}
+        </span>
+      ),
+    };
+  });
+
   const renderFooter = (
     <ModalFooterButton
       footerRight={
@@ -62,27 +82,33 @@ const LogModal = (_props: IProps) => {
               {i18n('workspace.task.action.resume')}
             </Button>
           )}
-          {taskDetails?.status === ImportExportTaskStatus.SUCCESS &&
-            (taskDetails.artifacts?.length
-              ? taskDetails.artifacts.map((artifact) => (
-                  <Button
-                    key={artifact.artifactId}
-                    type={artifact.role === 'OUTPUT' ? 'primary' : 'default'}
-                    icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
-                    onClick={() => handleOpenFile(artifact.artifactId)}
-                  >
-                    {artifact.artifactId.split(/[\\/]/).pop()}
-                  </Button>
-                ))
-              : taskDetails.artifactId && (
-                  <Button
-                    type="primary"
-                    icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
-                    onClick={() => handleOpenFile()}
-                  >
-                    {i18n('workspace.text.openFile')}
-                  </Button>
-                ))}
+          {downloadableArtifacts.length ? (
+            <Dropdown
+              trigger={['click']}
+              overlayStyle={{ maxWidth: 'calc(100vw - 32px)', maxHeight: 'min(60vh, 360px)', overflowY: 'auto' }}
+              menu={{
+                items: artifactMenuItems,
+                onClick: ({ key }) => handleOpenFile(String(key)),
+              }}
+            >
+              <Button
+                type={downloadableArtifacts.some(({ role }) => role === 'OUTPUT') ? 'primary' : 'default'}
+                icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+              >
+                {i18n('workspace.importExport.taskArtifacts')} ({downloadableArtifacts.length})
+              </Button>
+            </Dropdown>
+          ) : (
+            shouldShowLegacyPrimaryArtifact(taskDetails) && (
+              <Button
+                type="primary"
+                icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
+                onClick={() => handleOpenFile()}
+              >
+                {i18n('workspace.text.openFile')}
+              </Button>
+            )
+          )}
         </>
       }
     />

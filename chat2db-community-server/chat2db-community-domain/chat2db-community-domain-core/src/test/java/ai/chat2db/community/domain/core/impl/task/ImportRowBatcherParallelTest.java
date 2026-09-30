@@ -4,7 +4,6 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
@@ -16,8 +15,6 @@ import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportRowBatcher;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
@@ -49,6 +46,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 
 /**
  * The parallel import path end to end: multiple workers, each on its own dedicated connection,
@@ -169,7 +167,7 @@ class ImportRowBatcherParallelTest {
         Long taskId = storage.create(Task.builder().type("DATA_FILE_IMPORT").name("import")
                 .target(spec.getTarget()).build(), TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
-        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId),
+        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId, () -> { }),
                 storage, new ArtifactServiceImpl());
     }
 

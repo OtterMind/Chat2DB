@@ -3,7 +3,6 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
@@ -28,8 +27,6 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +35,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -59,8 +58,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class LocalTaskManagerTest {
+
+    private static final String CLIENT_SUBMISSION_RETENTION_HOURS = "chat2db.task.idempotency.retention-hours";
 
     @TempDir
     Path tempDirectory;
@@ -71,6 +74,28 @@ class LocalTaskManagerTest {
     void tearDown() {
         if (taskManager != null) {
             taskManager.shutdown();
+        }
+    }
+
+    @Test
+    void clientSubmissionRetentionIsDisabledUnlessAPositiveWindowIsConfigured() {
+        TestTaskStorage storage = new TestTaskStorage();
+        System.clearProperty(CLIENT_SUBMISSION_RETENTION_HOURS);
+        try {
+            taskManager = manager(storage, (spec, context) -> {});
+            taskManager.reconcileInterruptedTasks();
+            assertNull(storage.lastClientSubmissionCutoff,
+                    "a retention window of 0 must leave every client submission key in place");
+
+            System.setProperty(CLIENT_SUBMISSION_RETENTION_HOURS, "24");
+            Instant before = Instant.now().minus(Duration.ofHours(24));
+            taskManager.reconcileInterruptedTasks();
+            assertNotNull(storage.lastClientSubmissionCutoff);
+            assertTrue(storage.lastClientSubmissionCutoff.isAfter(before.minus(Duration.ofMinutes(1)))
+                            && storage.lastClientSubmissionCutoff.isBefore(before.plus(Duration.ofMinutes(1))),
+                    () -> "cutoff should be about a day old but was " + storage.lastClientSubmissionCutoff);
+        } finally {
+            System.clearProperty(CLIENT_SUBMISSION_RETENTION_HOURS);
         }
     }
 
@@ -136,6 +161,41 @@ class LocalTaskManagerTest {
         assertEquals(TaskErrorCode.TASK_SUBMISSION_REJECTED.name(), rejected.getErrorCode());
         assertEquals("Task submission rejected", rejected.getErrorMessage());
         assertTrue(storage.listNonTerminalTasks().isEmpty());
+    }
+
+    @Test
+    void saturatedExecutionQueueFailsPersistedTaskAndPropagatesRejection() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch executionStarted = new CountDownLatch(1);
+        CountDownLatch releaseExecution = new CountDownLatch(1);
+        AtomicLong cleanupCalls = new AtomicLong();
+        taskManager = manager(storage, (spec, context) -> {
+            executionStarted.countDown();
+            try {
+                releaseExecution.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }, emptyExtensionManager(), 1, 1, cleanupCalls::incrementAndGet);
+
+        Task running = newTask();
+        Task queued = newTask();
+        Task rejected = newTask();
+        taskManager.submit(running, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(executionStarted.await(5, TimeUnit.SECONDS));
+        taskManager.submit(queued, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+
+        try {
+            assertThrows(RejectedExecutionException.class,
+                    () -> taskManager.submit(rejected, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null));
+            Task failed = storage.get(rejected.getId()).orElseThrow();
+            assertEquals(TaskStatus.FAILED.name(), failed.getStatus());
+            assertEquals(TaskErrorCode.TASK_EXECUTOR_REJECTED.name(), failed.getErrorCode());
+            assertEquals("Too many tasks are waiting to execute", failed.getErrorMessage());
+            assertEquals(1L, cleanupCalls.get());
+        } finally {
+            releaseExecution.countDown();
+        }
     }
 
     @Test
@@ -297,7 +357,7 @@ class LocalTaskManagerTest {
     void executionContextBindingFailureFailsTaskAndCleansRunningRegistry() {
         TestTaskStorage storage = new TestTaskStorage();
         Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
-        RunningTask runningTask = new RunningTask(task.getId());
+        RunningTask runningTask = new RunningTask(task.getId(), () -> { });
         RunningTaskRegistry registry = new RunningTaskRegistry();
         registry.register(runningTask);
         AtomicBoolean executed = new AtomicBoolean();
@@ -372,6 +432,45 @@ class LocalTaskManagerTest {
     }
 
     @Test
+    void containerShutdownPreservesCheckpointedTaskWithoutCleaningTerminalResources() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch checkpointPersisted = new CountDownLatch(1);
+        CountDownLatch releaseExecution = new CountDownLatch(1);
+        AtomicLong cleanupCalls = new AtomicLong();
+        taskManager = manager(storage, (spec, context) -> {
+            context.checkpoint(ResumeState.builder()
+                    .shardNo(0)
+                    .kind("KEYSET")
+                    .rowsDone(500L)
+                    .build());
+            checkpointPersisted.countDown();
+            try {
+                releaseExecution.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            context.checkCancelled();
+        }, emptyExtensionManager(), 1, 4, cleanupCalls::incrementAndGet);
+        Task task = newTask();
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(checkpointPersisted.await(5, TimeUnit.SECONDS));
+
+        try {
+            taskManager.shutdown();
+        } finally {
+            releaseExecution.countDown();
+        }
+
+        Task resumable = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.PENDING.name(), resumable.getStatus());
+        assertEquals(TaskStage.RESUMING.name(), resumable.getStage());
+        assertEquals(1, storage.listResumeStates(task.getId()).size());
+        assertEquals(0L, cleanupCalls.get());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.RESUME_AVAILABLE.name().equals(event.getCode())));
+    }
+
+    @Test
     void startupReconciliationDoesNotResubmitInterruptedTask() {
         TestTaskStorage storage = new TestTaskStorage();
         Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
@@ -385,8 +484,9 @@ class LocalTaskManagerTest {
         assertEquals(0, taskManager.activeTaskCount(null, null));
     }
 
-    @Test
-    void startupReconciliationCleansPreparedAndPublishedArtifactPaths() throws Exception {
+    @ParameterizedTest
+    @EnumSource(value = TaskEventCode.class, names = {"ARTIFACT_PUBLICATION_STARTED", "ARTIFACT_PUBLISHED"})
+    void startupReconciliationCleansPreparedAndPublishedArtifactPaths(TaskEventCode publicationEvent) throws Exception {
         TestTaskStorage storage = new TestTaskStorage();
         Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
         Path temporary = Files.writeString(
@@ -404,7 +504,7 @@ class LocalTaskManagerTest {
         storage.appendEvent(TaskEvent.builder()
                 .taskId(task.getId())
                 .level(TaskEventLevel.INFO.name())
-                .code(TaskEventCode.ARTIFACT_PUBLISHED.name())
+                .code(publicationEvent.name())
                 .message("Artifact published")
                 .details(Map.of(TaskConstants.ARTIFACT_ID_DETAIL_KEY, target.toString()))
                 .build());
@@ -593,6 +693,17 @@ class LocalTaskManagerTest {
 
     private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution,
             TaskExtensionManager extensionManager) {
+        return manager(storage, execution, extensionManager, 1, 4, () -> { });
+    }
+
+    private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution,
+            TaskExtensionManager extensionManager, int maxConcurrency, int queueCapacity) {
+        return manager(storage, execution, extensionManager, maxConcurrency, queueCapacity, () -> { });
+    }
+
+    private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution,
+            TaskExtensionManager extensionManager, int maxConcurrency, int queueCapacity,
+            Runnable terminalResourceCleanup) {
         TaskExecutor<ExportTaskSpec> executor = new TaskExecutor<>() {
             @Override
             public String taskType() {
@@ -608,9 +719,14 @@ class LocalTaskManagerTest {
             public void execute(ExportTaskSpec spec, TaskExecutionContext context) {
                 execution.execute(spec, context);
             }
+
+            @Override
+            public void cleanupTerminalResources(ExportTaskSpec spec, Long taskId) {
+                terminalResourceCleanup.run();
+            }
         };
         return new LocalTaskManager(storage, new TaskExecutorRegistry(List.of(executor)), new ArtifactServiceImpl(),
-                new ConnectionContextConverter(), extensionManager, 1, 4);
+                new ConnectionContextConverter(), extensionManager, maxConcurrency, queueCapacity);
     }
 
     private TaskExtensionManager emptyExtensionManager() {
@@ -665,6 +781,13 @@ class LocalTaskManagerTest {
         private int terminalTransitions;
         private CountDownLatch createPaused;
         private CountDownLatch resumeCreate;
+        private Instant lastClientSubmissionCutoff;
+
+        @Override
+        public int releaseExpiredClientSubmissions(Instant finishedBefore) {
+            lastClientSubmissionCutoff = finishedBefore;
+            return 0;
+        }
 
         @Override
         public synchronized Task create(Task task, TaskEvent createdEvent) {

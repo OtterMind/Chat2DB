@@ -85,7 +85,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
                 completeFailed(TaskErrorCode.TASK_INTERNAL_ERROR.name(),
                         "Task execution failed after database commit started", null, e,
                         executionContext.artifactDrafts());
-            } else {
+            } else if (!runningTask.shouldRetainResourcesForResume()) {
                 completeCancelled(executionContext.artifactDrafts());
             }
         } catch (TaskExecutionException e) {
@@ -94,13 +94,16 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
         } catch (Throwable e) {
             if (!runningTask.isCommitPhase()
                     && (runningTask.cancellationToken().isCancelled() || Thread.currentThread().isInterrupted())) {
-                completeCancelled(executionContext.artifactDrafts());
+                if (!runningTask.shouldRetainResourcesForResume()) {
+                    completeCancelled(executionContext.artifactDrafts());
+                }
             } else {
                 completeFailed(TaskErrorCode.TASK_INTERNAL_ERROR.name(), "Task execution failed", null, e,
                         executionContext.artifactDrafts());
             }
         } finally {
             try {
+                cleanupTerminalResources();
                 executionContext.closeQuietly();
                 runningTask.close();
                 runningTaskRegistry.remove(submission.taskId(), runningTask);
@@ -270,6 +273,16 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
         }
     }
 
+    private void cleanupTerminalResources() {
+        try {
+            taskStorage.get(submission.taskId())
+                    .filter(task -> TaskStatus.isTerminal(task.getStatus()))
+                    .ifPresent(task -> runningTask.cleanupTerminalResources());
+        } catch (RuntimeException cleanupCheckFailure) {
+            log.warn("Could not inspect terminal resources for task {}", submission.taskId(), cleanupCheckFailure);
+        }
+    }
+
     private FailureArtifacts publishFailureDiagnostics(List<ArtifactDraft> drafts) {
         List<ArtifactDraft> ordered = drafts.stream()
                 .filter(this::isFailureDiagnostic)
@@ -359,9 +372,21 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
     }
 
     private void completeCancelledLocked(List<ArtifactDraft> drafts) {
+        if (runningTask.shouldRetainResourcesForResume()) {
+            return;
+        }
         for (ArtifactDraft draft : drafts) {
             artifactService.deleteDraft(draft);
         }
+        Date now = new Date();
+        taskStorage.compareAndSetStatus(submission.taskId(), TaskStatus.RUNNING.name(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                lifecycleEvent(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(), "Task cancelled"));
     }
 
     private TaskEvent lifecycleEvent(String code, String level, String message) {
