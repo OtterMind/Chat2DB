@@ -6,6 +6,7 @@ import type {
   IImportPreview,
   ImportExecutionMode,
   ImportExportDataBoundInfo,
+  SqlExporterProfile,
 } from '@/typings/importExport';
 
 export interface ImportExportFormValue {
@@ -21,6 +22,7 @@ export interface ImportExportFormValue {
   onError?: 'ABORT' | 'SKIP';
   maxErrors?: number;
   unmappedTarget?: 'DEFAULT' | 'NULL';
+  sqlExporterProfile?: SqlExporterProfile;
 }
 
 interface BuildTaskParamsInput {
@@ -96,7 +98,12 @@ export function buildTaskParams({
     : undefined;
   const options: IImportOptions | undefined =
     formValue.exportType === ImportExportFileType.SQL
-      ? undefined
+      ? formValue.sqlExporterProfile
+        ? {
+            sqlExporterProfile: formValue.sqlExporterProfile,
+            ...(formValue.charset?.trim() ? { charset: formValue.charset.trim() } : {}),
+          }
+        : undefined
       : {
           ...(formValue.exportType === ImportExportFileType.CSV
             ? {
@@ -118,7 +125,9 @@ export function buildTaskParams({
         ? ImportExportTaskType.SQL_FILE_IMPORT
         : ImportExportTaskType.DATA_FILE_IMPORT,
     tableName: boundInfo.targetScope === 'TABLE' ? tableName : undefined,
+    ...(boundInfo.targetScope === 'DATA_SOURCE' ? {} : { scope: boundInfo.targetScope }),
     sourceFile,
+    ...(formValue.sqlExporterProfile ? { sourceKind: 'THIRD_PARTY' as const } : {}),
     ...(mode === 'ULTRA_FAST' && confirmedNoStrongRelations ? { confirmedNoStrongRelations: true } : {}),
     options,
     ...(importPreview ? { unmappedTarget: formValue.unmappedTarget || 'DEFAULT' } : {}),

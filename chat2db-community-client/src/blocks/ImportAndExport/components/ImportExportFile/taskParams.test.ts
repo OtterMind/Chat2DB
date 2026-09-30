@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ImportExportFileType, ImportExportTaskType, ImportExportType } from '@/constants/importExport';
-import type { ImportExportDataBoundInfo } from '@/typings/importExport';
+import { SQL_EXPORTER_PROFILES, type ImportExportDataBoundInfo } from '@/typings/importExport';
 import { buildTaskParams, initialFileType, type ImportExportFormValue } from './taskParams';
 
 const checkpointableFormats = [
@@ -82,6 +82,17 @@ const databaseImport: ImportExportDataBoundInfo = {
   type: ImportExportType.IMPORT,
   fileType: ImportExportFileType.SQL,
 };
+assert.deepEqual(SQL_EXPORTER_PROFILES, [
+  'NAVICAT',
+  'DBEAVER',
+  'DATAGRIP',
+  'HEIDISQL',
+  'PHPMYADMIN',
+  'MYSQL_WORKBENCH',
+  'PGADMIN',
+  'SSMS',
+  'ORACLE_SQL_DEVELOPER',
+]);
 assert.deepEqual(build(databaseImport, { exportType: ImportExportFileType.SQL }), {
   dataSourceId: 1,
   databaseName: 'app',
@@ -90,9 +101,34 @@ assert.deepEqual(build(databaseImport, { exportType: ImportExportFileType.SQL })
   mode: 'ULTRA_FAST',
   taskType: ImportExportTaskType.SQL_FILE_IMPORT,
   tableName: undefined,
+  scope: 'DATABASE',
   sourceFile: 'C:\\imports\\dump.sql',
   options: undefined,
 });
+
+const navicatDatabaseImport = build(databaseImport, {
+  exportType: ImportExportFileType.SQL,
+  sqlExporterProfile: 'NAVICAT',
+  charset: ' UTF-16LE ',
+});
+assert.deepEqual('options' in navicatDatabaseImport ? navicatDatabaseImport.options : undefined, {
+  sqlExporterProfile: 'NAVICAT',
+  charset: 'UTF-16LE',
+});
+assert.equal('scope' in navicatDatabaseImport ? navicatDatabaseImport.scope : undefined, 'DATABASE');
+assert.equal('sourceKind' in navicatDatabaseImport ? navicatDatabaseImport.sourceKind : undefined, 'THIRD_PARTY');
+
+const dataSourceSqlImport = build(
+  {
+    dataSourceId: 1,
+    targetScope: 'DATA_SOURCE',
+    type: ImportExportType.IMPORT,
+    fileType: ImportExportFileType.SQL,
+  },
+  { exportType: ImportExportFileType.SQL },
+);
+assert.equal(dataSourceSqlImport.taskType, ImportExportTaskType.SQL_FILE_IMPORT);
+assert.equal('scope' in dataSourceSqlImport, false);
 
 const tableImport: ImportExportDataBoundInfo = {
   ...tableExport,
@@ -116,6 +152,7 @@ const mappedImport = buildTaskParams({
 });
 assert.equal(mappedImport.taskType, ImportExportTaskType.DATA_FILE_IMPORT);
 assert.equal('tableName' in mappedImport ? mappedImport.tableName : undefined, 'orders');
+assert.equal('scope' in mappedImport ? mappedImport.scope : undefined, 'TABLE');
 assert.deepEqual('options' in mappedImport ? mappedImport.options : undefined, {
   charset: undefined,
   delimiter: ';',

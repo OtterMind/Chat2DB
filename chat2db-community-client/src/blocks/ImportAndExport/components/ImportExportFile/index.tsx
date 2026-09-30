@@ -1,4 +1,14 @@
-import { memo, useMemo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
+import {
+  memo,
+  useMemo,
+  useState,
+  forwardRef,
+  ForwardedRef,
+  useImperativeHandle,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { useStyles } from './style';
 import UploadLocalFile, { type FileUrl } from '@/components/UploadLocalFile';
 import { Alert, Checkbox, Form, Input, Select, InputNumber, Switch, Table, Tooltip } from 'antd';
@@ -7,13 +17,14 @@ import { useImportExportStore } from '@/store/importExport';
 import { IconButton } from '@chat2db/ui';
 import { ImportExportType, ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 import importExportServices, { ExportTaskParams, ImportTaskParams } from '@/service/importExport';
-import { IImportPreview, ImportExecutionMode } from '@/typings/importExport';
+import { IImportPreview, ImportExecutionMode, SQL_EXPORTER_PROFILES } from '@/typings/importExport';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
 import { CircleHelp } from 'lucide-react';
 import { buildTaskParams, initialFileType, type ImportExportFormValue } from './taskParams';
 import sqlService from '@/service/sql';
 import { stageSelectedImportFile } from '../ImportMappingContent/fileStaging';
+import { createStagedFileOwnership } from '../ImportMappingContent/stagedFileOwnership';
 import { getImportPreviewErrorMessage } from '../ImportMappingContent/mapping';
 import { getImportMappingIssues, mergeImportColumnMappings } from './mappingValidation';
 
@@ -23,7 +34,10 @@ interface IProps {
 }
 
 export interface ImportExportFileRef {
-  getValues: () => ExportTaskParams | ImportTaskParams | null;
+  getValues: (clientSubmissionId?: string) => ExportTaskParams | ImportTaskParams | null;
+  invalidateStagedFiles: (message: string) => void;
+  releaseStagedFiles: () => void;
+  markStagedFilesSubmitted: (fileIds: readonly string[]) => void;
 }
 
 const exportTypeOptions = [
@@ -72,6 +86,34 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   });
   const [mode, setMode] = useState<ImportExecutionMode>('STANDARD');
   const [confirmedNoStrongRelations, setConfirmedNoStrongRelations] = useState(false);
+  const mounted = useRef(true);
+  const stagingGeneration = useRef(0);
+  const activeStagedFileId = useRef<string>();
+  const stagingOwnershipRef = useRef<ReturnType<typeof createStagedFileOwnership>>();
+  if (!stagingOwnershipRef.current) {
+    stagingOwnershipRef.current = createStagedFileOwnership((fileId) => sqlService.releaseImportFile({ fileId }));
+  }
+  const stagingOwnership = stagingOwnershipRef.current;
+
+  const releaseActiveStagedFile = useCallback(() => {
+    const fileId = activeStagedFileId.current;
+    activeStagedFileId.current = undefined;
+    if (fileId) void stagingOwnership.release(fileId);
+  }, [stagingOwnership]);
+
+  const releaseAllStagedFiles = useCallback(() => {
+    stagingGeneration.current += 1;
+    activeStagedFileId.current = undefined;
+    void stagingOwnership.releaseAll();
+  }, [stagingOwnership]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      releaseAllStagedFiles();
+    };
+  }, [releaseAllStagedFiles]);
 
   const isImport = importExportDataBoundInfo?.type === ImportExportType.IMPORT;
   const isExport = importExportDataBoundInfo?.type === ImportExportType.EXPORT;
@@ -84,6 +126,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
 
   useEffect(() => {
     if (importExportDataBoundInfo) {
+      releaseAllStagedFiles();
       const { dataSourceName, databaseName, schemaName, tableName } = importExportDataBoundInfo;
       const tableNameDisplay = [dataSourceName, databaseName, schemaName, tableName].filter(Boolean).join('/');
       const exportType = initialFileType(importExportDataBoundInfo);
@@ -106,7 +149,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
         ...initialValues,
       });
     }
-  }, [form, importExportDataBoundInfo]);
+  }, [form, importExportDataBoundInfo, releaseAllStagedFiles]);
 
   // Gets the corresponding file type based on the export type
   const uploadLocalFileAccept = useMemo(() => {
@@ -115,22 +158,28 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
 
   // Both browser and desktop selections use the server's opaque staged-file contract.
   useEffect(() => {
+    const generation = ++stagingGeneration.current;
+    releaseActiveStagedFile();
     setStagedFile(undefined);
     setImportPreview(null);
     setImportError(undefined);
     if (!selectedFile) return;
-    let cancelled = false;
     stageSelectedImportFile(selectedFile, sqlService.uploadImportFile, sqlService.stageDesktopImportFile)
       .then((id) => {
-        if (!cancelled) setStagedFile({ selection: selectedFile, id });
+        stagingOwnership.own(id);
+        if (!mounted.current || stagingGeneration.current !== generation) {
+          void stagingOwnership.release(id);
+          return;
+        }
+        activeStagedFileId.current = id;
+        setStagedFile({ selection: selectedFile, id });
       })
       .catch((error) => {
-        if (!cancelled) setImportError(getImportPreviewErrorMessage(error, i18n('common.text.failure')));
+        if (mounted.current && stagingGeneration.current === generation) {
+          setImportError(getImportPreviewErrorMessage(error, i18n('common.text.failure')));
+        }
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedFile]);
+  }, [releaseActiveStagedFile, selectedFile, stagingOwnership]);
 
   // Previews the selected import file once both the file and the format are known, so the
   // column mapping panel below reflects what the backend will actually import.
@@ -240,7 +289,25 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
   };
 
   useImperativeHandle(ref, () => ({
-    getValues: () => {
+    invalidateStagedFiles: (message: string) => {
+      releaseAllStagedFiles();
+      setStagedFile(undefined);
+      setImportPreview(null);
+      setImportError(message);
+      setIsReady?.(false);
+    },
+    releaseStagedFiles: () => {
+      releaseAllStagedFiles();
+      setStagedFile(undefined);
+      setImportPreview(null);
+      setIsReady?.(false);
+    },
+    markStagedFilesSubmitted: (fileIds: readonly string[]) => {
+      stagingGeneration.current += 1;
+      activeStagedFileId.current = undefined;
+      stagingOwnership.transfer(fileIds);
+    },
+    getValues: (clientSubmissionId?: string) => {
       if (!importExportDataBoundInfo) return null;
       if (isImport && !importReady) return null;
       const params = buildTaskParams({
@@ -258,6 +325,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       return isImport
         ? ({
             ...params,
+            ...(clientSubmissionId ? { clientSubmissionId } : {}),
             sourceFile: undefined,
             fileId,
             displayFileName: selectedFile?.fileName || selectedFile?.file?.name,
@@ -280,6 +348,10 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
       ...formValue,
       ...allValues,
     };
+    if (changedValues.exportType && changedValues.exportType !== ImportExportFileType.SQL) {
+      form.setFieldValue('sqlExporterProfile', undefined);
+      nextValue.sqlExporterProfile = undefined;
+    }
     if (
       changedValues.compression ||
       (changedValues.exportType && !checkpointableFormats.includes(changedValues.exportType))
@@ -351,6 +423,22 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
         <Form.Item className={styles.fullWidth} label={`${i18n('workspace.importExport.sourceFile')}:`}>
           <UploadLocalFile fileUrlListChange={handleFileUrlListChange} accept={uploadLocalFileAccept} fileSize={50} />
         </Form.Item>
+      )}
+      {isImport && formValue.exportType === ImportExportFileType.SQL && (
+        <>
+          <Form.Item label={`${i18n('workspace.importExport.sqlExporterProfile')}:`} name="sqlExporterProfile">
+            <Select
+              allowClear
+              aria-label={i18n('workspace.importExport.sqlExporterProfile')}
+              options={SQL_EXPORTER_PROFILES.map((profile) => ({ label: profile, value: profile }))}
+            />
+          </Form.Item>
+          {formValue.sqlExporterProfile && (
+            <Form.Item label={`${i18n('workspace.importExport.charset')}:`} name="charset">
+              <Input autoComplete="off" placeholder={i18n('workspace.importExport.auto')} />
+            </Form.Item>
+          )}
+        </>
       )}
       {isImport && formValue.exportType === ImportExportFileType.CSV && (
         <>

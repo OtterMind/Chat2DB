@@ -16,6 +16,14 @@ public interface IImportFileStagingService {
     /** Protects a staged file from normal expiry cleanup while an asynchronous task owns it. */
     void claimForTask(String fileId);
 
+    /**
+     * Deletes an abandoned preview upload only when no asynchronous task has claimed it.
+     * Implementations that cannot prove the file is unclaimed must leave it untouched.
+     */
+    default boolean releaseUnclaimed(String fileId) {
+        return false;
+    }
+
     /** Deletes a staged file after task completion or failed submission. */
     void release(String fileId);
 }

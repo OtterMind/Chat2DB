@@ -471,6 +471,11 @@ const stageDesktopImportFile = createRequest<{ sourceFile: string; originalFileN
   { method: 'post' },
 );
 
+const releaseImportFile = createRequest<{ fileId: string }, void>('/api/rdb/import_preview/release', {
+  method: 'post',
+  errorLevel: false,
+});
+
 const getImportPreview = createRequest<
   {
     dataSourceId: number;
@@ -629,6 +634,7 @@ export default {
   executeImportWithMapping,
   uploadImportFile,
   stageDesktopImportFile,
+  releaseImportFile,
   getActiveTransactionList,
   getDataSourceList,
 };

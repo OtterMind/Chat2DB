@@ -7,6 +7,15 @@ import {
   ITaskArtifact,
   IImportOptions,
   IImportPreview,
+  IImportFinalizationOptions,
+  IImportRollbackOptions,
+  IImportStagingPolicy,
+  IImportTableDependency,
+  IImportTableSource,
+  IImportValidationOptions,
+  ImportCycleStrategy,
+  ImportSourceKind,
+  ImportTaskScope,
 } from '@/typings/importExport';
 import { ImportExportFileType, ImportExportTaskType } from '@/constants/importExport';
 
@@ -71,6 +80,7 @@ export interface ExportTaskParams extends IDatabaseBaseInfo {
 }
 
 export interface ImportTaskParams extends IDatabaseBaseInfo {
+  clientSubmissionId?: string;
   taskType: ImportTaskType;
   taskName?: string;
   tableName?: string;
@@ -84,6 +94,16 @@ export interface ImportTaskParams extends IDatabaseBaseInfo {
   /** Execution mode: ULTRA_FAST (parallel) or STANDARD (serial). Default STANDARD. */
   mode?: 'ULTRA_FAST' | 'STANDARD';
   confirmedNoStrongRelations?: boolean;
+  scope?: ImportTaskScope;
+  tableSources?: IImportTableSource[];
+  logicalDependencies?: IImportTableDependency[];
+  sourceKind?: ImportSourceKind;
+  cycleStrategy?: ImportCycleStrategy;
+  stagingPolicy?: IImportStagingPolicy;
+  validationOptions?: IImportValidationOptions;
+  finalizationOptions?: IImportFinalizationOptions;
+  rollbackOptions?: IImportRollbackOptions;
+  performanceSamplePercent?: number;
 }
 
 const submitExport = createRequest<ExportTaskParams, TaskSubmissionResponse>('/api/tasks/export', { method: 'post' });
