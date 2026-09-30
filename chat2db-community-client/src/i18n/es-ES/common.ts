@@ -275,6 +275,8 @@ export default {
   'common.text.creator': 'Creador',
   'common.text.singleUploadFileSize': 'El tamaño del archivo no puede superar {1} MB',
   'common.text.limitFileSize': 'Límite de tamaño del archivo: {1} MB',
+  'common.text.uploadFileCountLimit': 'Puede seleccionar hasta {1} archivos',
+  'common.text.uploadTotalSizeLimit': 'El tamaño total de los archivos seleccionados no puede superar {1}',
   'common.text.output': 'Salida',
   'common.button.copyConsole': 'Copiar salida',
   'common.button.clearConsole': 'Limpiar salida',

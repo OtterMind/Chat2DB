@@ -1,13 +1,15 @@
-import React, { memo, useEffect, useState, forwardRef, ForwardedRef, useImperativeHandle } from 'react';
+import React, { memo, useEffect, useRef, useState, forwardRef, ForwardedRef, useImperativeHandle } from 'react';
 import { useStyles } from './style';
-import { Upload, type UploadProps, GetProp } from 'antd';
-import { IconfontSvg, IconButton, staticMessage } from '@chat2db/ui';
+import { Button, Upload, type UploadProps, GetProp } from 'antd';
+import { IconfontSvg, staticMessage } from '@chat2db/ui';
+import { Plus, Trash2 } from 'lucide-react';
 import i18n from '@/i18n';
 import { useUpdateEffect } from 'ahooks';
-import { customRequestOSS } from '@/utils/file';
+import { customRequestOSS, formatFileSize } from '@/utils/file';
 import { UploadTypeEnum } from '@/typings/upload';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
+import { exceedsSingleFileSizeLimit, mergeFileSelections, type FileSelectionLimitViolation } from './selectionLimits';
 
 type FileType = Parameters<GetProp<UploadProps, 'beforeUpload'>>[0];
 
@@ -15,6 +17,7 @@ export interface FileUrl {
   fileName?: string;
   filePath?: string;
   file?: File;
+  fileSize?: number;
 }
 
 interface IProps extends UploadProps {
@@ -26,6 +29,8 @@ interface IProps extends UploadProps {
   // Whether OSS upload is enabled on the web.
   webOssUpload?: boolean;
   fileSize?: number;
+  maxFiles?: number;
+  maxTotalSizeBytes?: number;
 }
 
 export interface UploadLocalFileRef {
@@ -42,28 +47,62 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
     webOssUpload,
     descriptionSlot,
     fileSize,
+    maxFiles,
+    maxTotalSizeBytes,
     ...rest
   } = props;
   const { styles, cx } = useStyles();
   const [fileList, setFileList] = useState<FileUrl[]>([]);
+  const fileListRef = useRef<FileUrl[]>([]);
+
+  const commitFileList = (nextFileList: FileUrl[]) => {
+    fileListRef.current = nextFileList;
+    setFileList(nextFileList);
+  };
+
+  const showSelectionLimitErrors = (violations: FileSelectionLimitViolation[]) => {
+    if (violations.includes('maxFiles')) {
+      staticMessage.error(i18n('common.text.uploadFileCountLimit', maxFiles));
+    }
+    if (violations.includes('maxTotalSizeBytes')) {
+      staticMessage.error(i18n('common.text.uploadTotalSizeLimit', formatFileSize(maxTotalSizeBytes!)));
+    }
+  };
+
+  const addFileSelections = (selections: FileUrl[]) => {
+    const result = mergeFileSelections(fileListRef.current, selections, {
+      multiple,
+      maxFiles,
+      maxTotalSizeBytes,
+    });
+    showSelectionLimitErrors(result.violations);
+    if (result.accepted.length) {
+      commitFileList(result.fileList);
+    }
+  };
 
   useUpdateEffect(() => {
     fileUrlListChange && fileUrlListChange(fileList);
   }, [fileList]);
 
   const deleteFile = (index: number) => {
-    setFileList(fileList.filter((_, i) => i !== index));
+    commitFileList(fileListRef.current.filter((_, i) => i !== index));
   };
 
   const renderFileItem = (filePath: FileUrl, index: number) => {
     return (
       <div key={index} className={styles.fileItem}>
-        <span>{filePath.fileName}</span>
+        <span className={styles.fileName} title={filePath.fileName}>
+          {filePath.fileName}
+        </span>
         <div className={styles.deleteIconBox}>
-          <IconButton
+          <Button
+            aria-label={`${i18n('common.button.delete')}: ${filePath.fileName || ''}`}
             className={styles.deleteIcon}
-            code="icon-trash"
-            size="xs"
+            title={i18n('common.button.delete')}
+            type="text"
+            size="small"
+            icon={<Trash2 size={14} />}
             onClick={() => {
               deleteFile(index);
             }}
@@ -75,13 +114,13 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
 
   useEffect(() => {
     if (accept) {
-      setFileList([]);
+      commitFileList([]);
     }
   }, [accept]);
 
   useImperativeHandle(ref, () => ({
     resetFileList: () => {
-      setFileList([]);
+      commitFileList([]);
     },
   }));
 
@@ -95,8 +134,9 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
         file: selectedFile,
         filePath: selectedFile?.path,
         fileName: file.name,
+        fileSize: selectedFile?.size,
       };
-      setFileList((current) => (multiple ? [...current, selection] : [selection]));
+      addFileSelections([selection]);
       return;
     }
 
@@ -104,19 +144,16 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
       const selection = {
         fileName: file.name,
         filePath: file.response.privateUrl || file.originFileObj?.path,
+        fileSize: file.originFileObj?.size,
       };
-      setFileList((current) => (multiple ? [...current, selection] : [selection]));
+      addFileSelections([selection]);
     }
   };
 
   const beforeUpload = (file: FileType) => {
-    if (fileSize) {
-      const isLtxM = file.size / 1024 / 1024 < fileSize;
-      if (!isLtxM) {
-        setFileList([]);
-        staticMessage.error(i18n('common.text.singleUploadFileSize', fileSize));
-        return Upload.LIST_IGNORE;
-      }
+    if (exceedsSingleFileSizeLimit(file.size, fileSize)) {
+      staticMessage.error(i18n('common.text.singleUploadFileSize', fileSize));
+      return Upload.LIST_IGNORE;
     }
     if (isWebLocalUpload) {
       return false;
@@ -129,11 +166,15 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
         return type.replace('.', '');
       }) || [];
 
-    jcefApi.selectFile({ fileTypeList, fileSize }).then((data) => {
-      if (data) {
-        setFileList(data);
-      }
-    });
+    jcefApi
+      .selectFile({ fileTypeList, fileSize, multiple })
+      .then((data) => {
+        if (data) {
+          const selectedFiles = (Array.isArray(data) ? data : [data]) as FileUrl[];
+          addFileSelections(selectedFiles);
+        }
+      })
+      .catch(() => staticMessage.error(i18n('common.text.failure')));
   };
 
   return (
@@ -142,11 +183,36 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
         <div className={styles.uploadLocalFile}>
           <div className={styles.uploadLocalFileHeader}>
             <span>{i18n('common.text.selectedFile')}</span>
-            {/* {multiple && (
-              <Upload beforeUpload={beforeUpload} onChange={fileUploadOnChange} showUploadList={false} {...rest}>
-                <IconButton className={styles.addIcon} code="icon-add" size="xs" />
-              </Upload>
-            )} */}
+            {multiple &&
+              (isDesktop ? (
+                <Button
+                  aria-label={i18n('common.button.add')}
+                  className={styles.addIcon}
+                  title={i18n('common.button.add')}
+                  type="text"
+                  size="small"
+                  icon={<Plus size={14} />}
+                  onClick={handleUpdate}
+                />
+              ) : (
+                <Upload
+                  accept={accept}
+                  multiple
+                  beforeUpload={beforeUpload}
+                  onChange={fileUploadOnChange}
+                  showUploadList={false}
+                  {...rest}
+                >
+                  <Button
+                    aria-label={i18n('common.button.add')}
+                    className={styles.addIcon}
+                    title={i18n('common.button.add')}
+                    type="text"
+                    size="small"
+                    icon={<Plus size={14} />}
+                  />
+                </Upload>
+              ))}
           </div>
           <div className={styles.uploadLocalFileBody}>
             {fileList.map((filePath, index) => {
@@ -190,19 +256,26 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
             </div>
           </Upload.Dragger>
         ) : (
-          <div className={styles.uploadDragger} onClick={handleUpdate}>
+          <button
+            type="button"
+            className={cx(styles.uploadDragger, styles.desktopUploadDragger)}
+            aria-label={description[0] || i18n('workspace.importExport.clickOrDrag')}
+            onClick={handleUpdate}
+          >
             <IconfontSvg className={styles.uploadDraggerIcon} size={36} code="icon-upload" />
-            <div className={styles.description}>
-              <p className={styles.description1}>{description[0] || i18n('workspace.importExport.clickOrDrag')}</p>
-              <p className={styles.description2}>{description[1]}</p>
+            <span className={styles.description}>
+              <span className={styles.description1}>
+                {description[0] || i18n('workspace.importExport.clickOrDrag')}
+              </span>
+              <span className={styles.description2}>{description[1]}</span>
               {descriptionSlot}
-            </div>
+            </span>
             {fileSize && (
-              <div className={styles.limitFileSize}>
+              <span className={styles.limitFileSize}>
                 <span>{i18n('common.text.limitFileSize', fileSize)}</span>
-              </div>
+              </span>
             )}
-          </div>
+          </button>
         )}
       </div>
     </div>

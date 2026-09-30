@@ -178,6 +178,7 @@ export const dropMenuConfig = {
       OperationColumn.Divider,
       // SQL & Synchronization
       OperationColumn.RunSqlFile,
+      OperationColumn.ImportMultipleTables,
       OperationColumn.ExportSqlFile,
       OperationColumn.SchemaSync,
       OperationColumn.Divider,
@@ -191,6 +192,7 @@ export const dropMenuConfig = {
       OperationColumn.CreateConsole,
       OperationColumn.Divider,
       OperationColumn.RunSqlFile,
+      OperationColumn.ImportMultipleTables,
       OperationColumn.ExportSqlFile,
       OperationColumn.SchemaSync,
       OperationColumn.Divider,

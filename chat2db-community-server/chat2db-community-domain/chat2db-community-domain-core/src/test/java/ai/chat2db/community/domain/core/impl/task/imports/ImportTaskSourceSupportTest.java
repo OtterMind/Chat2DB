@@ -1,9 +1,13 @@
 package ai.chat2db.community.domain.core.impl.task.imports;
 
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
+import ai.chat2db.community.domain.api.model.task.ImportFinalizationOptions;
 import ai.chat2db.community.domain.api.model.task.ImportRollbackOptions;
+import ai.chat2db.community.domain.api.model.task.ImportStagingPolicy;
+import ai.chat2db.community.domain.api.model.task.ImportTableDependency;
 import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportValidationOptions;
 import ai.chat2db.community.domain.api.model.task.TaskArtifactRole;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import org.junit.jupiter.api.Test;
@@ -117,6 +121,27 @@ class ImportTaskSourceSupportTest {
     }
 
     @Test
+    void rejectsEveryMultiTableManifestControlForSqlFileImports() {
+        List<ImportTaskSpec> invalid = List.of(
+                sqlSpec().tableSources(List.of(ImportTableSource.builder().tableName("orders").build())).build(),
+                sqlSpec().logicalDependencies(List.of(ImportTableDependency.builder()
+                        .parentTable("orders").childTable("items").build())).build(),
+                sqlSpec().cycleStrategy("REJECT").build(),
+                sqlSpec().stagingPolicy(ImportStagingPolicy.builder().enabled(false).build()).build(),
+                sqlSpec().validationOptions(ImportValidationOptions.builder().orphanCheck(false).build()).build(),
+                sqlSpec().finalizationOptions(ImportFinalizationOptions.builder().resetSequences(false).build()).build(),
+                sqlSpec().rollbackOptions(ImportRollbackOptions.builder().rehearsal(false).build()).build(),
+                sqlSpec().performanceSamplePercent(5).build(),
+                sqlSpec().confirmedNoStrongRelations(false).build());
+
+        for (ImportTaskSpec spec : invalid) {
+            assertEquals("SQL file import does not accept multi-table manifest controls",
+                    assertThrows(IllegalArgumentException.class,
+                            () -> ImportTaskSourceSupport.validateSqlImportControls(spec)).getMessage());
+        }
+    }
+
+    @Test
     void rejectsPerformanceSampleWithoutRollbackRehearsal() {
         ImportTaskSpec sampleOnly = spec("TRUSTED", "REJECT", 5, null);
         sampleOnly.setRollbackOptions(null);
@@ -153,5 +178,14 @@ class ImportTaskSourceSupportTest {
                         .databaseName("app").schemaName("public").tableName("orders")
                         .sourceFile("orders.csv").format("CSV").options(options).build()))
                 .build();
+    }
+
+    private static ImportTaskSpec.ImportTaskSpecBuilder sqlSpec() {
+        return ImportTaskSpec.builder()
+                .taskType("SQL_FILE_IMPORT")
+                .scope("DATABASE")
+                .sourceKind("THIRD_PARTY")
+                .mode("STANDARD")
+                .options(ImportOptions.builder().sqlExporterProfile("NAVICAT").build());
     }
 }

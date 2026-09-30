@@ -1,12 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Modal, IconfontSvg } from '@chat2db/ui';
+import { Modal } from '@chat2db/ui';
 import { Button } from 'antd';
 import i18n from '@/i18n';
 import ImportExportFile, { ImportExportFileRef } from '../ImportExportFile';
+import MultiTableImportWizard from '../MultiTableImportWizard';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices, { type ExportTaskParams, type ImportTaskParams } from '@/service/importExport';
-import { ImportExportTaskStatus, ImportExportType } from '@/constants/importExport';
+import { ImportExportFileType, ImportExportTaskStatus, ImportExportType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import jcefApi from '@/jcef';
@@ -26,6 +27,7 @@ export default memo<IProps>((_props) => {
   const [taskId, setTaskId] = useState<number>();
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
   const previousTaskDetailsRef = useRef<ImportExportTaskDetails>();
+  const submittedImportTargetsRef = useRef<Array<NonNullable<ImportExportTaskDetails['target']>>>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
@@ -42,6 +44,7 @@ export default memo<IProps>((_props) => {
       setTaskId(undefined);
       setTaskDetails(undefined);
       previousTaskDetailsRef.current = undefined;
+      submittedImportTargetsRef.current = [];
     }
   }, [importExportDataBoundInfo]);
 
@@ -50,10 +53,18 @@ export default memo<IProps>((_props) => {
     const params = importExportFileRef.current?.getValues();
     if (!params) return;
     setSubmitting(true);
-    const request =
-      params.taskType === 'DATA_FILE_IMPORT' || params.taskType === 'SQL_FILE_IMPORT'
-        ? importExportServices.submitImport(params as ImportTaskParams)
-        : importExportServices.submitExport(params as ExportTaskParams);
+    const isImportRequest = params.taskType === 'DATA_FILE_IMPORT' || params.taskType === 'SQL_FILE_IMPORT';
+    submittedImportTargetsRef.current = isImportRequest
+      ? ((params as ImportTaskParams).tableSources || []).map((source) => ({
+          dataSourceId: (params as ImportTaskParams).dataSourceId,
+          databaseName: source.databaseName || (params as ImportTaskParams).databaseName,
+          schemaName: source.schemaName,
+          tableName: source.tableName,
+        }))
+      : [];
+    const request = isImportRequest
+      ? importExportServices.submitImport(params as ImportTaskParams)
+      : importExportServices.submitExport(params as ExportTaskParams);
     request
       .then((res) => {
         setTaskId(res.taskId);
@@ -98,8 +109,13 @@ export default memo<IProps>((_props) => {
       footerLeft={
         <>
           {importExportDataBoundInfo?.type === ImportExportType.EXPORT &&
-            taskDetails?.status === ImportExportTaskStatus.SUCCESS && (
-              <Button icon={<IconfontSvg code="icon-folder" />} onClick={handleOpenFile}>
+            taskDetails?.status === ImportExportTaskStatus.SUCCESS &&
+            taskDetails.artifactId && (
+              <Button
+                type="primary"
+                icon={isDesktop ? undefined : undefined}
+                onClick={handleOpenFile}
+              >
                 {i18n('workspace.text.openFile')}
               </Button>
             )}
@@ -123,14 +139,36 @@ export default memo<IProps>((_props) => {
     const previous = previousTaskDetailsRef.current;
     previousTaskDetailsRef.current = _taskDetails;
     setTaskDetails(_taskDetails);
+    const becameSuccessful =
+      _taskDetails.status === ImportExportTaskStatus.SUCCESS &&
+      (!previous || previous.id === _taskDetails.id) &&
+      previous?.status !== ImportExportTaskStatus.SUCCESS;
+    if (becameSuccessful && submittedImportTargetsRef.current.length) {
+      submittedImportTargetsRef.current.forEach((target) => {
+        window.dispatchEvent(new CustomEvent(IMPORT_TARGET_TABLE_REFRESH_EVENT, { detail: target }));
+      });
+      getTaskList();
+      return;
+    }
     if (shouldRefreshImportTargetTable(previous, _taskDetails)) {
       window.dispatchEvent(new CustomEvent(IMPORT_TARGET_TABLE_REFRESH_EVENT, { detail: _taskDetails.target }));
-      void getTaskList();
+      getTaskList();
     }
   };
 
+  // The wizard can only build a submission for the scopes it supports; anything else would render
+  // a wizard whose start button can never produce params.
+  const isMultiTableImport =
+    importExportDataBoundInfo?.type === ImportExportType.IMPORT &&
+    (importExportDataBoundInfo.targetScope === 'SCHEMA' ||
+      importExportDataBoundInfo.targetScope === 'DATABASE') &&
+    importExportDataBoundInfo.fileType !== ImportExportFileType.SQL;
+
   const modalTitle = (() => {
     if (importExportDataBoundInfo?.type === ImportExportType.IMPORT) {
+      if (isMultiTableImport) {
+        return i18n('workspace.menu.importMultipleTables');
+      }
       return importExportDataBoundInfo.targetScope === 'TABLE'
         ? i18n('workspace.menu.importData')
         : i18n('workspace.menu.runSqlFile');
@@ -156,12 +194,15 @@ export default memo<IProps>((_props) => {
       destroyOnClose
       footer={taskId ? logRenderFooter() : renderFooter()}
       maskClosable={false}
-      onCancel={() => {
-        setImportExportDataBoundInfo(null);
-      }}
     >
       {taskId ? (
         <Log onTaskChange={handleTaskChange} taskId={taskId} />
+      ) : isMultiTableImport && importExportDataBoundInfo ? (
+        <MultiTableImportWizard
+          ref={importExportFileRef}
+          boundInfo={importExportDataBoundInfo}
+          setIsReady={setIsReady}
+        />
       ) : (
         <ImportExportFile ref={importExportFileRef} setIsReady={setIsReady} />
       )}

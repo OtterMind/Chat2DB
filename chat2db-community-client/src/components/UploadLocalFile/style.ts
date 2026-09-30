@@ -2,7 +2,6 @@ import { createStyles } from 'antd-style';
 
 export const useStyles = createStyles(({ css, cx, token }) => {
   const deleteIconBox = cx(css`
-    display: none;
     flex-shrink: 0;
   `);
   return {
@@ -24,6 +23,13 @@ export const useStyles = createStyles(({ css, cx, token }) => {
     `,
     uploadDraggerIcon: css`
       color: ${token.colorPrimary};
+    `,
+    desktopUploadDragger: css`
+      width: 100%;
+      appearance: none;
+      color: inherit;
+      font: inherit;
+      background: transparent;
     `,
     hiddenUploadDraggerBox: css`
       height: 0px;
@@ -71,6 +77,10 @@ export const useStyles = createStyles(({ css, cx, token }) => {
     `,
     deleteIconBox,
     deleteIcon: css`
+      width: 24px;
+      min-width: 24px;
+      height: 24px;
+
       &:hover {
         background: ${token.colorPrimaryBgHover};
         color: ${token.colorPrimary};
@@ -81,18 +91,18 @@ export const useStyles = createStyles(({ css, cx, token }) => {
       line-height: 24px;
       padding: 0px 3px 0px 6px;
       border-radius: 4px;
-      cursor: pointer;
       display: flex;
       align-items: center;
-      span {
-        flex: 1;
-      }
       &:hover {
         background-color: ${token.colorPrimaryBgHover};
-        .${deleteIconBox} {
-          display: block;
-        }
       }
+    `,
+    fileName: css`
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     `,
     addIcon: css`
       color: ${token.colorText};

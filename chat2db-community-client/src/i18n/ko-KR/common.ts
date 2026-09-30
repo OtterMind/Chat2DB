@@ -275,6 +275,8 @@ export default {
   'common.text.creator': '생성자',
   'common.text.singleUploadFileSize': '파일 크기는 {1}M를 초과할 수 없습니다',
   'common.text.limitFileSize': '파일 크기 제한: {1}M',
+  'common.text.uploadFileCountLimit': '최대 {1}개의 파일만 선택할 수 있습니다',
+  'common.text.uploadTotalSizeLimit': '선택한 파일의 총 크기는 {1}을 초과할 수 없습니다',
   'common.text.output': '출력',
   'common.button.copyConsole': '출력 복사',
   'common.button.clearConsole': '출력 지우기',

@@ -13,6 +13,12 @@ import java.util.List;
 @AllArgsConstructor
 public class ImportTaskSpec implements TaskSpec {
 
+    /** Client-generated key used to recover the original task after an ambiguous submit response. */
+    private String clientSubmissionId;
+
+    /** Server-generated fingerprint that binds the client submission key to this exact request. */
+    private String clientSubmissionFingerprint;
+
     private String taskType;
 
     private String taskName;

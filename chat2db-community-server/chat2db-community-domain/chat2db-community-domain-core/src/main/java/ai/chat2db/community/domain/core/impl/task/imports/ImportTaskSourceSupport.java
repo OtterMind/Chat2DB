@@ -54,6 +54,18 @@ public final class ImportTaskSourceSupport {
         if (spec == null) {
             throw new IllegalArgumentException("Import task specification is required");
         }
+        if (CollectionUtils.isNotEmpty(spec.getTableSources())
+                || CollectionUtils.isNotEmpty(spec.getLogicalDependencies())
+                || StringUtils.isNotBlank(spec.getCycleStrategy())
+                || spec.getStagingPolicy() != null
+                || spec.getValidationOptions() != null
+                || spec.getFinalizationOptions() != null
+                || spec.getRollbackOptions() != null
+                || spec.getPerformanceSamplePercent() != null
+                || spec.getConfirmedNoStrongRelations() != null) {
+            throw new IllegalArgumentException(
+                    "SQL file import does not accept multi-table manifest controls");
+        }
         requireMember("source kind", spec.getSourceKind(), SOURCE_KINDS);
         validateSqlExporterProfile(spec.getSourceKind(), spec.getOptions(), true);
     }

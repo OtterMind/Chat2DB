@@ -1067,6 +1067,28 @@ export const useCreateRightClickMenu = () => {
           !hasPermission,
       },
 
+      [OperationColumn.ImportMultipleTables]: {
+        text: i18n('workspace.menu.importMultipleTables'),
+        icon: 'icon-upload',
+        handle: () => {
+          setImportExportDataBoundInfo({
+            dataSourceName,
+            dataSourceId: dataSourceId!,
+            databaseType,
+            databaseName,
+            schemaName,
+            targetScope: importExportTargetScope,
+            type: ImportExportType.IMPORT,
+            fileType: ImportExportFileType.CSV,
+          });
+        },
+        discard:
+          !canImportExport ||
+          !isDatabaseCapabilitySupported(databaseType, DatabaseCapability.IMPORT_EXPORT) ||
+          !hasPermission,
+        requiredOperations: ['INSERT'],
+      },
+
       [OperationColumn.CopyMcpConfig]: {
         text: i18n('workspace.menu.copyMcpConfig'),
         icon: 'icon-mcp',

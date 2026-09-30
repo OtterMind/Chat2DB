@@ -103,6 +103,7 @@ export enum OperationColumn {
   ExportData = 'export',
   // import
   ImportData = 'import',
+  ImportMultipleTables = 'importMultipleTables',
   // Copy table
   CopyTable = 'copyTable',
   // Clear table

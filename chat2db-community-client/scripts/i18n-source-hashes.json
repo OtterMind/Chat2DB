@@ -5,7 +5,7 @@
     "es-ES": {
       "ai.ts": "e7a2fcbfb3ed647bd14f63aca4b6c35c8fb402c49a6a1f36bb04f76f4e8415af",
       "chat.ts": "f6c6ab9cbc5c1c828c35c75d83c4adca347ade590b5177e10d64fdd18cc8aef5",
-      "common.ts": "7019fed4961602ede442b9e95b9142c9abf378ab0ef874580f9f101e733215d6",
+      "common.ts": "1fe2502580191d122ccaccd130843b1da6be3e0dbb120fefff1b2d18e501b0af",
       "connection.ts": "24f987f3e4188c0076c1c17591b9fd5792b29c2c176b2069f50a3bdf5d661af9",
       "dashboard.ts": "7f4a13874afe812f8ecfd0e8f32293690dd151f53158e2958d094c2fda2b9945",
       "editTable.ts": "6d1233d574dbd2e038ed112bc8677b12f61a0fc831f56f77d5ce024a96a319f6",
@@ -21,12 +21,12 @@
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
       "sqlEditor.ts": "5c41e5f24d5ba78909795bcc681cabb8460cca075233b665dc4940afe82ce0c9",
       "stream.ts": "2e2fca0b1ba1ecd5a1501b767be8857cf0b72d800d69a4acf9cd62a61d5ceaf5",
-      "workspace.ts": "c72e4530738cc8a592dd12c65e7f4cf29bac924e3c2ef79e60470dc1e6e617d0"
+      "workspace.ts": "b6304de29ba44259c8b0887036520639dfe1b03cf561c4999090599f46b7cf10"
     },
     "ko-KR": {
       "ai.ts": "e7a2fcbfb3ed647bd14f63aca4b6c35c8fb402c49a6a1f36bb04f76f4e8415af",
       "chat.ts": "f6c6ab9cbc5c1c828c35c75d83c4adca347ade590b5177e10d64fdd18cc8aef5",
-      "common.ts": "7019fed4961602ede442b9e95b9142c9abf378ab0ef874580f9f101e733215d6",
+      "common.ts": "1fe2502580191d122ccaccd130843b1da6be3e0dbb120fefff1b2d18e501b0af",
       "connection.ts": "24f987f3e4188c0076c1c17591b9fd5792b29c2c176b2069f50a3bdf5d661af9",
       "dashboard.ts": "7f4a13874afe812f8ecfd0e8f32293690dd151f53158e2958d094c2fda2b9945",
       "editTable.ts": "6d1233d574dbd2e038ed112bc8677b12f61a0fc831f56f77d5ce024a96a319f6",
@@ -42,7 +42,7 @@
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
       "sqlEditor.ts": "5c41e5f24d5ba78909795bcc681cabb8460cca075233b665dc4940afe82ce0c9",
       "stream.ts": "2e2fca0b1ba1ecd5a1501b767be8857cf0b72d800d69a4acf9cd62a61d5ceaf5",
-      "workspace.ts": "c72e4530738cc8a592dd12c65e7f4cf29bac924e3c2ef79e60470dc1e6e617d0"
+      "workspace.ts": "b6304de29ba44259c8b0887036520639dfe1b03cf561c4999090599f46b7cf10"
     }
   }
 }
