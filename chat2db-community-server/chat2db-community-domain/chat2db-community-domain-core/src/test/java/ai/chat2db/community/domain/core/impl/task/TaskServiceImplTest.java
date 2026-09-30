@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContext
 import ai.chat2db.community.domain.api.model.task.ImportPreview;
 import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
+import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
@@ -108,6 +109,40 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void importSubmissionLookupRequiresTheOriginalOwnerAndFingerprint() {
+        Task own = Task.builder()
+                .id(7L)
+                .type("DATA_FILE_IMPORT")
+                .status(TaskStatus.PENDING.name())
+                .clientSubmissionId("import-attempt-1")
+                .clientSubmissionFingerprint("fingerprint-1")
+                .userId(10L)
+                .organizationId(100L)
+                .build();
+        Task otherOwner = Task.builder()
+                .id(8L)
+                .type("DATA_FILE_IMPORT")
+                .status(TaskStatus.PENDING.name())
+                .clientSubmissionId("import-attempt-1")
+                .clientSubmissionFingerprint("fingerprint-other-owner")
+                .userId(20L)
+                .organizationId(100L)
+                .build();
+        TaskServiceImpl service = new TaskServiceImpl(
+                new OwnershipTaskStorage(List.of(own, otherOwner)), null, new ArtifactService());
+        ContextUtils.setContext(Context.builder()
+                .loginUser(LoginUser.builder().id(10L).build())
+                .organizationId(100L)
+                .build());
+
+        assertEquals(7L, service.findImportTaskId(" import-attempt-1 ", "fingerprint-1"));
+        BusinessException conflict = assertThrows(BusinessException.class,
+                () -> service.findImportTaskId("import-attempt-1", "fingerprint-changed"));
+        assertEquals("task.import.submissionConflict", conflict.getCode());
+        assertNull(service.findImportTaskId("unknown-attempt", "fingerprint-1"));
+    }
+
+    @Test
     void terminalTaskDownloadsOnlyPersistedDiagnosticArtifacts() throws Exception {
         Path report = Files.writeString(tempDirectory.resolve("import-report.json"), "{}");
         Path rejectSummary = Files.writeString(tempDirectory.resolve("reject-summary.json"), "{}");
@@ -170,6 +205,54 @@ class TaskServiceImplTest {
                 .build();
 
         assertThrows(BusinessException.class, () -> service.submitImport(spec));
+    }
+
+    @Test
+    void sqlImportCannotBypassTopLevelSourceAllowlistWithAnAllowedTableSource() throws Exception {
+        Path allowed = Files.createDirectory(tempDirectory.resolve("allowed-sql"));
+        Path childSource = Files.writeString(allowed.resolve("child.sql"),
+                "INSERT INTO orders (id) VALUES (1);");
+        Path outside = Files.createDirectory(tempDirectory.resolve("outside-sql"));
+        Path topLevelSource = Files.writeString(outside.resolve("top-level.sql"),
+                "INSERT INTO orders (id) VALUES (2);");
+        TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
+                new ArtifactService());
+        Field field = TaskServiceImpl.class.getDeclaredField("importAllowedRoots");
+        field.setAccessible(true);
+        field.set(service, allowed.toString());
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .taskType("SQL_FILE_IMPORT")
+                .sourceFile(topLevelSource.toString())
+                .tableSources(List.of(ImportTableSource.builder()
+                        .tableName("orders")
+                        .sourceFile(childSource.toString())
+                        .format("SQL")
+                        .build()))
+                .build();
+
+        BusinessException error = assertThrows(BusinessException.class, () -> service.submitImport(spec));
+
+        assertEquals("task.import.sourceNotAllowed", error.getCode());
+    }
+
+    @Test
+    void rejectsSqlMultiTableManifestBeforePersistingTask() throws Exception {
+        Path source = Files.writeString(tempDirectory.resolve("single-file.sql"),
+                "INSERT INTO orders (id) VALUES (1);");
+        TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
+                new ArtifactService());
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .taskType("SQL_FILE_IMPORT")
+                .sourceFile(source.toString())
+                .tableSources(List.of(ImportTableSource.builder()
+                        .tableName("orders")
+                        .sourceFile(source.toString())
+                        .format("SQL")
+                        .build()))
+                .build();
+
+        assertEquals("SQL file import does not accept multi-table manifest controls",
+                assertThrows(IllegalArgumentException.class, () -> service.submitImport(spec)).getMessage());
     }
 
     @Test
@@ -376,6 +459,16 @@ class TaskServiceImplTest {
         @Override
         public Optional<Task> get(Long taskId) {
             return Optional.ofNullable(tasks.get(taskId));
+        }
+
+        @Override
+        public Optional<Task> findByClientSubmissionId(String clientSubmissionId, Long userId,
+                Long organizationId) {
+            return tasks.values().stream()
+                    .filter(task -> java.util.Objects.equals(clientSubmissionId, task.getClientSubmissionId()))
+                    .filter(task -> java.util.Objects.equals(userId, task.getUserId()))
+                    .filter(task -> java.util.Objects.equals(organizationId, task.getOrganizationId()))
+                    .findFirst();
         }
 
         @Override

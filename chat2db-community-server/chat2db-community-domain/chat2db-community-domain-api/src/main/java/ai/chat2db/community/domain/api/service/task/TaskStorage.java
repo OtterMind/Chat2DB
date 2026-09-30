@@ -20,6 +20,15 @@ public interface TaskStorage {
 
     Optional<Task> get(Long taskId);
 
+    /**
+     * Finds a task submitted with the client key inside the exact owner scope. Implementations must
+     * treat {@code null} user and organization IDs as values, not as wildcard filters.
+     */
+    default Optional<Task> findByClientSubmissionId(String clientSubmissionId, Long userId,
+            Long organizationId) {
+        return Optional.empty();
+    }
+
     PageResponse<Task> list(TaskQuery query);
 
     boolean compareAndSetStatus(Long taskId, String expectedStatus, String targetStatus,

@@ -6,7 +6,10 @@ import ImportExportFile, { ImportExportFileRef } from '../ImportExportFile';
 import MultiTableImportWizard from '../MultiTableImportWizard';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
-import importExportServices, { type ExportTaskParams, type ImportTaskParams } from '@/service/importExport';
+import importExportServices, {
+  type ExportTaskParams,
+  type ImportTaskParams,
+} from '@/service/importExport';
 import { ImportExportFileType, ImportExportTaskStatus, ImportExportType } from '@/constants/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
 import { ImportExportTaskDetails } from '@/typings/importExport';
@@ -16,6 +19,15 @@ import {
   IMPORT_TARGET_TABLE_REFRESH_EVENT,
   shouldRefreshImportTargetTable,
 } from '@/store/importExport/taskCenterUtils';
+import {
+  createClientSubmissionId,
+  getServerStagedImportFileIds,
+  hasServerStagedImportFiles,
+  importSubmissionIdentityAfterFailure,
+  isUnknownSubmissionResponse,
+  prepareImportSubmission,
+  type ImportSubmissionIdentity,
+} from './submission';
 
 interface IProps {
   className?: string;
@@ -28,6 +40,8 @@ export default memo<IProps>((_props) => {
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
   const previousTaskDetailsRef = useRef<ImportExportTaskDetails>();
   const submittedImportTargetsRef = useRef<Array<NonNullable<ImportExportTaskDetails['target']>>>([]);
+  const submissionGenerationRef = useRef(0);
+  const importSubmissionIdentityRef = useRef<ImportSubmissionIdentity>();
   const [submitting, setSubmitting] = useState(false);
 
   const { importExportDataBoundInfo, setImportExportDataBoundInfo, getTaskList } = useImportExportStore((state) => {
@@ -45,33 +59,76 @@ export default memo<IProps>((_props) => {
       setTaskDetails(undefined);
       previousTaskDetailsRef.current = undefined;
       submittedImportTargetsRef.current = [];
+      importSubmissionIdentityRef.current = undefined;
     }
   }, [importExportDataBoundInfo]);
 
   const handleRunSQl = () => {
     if (submitting) return;
-    const params = importExportFileRef.current?.getValues();
+    const importing = importExportDataBoundInfo?.type === ImportExportType.IMPORT;
+    const proposedClientSubmissionId = importing
+      ? importSubmissionIdentityRef.current?.clientSubmissionId || createClientSubmissionId()
+      : undefined;
+    const params = importExportFileRef.current?.getValues(proposedClientSubmissionId);
     if (!params) return;
     setSubmitting(true);
     const isImportRequest = params.taskType === 'DATA_FILE_IMPORT' || params.taskType === 'SQL_FILE_IMPORT';
-    submittedImportTargetsRef.current = isImportRequest
-      ? ((params as ImportTaskParams).tableSources || []).map((source) => ({
-          dataSourceId: (params as ImportTaskParams).dataSourceId,
-          databaseName: source.databaseName || (params as ImportTaskParams).databaseName,
-          schemaName: source.schemaName,
-          tableName: source.tableName,
-        }))
-      : [];
-    const request = isImportRequest
-      ? importExportServices.submitImport(params as ImportTaskParams)
+    const preparedImport = isImportRequest
+      ? prepareImportSubmission(params as ImportTaskParams, importSubmissionIdentityRef.current)
+      : undefined;
+    const importParams = preparedImport?.params;
+    if (preparedImport) importSubmissionIdentityRef.current = preparedImport.identity;
+    const hasServerStagedFiles = importParams ? hasServerStagedImportFiles(importParams) : false;
+    const submittedStagedFileIds = importParams ? getServerStagedImportFileIds(importParams) : [];
+    const submissionGeneration = ++submissionGenerationRef.current;
+    if (importParams) {
+      submittedImportTargetsRef.current = (importParams.tableSources || []).map((source) => ({
+        dataSourceId: importParams.dataSourceId,
+        databaseName: source.databaseName || importParams.databaseName,
+        schemaName: source.schemaName,
+        tableName: source.tableName,
+      }));
+    } else {
+      submittedImportTargetsRef.current = [];
+    }
+    const request = importParams
+      ? importExportServices.submitImport(importParams)
       : importExportServices.submitExport(params as ExportTaskParams);
     request
       .then((res) => {
+        void getTaskList();
+        if (submissionGeneration !== submissionGenerationRef.current) return;
+        importExportFileRef.current?.markStagedFilesSubmitted(submittedStagedFileIds);
         setTaskId(res.taskId);
-        getTaskList();
       })
-      .catch(() => {})
-      .finally(() => setSubmitting(false));
+      .catch((error) => {
+        if (submissionGeneration !== submissionGenerationRef.current) return;
+        const unknownResponse = isUnknownSubmissionResponse(error);
+        if (isImportRequest) {
+          importSubmissionIdentityRef.current = importSubmissionIdentityAfterFailure(
+            importSubmissionIdentityRef.current,
+            error,
+          );
+        }
+        if (isImportRequest && hasServerStagedFiles && !unknownResponse) {
+          importExportFileRef.current?.invalidateStagedFiles(
+            i18n('workspace.importExport.multiTable.submissionFilesExpired'),
+          );
+          submittedImportTargetsRef.current = [];
+          setIsReady(false);
+        }
+      })
+      .finally(() => {
+        if (submissionGeneration === submissionGenerationRef.current) setSubmitting(false);
+      });
+  };
+
+  const closeModal = () => {
+    submissionGenerationRef.current += 1;
+    setSubmitting(false);
+    importSubmissionIdentityRef.current = undefined;
+    if (!taskId) importExportFileRef.current?.releaseStagedFiles();
+    setImportExportDataBoundInfo(null);
   };
 
   const renderFooter = () => {
@@ -79,11 +136,7 @@ export default memo<IProps>((_props) => {
       <ModalFooterButton
         footerRight={
           <>
-            <Button
-              onClick={() => {
-                setImportExportDataBoundInfo(null);
-              }}
-            >
+            <Button disabled={submitting} onClick={closeModal}>
               {i18n('common.button.cancel')}
             </Button>
             <Button type="primary" disabled={!isReady} loading={submitting} onClick={handleRunSQl}>
@@ -111,11 +164,7 @@ export default memo<IProps>((_props) => {
           {importExportDataBoundInfo?.type === ImportExportType.EXPORT &&
             taskDetails?.status === ImportExportTaskStatus.SUCCESS &&
             taskDetails.artifactId && (
-              <Button
-                type="primary"
-                icon={isDesktop ? undefined : undefined}
-                onClick={handleOpenFile}
-              >
+              <Button type="primary" onClick={handleOpenFile}>
                 {i18n('workspace.text.openFile')}
               </Button>
             )}
@@ -124,9 +173,7 @@ export default memo<IProps>((_props) => {
       footerRight={
         <>
           <Button
-            onClick={() => {
-              setImportExportDataBoundInfo(null);
-            }}
+            onClick={closeModal}
           >
             {i18n('common.button.close')}
           </Button>
@@ -147,12 +194,12 @@ export default memo<IProps>((_props) => {
       submittedImportTargetsRef.current.forEach((target) => {
         window.dispatchEvent(new CustomEvent(IMPORT_TARGET_TABLE_REFRESH_EVENT, { detail: target }));
       });
-      getTaskList();
+      void getTaskList();
       return;
     }
     if (shouldRefreshImportTargetTable(previous, _taskDetails)) {
       window.dispatchEvent(new CustomEvent(IMPORT_TARGET_TABLE_REFRESH_EVENT, { detail: _taskDetails.target }));
-      getTaskList();
+      void getTaskList();
     }
   };
 
@@ -194,6 +241,10 @@ export default memo<IProps>((_props) => {
       destroyOnClose
       footer={taskId ? logRenderFooter() : renderFooter()}
       maskClosable={false}
+      closable={!submitting}
+      onCancel={() => {
+        if (!submitting) closeModal();
+      }}
     >
       {taskId ? (
         <Log onTaskChange={handleTaskChange} taskId={taskId} />

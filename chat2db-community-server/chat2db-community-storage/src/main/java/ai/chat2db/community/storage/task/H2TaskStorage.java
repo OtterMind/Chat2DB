@@ -319,6 +319,29 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
     }
 
     @Override
+    public Optional<Task> findByClientSubmissionId(String clientSubmissionId, Long userId,
+            Long organizationId) {
+        if (clientSubmissionId == null || clientSubmissionId.isBlank()) {
+            return Optional.empty();
+        }
+        return transact(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT " + TaskRows.TASK_COLUMNS + " FROM task"
+                            + " WHERE client_submission_id = ?"
+                            + " AND user_id IS NOT DISTINCT FROM ?"
+                            + " AND organization_id IS NOT DISTINCT FROM ?"
+                            + " ORDER BY id DESC FETCH FIRST 1 ROW ONLY")) {
+                statement.setString(1, clientSubmissionId);
+                setNullableLong(statement, 2, userId);
+                setNullableLong(statement, 3, organizationId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    return rows.next() ? Optional.of(TaskRows.readTask(rows)) : Optional.empty();
+                }
+            }
+        });
+    }
+
+    @Override
     public boolean compareAndSetResumeState(Long taskId, Integer shardNo, String expectedKind,
             ResumeState targetState) {
         requireResumeTransition(taskId, shardNo, expectedKind, targetState);
@@ -653,6 +676,8 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
         target.setProgressMessage(copy.getProgressMessage());
         target.setTarget(copy.getTarget());
         target.setSpecJson(copy.getSpecJson());
+        target.setClientSubmissionId(copy.getClientSubmissionId());
+        target.setClientSubmissionFingerprint(copy.getClientSubmissionFingerprint());
         target.setErrorCode(copy.getErrorCode());
         target.setErrorMessage(copy.getErrorMessage());
         target.setArtifactId(copy.getArtifactId());

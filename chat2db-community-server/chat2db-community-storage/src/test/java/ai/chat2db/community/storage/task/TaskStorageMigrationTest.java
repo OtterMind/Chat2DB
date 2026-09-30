@@ -19,6 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
@@ -144,6 +147,36 @@ class TaskStorageMigrationTest {
         assertTrue(new H2TaskStorage(database()).listTasksForRecovery().isEmpty());
         assertThrows(IllegalStateException.class, migrator::migrateIfRequired,
                 "a failed migration must not write its completion marker");
+    }
+
+    @Test
+    void upgradingAnOlderSchemaAddsTheIdempotentSubmissionIndex() throws Exception {
+        database().initialize();
+        // Simulate a database written by the previous build: version 6 without the new index.
+        try (Connection connection = database().open();
+                Statement statement = connection.createStatement()) {
+            statement.execute("DROP INDEX IF EXISTS idx_task_client_submission");
+            statement.execute("UPDATE schema_meta SET meta_value = '6' WHERE meta_key = 'schema_version'");
+            connection.commit();
+        }
+        database.close();
+        database = null;
+
+        TaskDatabase upgraded = new TaskDatabase(baseDir.getAbsolutePath());
+        try {
+            upgraded.initialize();
+            try (Connection connection = upgraded.open();
+                    Statement statement = connection.createStatement();
+                    ResultSet rows = statement.executeQuery(
+                            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES"
+                                    + " WHERE INDEX_NAME = 'IDX_TASK_CLIENT_SUBMISSION'")) {
+                assertTrue(rows.next());
+                assertEquals(1L, rows.getLong(1),
+                        "an upgraded database must index client_submission_id for the idempotent lookup");
+            }
+        } finally {
+            upgraded.close();
+        }
     }
 
     private Task task(String name) {

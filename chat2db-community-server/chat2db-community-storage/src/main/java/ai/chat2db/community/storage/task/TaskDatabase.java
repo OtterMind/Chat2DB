@@ -19,7 +19,8 @@ import java.sql.Statement;
 @Slf4j
 final class TaskDatabase implements AutoCloseable {
 
-    static final int SCHEMA_VERSION = 4;
+    // 5 was never published; 6 added the idempotent import submission columns.
+    static final int SCHEMA_VERSION = 7;
 
     /**
      * Sibling of the {@code task-v2} directory written by {@code FileTaskStorage}, so every task
@@ -43,6 +44,8 @@ final class TaskDatabase implements AutoCloseable {
                     + "artifact_id CLOB,"
                     + "target_json CLOB,"
                     + "spec_json CLOB,"
+                    + "client_submission_id VARCHAR(128),"
+                    + "client_submission_fingerprint VARCHAR(64),"
                     + "user_id BIGINT,"
                     + "organization_id BIGINT,"
                     + "created_at BIGINT,"
@@ -51,6 +54,11 @@ final class TaskDatabase implements AutoCloseable {
                     + "updated_at BIGINT,"
                     + "last_event_sequence BIGINT NOT NULL DEFAULT 0)",
             "CREATE INDEX IF NOT EXISTS idx_task_scope ON task(user_id, organization_id, status)",
+            // Idempotent import submission lookup filters on client_submission_id first, so that
+            // column leads the index and stays usable even when the null-safe owner predicates
+            // cannot use an index on their own.
+            "CREATE INDEX IF NOT EXISTS idx_task_client_submission"
+                    + " ON task(client_submission_id, user_id, organization_id)",
             "CREATE TABLE IF NOT EXISTS task_event ("
                     + "task_id BIGINT NOT NULL,"
                     + "sequence BIGINT NOT NULL,"
@@ -95,6 +103,10 @@ final class TaskDatabase implements AutoCloseable {
      */
     private static final String[] UPGRADE_SQL = {
             "ALTER TABLE task ADD COLUMN IF NOT EXISTS spec_json CLOB",
+            "ALTER TABLE task ADD COLUMN IF NOT EXISTS client_submission_id VARCHAR(128)",
+            "ALTER TABLE task ADD COLUMN IF NOT EXISTS client_submission_fingerprint VARCHAR(64)",
+            "CREATE INDEX IF NOT EXISTS idx_task_client_submission"
+                    + " ON task(client_submission_id, user_id, organization_id)",
     };
 
     private final String jdbcUrl;

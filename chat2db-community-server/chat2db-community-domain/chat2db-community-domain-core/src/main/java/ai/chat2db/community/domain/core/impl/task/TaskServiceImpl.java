@@ -125,20 +125,40 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Long submitImport(ImportTaskSpec spec) {
-        if (spec.getTableSources() == null || spec.getTableSources().isEmpty()) {
+        boolean sqlFileImport = TaskType.SQL_FILE_IMPORT.name().equals(spec.getTaskType());
+        if (sqlFileImport || spec.getTableSources() == null || spec.getTableSources().isEmpty()) {
             validateImportSource(spec.getSourceFile());
         } else {
             spec.getTableSources().stream().filter(Objects::nonNull)
                     .map(ImportTableSource::getSourceFile).forEach(this::validateImportSource);
         }
-        if (TaskType.DATA_FILE_IMPORT.name().equals(spec.getTaskType())
+        if (sqlFileImport) {
+            ImportTaskSourceSupport.validateSqlImportControls(spec);
+        } else if (TaskType.DATA_FILE_IMPORT.name().equals(spec.getTaskType())
                 || spec.getTableSources() != null && !spec.getTableSources().isEmpty()) {
             ImportTaskSourceSupport.effectiveSources(spec);
         }
-        if (TaskType.SQL_FILE_IMPORT.name().equals(spec.getTaskType())) {
-            ImportTaskSourceSupport.validateSqlImportControls(spec);
-        }
         return submit(spec);
+    }
+
+    @Override
+    public Long findImportTaskId(String clientSubmissionId, String clientSubmissionFingerprint) {
+        if (StringUtils.isBlank(clientSubmissionId) || StringUtils.isBlank(clientSubmissionFingerprint)) {
+            return null;
+        }
+        TaskOwner owner = currentOwner();
+        Task task = taskStorage.findByClientSubmissionId(
+                        clientSubmissionId.trim(), owner.userId(), owner.organizationId())
+                .filter(candidate -> TaskType.DATA_FILE_IMPORT.name().equals(candidate.getType())
+                        || TaskType.SQL_FILE_IMPORT.name().equals(candidate.getType()))
+                .orElse(null);
+        if (task == null) {
+            return null;
+        }
+        if (!clientSubmissionFingerprint.equals(task.getClientSubmissionFingerprint())) {
+            throw new BusinessException("task.import.submissionConflict");
+        }
+        return task.getId();
     }
 
     @Override
@@ -551,6 +571,10 @@ public class TaskServiceImpl implements TaskService {
         TaskOwner owner = owner(context);
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         Task task = Task.builder()
+                .clientSubmissionId(spec instanceof ImportTaskSpec importSpec
+                        ? StringUtils.trimToNull(importSpec.getClientSubmissionId()) : null)
+                .clientSubmissionFingerprint(spec instanceof ImportTaskSpec importSpec
+                        ? StringUtils.trimToNull(importSpec.getClientSubmissionFingerprint()) : null)
                 .type(spec.getTaskType())
                 .name(StringUtils.defaultIfBlank(spec.getTaskName(), spec.getTaskType()))
                 .target(spec.getTarget())

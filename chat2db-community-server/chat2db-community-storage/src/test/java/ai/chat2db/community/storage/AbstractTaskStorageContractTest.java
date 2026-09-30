@@ -117,6 +117,34 @@ public abstract class AbstractTaskStorageContractTest {
     }
 
     @Test
+    void clientSubmissionLookupIsOwnerScopedAndSurvivesRestart() {
+        TaskStorage storage = storage();
+        Task own = task("own-import");
+        own.setType("DATA_FILE_IMPORT");
+        own.setClientSubmissionId("import-attempt-1");
+        own.setClientSubmissionFingerprint("fingerprint-1");
+        own.setUserId(11L);
+        own.setOrganizationId(22L);
+        Long ownId = storage.create(own, event(TaskEventCode.TASK_CREATED.name())).getId();
+
+        Task otherOwner = task("other-import");
+        otherOwner.setType("DATA_FILE_IMPORT");
+        otherOwner.setClientSubmissionId("import-attempt-1");
+        otherOwner.setUserId(99L);
+        otherOwner.setOrganizationId(22L);
+        storage.create(otherOwner, event(TaskEventCode.TASK_CREATED.name()));
+
+        TaskStorage reloaded = storage();
+        Task found = reloaded.findByClientSubmissionId("import-attempt-1", 11L, 22L).orElseThrow();
+
+        assertEquals(ownId, found.getId());
+        assertEquals("import-attempt-1", found.getClientSubmissionId());
+        assertEquals("fingerprint-1", found.getClientSubmissionFingerprint());
+        assertTrue(reloaded.findByClientSubmissionId("import-attempt-1", 11L, 99L).isEmpty());
+        assertTrue(reloaded.findByClientSubmissionId(" ", 11L, 22L).isEmpty());
+    }
+
+    @Test
     void compareAndSetEnforcesLegalTransitionsAndTerminalImmutability() {
         TaskStorage storage = storage();
         Task created = create(storage, "task");
@@ -141,6 +169,31 @@ public abstract class AbstractTaskStorageContractTest {
         assertFalse(storage.compareAndSetStatus(taskId, TaskStatus.SUCCESS.name(), TaskStatus.FAILED.name(),
                 TaskStatusPatch.builder().errorCode("TOO_LATE").build(), event(TaskEventCode.TASK_FAILED.name())));
         assertEquals(TaskStatus.SUCCESS.name(), storage.get(taskId).orElseThrow().getStatus());
+        assertEquals(List.of(1L, 2L, 3L), sequences(storage.listEvents(taskId, 0, 20)));
+    }
+
+    @Test
+    void runningTaskCanBeCancelledAndCancellationIsTerminal() {
+        TaskStorage storage = storage();
+        Long taskId = create(storage, "cancelled-task").getId();
+        assertTrue(start(storage, taskId));
+        Date finishedAt = new Date();
+
+        assertTrue(storage.compareAndSetStatus(taskId, TaskStatus.RUNNING.name(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled")
+                        .finishedAt(finishedAt)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name())));
+
+        Task cancelled = storage.get(taskId).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals(TaskStage.CANCELLED.name(), cancelled.getStage());
+        assertEquals(finishedAt, cancelled.getFinishedAt());
+        assertFalse(storage.compareAndSetStatus(taskId, TaskStatus.CANCELLED.name(), TaskStatus.FAILED.name(),
+                TaskStatusPatch.builder().errorCode("TOO_LATE").build(),
+                event(TaskEventCode.TASK_FAILED.name())));
         assertEquals(List.of(1L, 2L, 3L), sequences(storage.listEvents(taskId, 0, 20)));
     }
 

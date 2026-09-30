@@ -37,6 +37,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -109,6 +110,20 @@ public class FileTaskStorage implements TaskStorage {
     @Override
     public synchronized Optional<Task> get(Long taskId) {
         return Optional.ofNullable(snapshots.find(taskId)).map(this::copy);
+    }
+
+    @Override
+    public synchronized Optional<Task> findByClientSubmissionId(String clientSubmissionId, Long userId,
+            Long organizationId) {
+        if (StringUtils.isBlank(clientSubmissionId)) {
+            return Optional.empty();
+        }
+        return snapshots.newestFirst().stream()
+                .filter(task -> clientSubmissionId.equals(task.getClientSubmissionId()))
+                .filter(task -> Objects.equals(userId, task.getUserId()))
+                .filter(task -> Objects.equals(organizationId, task.getOrganizationId()))
+                .findFirst()
+                .map(this::copy);
     }
 
     @Override
@@ -819,6 +834,8 @@ public class FileTaskStorage implements TaskStorage {
         target.setProgressMessage(copy.getProgressMessage());
         target.setTarget(copy.getTarget());
         target.setSpecJson(copy.getSpecJson());
+        target.setClientSubmissionId(copy.getClientSubmissionId());
+        target.setClientSubmissionFingerprint(copy.getClientSubmissionFingerprint());
         target.setErrorCode(copy.getErrorCode());
         target.setErrorMessage(copy.getErrorMessage());
         target.setArtifactId(copy.getArtifactId());
@@ -859,7 +876,7 @@ public class FileTaskStorage implements TaskStorage {
             return getDataList();
         }
 
-        private Iterable<Task> newestFirst() {
+        private Collection<Task> newestFirst() {
             return dataMap.descendingMap().values();
         }
 

@@ -24,18 +24,22 @@ import java.util.List;
 final class TaskRows {
 
     static final String TASK_COLUMNS = "id, type, name, status, progress, stage, progress_message,"
-            + " error_code, error_message, artifact_id, target_json, spec_json, user_id, organization_id,"
+            + " error_code, error_message, artifact_id, target_json, spec_json, client_submission_id,"
+            + " client_submission_fingerprint,"
+            + " user_id, organization_id,"
             + " created_at, started_at, finished_at, updated_at, last_event_sequence";
 
     static final String EVENT_COLUMNS = "task_id, sequence, event_id, level, code, stage, message,"
             + " details, created_at";
 
     static final String INSERT_TASK = "INSERT INTO task (" + TASK_COLUMNS + ") VALUES ("
-            + placeholders(19) + ")";
+            + placeholders(21) + ")";
 
     static final String UPDATE_TASK = "UPDATE task SET type = ?, name = ?, status = ?, progress = ?,"
             + " stage = ?, progress_message = ?, error_code = ?, error_message = ?, artifact_id = ?,"
-            + " target_json = ?, spec_json = ?, user_id = ?, organization_id = ?, created_at = ?,"
+            + " target_json = ?, spec_json = ?, client_submission_id = ?, client_submission_fingerprint = ?,"
+            + " user_id = ?, organization_id = ?,"
+            + " created_at = ?,"
             + " started_at = ?, finished_at = ?, updated_at = ?, last_event_sequence = ? WHERE id = ?";
 
     static final String INSERT_EVENT = "INSERT INTO task_event (" + EVENT_COLUMNS + ") VALUES ("
@@ -113,6 +117,8 @@ final class TaskRows {
                 .target(StringUtils.isBlank(targetJson) ? null
                         : JSON.parseObject(targetJson, TaskTargetSnapshot.class))
                 .specJson(rows.getString("spec_json"))
+                .clientSubmissionId(rows.getString("client_submission_id"))
+                .clientSubmissionFingerprint(rows.getString("client_submission_fingerprint"))
                 .errorCode(rows.getString("error_code"))
                 .errorMessage(rows.getString("error_message"))
                 .artifactId(rows.getString("artifact_id"))
@@ -175,6 +181,8 @@ final class TaskRows {
         setString(statement, index++, task.getArtifactId());
         setString(statement, index++, task.getTarget() == null ? null : JSON.toJSONString(task.getTarget()));
         setString(statement, index++, task.getSpecJson());
+        setString(statement, index++, task.getClientSubmissionId());
+        setString(statement, index++, task.getClientSubmissionFingerprint());
         setLong(statement, index++, task.getUserId());
         setLong(statement, index++, task.getOrganizationId());
         index = setDate(statement, index, task.getCreatedAt());

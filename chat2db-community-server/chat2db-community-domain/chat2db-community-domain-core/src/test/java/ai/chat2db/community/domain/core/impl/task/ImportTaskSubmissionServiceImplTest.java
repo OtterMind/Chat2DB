@@ -1,7 +1,9 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTableSource;
+import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import org.junit.jupiter.api.Test;
@@ -19,10 +21,76 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImportTaskSubmissionServiceImplTest {
+
+    @Test
+    void retryReturnsPersistedTaskBeforeTouchingAlreadyClaimedStagedFiles() {
+        RecordingStagingService stagingService = new RecordingStagingService(null);
+        AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .clientSubmissionId("import-attempt-1")
+                .importFileId("claimed-file-id")
+                .build();
+
+        assertEquals(73L, service(stagingService, submitted, null, 73L).submit(spec, "claimed-file-id"));
+
+        assertFalse(stagingService.resolved);
+        assertFalse(stagingService.claimed);
+        assertNull(submitted.get());
+        assertEquals(64, spec.getClientSubmissionFingerprint().length());
+    }
+
+    @Test
+    void canonicalFingerprintIgnoresResolvedPathsAndDetectsSemanticChanges() {
+        ImportTaskSpec original = ImportTaskSpec.builder()
+                .clientSubmissionId("attempt-1")
+                .taskType("DATA_FILE_IMPORT")
+                .importFileId("staged-users")
+                .sourceFile("C:/untrusted/users.csv")
+                .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("users").build())
+                .options(ImportOptions.builder().delimiter(",").skipRows(1).build())
+                .build();
+        ImportTaskSpec sameRequestAfterResolution = ImportTaskSpec.builder()
+                .clientSubmissionId("another-key-is-ignored")
+                .clientSubmissionFingerprint("server-field-is-ignored")
+                .taskType("DATA_FILE_IMPORT")
+                .importFileId("staged-users")
+                .sourceFile("D:/server/staging/staged-users.csv")
+                .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("users").build())
+                .options(ImportOptions.builder().delimiter(",").skipRows(1).build())
+                .build();
+
+        String fingerprint = ImportTaskSubmissionFingerprint.create(original, "staged-users");
+
+        assertEquals(fingerprint,
+                ImportTaskSubmissionFingerprint.create(sameRequestAfterResolution, "staged-users"));
+        assertNotEquals(fingerprint, ImportTaskSubmissionFingerprint.create(
+                ImportTaskSpec.builder()
+                        .taskType("DATA_FILE_IMPORT")
+                        .importFileId("staged-replacement")
+                        .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("users").build())
+                        .options(ImportOptions.builder().delimiter(",").skipRows(1).build())
+                        .build(), "staged-replacement"));
+        assertNotEquals(fingerprint, ImportTaskSubmissionFingerprint.create(
+                ImportTaskSpec.builder()
+                        .taskType("DATA_FILE_IMPORT")
+                        .importFileId("staged-users")
+                        .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("archived_users").build())
+                        .options(ImportOptions.builder().delimiter(",").skipRows(1).build())
+                        .build(), "staged-users"));
+        assertNotEquals(fingerprint, ImportTaskSubmissionFingerprint.create(
+                ImportTaskSpec.builder()
+                        .taskType("DATA_FILE_IMPORT")
+                        .importFileId("staged-users")
+                        .target(TaskTargetSnapshot.builder().dataSourceId(1L).tableName("users").build())
+                        .options(ImportOptions.builder().delimiter(";").skipRows(1).build())
+                        .build(), "staged-users"));
+    }
 
     @Test
     void preservesDesktopSourceWhenNoStagedFileIdIsPresent() {
@@ -52,6 +120,23 @@ class ImportTaskSubmissionServiceImplTest {
         assertFalse(stagingService.released);
         assertEquals(stagedFile.getAbsolutePath(), submitted.get().getSourceFile());
         assertEquals("file-id", submitted.get().getImportFileId());
+    }
+
+    @Test
+    void rejectsConflictingTopLevelStagedFileIdsBeforeResolvingEither() {
+        RecordingStagingService stagingService = new RecordingStagingService(null);
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .clientSubmissionId("import-attempt-1")
+                .importFileId("spec-file-id")
+                .build();
+
+        assertEquals("Top-level staged import file IDs do not match",
+                assertThrows(IllegalArgumentException.class,
+                        () -> service(stagingService, new AtomicReference<>(), null)
+                                .submit(spec, "argument-file-id"))
+                        .getMessage());
+        assertFalse(stagingService.resolved);
+        assertFalse(stagingService.claimed);
     }
 
     @Test
@@ -89,6 +174,27 @@ class ImportTaskSubmissionServiceImplTest {
     }
 
     @Test
+    void alwaysClaimsAndResolvesTheTopLevelFileIdBeforeTableSourceIds(@TempDir Path directory) throws Exception {
+        File topLevel = Files.writeString(directory.resolve("top-level.sql"), "SELECT 1;").toFile();
+        File child = Files.writeString(directory.resolve("child.sql"), "SELECT 2;").toFile();
+        MultiRecordingStagingService staging = new MultiRecordingStagingService(
+                Map.of("top-level-id", topLevel, "child-id", child));
+        AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
+        ImportTaskSpec spec = ImportTaskSpec.builder()
+                .importFileId("top-level-id")
+                .sourceFile("untrusted-client-path.sql")
+                .tableSources(List.of(ImportTableSource.builder()
+                        .tableName("orders").importFileId("child-id").build()))
+                .build();
+
+        assertEquals(42L, service(staging, submitted, null).submit(spec, null));
+
+        assertEquals(List.of("top-level-id", "child-id"), staging.claimedIds);
+        assertEquals(topLevel.getAbsolutePath(), submitted.get().getSourceFile());
+        assertEquals(child.getAbsolutePath(), submitted.get().getTableSources().get(0).getSourceFile());
+    }
+
+    @Test
     void releasesAllTableSourceClaimsWhenSubmissionFails(@TempDir Path directory) throws Exception {
         MultiRecordingStagingService staging = new MultiRecordingStagingService(new LinkedHashMap<>(Map.of(
                 "orders-id", Files.writeString(directory.resolve("orders.csv"), "id\n1\n").toFile(),
@@ -106,9 +212,19 @@ class ImportTaskSubmissionServiceImplTest {
 
     private static ImportTaskSubmissionServiceImpl service(IImportFileStagingService stagingService,
             AtomicReference<ImportTaskSpec> submitted, RuntimeException failure) {
+        return service(stagingService, submitted, failure, null);
+    }
+
+    private static ImportTaskSubmissionServiceImpl service(IImportFileStagingService stagingService,
+            AtomicReference<ImportTaskSpec> submitted, RuntimeException failure, Long existingTaskId) {
         TaskService taskService = (TaskService) Proxy.newProxyInstance(
                 ImportTaskSubmissionServiceImplTest.class.getClassLoader(), new Class<?>[] {TaskService.class},
                 (proxy, method, arguments) -> {
+                    if ("findImportTaskId".equals(method.getName())) {
+                        assertEquals("import-attempt-1", arguments[0]);
+                        assertEquals(64, ((String) arguments[1]).length());
+                        return existingTaskId;
+                    }
                     if ("submitImport".equals(method.getName())) {
                         submitted.set((ImportTaskSpec) arguments[0]);
                         if (failure != null) {

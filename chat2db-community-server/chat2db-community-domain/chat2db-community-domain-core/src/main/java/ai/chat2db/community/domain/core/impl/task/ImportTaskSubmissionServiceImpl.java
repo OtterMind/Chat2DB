@@ -5,6 +5,7 @@ import ai.chat2db.community.domain.api.model.task.ImportTableSource;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.IImportTaskSubmissionService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
+import com.google.common.util.concurrent.Striped;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +16,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
 
 @Service
 public class ImportTaskSubmissionServiceImpl implements IImportTaskSubmissionService {
+
+    private static final int MAX_CLIENT_SUBMISSION_ID_LENGTH = 128;
+
+    private final Striped<Lock> submissionLocks = Striped.lazyWeakLock(64);
 
     private final TaskService taskService;
 
@@ -31,6 +37,31 @@ public class ImportTaskSubmissionServiceImpl implements IImportTaskSubmissionSer
 
     @Override
     public Long submit(ImportTaskSpec spec, String stagedFileId) {
+        if (spec == null) {
+            throw new IllegalArgumentException("Import task spec is required");
+        }
+        validateTopLevelStagedFileIds(spec, stagedFileId);
+        String clientSubmissionId = StringUtils.trimToNull(spec.getClientSubmissionId());
+        if (clientSubmissionId == null) {
+            return submitNew(spec, stagedFileId);
+        }
+        if (clientSubmissionId.length() > MAX_CLIENT_SUBMISSION_ID_LENGTH) {
+            throw new IllegalArgumentException("Client submission ID exceeds 128 characters");
+        }
+        spec.setClientSubmissionId(clientSubmissionId);
+        String clientSubmissionFingerprint = ImportTaskSubmissionFingerprint.create(spec, stagedFileId);
+        spec.setClientSubmissionFingerprint(clientSubmissionFingerprint);
+        Lock lock = submissionLocks.get(clientSubmissionId);
+        lock.lock();
+        try {
+            Long existingTaskId = taskService.findImportTaskId(clientSubmissionId, clientSubmissionFingerprint);
+            return existingTaskId == null ? submitNew(spec, stagedFileId) : existingTaskId;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private Long submitNew(ImportTaskSpec spec, String stagedFileId) {
         String legacyFileId = StringUtils.firstNonBlank(stagedFileId, spec.getImportFileId());
         Set<String> fileIds = new LinkedHashSet<>();
         if (StringUtils.isNotBlank(legacyFileId)) {
@@ -70,6 +101,13 @@ public class ImportTaskSubmissionServiceImpl implements IImportTaskSubmissionSer
         } catch (RuntimeException e) {
             releaseClaims(claimed, e);
             throw e;
+        }
+    }
+
+    private void validateTopLevelStagedFileIds(ImportTaskSpec spec, String stagedFileId) {
+        if (StringUtils.isNotBlank(stagedFileId) && StringUtils.isNotBlank(spec.getImportFileId())
+                && !StringUtils.equals(stagedFileId, spec.getImportFileId())) {
+            throw new IllegalArgumentException("Top-level staged import file IDs do not match");
         }
     }
 

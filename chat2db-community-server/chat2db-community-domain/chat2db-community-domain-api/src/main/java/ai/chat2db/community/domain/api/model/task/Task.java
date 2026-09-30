@@ -16,6 +16,12 @@ public class Task {
 
     private Long id;
 
+    /** Opaque import-submission key, persisted separately so retries do not depend on spec parsing. */
+    private String clientSubmissionId;
+
+    /** SHA-256 of the canonical import request associated with {@link #clientSubmissionId}. */
+    private String clientSubmissionFingerprint;
+
     private String type;
 
     private String name;

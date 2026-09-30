@@ -19,6 +19,12 @@ public interface TaskService {
     Long submitImport(ImportTaskSpec spec);
 
     /**
+     * Returns an existing import task for the current owner and client submission key, rejecting
+     * reuse of that key for a different canonical import request.
+     */
+    Long findImportTaskId(String clientSubmissionId, String clientSubmissionFingerprint);
+
+    /**
      * Parses the import source and resolves its columns against the target table without writing
      * anything, so the UI can show the mapping and sample rows before submission.
      */
