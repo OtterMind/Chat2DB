@@ -34,6 +34,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +58,8 @@ import java.util.stream.Collectors;
 public class LocalTaskManager {
 
     private static final long EXIT_TASK_WAIT_MILLIS = 2000L;
+    private static final String CLIENT_SUBMISSION_RETENTION_HOURS_PROPERTY =
+            "chat2db.task.idempotency.retention-hours";
 
     private final TaskStorage taskStorage;
 
@@ -93,6 +97,7 @@ public class LocalTaskManager {
 
     @PostConstruct
     void reconcileInterruptedTasks() {
+        releaseExpiredClientSubmissions();
         Set<Long> resumableTaskIds = taskStorage.listResumableTasks().stream()
                 .map(Task::getId)
                 .collect(Collectors.toSet());
@@ -116,6 +121,27 @@ public class LocalTaskManager {
                         .filter(current -> TaskStatus.isTerminal(current.getStatus()))
                         .ifPresent(this::cleanupStoredTerminalResources);
             }
+        }
+    }
+
+    /**
+     * Publishes the retention window for idempotent import submissions. A client may retry a lost
+     * response only while the key is still stored, so the window is configurable and disabled by
+     * default; keys of tasks that never finished are never released.
+     */
+    private void releaseExpiredClientSubmissions() {
+        long retentionHours = Long.getLong(CLIENT_SUBMISSION_RETENTION_HOURS_PROPERTY, 0L);
+        if (retentionHours <= 0L) {
+            return;
+        }
+        Instant finishedBefore = Instant.now().minus(Duration.ofHours(retentionHours));
+        try {
+            int released = taskStorage.releaseExpiredClientSubmissions(finishedBefore);
+            if (released > 0) {
+                log.info("Released {} client submission keys finished before {}", released, finishedBefore);
+            }
+        } catch (RuntimeException purgeFailure) {
+            log.warn("Could not release expired client submission keys", purgeFailure);
         }
     }
 

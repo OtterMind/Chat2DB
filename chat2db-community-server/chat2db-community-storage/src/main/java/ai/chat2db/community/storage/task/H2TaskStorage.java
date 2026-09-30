@@ -23,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -337,6 +338,22 @@ public class H2TaskStorage implements TaskStorage, AutoCloseable {
                 try (ResultSet rows = statement.executeQuery()) {
                     return rows.next() ? Optional.of(TaskRows.readTask(rows)) : Optional.empty();
                 }
+            }
+        });
+    }
+
+    @Override
+    public int releaseExpiredClientSubmissions(Instant finishedBefore) {
+        if (finishedBefore == null) {
+            return 0;
+        }
+        return transact(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE task SET client_submission_id = NULL, client_submission_fingerprint = NULL"
+                            + " WHERE client_submission_id IS NOT NULL"
+                            + " AND finished_at IS NOT NULL AND finished_at < ?")) {
+                statement.setLong(1, finishedBefore.toEpochMilli());
+                return statement.executeUpdate();
             }
         });
     }

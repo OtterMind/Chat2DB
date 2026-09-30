@@ -11,6 +11,7 @@ import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -105,5 +106,15 @@ public interface TaskStorage {
 
     default Optional<ImportManifest> loadImportManifest(Long taskId) {
         return Optional.empty();
+    }
+
+    /**
+     * Drops the client submission key of every task that finished before {@code finishedBefore} so the
+     * idempotency lookup cannot grow without bound. Tasks that have not reached a terminal state keep
+     * their key, because a retry of a still-running submission must still find them. Returns the
+     * number of released keys; implementations without key storage return zero.
+     */
+    default int releaseExpiredClientSubmissions(Instant finishedBefore) {
+        return 0;
     }
 }

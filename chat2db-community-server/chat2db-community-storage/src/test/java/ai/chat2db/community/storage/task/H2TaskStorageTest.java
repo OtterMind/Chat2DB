@@ -10,6 +10,8 @@ import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.storage.AbstractTaskStorageContractTest;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -75,6 +77,63 @@ class H2TaskStorageTest extends AbstractTaskStorageContractTest {
         assertEquals("query", storedEvent.getStage());
         assertEquals(10, storedEvent.getDetails().get("rows"));
         assertEquals("t_order", storedEvent.getDetails().get("table"));
+    }
+
+    @Test
+    void releaseExpiredClientSubmissionsOnlyDropsFinishedTasks() {
+        H2TaskStorage storage = (H2TaskStorage) storage();
+        Instant cutoff = Instant.now().minus(Duration.ofHours(1));
+
+        Long oldFinished = createFinishedImportTask(storage, "old-finished",
+                Date.from(cutoff.minus(Duration.ofHours(10))));
+        Long recentFinished = createFinishedImportTask(storage, "recent-finished", new Date());
+        Task running = task("still-running");
+        running.setClientSubmissionId("key-running");
+        running.setClientSubmissionFingerprint("fp-running");
+        running.setUserId(3L);
+        running.setOrganizationId(4L);
+        Long runningId = storage.create(running, event(TaskEventCode.TASK_CREATED.name())).getId();
+        storage.compareAndSetStatus(runningId, TaskStatus.PENDING.name(), TaskStatus.RUNNING.name(),
+                TaskStatusPatch.builder().progress(1).stage("started").build(),
+                event(TaskEventCode.TASK_STARTED.name()));
+
+        assertEquals(1, storage.releaseExpiredClientSubmissions(cutoff));
+
+        assertNull(storage.get(oldFinished).orElseThrow().getClientSubmissionId());
+        assertNull(storage.get(oldFinished).orElseThrow().getClientSubmissionFingerprint());
+        assertEquals("key-recent-finished", storage.get(recentFinished).orElseThrow().getClientSubmissionId());
+        assertEquals("key-running", storage.get(runningId).orElseThrow().getClientSubmissionId());
+        assertTrue(storage.findByClientSubmissionId("key-recent-finished", 3L, 4L).isPresent());
+        assertTrue(storage.findByClientSubmissionId("key-running", 3L, 4L).isPresent());
+        // A second run must not report work it already did.
+        assertEquals(0, storage.releaseExpiredClientSubmissions(cutoff));
+    }
+
+    @Test
+    void releaseExpiredClientSubmissionsIgnoresANullCutoff() {
+        H2TaskStorage storage = (H2TaskStorage) storage();
+        createFinishedImportTask(storage, "kept", new Date());
+        assertEquals(0, storage.releaseExpiredClientSubmissions(null));
+    }
+
+    private Long createFinishedImportTask(H2TaskStorage storage, String name, Date finishedAt) {
+        Task task = task(name);
+        task.setClientSubmissionId("key-" + name);
+        task.setClientSubmissionFingerprint("fp-" + name);
+        task.setUserId(3L);
+        task.setOrganizationId(4L);
+        Long taskId = storage.create(task, event(TaskEventCode.TASK_CREATED.name())).getId();
+        storage.compareAndSetStatus(taskId, TaskStatus.PENDING.name(), TaskStatus.RUNNING.name(),
+                TaskStatusPatch.builder().progress(1).stage("started").build(),
+                event(TaskEventCode.TASK_STARTED.name()));
+        storage.compareAndSetStatus(taskId, TaskStatus.RUNNING.name(), TaskStatus.SUCCESS.name(),
+                TaskStatusPatch.builder()
+                        .progress(TaskConstants.COMPLETED_PROGRESS)
+                        .stage("finished")
+                        .finishedAt(finishedAt)
+                        .build(),
+                event(TaskEventCode.TASK_SUCCEEDED.name()));
+        return taskId;
     }
 
     @Test
