@@ -429,12 +429,18 @@ class TaskDeletionServiceImplTest {
         @Override
         public void clearResumeStates(Long taskId) {
         }
-        @Override
+
         @Override
         public void saveResumeState(Long taskId, ResumeState state) {
         }
 
+        @Override
         public List<ResumeState> listResumeStates(Long taskId) {
+            return List.of();
+        }
+
+        @Override
+        public List<Long> listResumableTasks() {
             return List.of();
         }
 
