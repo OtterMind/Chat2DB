@@ -448,6 +448,15 @@ class TaskDeletionServiceImplTest {
         public void deleteArtifact(Long taskId, String artifactPath) {
         }
 
+        @Override
+        public List<ai.chat2db.community.domain.api.model.task.TaskArtifact> listArtifacts(Long taskId) {
+            return List.of();
+        }
+
+        @Override
+        public void saveArtifact(Long taskId, ai.chat2db.community.domain.api.model.task.TaskArtifact artifact) {
+        }
+
 
         private final Map<Long, Task> tasks = new LinkedHashMap<>();
         private boolean failDeletion;
