@@ -32,6 +32,8 @@ final class RunningTask {
     // Several shard workers register statements concurrently; cancellation must reach all of them.
     private final Set<TaskCancelable> cancelables = ConcurrentHashMap.newKeySet();
 
+    private volatile boolean resourcesCancelled;
+
     private final ReentrantLock completionLock = new ReentrantLock();
 
     private final CountDownLatch executionFinished = new CountDownLatch(1);
@@ -82,6 +84,22 @@ final class RunningTask {
         } finally {
             completionLock.unlock();
         }
+    }
+
+    /**
+     * Releases every live resource this task holds without cancelling its own future. A parallel worker
+     * whose peer failed calls this so the surviving workers stop writing before the task is torn down.
+     */
+    void cancelResources() {
+        resourcesCancelled = true;
+        for (TaskCancelable resource : cancelables) {
+            cancelRegisteredResourceAsync(resource);
+        }
+    }
+
+    /** Whether {@link #cancelResources()} has already run for this task. */
+    boolean isResourcesCancelled() {
+        return resourcesCancelled;
     }
 
     boolean enterCommitPhase() {

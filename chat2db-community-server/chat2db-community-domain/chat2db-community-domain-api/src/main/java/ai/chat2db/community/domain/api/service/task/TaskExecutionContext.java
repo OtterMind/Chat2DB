@@ -40,6 +40,13 @@ public interface TaskExecutionContext extends ISqlExecutionStatementListener {
 
     void registerCancelable(TaskCancelable resource);
 
+    /**
+     * Releases the resources this task still holds. A failing parallel worker calls it so its peers
+     * stop writing before the task is torn down. The default keeps direct constructions working.
+     */
+    default void cancelResources() {
+    }
+
     ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType);
 
     /**

@@ -131,6 +131,10 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
     }
 
     @Override
+    public void cancelResources() {
+        runningTask.cancelResources();
+    }
+
     public ArtifactDraft createArtifact(String outputDirectory, String fileName, String mediaType) {
         return createArtifact(TaskArtifactRole.OUTPUT, outputDirectory, fileName, mediaType);
     }

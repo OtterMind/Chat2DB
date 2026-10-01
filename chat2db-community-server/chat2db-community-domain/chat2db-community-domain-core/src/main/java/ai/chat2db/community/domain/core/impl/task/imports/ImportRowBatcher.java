@@ -15,6 +15,8 @@ import ai.chat2db.community.domain.core.impl.task.AdaptiveBatchSizer;
 import ai.chat2db.community.domain.core.impl.task.AdaptiveConcurrencyGate;
 import ai.chat2db.community.domain.core.impl.task.TaskResumeJournal;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver.Resolution;
+import ai.chat2db.community.tools.model.Context;
+import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
@@ -25,6 +27,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.MDC;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -37,6 +40,7 @@ import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientConnectionException;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -53,8 +57,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.atomic.AtomicLong;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
 
 /**
  * Turns file rows into buffered {@code INSERT} statements and executes them in JDBC batches.
@@ -79,8 +87,20 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     private static final int QUEUE_CAPACITY = 4;
 
+    /**
+     * Upper bound on the buffered SQL text of one batch, in UTF-16 chars. The adaptive sizer caps
+     * batch size by row count only, so a batch of very wide rows would otherwise be bounded by
+     * heap rather than by design. One row larger than the budget is still sent on its own.
+     */
+    private static final long MAX_BATCH_CHARS = 2L * 1024 * 1024;
+
     /** Upper bound of the adaptive worker band, also capped by the machine's CPU count. */
     private static final int MAX_WORKERS = 16;
+    /** Upper bound on how long close() joins the workers before forcing them. */
+    private static final long WORKER_JOIN_SECONDS = 30L;
+    private static final int PROGRESS_STEP_PERCENT = 20;
+    /** 100 belongs to the task framework once the task really finished. */
+    private static final int PROGRESS_DRAINED_PERCENT = 90;
 
     /** How long a worker waits for an adaptive gate permit before degrading to ungated execution. */
     private static final long GATE_WAIT_MILLIS = 30_000L;
@@ -109,6 +129,8 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     private final AdaptiveBatchSizer batchSizer = new AdaptiveBatchSizer(DEFAULT_BATCH_ROWS);
 
+    private final AtomicLong lastReportedRows = new AtomicLong(0L);
+    private volatile int lastReportedPercent;
     private final LongAdder importedCount = new LongAdder();
 
     private final Object rejectLock = new Object();
@@ -124,9 +146,26 @@ public final class ImportRowBatcher implements AutoCloseable {
     private long rejectedRowCount;
 
     // --- parallel-execution state, null on the serial path ---
-    private final int workerCount;
+    /** Grows with the adaptive gate, so submitting and worker threads both read it. */
+    private volatile int workerCount;
 
     private final List<BlockingQueue<PendingBatch>> queues;
+
+    private final Object workerGrowthLock = new Object();
+
+    /** Ceiling for gate-driven worker growth: the top of the band the parallelism property allows. */
+    private final int maxWorkerCount;
+
+    private final AtomicBoolean closing = new AtomicBoolean();
+
+    /** Propagated to every worker so a pool thread keeps the submitting task's identity. */
+    private final Context requestContext;
+
+    private final Consumer<String> statementGuard;
+
+    private final Map<String, String> loggingContext;
+
+    private long bufferedChars;
 
     private final ExecutorService workerPool;
 
@@ -195,6 +234,9 @@ public final class ImportRowBatcher implements AutoCloseable {
         this.standardMode = !TaskExecutionMode.isUltraFast(spec.getMode());
         this.sqlExecutor = new ImportSqlExecutor(context);
         this.sourceIdentity = sourceIdentity(spec);
+        this.requestContext = ContextUtils.queryContext();
+        this.statementGuard = Chat2DBContext.captureStatementGuard();
+        this.loggingContext = MDC.getCopyOfContextMap();
         this.resumeBelowRow = resolveResumeBelowRow(spec, context);
         if (resumeBelowRow > 0) {
             log.info("Import resume: the first {} rows are durable from the interrupted run; "
@@ -210,7 +252,7 @@ public final class ImportRowBatcher implements AutoCloseable {
         ExecutorService builtPool = null;
         if (requestedWorkers > 1) {
             try {
-                builtQueues = new ArrayList<>(requestedWorkers);
+                builtQueues = new CopyOnWriteArrayList<>();
                 for (int index = 0; index < requestedWorkers; index++) {
                     builtQueues.add(new ArrayBlockingQueue<>(QUEUE_CAPACITY));
                 }
@@ -235,6 +277,8 @@ public final class ImportRowBatcher implements AutoCloseable {
             }
         }
         this.workerCount = requestedWorkers;
+        this.maxWorkerCount = Math.max(requestedWorkers,
+                Math.min(MAX_WORKERS, Runtime.getRuntime().availableProcessors()));
         this.queues = builtQueues;
         this.gate = builtGate;
         this.workerPool = builtPool;
@@ -275,13 +319,14 @@ public final class ImportRowBatcher implements AutoCloseable {
         bufferedSqls.add(sql);
         bufferedRows.add(raw);
         bufferedRowNumbers.add(fileRowNumber);
+        bufferedChars += sql.length();
         if (fileRowNumber > lastAcceptedRow) {
             lastAcceptedRow = fileRowNumber;
         }
         if (bufferedFirstRow == Long.MAX_VALUE) {
             bufferedFirstRow = fileRowNumber;
         }
-        if (bufferedSqls.size() >= batchSizer.batchSize()) {
+        if (bufferedSqls.size() >= batchSizer.batchSize() || bufferedChars >= MAX_BATCH_CHARS) {
             flushBufferedBatch();
         }
     }
@@ -337,6 +382,7 @@ public final class ImportRowBatcher implements AutoCloseable {
             if (workerCount > 1) {
                 awaitQuiesce();
             }
+            reportProgressCompleted(importedCount.sum());
         } catch (RuntimeException taskFailure) {
             recordFailure(taskFailure);
             throw taskFailure;
@@ -355,6 +401,7 @@ public final class ImportRowBatcher implements AutoCloseable {
         bufferedSqls.clear();
         bufferedRows.clear();
         bufferedRowNumbers.clear();
+        bufferedChars = 0L;
         bufferedFirstRow = Long.MAX_VALUE;
         executeBatch(batch);
     }
@@ -376,6 +423,7 @@ public final class ImportRowBatcher implements AutoCloseable {
         long started = System.nanoTime();
         int rows = batch.sqls().size();
         boolean fullyHandled = false;
+        RuntimeException failureToReport = null;
         try {
             try {
                 sqlExecutor.executeBatch(batch.sqls());
@@ -395,6 +443,9 @@ public final class ImportRowBatcher implements AutoCloseable {
                 replayIndividually(batch);
                 fullyHandled = true;
             }
+        } catch (RuntimeException batchFailure) {
+            failureToReport = batchFailure;
+            throw batchFailure;
         } finally {
             long elapsed = System.nanoTime() - started;
             if (gate != null) {
@@ -410,6 +461,12 @@ public final class ImportRowBatcher implements AutoCloseable {
                 maybeCheckpoint();
             }
             if (workerCount > 1) {
+                // The failure must be recorded *before* the in-flight count drops: awaitQuiesce
+                // returns as soon as that count reaches zero, so recording afterwards lets the
+                // producer observe quiescence and report a failed import as a successful one.
+                if (failureToReport != null) {
+                    recordFailure(failureToReport);
+                }
                 batchCompleted();
             }
         }
@@ -476,6 +533,7 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     private void submitBatch(PendingBatch batch) {
         throwIfFailed();
+        ensureWorkerCapacity();
         int inFlight = inFlightBatches.incrementAndGet();
         peakInFlightBatches.accumulateAndGet(inFlight, Math::max);
         BlockingQueue<PendingBatch> queue = queues.get((int) (batch.seq() % workerCount));
@@ -529,6 +587,40 @@ public final class ImportRowBatcher implements AutoCloseable {
         return Math.min(firstInFlight, Math.min(firstBuffered, lastAcceptedRow + 1));
     }
 
+    /**
+     * Publishes task progress in coarse steps. A file source streams, so the only honest
+     * percentage is "durable rows so far over rows accepted so far"; it is quantised so the
+     * renderer sees a handful of updates rather than one per batch, and a non-import task never
+     * sees a progress that could go backwards.
+     */
+    private void reportProgress(long rowsDone) {
+        if (rowsDone <= lastReportedRows.get()) {
+            return;
+        }
+        long accepted = lastAcceptedRow;
+        int percent = accepted <= 0 ? 0
+                : (int) Math.min(PROGRESS_DRAINED_PERCENT, rowsDone * 100 / (accepted + 1));
+        if (percent < lastReportedPercent + PROGRESS_STEP_PERCENT) {
+            return;
+        }
+        lastReportedRows.set(rowsDone);
+        lastReportedPercent = percent;
+        context.reportProgress(percent, TaskStage.IMPORTING.name(), "imported " + rowsDone + " rows");
+    }
+
+    /** Final progress: every accepted row is durable, so the source is fully drained. */
+    private void reportProgressCompleted(long rowsDone) {
+        // flush() runs again from close(), so only a strictly larger count is news; repeating
+        // the same total would look like progress going nowhere to the renderer.
+        if (rowsDone <= lastReportedRows.get()) {
+            return;
+        }
+        lastReportedRows.set(rowsDone);
+        lastReportedPercent = PROGRESS_DRAINED_PERCENT;
+        context.reportProgress(PROGRESS_DRAINED_PERCENT, TaskStage.IMPORTING.name(),
+                "imported " + rowsDone + " rows");
+    }
+
     /** Layered cadence: journal every 8, storage checkpoint every 64, snapshot every 256 batches. */
     private void maybeCheckpoint() {
         batchesSinceCheckpoint++;
@@ -537,6 +629,7 @@ public final class ImportRowBatcher implements AutoCloseable {
             if (journal != null && batchesSinceCheckpoint % journalProgressInterval == 0) {
                 journal.progress("IMPORTING", rowsDone);
             }
+            reportProgress(rowsDone);
             if (batchesSinceCheckpoint % checkpointInterval == 0) {
                 context.checkpoint(ResumeState.builder()
                         .shardNo(0)
@@ -688,15 +781,51 @@ public final class ImportRowBatcher implements AutoCloseable {
                 && Objects.equals(foreignTable, key.getString("PKTABLE_NAME"));
     }
 
+    /**
+     * Grows the live worker set to match the adaptive gate: once the AIMD tuning admits more
+     * concurrent batches than there are workers, another queue/worker pair is added up to the band
+     * ceiling the parallelism property resolved to.
+     */
+    private void ensureWorkerCapacity() {
+        AdaptiveConcurrencyGate liveGate = gate;
+        if (liveGate == null || closing.get()) {
+            return;
+        }
+        int target = Math.min(liveGate.totalPermits(), maxWorkerCount);
+        synchronized (workerGrowthLock) {
+            if (closing.get() || workerCount >= target) {
+                return;
+            }
+            while (workerCount < target) {
+                int index = workerCount;
+                queues.add(new ArrayBlockingQueue<>(QUEUE_CAPACITY));
+                workerPool.execute(() -> runWorker(index));
+                workerCount = index + 1;
+            }
+        }
+    }
+
     private void runWorker(int workerIndex) {
         Thread.currentThread().setName("chat2db-import-" + context.taskId() + "-" + workerIndex);
         // Created on first use and owned by this worker until it exits; copy() carries no
         // connection, so Chat2DBContext.getConnection() builds a dedicated one per worker.
         ConnectInfo isolated = null;
-        try {
+        try (var ignoredGuard = Chat2DBContext.bindStatementGuard(statementGuard)) {
             isolated = connectInfo.copy();
             isolated.setLoginUser("task-" + context.taskId() + "#import-" + workerIndex);
+            // The identity must be in place before the connection is opened: the driver plugin
+            // reads the request context and the MDC to attribute the connection to this task.
             Chat2DBContext.putContext(isolated);
+            ContextUtils.setContext(requestContext);
+            if (loggingContext != null) {
+                MDC.setContextMap(loggingContext);
+            }
+            // A dedicated connection per worker, never a pooled one: a worker that fails mid-statement
+            // leaves its connection unusable, and returning that to the pool would hand the damage
+            // to an unrelated caller.
+            if (isolated.getConnection() == null) {
+                ConnectionPool.createNewConnection(isolated);
+            }
             while (true) {
                 PendingBatch batch = queues.get(workerIndex).take();
                 if (batch == END_OF_QUEUE) {
@@ -719,18 +848,39 @@ public final class ImportRowBatcher implements AutoCloseable {
         } catch (Throwable t) {
             recordFailure(t);
         } finally {
-            if (isolated != null) {
-                // Hand the dedicated connection back to the pool (or close it) instead of
-                // leaking it until the JVM exits.
-                ConnectionPool.close(isolated);
+            try {
+                if (isolated != null) {
+                    // Worker connections are dedicated: close them rather than returning a possibly
+                    // poisoned connection to the pool, and drop the reference so nothing reuses it.
+                    try {
+                        Connection connection = isolated.getConnection();
+                        if (connection != null) {
+                            try {
+                                connection.close();
+                            } catch (SQLException ignored) {
+                                // The worker is already leaving; a failed close cannot be acted on.
+                            }
+                        }
+                    } finally {
+                        isolated.setConnection(null);
+                    }
+                }
+            } finally {
+                Chat2DBContext.removeContext();
+                ContextUtils.removeContext();
+                MDC.clear();
             }
-            Chat2DBContext.removeContext();
         }
     }
 
     private void recordFailure(Throwable taskFailure) {
-        failure.compareAndSet(null, taskFailure);
+        boolean firstFailure = failure.compareAndSet(null, taskFailure);
         aborted.set(true);
+        if (firstFailure) {
+            // The first failure is the one that still holds live task resources; later ones are
+            // its consequences and must not tear down an already released task.
+            context.cancelResources();
+        }
         synchronized (quiesceMonitor) {
             quiesceMonitor.notifyAll();
         }
@@ -865,6 +1015,8 @@ public final class ImportRowBatcher implements AutoCloseable {
             }
         } finally {
             if (workerPool != null) {
+                // Stop the gate from growing the worker set while the queues are being drained.
+                closing.set(true);
                 for (BlockingQueue<PendingBatch> queue : queues) {
                     while (!queue.offer(END_OF_QUEUE)) {
                         if (aborted.get()) {
@@ -872,18 +1024,32 @@ public final class ImportRowBatcher implements AutoCloseable {
                         }
                     }
                 }
-                if (aborted.get()) {
-                    workerPool.shutdownNow();
-                } else {
-                    workerPool.shutdown();
-                }
+                // Even an aborted import lets the in-flight driver call finish: cancelling a
+                // statement only asks the driver to unwind, and the task must not be reported done
+                // (or its connection released) while that call is still running. The bounded
+                // await below is the escape hatch for a driver that never returns.
+                workerPool.shutdown();
+                boolean interrupted = false;
                 try {
-                    if (!workerPool.awaitTermination(30L, TimeUnit.SECONDS)) {
+                    if (!workerPool.awaitTermination(WORKER_JOIN_SECONDS, TimeUnit.SECONDS)) {
                         workerPool.shutdownNow();
                     }
                 } catch (InterruptedException e) {
+                    // A user cancellation interrupts this thread as well. Abandoning the join here
+                    // would end the task while its driver call is still running, so the interrupt
+                    // is remembered and the wait is repeated; the flag is restored afterwards so
+                    // the caller still observes it.
+                    interrupted = true;
+                }
+                if (interrupted) {
+                    try {
+                        if (!workerPool.awaitTermination(WORKER_JOIN_SECONDS, TimeUnit.SECONDS)) {
+                            workerPool.shutdownNow();
+                        }
+                    } catch (InterruptedException retryFailure) {
+                        workerPool.shutdownNow();
+                    }
                     Thread.currentThread().interrupt();
-                    workerPool.shutdownNow();
                 }
             }
             totalImportNanos = System.nanoTime() - createdNanos;
