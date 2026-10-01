@@ -72,6 +72,12 @@ public class AiModelFactory {
         if (provider == AiProviderEnum.GEMINI) {
             return geminiClient(runtimeModel, retryTemplate);
         }
+        if (provider == AiProviderEnum.LITELLM) {
+            // LiteLLM exposes an OpenAI-compatible endpoint (the LiteLLM proxy), so it
+            // reuses the OpenAI client pointed at the user's configured base URL. One
+            // provider entry then reaches every model the proxy is configured to serve.
+            return openAiClient(runtimeModel, retryTemplate);
+        }
         throw new IllegalArgumentException("Unsupported provider: " + runtimeModel.getProvider());
     }
 
