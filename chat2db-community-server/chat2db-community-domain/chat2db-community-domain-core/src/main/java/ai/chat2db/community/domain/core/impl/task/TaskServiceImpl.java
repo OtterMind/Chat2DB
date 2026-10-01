@@ -25,6 +25,7 @@ import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.TaskService;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.api.service.task.TaskDeletionService;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportFileProbe;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportParallelAdmission;
@@ -76,20 +77,40 @@ public class TaskServiceImpl implements TaskService {
 
     private final IImportFileStagingService importFileStagingService;
 
+    private final TaskDeletionService deletionService;
+
     @Autowired
     public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService,
             IDbConnectionContextService connectionContextService,
-            IImportFileStagingService importFileStagingService) {
+            IImportFileStagingService importFileStagingService, TaskDeletionService deletionService) {
         this.taskStorage = taskStorage;
         this.localTaskManager = localTaskManager;
         this.artifactService = artifactService;
         this.connectionContextService = connectionContextService;
         this.importFileStagingService = importFileStagingService;
+        this.deletionService = deletionService;
+    }
+
+    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService,
+            IDbConnectionContextService connectionContextService,
+            IImportFileStagingService importFileStagingService) {
+        this(taskStorage, localTaskManager, artifactService, connectionContextService, importFileStagingService,
+                null);
     }
 
     public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService,
             IDbConnectionContextService connectionContextService) {
         this(taskStorage, localTaskManager, artifactService, connectionContextService, null);
+    }
+
+    /**
+     * Retries artifact deletions that a previous run staged but did not finish. Startup calls this so a
+     * half-published artifact never lingers when the process that produced it died mid-deletion.
+     */
+    void recoverInterruptedArtifactDeletions() {
+        if (deletionService != null) {
+            deletionService.retryPendingDeletions();
+        }
     }
 
     TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, ArtifactService artifactService) {
@@ -381,11 +402,6 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
-    void recoverInterruptedArtifactDeletions() {
-        if (deletionService != null) {
-            deletionService.retryPendingDeletions();
-        }
-    }
 
     private List<ArtifactService.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
         List<ArtifactService.PublishedArtifactDeletion> deletions = new ArrayList<>();
