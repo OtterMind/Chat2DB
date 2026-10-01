@@ -47,11 +47,26 @@ public final class ImportParallelAdmission {
     }
 
     public static ImportAdmissionReport assess(ImportTaskSpec spec, List<TableColumn> tableColumns) {
-        return assess(spec, tableColumns, null);
+        return assess(spec, tableColumns, null, false);
+    }
+
+    /**
+     * Assesses an already-split shard. Same rules as {@link #assess(ImportTaskSpec, List)}
+     * except that the "small source" degradation is skipped, because a shard is a slice of a
+     * source that the pre-shard decision already accepted and is small by construction.
+     */
+    public static ImportAdmissionReport assessShard(ImportTaskSpec spec, List<TableColumn> tableColumns,
+            ImportResourceSnapshot resources) {
+        return assess(spec, tableColumns, resources, true);
     }
 
     public static ImportAdmissionReport assess(ImportTaskSpec spec, List<TableColumn> tableColumns,
             ImportResourceSnapshot resources) {
+        return assess(spec, tableColumns, resources, false);
+    }
+
+    private static ImportAdmissionReport assess(ImportTaskSpec spec, List<TableColumn> tableColumns,
+            ImportResourceSnapshot resources, boolean shardScope) {
         File source = new File(StringUtils.defaultString(spec.getSourceFile()));
         String format = StringUtils.upperCase(StringUtils.trimToEmpty(spec.getFormat()), Locale.ROOT);
         boolean requestedParallel = TaskExecutionMode.isUltraFast(spec.getMode());
@@ -102,7 +117,11 @@ public final class ImportParallelAdmission {
 
         long minBytes = Long.getLong("chat2db.task.import.parallel.min-bytes", DEFAULT_MIN_BYTES);
         long minRows = Long.getLong("chat2db.task.import.parallel.min-rows", DEFAULT_MIN_ROWS);
-        if ("CSV".equals(format) && source.isFile()
+        // G0 answers "is this source worth splitting at all?", so it belongs to the pre-shard
+        // decision only. A shard is a slice of an already-approved source and is small by
+        // construction, so re-measuring it here would degrade every sharded import back to
+        // serial execution.
+        if (!shardScope && "CSV".equals(format) && source.isFile()
                 && (source.length() < minBytes || (rows >= 0 && rows < minRows))) {
             degradation(findings, "G0", "Parallel execution would not benefit this small source",
                     source.length() + " bytes, " + Math.max(0L, rows) + " data rows",
@@ -143,10 +162,25 @@ public final class ImportParallelAdmission {
 
     public static ImportAdmissionReport enforce(ImportTaskSpec spec, List<TableColumn> tableColumns,
             TaskExecutionContext context) {
+        return enforce(spec, tableColumns, context, false);
+    }
+
+    /**
+     * Enforces admission for one shard of an already-approved source. Blockers still apply, but
+     * the small-source degradation does not, and the spec is never downgraded here: the
+     * pre-shard decision already settled the execution mode for the whole manifest.
+     */
+    public static ImportAdmissionReport enforceShard(ImportTaskSpec spec, List<TableColumn> tableColumns,
+            TaskExecutionContext context) {
+        return enforce(spec, tableColumns, context, true);
+    }
+
+    private static ImportAdmissionReport enforce(ImportTaskSpec spec, List<TableColumn> tableColumns,
+            TaskExecutionContext context, boolean shardScope) {
         ImportResourceSnapshot resources = Chat2DBContext.getDbManager().probeImportResources(
                 Chat2DBContext.getConnection(), spec.getTarget().getDatabaseName(),
                 spec.getTarget().getSchemaName());
-        ImportAdmissionReport report = assess(spec, tableColumns, resources);
+        ImportAdmissionReport report = assess(spec, tableColumns, resources, shardScope);
         Map<String, Object> details = details(report);
         if (TaskExecutionMode.isUltraFast(spec.getMode()) && FORBIDDEN.equals(report.getVerdict())) {
             context.logError("IMPORT_PARALLEL_ADMISSION", "Parallel import rejected before execution", details);
@@ -156,6 +190,15 @@ public final class ImportParallelAdmission {
                     .orElse("UNKNOWN");
             throw new TaskExecutionException(TaskErrorCode.IMPORT_PARALLEL_FORBIDDEN.name(),
                     "Parallel import rejected by admission rules: " + codes + ". Review the task event for evidence and remediation.");
+        }
+        if (shardScope) {
+            if (FORBIDDEN.equals(report.getVerdict())) {
+                context.logWarn("IMPORT_PARALLEL_ADMISSION",
+                        "Shard admission found a blocker in an already-approved source", details);
+            } else {
+                context.logInfo("IMPORT_PARALLEL_ADMISSION", "Shard admission completed", details);
+            }
+            return report;
         }
         if (!report.getRequestedMode().equals(report.getEffectiveMode())) {
             spec.setMode(report.getEffectiveMode());

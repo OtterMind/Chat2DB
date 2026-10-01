@@ -108,6 +108,23 @@ class ImportParallelAdmissionTest {
         assertTrue(hasFinding(report, "G0", "DEGRADATION"));
     }
 
+    /**
+     * The same tiny CSV, but presented as one shard of an already-approved source. A shard is
+     * small by construction, so re-applying G0 here would strip parallelism from every sharded
+     * import: a 12.2 MB import split into 53 shards reported as "227405 bytes" and fell back to
+     * serial execution. The pre-shard decision above already made this call on the whole source.
+     */
+    @Test
+    void aShardOfAnApprovedSourceIsNotDegradedByTheSmallSourceRule() throws Exception {
+        ImportAdmissionReport report = ImportParallelAdmission.assessShard(
+                csvSpec("ID,NAME\n1,Alice\n", true, true), columns(), null);
+
+        assertFalse(hasFinding(report, "G0", "DEGRADATION"),
+                "G0 belongs to the pre-shard decision; re-measuring a shard degrades it");
+        assertEquals("ULTRA_FAST", report.getEffectiveMode(),
+                "an admitted shard must not downgrade the manifest back to serial execution");
+    }
+
     @Test
     void sqlCannotClaimParallelExecutionWithoutAPlanner() throws Exception {
         Path source = Files.writeString(tempDirectory.resolve("input.sql"),

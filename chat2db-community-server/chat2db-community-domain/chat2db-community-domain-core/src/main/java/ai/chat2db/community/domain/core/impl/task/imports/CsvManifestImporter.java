@@ -305,6 +305,7 @@ public final class CsvManifestImporter {
             copy.getTarget().setSchemaName(shard.getSchemaName());
         }
         copy.getTarget().setTableName(shard.getTableName());
+        copy.setManifestShard(Boolean.TRUE);
         ImportOptions options = copy.getOptions() == null ? new ImportOptions() : copy.getOptions();
         options.setCharset("UTF-8");
         options.setDelimiter(",");

@@ -33,7 +33,11 @@ public abstract class BaseImporter implements IImportStrategy {
                     new TableMetadataRequest(connectInfo.getDatabaseName(), connectInfo.getSchemaName(),
                             spec.getTarget().getTableName()));
             context.checkCancelled();
-            ImportParallelAdmission.enforce(spec, tableColumns, context);
+            if (Boolean.TRUE.equals(spec.getManifestShard())) {
+                ImportParallelAdmission.enforceShard(spec, tableColumns, context);
+            } else {
+                ImportParallelAdmission.enforce(spec, tableColumns, context);
+            }
             context.checkCancelled();
             context.reportProgress(20, TaskStage.READING.name(), "Target table metadata loaded");
             context.logInfo(TaskEventCode.TARGET_METADATA_LOADED.name(), "Target table metadata loaded");

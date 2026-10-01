@@ -85,4 +85,12 @@ public class ImportTaskSpec implements TaskSpec {
      * application-level parent/child ID dependencies); it does not bypass file-format blockers.
      */
     private Boolean confirmedNoStrongRelations;
+
+    /**
+     * Set on the per-shard spec handed to a manifest worker. The manifest's execution mode was
+     * already decided from the whole source before sharding, so admission for a shard must not
+     * re-apply the "small source" rule: a shard is small by construction and would otherwise
+     * degrade every sharded import back to serial execution.
+     */
+    private Boolean manifestShard;
 }
