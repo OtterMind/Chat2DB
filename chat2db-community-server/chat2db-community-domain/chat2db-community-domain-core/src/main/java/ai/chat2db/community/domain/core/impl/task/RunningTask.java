@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
@@ -29,10 +30,12 @@ final class RunningTask {
 
     private final CancellationToken cancellationToken = new CancellationToken();
 
+    private final Runnable terminalResourceCleanup;
+
+    private final AtomicBoolean terminalResourceCleanupStarted = new AtomicBoolean();
+
     // Several shard workers register statements concurrently; cancellation must reach all of them.
     private final Set<TaskCancelable> cancelables = ConcurrentHashMap.newKeySet();
-
-    private volatile boolean resourcesCancelled;
 
     private final ReentrantLock completionLock = new ReentrantLock();
 
@@ -42,10 +45,24 @@ final class RunningTask {
 
     private volatile boolean closed;
 
-    private volatile boolean commitPhase;
+    private volatile int commitPhaseDepth;
+
+    private volatile boolean retainResourcesForResume;
+
+    /**
+     * Set when execution has already failed and the registered work must be torn down. Kept apart
+     * from the cancellation token on purpose: tearing down after a failure must not look like a
+     * user cancellation to the task's own status or to its resume bookkeeping.
+     */
+    private volatile boolean resourcesCancelled;
 
     RunningTask(Long taskId) {
+        this(taskId, null);
+    }
+
+    RunningTask(Long taskId, Runnable terminalResourceCleanup) {
         this.taskId = taskId;
+        this.terminalResourceCleanup = terminalResourceCleanup == null ? () -> { } : terminalResourceCleanup;
     }
 
     Long taskId() {
@@ -67,7 +84,7 @@ final class RunningTask {
     boolean requestCancellation(boolean mayInterruptIfRunning) {
         completionLock.lock();
         try {
-            if (closed || commitPhase) {
+            if (closed || commitPhaseDepth > 0) {
                 return false;
             }
             if (!cancellationToken.cancel()) {
@@ -86,9 +103,47 @@ final class RunningTask {
         }
     }
 
+    boolean enterCommitPhase() {
+        completionLock.lock();
+        try {
+            if (closed || cancellationToken.isCancelled()) {
+                return false;
+            }
+            commitPhaseDepth++;
+            return true;
+        } finally {
+            completionLock.unlock();
+        }
+    }
+
+    boolean isCommitPhase() {
+        return commitPhaseDepth > 0;
+    }
+
+    void exitCommitPhase() {
+        completionLock.lock();
+        try {
+            if (commitPhaseDepth <= 0) {
+                throw new IllegalStateException("Task is not in a commit phase");
+            }
+            commitPhaseDepth--;
+        } finally {
+            completionLock.unlock();
+        }
+    }
+
+    void retainResourcesForResume() {
+        retainResourcesForResume = true;
+    }
+
+    boolean shouldRetainResourcesForResume() {
+        return retainResourcesForResume;
+    }
+
     /**
-     * Releases every live resource this task holds without cancelling its own future. A parallel worker
-     * whose peer failed calls this so the surviving workers stop writing before the task is torn down.
+     * Tears down the work this task registered because execution failed, without touching the
+     * cancellation token. The flag is raised before the snapshot so a resource registered
+     * concurrently observes it and cancels itself instead of being missed.
      */
     void cancelResources() {
         resourcesCancelled = true;
@@ -97,34 +152,12 @@ final class RunningTask {
         }
     }
 
-    /** Whether {@link #cancelResources()} has already run for this task. */
-    boolean isResourcesCancelled() {
-        return resourcesCancelled;
-    }
-
-    boolean enterCommitPhase() {
-        completionLock.lock();
-        try {
-            if (closed || cancellationToken.isCancelled()) {
-                return false;
-            }
-            commitPhase = true;
-            return true;
-        } finally {
-            completionLock.unlock();
-        }
-    }
-
-    boolean isCommitPhase() {
-        return commitPhase;
-    }
-
     void registerCancelable(TaskCancelable resource) {
         if (resource == null) {
             return;
         }
         cancelables.add(resource);
-        if (cancellationToken.isCancelled()) {
+        if (resourcesCancelled || cancellationToken.isCancelled()) {
             cancelRegisteredResourceAsync(resource);
         }
     }
@@ -144,6 +177,18 @@ final class RunningTask {
 
     void markFinished() {
         executionFinished.countDown();
+    }
+
+    void cleanupTerminalResources() {
+        if (!terminalResourceCleanupStarted.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            terminalResourceCleanup.run();
+        } catch (RuntimeException cleanupFailure) {
+            terminalResourceCleanupStarted.set(false);
+            log.warn("Failed to clean terminal resources for task {}", taskId, cleanupFailure);
+        }
     }
 
     boolean awaitFinished(long timeout, TimeUnit unit) throws InterruptedException {

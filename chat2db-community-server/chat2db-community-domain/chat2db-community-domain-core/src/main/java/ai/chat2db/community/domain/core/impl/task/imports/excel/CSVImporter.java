@@ -51,6 +51,7 @@ public class CSVImporter extends BaseImporter implements IImportStrategy {
             try (ImportRowBatcher batcher = new ImportRowBatcher(spec, context, resolution,
                     Chat2DBContext.getDbMetaData().getValueProcessor())) {
                 try {
+                    long startedAt = System.nanoTime();
                     long rowNumber = 1;
                     int skipped = 0;
                     while (iterator.hasNext()) {
@@ -65,7 +66,8 @@ public class CSVImporter extends BaseImporter implements IImportStrategy {
                     batcher.flush();
                     context.logInfo("IMPORT_SUMMARY", "CSV import finished", Map.of(
                             "importedRows", batcher.importedRows(),
-                            "rejectedRows", batcher.rejectedRows()));
+                            "rejectedRows", batcher.rejectedRows(),
+                            "elapsedMillis", (System.nanoTime() - startedAt) / 1_000_000L));
                 } catch (RuntimeException failure) {
                     batcher.abort(failure);
                     throw failure;

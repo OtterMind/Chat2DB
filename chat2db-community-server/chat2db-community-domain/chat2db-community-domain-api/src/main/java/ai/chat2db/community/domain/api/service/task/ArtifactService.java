@@ -1,17 +1,40 @@
 package ai.chat2db.community.domain.api.service.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 
-import java.io.IOException;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** Manages task output files and their temporary staging paths. */
+/**
+ * Manages task output files and their temporary staging paths.
+ *
+ * <p>A task may own several artifacts (a primary output plus diagnostics or rejects), so every
+ * operation is keyed by {@link ArtifactDraft#getRole()} or by an explicit path rather than by a
+ * single implicit output.
+ */
 public interface ArtifactService {
+
+    /** Draft for the task's primary output. */
     ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType);
+
+    /** Draft for one named role; the primary download uses {@code OUTPUT}. */
+    ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType);
+
+    /**
+     * Builds a draft around the interrupted run's temporary file, so a checkpointed export
+     * continues appending where it stopped instead of restarting the artifact.
+     */
+    ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName,
+            String mediaType, File existingTemporaryFile);
+
+    /**
+     * Whether {@code file} is a draft this application wrote for this task, and therefore the only
+     * kind of file a resume may safely reopen.
+     */
+    boolean isInterruptedDraft(Long taskId, File file);
 
     String publish(ArtifactDraft draft);
 
@@ -38,63 +61,37 @@ public interface ArtifactService {
     /** Stages a file only when the destination is absent; an already staged file is left in place. */
     void stageForDeletion(Path original, Path staged) throws IOException;
 
-    boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath);
-
     /**
-     * Finishes every publish this task left half-done, reporting whether any artifact still needed work.
-     */
-    boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths,
-            List<String> publishedPaths);
-
-    /**
-     * A deletion that has been staged on disk but not yet committed. The intent survives a crash so a
-     * restart can finish it instead of leaving the file behind.
-     *
-     * @param originalPath the published location the file returns to if the deletion aborts
-     * @param stagedPath   the location the file currently occupies
-     */
-    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
-
-        public static PublishedArtifactDeletion empty() {
-            return new PublishedArtifactDeletion(null, null);
-        }
-
-        public boolean isEmpty() {
-            return stagedPath == null;
-        }
-    }
-
-    /**
-     * Draft creation that records the owning task role, so a resumed task can tell its own draft apart
-     * from another task's leftovers in the same directory.
-     */
-    ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType);
-
-    /**
-     * Continues writing into the draft this task created earlier rather than starting a new one. The
-     * existing draft file lets a resumed task reuse the bytes it already wrote.
-     */
-    ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType,
-            File existingTemporaryFile);
-
-    /** Whether the file looks like a draft this task never finished publishing. */
-    static boolean isInterruptedDraft(Long taskId, File file) {
-        if (file == null || !file.isFile()) {
-            return false;
-        }
-        String name = file.getName();
-        return name.contains(String.valueOf(taskId)) && name.endsWith(".part");
-    }
-
-    /**
-     * Moves a published artifact aside without deleting it, so the deletion intent can be recorded first
-     * and only then committed.
+     * Hides an owned artifact behind a sibling marker before the task row is deleted, so a failed
+     * delete can restore it and a committed delete leaves nothing visible.
      */
     PublishedArtifactDeletion stagePublishedDeletion(String artifactId);
 
-    /** Deletes the staged file for good, completing a previously staged deletion. */
+    /** Deletes a staged artifact for good; called only after the task row is durably gone. */
     void commitPublishedDeletion(PublishedArtifactDeletion deletion);
 
-    /** Puts a staged file back where it was published, undoing a staged deletion that must not proceed. */
+    /** Puts a staged artifact back, used when the task delete did not commit. */
     void restorePublishedDeletion(PublishedArtifactDeletion deletion);
+
+    /** Removes the drafts and published files of one interrupted task. */
+    boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths, List<String> publishedPaths);
+
+    /** Single-path form of {@link #cleanupInterruptedArtifacts}. */
+    default boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
+        List<String> temporaryPaths = temporaryPath == null ? List.of() : List.of(temporaryPath);
+        List<String> publishedPaths = publishedPath == null ? List.of() : List.of(publishedPath);
+        return cleanupInterruptedArtifacts(taskId, temporaryPaths, publishedPaths);
+    }
+
+    /**
+     * A published artifact moved aside but not yet deleted. The staged file is invisible to
+     * download until the deletion commits.
+     */
+    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
+
+        /** A no-op deletion, used when the artifact is already absent. */
+        public static PublishedArtifactDeletion empty() {
+            return new PublishedArtifactDeletion(null, null);
+        }
+    }
 }

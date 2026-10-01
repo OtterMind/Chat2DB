@@ -187,7 +187,7 @@ final class TaskExecutionContextImpl implements TaskExecutionContext {
             return null;
         }
         java.io.File existing = new java.io.File(temporaryPath);
-        if (!ArtifactService.isInterruptedDraft(taskId, existing)) {
+        if (!artifactService.isInterruptedDraft(taskId, existing)) {
             return null;
         }
         return artifactService.resumeDraft(taskId, role, outputDirectory, fileName, mediaType, existing);

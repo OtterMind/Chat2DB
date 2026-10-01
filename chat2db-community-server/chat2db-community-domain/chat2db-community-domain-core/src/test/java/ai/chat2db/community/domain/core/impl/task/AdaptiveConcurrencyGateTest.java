@@ -2,6 +2,13 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,5 +123,45 @@ class AdaptiveConcurrencyGateTest {
         assertTrue(gate.admit(1L), "the returned permit is admitted again");
         gate.relinquish(true);
         assertEquals(1, gate.currentPermits());
+    }
+@Test
+    void ignoresThroughputChangesWithinTenPercentIncludingBoundaries() {
+        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(2, 4);
+        gate.record(100_000, 100 * MILLI);
+        gate.record(110_000, 100 * MILLI);
+        assertEquals(2, gate.totalPermits(), "exactly +10% is the boundary and must not grow");
+        gate.record(100_000, 100 * MILLI);
+        gate.record(90_000, 100 * MILLI);
+        assertEquals(2, gate.totalPermits(), "exactly -10% is the boundary and must not shrink");
+        gate.record(100_000, 100 * MILLI);
+        assertEquals(3, gate.totalPermits(), "a change beyond the band retunes the fan-out");
+    }
+
+    @Test
+    void concurrentSamplesWithEqualEfficiencyDoNotChangePermits() throws Exception {
+        AdaptiveConcurrencyGate gate = AdaptiveConcurrencyGate.create(2, 4);
+        var executor = Executors.newFixedThreadPool(4);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        try {
+            for (int worker = 1; worker <= 4; worker++) {
+                long rows = worker * 10_000L;
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    for (int sample = 0; sample < 2_000; sample++) {
+                        // rows * 1e6 ns means every worker reports the same rows-per-second.
+                        gate.record(rows, rows * MILLI);
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(10, TimeUnit.SECONDS);
+            }
+            assertEquals(2, gate.totalPermits(), "concurrent equal-efficiency samples are not an improvement");
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

@@ -21,6 +21,7 @@ public final class ImportSqlExecutor {
 
     private final TaskExecutionContext context;
 
+    private final java.util.concurrent.atomic.AtomicLong importedStatementCount = new java.util.concurrent.atomic.AtomicLong();
     private final AtomicInteger batchSequence = new AtomicInteger();
 
     public ImportSqlExecutor(TaskExecutionContext context) {
@@ -50,7 +51,8 @@ public final class ImportSqlExecutor {
             }
             flushInserts(inserts);
             context.logInfo(TaskEventCode.BATCH_EXECUTED.name(), "SQL batch executed",
-                    Map.of("batch", batch, "statementCount", statementCount));
+                    Map.of("batch", batch, "statementCount", statementCount,
+                            "importedRows", importedStatementCount.addAndGet(statementCount)));
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
@@ -67,7 +69,8 @@ public final class ImportSqlExecutor {
             context.checkCancelled();
             executeStatement(sql);
             context.logInfo(TaskEventCode.BATCH_EXECUTED.name(), "SQL statement executed",
-                    Map.of("batch", batch, "statementCount", 1));
+                    Map.of("batch", batch, "statementCount", 1,
+                            "importedRows", importedStatementCount.incrementAndGet()));
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {
