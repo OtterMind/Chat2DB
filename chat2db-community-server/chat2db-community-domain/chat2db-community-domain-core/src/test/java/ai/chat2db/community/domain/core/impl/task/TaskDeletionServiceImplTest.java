@@ -442,10 +442,10 @@ class TaskDeletionServiceImplTest {
         @Override
         public List<ai.chat2db.community.domain.api.model.task.Task> listResumableTasks() {
             return List.of();
+        }
 
         @Override
         public void deleteArtifact(Long taskId, String artifactPath) {
-        }
         }
 
 
