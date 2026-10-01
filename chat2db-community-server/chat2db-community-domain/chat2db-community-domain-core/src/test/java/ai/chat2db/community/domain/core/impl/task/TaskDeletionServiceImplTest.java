@@ -440,7 +440,7 @@ class TaskDeletionServiceImplTest {
         }
 
         @Override
-        public List<Long> listResumableTasks() {
+        public List<ai.chat2db.community.domain.api.model.task.Task> listResumableTasks() {
             return List.of();
         }
 
