@@ -119,7 +119,7 @@ class TaskExecutorRegistryTest {
                 });
         ArtifactService failingArtifactService = new ArtifactService() {
             @Override
-            String publish(ArtifactDraft ignored) {
+            public String publish(ArtifactDraft ignored) {
                 throw new IllegalStateException("Publish failed");
             }
         };
