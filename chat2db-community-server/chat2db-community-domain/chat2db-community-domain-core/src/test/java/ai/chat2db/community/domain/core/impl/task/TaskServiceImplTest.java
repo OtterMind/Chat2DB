@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.task.ImportPreview;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ImportOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ResumeState;

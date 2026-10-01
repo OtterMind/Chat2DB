@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.request.runtime.DbConnectionContextRequest;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ImportPreview;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportTableSource;
@@ -378,7 +379,7 @@ public class TaskServiceImpl implements TaskService {
             if (!TaskStatus.isTerminal(task.getStatus())) {
                 throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
             }
-            List<ArtifactService.PublishedArtifactDeletion> deletions = stageArtifactDeletions(task);
+            List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions = stageArtifactDeletions(task);
             try {
                 if (!taskStorage.deleteTerminalTask(taskId, () -> { })) {
                     throw new DataNotFoundException();
@@ -387,7 +388,7 @@ public class TaskServiceImpl implements TaskService {
                 restoreArtifactDeletions(deletions, e);
                 throw e;
             }
-            for (ArtifactService.PublishedArtifactDeletion deletion : deletions) {
+            for (ArtifactServiceImpl.PublishedArtifactDeletion deletion : deletions) {
                 try {
                     artifactService.commitPublishedDeletion(deletion);
                 } catch (RuntimeException cleanupFailure) {
@@ -403,8 +404,8 @@ public class TaskServiceImpl implements TaskService {
     }
 
 
-    private List<ArtifactService.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
-        List<ArtifactService.PublishedArtifactDeletion> deletions = new ArrayList<>();
+    private List<ArtifactServiceImpl.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
+        List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions = new ArrayList<>();
         try {
             for (String path : artifactPaths(task)) {
                 deletions.add(artifactService.stagePublishedDeletion(path));
@@ -417,8 +418,8 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private void restoreArtifactDeletions(
-            List<ArtifactService.PublishedArtifactDeletion> deletions, RuntimeException failure) {
-        for (ArtifactService.PublishedArtifactDeletion deletion : deletions) {
+            List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions, RuntimeException failure) {
+        for (ArtifactServiceImpl.PublishedArtifactDeletion deletion : deletions) {
             try {
                 artifactService.restorePublishedDeletion(deletion);
             } catch (RuntimeException rollbackFailure) {

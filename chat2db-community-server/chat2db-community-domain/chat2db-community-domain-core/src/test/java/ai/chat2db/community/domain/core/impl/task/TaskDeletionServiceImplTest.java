@@ -395,9 +395,9 @@ class TaskDeletionServiceImplTest {
 
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
         return new TaskServiceImpl(storage, null,
-                new ai.chat2db.community.domain.core.impl.task.ArtifactService(), null, null,
+                new ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl(), null, null,
                 new TaskDeletionServiceImpl(storage,
-                        new ai.chat2db.community.domain.core.impl.task.ArtifactService(), journalFile()));
+                        new ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl(), journalFile()));
     }
 
     private Task task(Long id, Path artifact) {

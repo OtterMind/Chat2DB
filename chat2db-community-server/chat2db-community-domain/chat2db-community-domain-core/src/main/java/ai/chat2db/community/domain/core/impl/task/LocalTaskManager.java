@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;

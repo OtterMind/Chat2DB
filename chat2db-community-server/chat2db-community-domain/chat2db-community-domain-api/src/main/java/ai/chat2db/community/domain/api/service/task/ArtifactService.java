@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.api.service.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 
 import java.io.IOException;
 import java.nio.file.Path;

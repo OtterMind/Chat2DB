@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.task.*;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
 import ai.chat2db.community.domain.api.model.task.extension.TaskStatementContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;

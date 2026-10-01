@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -19,7 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class ArtifactService implements ai.chat2db.community.domain.api.service.task.ArtifactService {
+public class ArtifactServiceImpl implements ArtifactService {
 
     private static final String DRAFT_FILE_SUFFIX = ".part";
 
