@@ -133,6 +133,7 @@ export default {
   'workspace.importExport.off': 'Off',
   'workspace.importExport.auto': 'Auto-detect',
   'workspace.importExport.ultraMode': 'Ultra-Fast Mode',
+  'workspace.importExport.beta': 'Beta',
   'workspace.importExport.ultraModeHint': 'Uses multi-threaded parallel processing: faster, but higher resource usage',
   'workspace.importExport.ultraModeConfirmTitle': 'Enable Ultra-Fast Mode',
   'workspace.importExport.ultraModeConfirmIntro': 'Ultra-fast mode characteristics:',
@@ -392,6 +393,7 @@ export default {
   'workspace.importExport.multiTable.stagingRequiredByOptions':
     'The selected validation, cycle, or finalization options require staging.',
   'workspace.importExport.multiTable.cycleStrategy': 'Cycle strategy',
+  'workspace.importExport.multiTable.executionMode': 'Execution mode',
   'workspace.importExport.multiTable.cycleReject': 'Reject when a cycle is found',
   'workspace.importExport.multiTable.cycleDeferred': 'Defer constraints',
   'workspace.importExport.multiTable.cycleTwoPhase': 'Two-phase staging import',

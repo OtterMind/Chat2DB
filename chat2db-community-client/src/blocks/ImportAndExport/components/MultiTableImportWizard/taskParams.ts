@@ -7,6 +7,7 @@ import type {
   IImportStagingPolicy,
   IImportValidationOptions,
   ImportCycleStrategy,
+  ImportExecutionMode,
   ImportExportDataBoundInfo,
   ImportSourceKind,
 } from '@/typings/importExport';
@@ -29,6 +30,11 @@ export interface MultiTableImportSettings {
   onError: 'ABORT' | 'SKIP';
   maxErrors?: number;
   performanceSamplePercent: number;
+  /**
+   * Execution mode handed to the task. 'FAST' asks the backend to shard the source and run the
+   * shards in parallel; the backend's admission gate still decides whether that is allowed.
+   */
+  mode: ImportExecutionMode;
 }
 
 export const defaultMultiTableImportSettings: MultiTableImportSettings = {
@@ -56,6 +62,7 @@ export const defaultMultiTableImportSettings: MultiTableImportSettings = {
   },
   onError: 'ABORT',
   performanceSamplePercent: 5,
+  mode: 'STANDARD',
 };
 
 const STAGING_DATABASE_TYPES = new Set<DatabaseTypeCode>([
@@ -265,7 +272,11 @@ export const buildMultiTableImportParams = ({
     schemaName: boundInfo.schemaName,
     taskType: ImportExportTaskType.DATA_FILE_IMPORT,
     format: MULTI_TABLE_IMPORT_FORMAT,
-    mode: 'STANDARD',
+    mode: settings.mode,
+    // Admission rule R1 blocks every parallel import unless the operator confirmed the target
+    // has no strong relationship or ordering dependency. The wizard asks that question before
+    // it allows FAST mode, so the acknowledgement travels with the task.
+    ...(settings.mode === 'ULTRA_FAST' ? { confirmedNoStrongRelations: true } : {}),
     scope: boundInfo.targetScope,
     tableSources: sources.map((source) => {
       const target = targetByKey.get(source.targetKey!)!;

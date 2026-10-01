@@ -24,7 +24,7 @@
     "lint:eslint": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --max-warnings=0",
     "lint:style": "stylelint \"src/**/*.{css,less}\" --max-warnings=0",
     "test:i18n": "node ./scripts/validate-i18n.cjs",
-    "test:import-export-wizard": "tsx src/blocks/ImportAndExport/components/ImportExportFile/taskParams.test.ts && tsx src/blocks/ImportAndExport/components/ImportExportFile/mappingValidation.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/model.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/taskParams.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/uploadQueue.test.ts && tsx src/components/UploadLocalFile/webLocalUpload.test.ts",
+    "test:import-export-wizard": "tsx src/blocks/ImportAndExport/components/ImportExportFile/taskParams.test.ts && tsx src/blocks/ImportAndExport/components/ImportExportFile/mappingValidation.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/model.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/taskParams.test.ts && tsx src/blocks/ImportAndExport/components/MultiTableImportWizard/uploadQueue.test.ts && tsx src/blocks/ImportAndExport/components/ImportModeControl/modeControlContract.test.ts && tsx src/components/UploadLocalFile/webLocalUpload.test.ts",
     "test:community-boundary": "node ./scripts/verify-community-boundary.cjs",
     "test:database-capabilities": "tsx src/utils/databaseJudgments.test.ts",
     "test:table-editor": "tsx src/blocks/DatabaseTableEditor/ColumnList/normalizeColumn.test.ts",

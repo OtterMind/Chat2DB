@@ -349,6 +349,7 @@ export default {
   'workspace.importExport.multiTable.stagingRequiredByOptions':
     '선택한 검증, 순환 종속성 또는 마무리 옵션에는 스테이징이 필요합니다.',
   'workspace.importExport.multiTable.cycleStrategy': '순환 종속성 전략',
+  'workspace.importExport.multiTable.executionMode': '실행 모드',
   'workspace.importExport.multiTable.cycleReject': '순환 감지 시 거부',
   'workspace.importExport.multiTable.cycleDeferred': '제약 조건 지연',
   'workspace.importExport.multiTable.cycleTwoPhase': '2단계 스테이징 가져오기',
@@ -436,6 +437,7 @@ export default {
   'workspace.importExport.off': '끄기',
   'workspace.importExport.auto': '자동 감지',
   'workspace.importExport.ultraMode': '초고속 모드',
+  'workspace.importExport.beta': '베타',
   'workspace.importExport.ultraModeHint': '멀티스레드 병렬 처리를 사용하여 더 빠르지만 리소스 사용량이 증가합니다',
   'workspace.importExport.ultraModeConfirmTitle': '초고속 모드 활성화',
   'workspace.importExport.ultraModeConfirmIntro': '초고속 모드 특징:',

@@ -198,6 +198,34 @@ assert.equal(thirdPartyRehearsal?.validationOptions?.sourceProfiling, true);
 assert.equal(thirdPartyRehearsal?.validationOptions?.orphanCheck, true);
 assert.equal(thirdPartyRehearsal?.performanceSamplePercent, 5);
 
+// The wizard was hardcoded to STANDARD, so multi-table imports could never ask for the
+// parallel path this series builds. The mode now comes from the settings, and switching to
+// parallel has to carry the R1 acknowledgement, otherwise the backend rejects the task with
+// "Parallel import rejected by admission rules: R1" no matter how the operator answered.
+const serialImport = buildMultiTableImportParams({
+  boundInfo,
+  sources,
+  targets,
+  dependencies,
+  settings: { ...mysqlDefaults, mode: 'STANDARD' },
+});
+assert.equal(serialImport?.mode, 'STANDARD');
+assert.equal(serialImport?.confirmedNoStrongRelations, undefined);
+
+const parallelImport = buildMultiTableImportParams({
+  boundInfo,
+  sources,
+  targets,
+  dependencies,
+  settings: { ...mysqlDefaults, mode: 'ULTRA_FAST' },
+});
+assert.equal(parallelImport?.mode, 'ULTRA_FAST');
+assert.equal(
+  parallelImport?.confirmedNoStrongRelations,
+  true,
+  'a parallel multi-table import must travel with the R1 acknowledgement',
+);
+
 assert.equal(
   buildMultiTableImportParams({
     boundInfo,

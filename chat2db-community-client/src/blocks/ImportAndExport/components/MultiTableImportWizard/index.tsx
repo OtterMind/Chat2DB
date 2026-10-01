@@ -30,6 +30,7 @@ import type { ImportExportDataBoundInfo } from '@/typings/importExport';
 import { getImportPreviewErrorMessage } from '../ImportMappingContent/mapping';
 import { stageSelectedImportFile } from '../ImportMappingContent/fileStaging';
 import { createStagedFileOwnership } from '../ImportMappingContent/stagedFileOwnership';
+import ImportModeControl from '../ImportModeControl';
 import type { ImportExportFileRef } from '../ImportExportFile';
 import {
   createLogicalDependencyDraft,
@@ -706,6 +707,14 @@ const MultiTableImportWizard = forwardRef(
                 message={i18n('workspace.importExport.multiTable.stagingRequiredByOptions')}
               />
             )}
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionTitle}>{i18n('workspace.importExport.multiTable.executionMode')}</div>
+            <ImportModeControl
+              value={settings.mode}
+              onChange={(mode) => updateSetting('mode', mode)}
+            />
           </section>
 
           <section className={styles.section}>

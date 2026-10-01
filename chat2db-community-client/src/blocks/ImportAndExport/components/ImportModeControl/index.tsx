@@ -18,7 +18,7 @@ export default function ImportModeControl({ value, onChange, disabled }: Props) 
         content: i18n('workspace.importExport.ultraModeAcknowledge'),
         okText: i18n('workspace.importExport.ultraModeConfirm'),
         cancelText: i18n('common.button.cancel'),
-        onOk: () => onChange('FAST'),
+        onOk: () => onChange('ULTRA_FAST'),
       });
       return;
     }
@@ -33,7 +33,7 @@ export default function ImportModeControl({ value, onChange, disabled }: Props) 
       </Tooltip>
       <Switch
         aria-label={i18n('workspace.importExport.ultraMode')}
-        checked={value === 'FAST'}
+        checked={value === 'ULTRA_FAST'}
         disabled={disabled}
         onChange={toggle}
       />

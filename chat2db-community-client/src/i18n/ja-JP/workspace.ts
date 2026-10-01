@@ -128,6 +128,7 @@ export default {
   'workspace.menu.copyStructureData': '構造とデータをコピー',
   'workspace.importExport.targetTable': 'ターゲットテーブル',
   'workspace.importExport.ultraMode': '超高速モード',
+  'workspace.importExport.beta': 'ベータ',
   'workspace.importExport.ultraModeHint':
     'マルチスレッド並列処理を使用します：より高速ですが、リソース使用量が増加します',
   'workspace.importExport.ultraModeConfirmTitle': '超高速モードを有効化',
@@ -379,6 +380,7 @@ export default {
   'workspace.importExport.multiTable.stagingRequiredByOptions':
     '選択した検証、循環依存、または後処理オプションにはステージングが必要です。',
   'workspace.importExport.multiTable.cycleStrategy': '循環依存戦略',
+  'workspace.importExport.multiTable.executionMode': '実行モード',
   'workspace.importExport.multiTable.cycleReject': '循環検出時に拒否',
   'workspace.importExport.multiTable.cycleDeferred': '制約を遅延',
   'workspace.importExport.multiTable.cycleTwoPhase': '2段階ステージングインポート',
