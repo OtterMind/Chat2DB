@@ -39,13 +39,11 @@ public class TaskWebConverter {
                 .resultSetId(request.getResultSetId())
                 .exportSize(exportSize)
                 .format(format)
-                .compression(normalize(request.getCompression()))
                 .scope(normalize(request.getScope()))
                 .containData(request.getContainData())
                 .containsHeader(request.getContainsHeader())
                 .exportPath(request.getExportPath())
                 .suggestedFileName(request.getSuggestedFileName())
-                .mode(normalize(request.getMode()))
                 .build();
     }
 

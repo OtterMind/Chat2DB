@@ -33,4 +33,10 @@ public class TaskExportRequest extends DataSourceBaseRequest {
     private String exportPath;
 
     private String suggestedFileName;
+
+    /** Output compression the client asked for; absent means the writer default. */
+    private String compression;
+
+    /** Execution mode for bulk work; {@code FAST} and {@code ULTRA_FAST} select the parallel path. */
+    private String mode;
 }
