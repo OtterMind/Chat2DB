@@ -265,7 +265,7 @@ class ParallelImportLifecycleTest {
                     if (method.getName().equals("appendEvent")) { events.add((TaskEvent) args[0]); return args[0]; }
                     throw new UnsupportedOperationException(method.getName());
                 });
-        new CSVImporter().run(spec, new TaskExecutionContextImpl(task.taskId(), task, storage, new ArtifactServiceImpl()));
+        new CSVImporter().run(spec, new TaskExecutionContextImpl(task.taskId(), task, storage, new ArtifactService()));
     }
 
     private void runOnCallerThread(ImportTaskSpec spec, RunningTask task) {

@@ -50,11 +50,11 @@ class TaskDeletionServiceImplTest {
         RecordingTaskStorage storage = storage(1L, artifact);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean(TaskStorage.class, () -> storage);
-            context.register(ArtifactServiceImpl.class, TaskDeletionServiceImpl.class);
+            context.register(ArtifactService.class, TaskDeletionServiceImpl.class);
             context.refresh();
             ArtifactService files = context.getBean(ArtifactService.class);
             TaskDeletionService deletions = context.getBean(TaskDeletionService.class);
-            assertEquals(ArtifactServiceImpl.class, files.getClass());
+            assertEquals(ArtifactService.class, files.getClass());
             deletions.delete(task(1L, artifact));
         }
         assertTrue(storage.get(1L).isEmpty());
@@ -393,7 +393,7 @@ class TaskDeletionServiceImplTest {
     }
 
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
-        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()));
+        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactService(), journalFile()));
     }
 
     private Task task(Long id, Path artifact) {

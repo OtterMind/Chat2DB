@@ -78,7 +78,7 @@ class TaskServiceImplTest {
                 task(1L, 10L, 100L, ownedArtifact),
                 task(2L, 20L, 100L, otherUserArtifact),
                 task(3L, 10L, 200L, otherOrganizationArtifact)));
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactService()));
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)

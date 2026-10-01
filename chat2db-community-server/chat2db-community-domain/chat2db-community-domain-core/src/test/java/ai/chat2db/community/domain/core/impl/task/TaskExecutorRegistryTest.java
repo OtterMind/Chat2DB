@@ -118,7 +118,7 @@ class TaskExecutorRegistryTest {
                     draftReference.set(draft);
                     context.write("value");
                 });
-        ArtifactService failingArtifactService = new ArtifactServiceImpl() {
+        ArtifactService failingArtifactService = new ArtifactService() {
             @Override
             void copyArtifact(Path source, java.io.OutputStream output) throws IOException {
                 output.write('x');
@@ -148,9 +148,9 @@ class TaskExecutorRegistryTest {
                 exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
                         (spec, context) -> {}),
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
-        taskManager = new LocalTaskManager(storage, registry, new ArtifactServiceImpl(),
+        taskManager = new LocalTaskManager(storage, registry, new ArtifactService(),
                 new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
+        return new TaskServiceImpl(storage, taskManager, new TaskDeletionServiceImpl(storage, new ArtifactService()));
     }
 
     private TaskExtensionManager emptyExtensionManager() {
