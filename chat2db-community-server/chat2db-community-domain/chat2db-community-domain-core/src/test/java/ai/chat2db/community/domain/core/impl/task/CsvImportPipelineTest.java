@@ -19,6 +19,7 @@ import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.spi.DefaultMetaService;
 import ai.chat2db.spi.IDbMetaData;
@@ -124,7 +125,7 @@ class CsvImportPipelineTest {
                 .target(spec.getTarget()).build(), TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
         TaskExecutionContextImpl context = new TaskExecutionContextImpl(taskId, new RunningTask(taskId),
-                storage, new ArtifactService());
+                storage, new ArtifactServiceImpl());
 
         new CSVImporter().run(spec, context);
 

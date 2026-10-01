@@ -21,6 +21,7 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -119,7 +120,7 @@ class TaskExecutorRegistryTest {
                     draftReference.set(draft);
                     context.write("value");
                 });
-        ArtifactService failingArtifactService = new ArtifactService() {
+        ArtifactService failingArtifactService = new ArtifactServiceImpl() {
             @Override
             public String publish(ArtifactDraft ignored) {
                 throw new IllegalStateException("Publish failed");
@@ -148,9 +149,9 @@ class TaskExecutorRegistryTest {
                 exportExecutor(TaskType.QUERY_RESULT_EXPORT.name(),
                         (spec, context) -> {}),
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
-        taskManager = new LocalTaskManager(storage, registry, new ArtifactService(),
+        taskManager = new LocalTaskManager(storage, registry, new ArtifactServiceImpl(),
                 new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new ArtifactService());
+        return new TaskServiceImpl(storage, taskManager, new ArtifactServiceImpl());
     }
 
     private TaskExtensionManager emptyExtensionManager() {

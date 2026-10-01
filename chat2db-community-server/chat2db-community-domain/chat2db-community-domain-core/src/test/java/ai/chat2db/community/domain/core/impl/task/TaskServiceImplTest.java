@@ -79,7 +79,7 @@ class TaskServiceImplTest {
                 task(1L, 10L, 100L, ownedArtifact),
                 task(2L, 20L, 100L, otherUserArtifact),
                 task(3L, 10L, 200L, otherOrganizationArtifact)));
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactServiceImpl());
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)
@@ -127,7 +127,7 @@ class TaskServiceImplTest {
                         artifact(shardReject, TaskArtifactRole.REJECT),
                         artifact(partialOutput, null)))
                 .withArtifacts(3L, List.of(artifact(report, TaskArtifactRole.IMPORT_REPORT)));
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactServiceImpl());
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)
@@ -161,7 +161,7 @@ class TaskServiceImplTest {
                     "Symbolic links are unavailable: " + unavailable.getMessage());
         }
         TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                new ArtifactService());
+                new ArtifactServiceImpl());
         Field field = TaskServiceImpl.class.getDeclaredField("importAllowedRoots");
         field.setAccessible(true);
         field.set(service, allowed.toString());
@@ -177,7 +177,7 @@ class TaskServiceImplTest {
         Path source = Files.writeString(tempDirectory.resolve("third-party.sql"),
                 "INSERT INTO orders VALUES (1);\n");
         TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                new ArtifactService());
+                new ArtifactServiceImpl());
         ImportTaskSpec spec = ImportTaskSpec.builder()
                 .taskType("SQL_FILE_IMPORT")
                 .sourceKind("THIRD_PARTY")
@@ -211,7 +211,7 @@ class TaskServiceImplTest {
                     return null;
                 });
         TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                new ArtifactService(), connectionContexts);
+                new ArtifactServiceImpl(), connectionContexts);
         DBConfig config = new DBConfig();
         config.setDbType(RESUME_TEST_DB_TYPE);
         config.setDefaultDriverConfig(new DriverConfig());
@@ -252,7 +252,7 @@ class TaskServiceImplTest {
             complete.setConnection(connection);
             IDbConnectionContextService connectionContexts = connectionContexts(complete, new AtomicReference<>());
             TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                    new ArtifactService(), connectionContexts);
+                    new ArtifactServiceImpl(), connectionContexts);
             DBConfig config = new DBConfig();
             config.setDbType(RESUME_TEST_DB_TYPE);
             config.setDefaultDriverConfig(new DriverConfig());
@@ -301,7 +301,7 @@ class TaskServiceImplTest {
                         return source.toFile();
                     });
             TaskServiceImpl stagedService = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                    new ArtifactService(), connectionContexts, staging);
+                    new ArtifactServiceImpl(), connectionContexts, staging);
             spec.setImportFileId("staged-preview-id");
             spec.setSourceFile(tempDirectory.resolve("untrusted.csv").toString());
             assertEquals(List.of("ID"), stagedService.previewImport(spec).getFileColumns());

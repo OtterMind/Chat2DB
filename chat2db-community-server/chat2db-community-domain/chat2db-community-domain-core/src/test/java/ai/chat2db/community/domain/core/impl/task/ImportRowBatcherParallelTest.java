@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportRowBatcher;
 import ai.chat2db.community.domain.api.model.task.TaskStage;
@@ -169,7 +170,7 @@ class ImportRowBatcherParallelTest {
                 .target(spec.getTarget()).build(), TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
         return new TaskExecutionContextImpl(taskId, new RunningTask(taskId),
-                storage, new ArtifactService());
+                storage, new ArtifactServiceImpl());
     }
 
     private ImportTaskSpec csvSpec(Path csv, String onError) {

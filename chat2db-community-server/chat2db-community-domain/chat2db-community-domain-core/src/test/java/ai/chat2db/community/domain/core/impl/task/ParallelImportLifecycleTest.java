@@ -9,6 +9,7 @@ import ai.chat2db.community.domain.api.model.task.extension.TaskStatementContext
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.task.extension.ITaskExecutionGuard;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.tools.model.Context;
@@ -267,7 +268,7 @@ class ParallelImportLifecycleTest {
                     if (method.getName().equals("appendEvent")) { events.add((TaskEvent) args[0]); return args[0]; }
                     throw new UnsupportedOperationException(method.getName());
                 });
-        new CSVImporter().run(spec, new TaskExecutionContextImpl(task.taskId(), task, storage, new ArtifactService()));
+        new CSVImporter().run(spec, new TaskExecutionContextImpl(task.taskId(), task, storage, new ArtifactServiceImpl()));
     }
 
     private void runOnCallerThread(ImportTaskSpec spec, RunningTask task) {

@@ -25,6 +25,7 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
@@ -232,7 +233,7 @@ class MySQLTaskRoundTripIT {
                 .target(TaskTargetSnapshot.builder().dataSourceId(1L).build()).build(),
                 TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
-        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactService());
+        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactServiceImpl());
     }
 
     private void createCopyTable(String tableName) throws Exception {

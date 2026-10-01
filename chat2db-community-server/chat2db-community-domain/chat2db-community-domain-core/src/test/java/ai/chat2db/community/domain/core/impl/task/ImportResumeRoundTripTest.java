@@ -18,6 +18,7 @@ import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
 import ai.chat2db.community.tools.constant.JdbcDriverConstants;
@@ -207,7 +208,7 @@ class ImportResumeRoundTripTest {
         Long taskId = storage.create(Task.builder().type("DATA_FILE_IMPORT").name("resume")
                 .target(TaskTargetSnapshot.builder().dataSourceId(1L).build()).build(),
                 TaskEvent.builder().level("INFO").code("TASK_CREATED").message("created").build()).getId();
-        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactService());
+        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactServiceImpl());
     }
 
     private int countRows() throws Exception {

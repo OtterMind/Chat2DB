@@ -42,7 +42,7 @@ class ArtifactServiceTest {
 
     @Test
     void concurrentDraftsReserveDifferentTargetsAndPublishIndependently() throws IOException {
-        ArtifactService service = new ArtifactService();
+        ArtifactService service = new ArtifactServiceImpl();
         var first = service.createDraft(1L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
                 "text/csv");
         var second = service.createDraft(2L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
@@ -63,7 +63,7 @@ class ArtifactServiceTest {
 
     @Test
     void failedPublicationReleasesReservedTarget() {
-        ArtifactService service = new ArtifactService();
+        ArtifactService service = new ArtifactServiceImpl();
         var failed = service.createDraft(1L, TaskArtifactRole.OUTPUT, tempDirectory.toString(), "export.csv",
                 "text/csv");
 
@@ -84,7 +84,7 @@ class ArtifactServiceTest {
                 .artifactId(artifact.toString())
                 .build());
 
-        new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L);
+        new TaskServiceImpl(storage, null, new ArtifactServiceImpl()).delete(1L);
 
         assertFalse(Files.exists(artifact));
         assertTrue(storage.deleted);
@@ -102,7 +102,7 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactServiceImpl()).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE, exception.getCode());
         assertFalse(storage.deleted);
@@ -120,7 +120,7 @@ class ArtifactServiceTest {
         storage.failDeletion = true;
 
         assertThrows(IllegalStateException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactServiceImpl()).delete(1L));
 
         assertEquals("value", Files.readString(artifact));
         assertTrue(storage.get(1L).isPresent());
@@ -134,7 +134,7 @@ class ArtifactServiceTest {
                 .status(TaskStatus.SUCCESS.name())
                 .artifactId(artifact.toString())
                 .build());
-        ArtifactService artifactService = new ArtifactService() {
+        ArtifactService artifactService = new ArtifactServiceImpl() {
             @Override
             void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
                 throw new IllegalStateException("Could not commit artifact deletion");
@@ -166,7 +166,7 @@ class ArtifactServiceTest {
                 .build());
 
         assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactServiceImpl()).delete(1L));
 
         assertEquals("value", Files.readString(first));
         assertTrue(Files.isDirectory(invalid));
@@ -181,7 +181,7 @@ class ArtifactServiceTest {
                 .status(TaskStatus.SUCCESS.name())
                 .artifactId(artifact.toString())
                 .build());
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactService());
+        TaskServiceImpl service = new TaskServiceImpl(storage, null, new ArtifactServiceImpl());
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger deleted = new AtomicInteger();
@@ -233,7 +233,7 @@ class ArtifactServiceTest {
                 .build());
 
         BusinessException exception = assertThrows(BusinessException.class,
-                () -> new TaskServiceImpl(storage, null, new ArtifactService()).delete(1L));
+                () -> new TaskServiceImpl(storage, null, new ArtifactServiceImpl()).delete(1L));
 
         assertEquals(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE, exception.getCode());
         assertTrue(Files.exists(artifact));
