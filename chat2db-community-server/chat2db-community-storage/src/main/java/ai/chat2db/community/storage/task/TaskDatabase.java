@@ -54,11 +54,6 @@ final class TaskDatabase implements AutoCloseable {
                     + "updated_at BIGINT,"
                     + "last_event_sequence BIGINT NOT NULL DEFAULT 0)",
             "CREATE INDEX IF NOT EXISTS idx_task_scope ON task(user_id, organization_id, status)",
-            // Idempotent import submission lookup filters on client_submission_id first, so that
-            // column leads the index and stays usable even when the null-safe owner predicates
-            // cannot use an index on their own.
-            "CREATE INDEX IF NOT EXISTS idx_task_client_submission"
-                    + " ON task(client_submission_id, user_id, organization_id)",
             "CREATE TABLE IF NOT EXISTS task_event ("
                     + "task_id BIGINT NOT NULL,"
                     + "sequence BIGINT NOT NULL,"
@@ -105,6 +100,9 @@ final class TaskDatabase implements AutoCloseable {
             "ALTER TABLE task ADD COLUMN IF NOT EXISTS spec_json CLOB",
             "ALTER TABLE task ADD COLUMN IF NOT EXISTS client_submission_id VARCHAR(128)",
             "ALTER TABLE task ADD COLUMN IF NOT EXISTS client_submission_fingerprint VARCHAR(64)",
+            // Created here rather than in SCHEMA_SQL: the index leads with client_submission_id
+            // so the idempotent lookup stays indexed even when the null-safe owner predicates
+            // cannot use an index on their own, and it can only run once the column exists.
             "CREATE INDEX IF NOT EXISTS idx_task_client_submission"
                     + " ON task(client_submission_id, user_id, organization_id)",
     };
@@ -152,7 +150,11 @@ final class TaskDatabase implements AutoCloseable {
                 throw new IllegalStateException("Task storage schema version " + stored
                         + " is newer than this build supports (" + SCHEMA_VERSION + ")");
             }
-            if (stored > 0 && stored < SCHEMA_VERSION) {
+            if (stored < SCHEMA_VERSION) {
+                // stored == 0 means the database predates the schema_meta bookkeeping entirely.
+                // CREATE TABLE IF NOT EXISTS then leaves an older task table untouched and every
+                // later SELECT would hit a missing column, so the idempotent upgrade statements
+                // have to run for that case too.
                 try (Statement statement = connection.createStatement()) {
                     for (String sql : UPGRADE_SQL) {
                         statement.execute(sql);

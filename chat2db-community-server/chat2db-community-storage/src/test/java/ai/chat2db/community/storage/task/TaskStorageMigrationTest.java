@@ -179,6 +179,62 @@ class TaskStorageMigrationTest {
         }
     }
 
+    @Test
+    void databaseWithoutSchemaVersionBookkeepingStillGainsTheNewColumns() throws Exception {
+        database().initialize();
+        // Reproduce a database written before the schema_meta bookkeeping existed: the task
+        // table predates spec_json and the idempotent submission columns, and no version row
+        // records how old it is.
+        try (Connection connection = database().open();
+                Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE task");
+            statement.execute("CREATE TABLE task ("
+                    + "id BIGINT PRIMARY KEY,"
+                    + "type VARCHAR(64),"
+                    + "name CLOB,"
+                    + "status VARCHAR(64) NOT NULL,"
+                    + "progress INT NOT NULL,"
+                    + "stage VARCHAR(64),"
+                    + "progress_message CLOB,"
+                    + "error_code VARCHAR(64),"
+                    + "error_message CLOB,"
+                    + "artifact_id CLOB,"
+                    + "target_json CLOB,"
+                    + "user_id BIGINT,"
+                    + "organization_id BIGINT,"
+                    + "created_at BIGINT,"
+                    + "started_at BIGINT,"
+                    + "finished_at BIGINT,"
+                    + "updated_at BIGINT,"
+                    + "last_event_sequence BIGINT NOT NULL DEFAULT 0)");
+            statement.execute("DELETE FROM schema_meta WHERE meta_key = 'schema_version'");
+            connection.commit();
+        }
+        database.close();
+        database = null;
+
+        TaskDatabase upgraded = new TaskDatabase(baseDir.getAbsolutePath());
+        try {
+            upgraded.initialize();
+            try (Connection connection = upgraded.open();
+                    Statement statement = connection.createStatement();
+                    ResultSet rows = statement.executeQuery(
+                            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+                                    + " WHERE TABLE_NAME = 'TASK' AND COLUMN_NAME = 'CLIENT_SUBMISSION_ID'")) {
+                assertTrue(rows.next());
+                assertEquals(1L, rows.getLong(1),
+                        "an unversioned database must still gain the idempotent submission columns");
+            }
+            // The original failure surfaced here: TaskRows selects this column on every read.
+            try (Statement statement = upgraded.open().createStatement();
+                    ResultSet rows = statement.executeQuery("SELECT client_submission_id FROM task")) {
+                assertFalse(rows.next(), "the recreated table starts empty");
+            }
+        } finally {
+            upgraded.close();
+        }
+    }
+
     private Task task(String name) {
         return Task.builder()
                 .type("TABLE_DATA_EXPORT")
