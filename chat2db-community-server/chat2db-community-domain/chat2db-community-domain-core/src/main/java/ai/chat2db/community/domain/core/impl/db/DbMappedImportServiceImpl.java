@@ -75,6 +75,7 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .columnMappings(mappings)
                 .unmappedTarget(strategy)
                 .mode(execution.getMode())
+                .confirmedNoStrongRelations(execution.getConfirmedNoStrongRelations())
                 .build();
         return importTaskSubmissionService.submit(spec, execution.getFileId());
     }
