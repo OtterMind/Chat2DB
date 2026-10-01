@@ -72,6 +72,13 @@ public final class AdaptiveConcurrencyGate extends Semaphore {
      * Records one completed work unit ({@code rows} rows over {@code nanos} wall time); once the
      * observation window fills, the fan-out is retuned. Never throws into the caller.
      */
+    /**
+     * Current permit total, exposed so callers can assert the gate actually responded.
+     */
+    public int totalPermits() {
+        return totalPermits.get();
+    }
+
     public void record(long rows, long nanos) {
         if (rows <= 0 || nanos <= 0) {
             return;
