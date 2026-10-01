@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.task.imports.excel;
 
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
+import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.core.impl.task.imports.BaseImporter;
@@ -32,6 +33,11 @@ public abstract class BaseExcelImporter extends BaseImporter {
 
     @Override
     protected void doImportData(ImportTaskSpec spec, TaskExecutionContext context, List<TableColumn> columns) {
+        // The client may send no options at all; materializing the defaults here keeps the reader and the
+        // row builder on one set of values instead of each inventing its own.
+        spec.setExcelOptions(spec.getExcelOptions() == null
+                ? new ExcelOptions().validate()
+                : spec.getExcelOptions().validate());
         ExcelTypeEnum excelType = getExcelType();
         try (NoModelDataListener listener = new NoModelDataListener(spec, context, columns,
                 Chat2DBContext.getDbMetaData().getValueProcessor())) {

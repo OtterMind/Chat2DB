@@ -1,7 +1,6 @@
 package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
-import ai.chat2db.community.domain.api.model.task.ResumeState;
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
@@ -36,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.api.model.task.ResumeState;
+import ai.chat2db.community.domain.api.model.task.TaskArtifact;
 
 class TaskDeletionServiceImplTest {
     @TempDir
@@ -51,11 +53,11 @@ class TaskDeletionServiceImplTest {
         RecordingTaskStorage storage = storage(1L, artifact);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean(TaskStorage.class, () -> storage);
-            context.register(ArtifactService.class, TaskDeletionServiceImpl.class);
+            context.register(ArtifactServiceImpl.class, TaskDeletionServiceImpl.class);
             context.refresh();
             ArtifactService files = context.getBean(ArtifactService.class);
             TaskDeletionService deletions = context.getBean(TaskDeletionService.class);
-            assertEquals(ArtifactService.class, files.getClass());
+            assertEquals(ArtifactServiceImpl.class, files.getClass());
             deletions.delete(task(1L, artifact));
         }
         assertTrue(storage.get(1L).isEmpty());
@@ -394,10 +396,8 @@ class TaskDeletionServiceImplTest {
     }
 
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
-        return new TaskServiceImpl(storage, null,
-                new ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl(), null, null,
-                new TaskDeletionServiceImpl(storage,
-                        new ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl(), journalFile()));
+        return new TaskServiceImpl(storage, null, new ArtifactServiceImpl(), null, null,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()));
     }
 
     private Task task(Long id, Path artifact) {
@@ -426,12 +426,26 @@ class TaskDeletionServiceImplTest {
     }
 
     private static final class RecordingTaskStorage implements TaskStorage {
+        private final Map<Long, List<TaskArtifact>> artifacts = new LinkedHashMap<>();
+
         @Override
-        public void clearResumeStates(Long taskId) {
+        public void saveArtifact(Long taskId, TaskArtifact artifact) {
+            artifacts.computeIfAbsent(taskId, key -> new java.util.ArrayList<>()).add(artifact);
         }
 
         @Override
-        public void saveResumeState(Long taskId, ResumeState state) {
+        public List<TaskArtifact> listArtifacts(Long taskId) {
+            return artifacts.getOrDefault(taskId, List.of());
+        }
+
+        @Override
+        public void deleteArtifact(Long taskId, String artifactId) {
+            // This stub records nothing; artifact removal is verified through the artifact files.
+        }
+
+        @Override
+        public List<Task> listResumableTasks() {
+            return List.of();
         }
 
         @Override
@@ -440,23 +454,14 @@ class TaskDeletionServiceImplTest {
         }
 
         @Override
-        public List<ai.chat2db.community.domain.api.model.task.Task> listResumableTasks() {
-            return List.of();
+        public void saveResumeState(Long taskId, ResumeState state) {
+            // This stub records nothing; resume checkpoints are verified by the resume tests.
         }
 
         @Override
-        public void deleteArtifact(Long taskId, String artifactPath) {
+        public void clearResumeStates(Long taskId) {
+            // This stub records nothing; the deletion queue is verified through artifact files.
         }
-
-        @Override
-        public List<ai.chat2db.community.domain.api.model.task.TaskArtifact> listArtifacts(Long taskId) {
-            return List.of();
-        }
-
-        @Override
-        public void saveArtifact(Long taskId, ai.chat2db.community.domain.api.model.task.TaskArtifact artifact) {
-        }
-
 
         private final Map<Long, Task> tasks = new LinkedHashMap<>();
         private boolean failDeletion;
