@@ -136,7 +136,7 @@ class ArtifactServiceTest {
                 .build());
         ArtifactService artifactService = new ArtifactServiceImpl() {
             @Override
-            void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
+        public void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
                 throw new IllegalStateException("Could not commit artifact deletion");
             }
         };
