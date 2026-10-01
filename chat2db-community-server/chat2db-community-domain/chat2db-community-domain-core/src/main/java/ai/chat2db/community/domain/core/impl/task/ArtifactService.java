@@ -2,12 +2,10 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.ConfigUtils;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,11 +17,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
-@Slf4j
-@Service
-public class ArtifactServiceImpl implements ArtifactService {
+@Component
+public class ArtifactService {
 
     private static final String DRAFT_FILE_SUFFIX = ".part";
 
@@ -31,14 +27,7 @@ public class ArtifactServiceImpl implements ArtifactService {
 
     private final Set<Path> reservedTargets = ConcurrentHashMap.newKeySet();
 
-    @Override
-    public ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType) {
-        return createDraft(taskId, "OUTPUT", outputDirectory, fileName, mediaType);
-    }
-
-    @Override
-    public ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName,
-            String mediaType) {
+    ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType) {
         File directory = resolveDirectory(outputDirectory);
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IllegalStateException("Could not create artifact directory");
@@ -55,8 +44,11 @@ public class ArtifactServiceImpl implements ArtifactService {
                 .build();
     }
 
-    @Override
-    public ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName,
+    /**
+     * Builds a draft around the interrupted run's temporary file, so a checkpointed export
+     * continues appending where it stopped instead of restarting the artifact.
+     */
+    ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName,
             String mediaType, File existingTemporaryFile) {
         File directory = resolveDirectory(outputDirectory);
         if (!directory.exists() && !directory.mkdirs()) {
@@ -72,14 +64,16 @@ public class ArtifactServiceImpl implements ArtifactService {
                 .build();
     }
 
-    @Override
-    public boolean isInterruptedDraft(Long taskId, File file) {
+    /**
+     * Whether {@code file} is a draft this application wrote for this task (the only files a
+     * resume may safely reopen).
+     */
+    static boolean isInterruptedDraft(Long taskId, File file) {
         String name = file.getName();
         return file.isFile() && name.startsWith(".task-" + taskId + "-") && name.endsWith(DRAFT_FILE_SUFFIX);
     }
 
-    @Override
-    public String publish(ArtifactDraft draft) {
+    String publish(ArtifactDraft draft) {
         if (draft == null) {
             throw new IllegalArgumentException("Artifact draft is incomplete");
         }
@@ -92,7 +86,11 @@ public class ArtifactServiceImpl implements ArtifactService {
             if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
                 throw new IllegalStateException("Artifact draft is not readable");
             }
-            move(source, target);
+            try {
+                Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(source, target);
+            }
             return target.toAbsolutePath().toString();
         } catch (IOException e) {
             throw new IllegalStateException("Could not publish artifact", e);
@@ -101,25 +99,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    /**
-     * The move above is atomic, so the destination only exists once the whole file is there;
-     * notifying straight after it is therefore as early as the contract allows, and a listener
-     * failure still leaves the published file to be reclaimed.
-     */
-    @Override
-    public String publish(ArtifactDraft draft, Consumer<String> onTargetCreated) {
-        String artifactId = publish(draft);
-        try {
-            onTargetCreated.accept(artifactId);
-            return artifactId;
-        } catch (RuntimeException | Error e) {
-            deletePublished(artifactId);
-            throw e;
-        }
-    }
-
-    @Override
-    public void deleteDraft(ArtifactDraft draft) {
+    void deleteDraft(ArtifactDraft draft) {
         if (draft == null) {
             return;
         }
@@ -134,8 +114,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    @Override
-    public void deletePublished(String artifactId) {
+    void deletePublished(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return;
         }
@@ -146,18 +125,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    @Override
-    public void stageForDeletion(Path original, Path staged) throws IOException {
-        if (Files.notExists(staged) && Files.exists(original)) {
-            if (!Files.isRegularFile(original)) {
-                throw new IOException("Task artifact is not a regular file: " + original);
-            }
-            move(original, staged);
-        }
-    }
-
-    @Override
-    public PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
+    PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return PublishedArtifactDeletion.empty();
         }
@@ -178,8 +146,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    @Override
-    public void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
+    void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
         if (deletion == null || deletion.stagedPath() == null) {
             return;
         }
@@ -190,8 +157,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    @Override
-    public void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
+    void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
         if (deletion == null || deletion.stagedPath() == null || !Files.exists(deletion.stagedPath())) {
             return;
         }
@@ -202,8 +168,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    @Override
-    public boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths, List<String> publishedPaths) {
+    boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths, List<String> publishedPaths) {
         boolean cleaned = true;
         for (String temporaryPath : temporaryPaths) {
             cleaned = cleanupInterruptedDraft(taskId, temporaryPath) && cleaned;
@@ -301,5 +266,12 @@ public class ArtifactServiceImpl implements ArtifactService {
     private BusinessException artifactDeletionFailure(String artifactId, Exception cause) {
         return new BusinessException(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE,
                 new Object[]{artifactId}, cause);
+    }
+
+    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
+
+        private static PublishedArtifactDeletion empty() {
+            return new PublishedArtifactDeletion(null, null);
+        }
     }
 }
