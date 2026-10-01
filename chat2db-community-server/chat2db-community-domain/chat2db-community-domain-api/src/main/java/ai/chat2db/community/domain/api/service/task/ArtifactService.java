@@ -6,6 +6,7 @@ import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 /** Manages task output files and their temporary staging paths. */
@@ -38,6 +39,12 @@ public interface ArtifactService {
     void stageForDeletion(Path original, Path staged) throws IOException;
 
     boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath);
+
+    /**
+     * Finishes every publish this task left half-done, reporting whether any artifact still needed work.
+     */
+    boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths,
+            List<String> publishedPaths);
 
     /**
      * A deletion that has been staged on disk but not yet committed. The intent survives a crash so a

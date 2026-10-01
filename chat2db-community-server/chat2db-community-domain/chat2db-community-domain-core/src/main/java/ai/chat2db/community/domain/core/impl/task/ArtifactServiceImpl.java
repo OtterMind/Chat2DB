@@ -70,7 +70,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         return true;
     }
 
-    ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType) {
+    public ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType) {
         File directory = resolveDirectory(outputDirectory);
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IllegalStateException("Could not create artifact directory");
@@ -91,7 +91,7 @@ public class ArtifactServiceImpl implements ArtifactService {
      * Builds a draft around the interrupted run's temporary file, so a checkpointed export
      * continues appending where it stopped instead of restarting the artifact.
      */
-    ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName,
+    public ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName,
             String mediaType, File existingTemporaryFile) {
         File directory = resolveDirectory(outputDirectory);
         if (!directory.exists() && !directory.mkdirs()) {
@@ -171,7 +171,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
+    public ArtifactService.PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return ArtifactService.PublishedArtifactDeletion.empty();
         }
@@ -192,7 +192,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
+    public void commitPublishedDeletion(PublishedArtifactDeletion deletion) {
         if (deletion == null || deletion.stagedPath() == null) {
             return;
         }
@@ -203,7 +203,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
+    public void restorePublishedDeletion(PublishedArtifactDeletion deletion) {
         if (deletion == null || deletion.stagedPath() == null || !Files.exists(deletion.stagedPath())) {
             return;
         }
@@ -214,7 +214,7 @@ public class ArtifactServiceImpl implements ArtifactService {
         }
     }
 
-    boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths, List<String> publishedPaths) {
+    public boolean cleanupInterruptedArtifacts(Long taskId, List<String> temporaryPaths, List<String> publishedPaths) {
         boolean cleaned = true;
         for (String temporaryPath : temporaryPaths) {
             cleaned = cleanupInterruptedDraft(taskId, temporaryPath) && cleaned;
