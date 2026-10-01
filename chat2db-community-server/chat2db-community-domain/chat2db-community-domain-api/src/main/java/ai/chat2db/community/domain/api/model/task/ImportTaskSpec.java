@@ -86,4 +86,3 @@ public class ImportTaskSpec implements TaskSpec {
      */
     private Boolean confirmedNoStrongRelations;
 }
-

@@ -70,6 +70,9 @@ public interface IDbManager {
             TaskExecutionContext context) throws SQLException;
 
     void dropView(Connection connection, String databaseName, String schemaName, String viewName);
-    default ImportResourceSnapshot probeImportResources(Connection connection, String databaseName,             String schemaName) {         return ImportResourceSnapshot.unknown("This database plugin does not provide import resource probes");     } 
+    default ImportResourceSnapshot probeImportResources(Connection connection, String databaseName,
+            String schemaName) {
+        return ImportResourceSnapshot.unknown("This database plugin does not provide import resource probes");
+    }
 
 }
