@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
 import ai.chat2db.community.domain.api.model.task.extension.TaskStatementContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.task.extension.ITaskExecutionGuard;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.tools.model.Context;

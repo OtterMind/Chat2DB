@@ -24,6 +24,7 @@ import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;

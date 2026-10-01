@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportColumnResolver;
 import ai.chat2db.community.tools.constant.JdbcDriverConstants;

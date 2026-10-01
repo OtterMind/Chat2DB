@@ -20,6 +20,7 @@ import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
