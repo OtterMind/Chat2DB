@@ -390,7 +390,8 @@ public class LocalTaskManager {
                 Map<String, Object> details = event.getDetails();
                 if (TaskEventCode.ARTIFACT_PREPARED.name().equals(event.getCode())) {
                     temporaryPaths.add(detail(details, TaskConstants.ARTIFACT_TEMPORARY_PATH_DETAIL_KEY));
-                } else if (TaskEventCode.ARTIFACT_PUBLISHED.name().equals(event.getCode())) {
+                } else if (TaskEventCode.ARTIFACT_PUBLICATION_STARTED.name().equals(event.getCode())
+                        || TaskEventCode.ARTIFACT_PUBLISHED.name().equals(event.getCode())) {
                     String publishedPath = detail(details, TaskConstants.ARTIFACT_ID_DETAIL_KEY);
                     if (publishedPath != null && !publishedPaths.contains(publishedPath)) {
                         publishedPaths.add(publishedPath);
