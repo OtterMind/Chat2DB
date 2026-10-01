@@ -379,6 +379,11 @@ public class TaskServiceImpl implements TaskService {
             if (!TaskStatus.isTerminal(task.getStatus())) {
                 throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
             }
+            if (deletionService != null) {
+                deletionService.delete(task);
+                return;
+            }
+            // No durable queue wired (test construction): stage the deletions inline.
             List<ArtifactService.PublishedArtifactDeletion> deletions = stageArtifactDeletions(task);
             try {
                 if (!taskStorage.deleteTerminalTask(taskId, () -> { })) {
@@ -465,6 +470,15 @@ public class TaskServiceImpl implements TaskService {
         if (task == null || StringUtils.isBlank(task.getArtifactId())) {
             throw new DataNotFoundException();
         }
+        if (deletionService != null) {
+            // A deletion that failed after staging leaves the file behind a sibling marker; the
+            // queue owns which path is current, so it must answer or the pending retry would
+            // delete a path nobody downloads any more.
+            java.io.File current = deletionService.resolveArtifact(task);
+            if (current != null) {
+                return downloadFor(current.getAbsolutePath(), new java.io.File(task.getArtifactId()).getName());
+            }
+        }
         if (TaskStatus.SUCCESS.name().equals(task.getStatus())) {
             // Preserve primary-download compatibility for tasks created before artifact rows were
             // introduced. The path still comes only from the owned task row.
@@ -508,6 +522,15 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private TaskDownload downloadFor(String artifactPath) {
+        return downloadFor(artifactPath, null);
+    }
+
+    /**
+     * Serves the file at {@code artifactPath} under {@code logicalFileName} when one is supplied. A staged
+     * deletion renames the file behind a marker suffix, so the name the caller sees must come from the
+     * task's own record rather than from whatever the file happens to be called on disk.
+     */
+    private TaskDownload downloadFor(String artifactPath, String logicalFileName) {
         if (StringUtils.isBlank(artifactPath)) {
             throw new DataNotFoundException();
         }
@@ -515,7 +538,8 @@ public class TaskServiceImpl implements TaskService {
         if (!file.isFile() || !file.canRead()) {
             throw new DataNotFoundException();
         }
-        return TaskDownload.builder().fileName(file.getName()).fileUri(file.toURI().toString()).build();
+        String servedName = StringUtils.isNotBlank(logicalFileName) ? logicalFileName : file.getName();
+        return TaskDownload.builder().fileName(servedName).fileUri(file.toURI().toString()).build();
     }
 
     private <S extends TaskSpec> Long submit(S spec) {

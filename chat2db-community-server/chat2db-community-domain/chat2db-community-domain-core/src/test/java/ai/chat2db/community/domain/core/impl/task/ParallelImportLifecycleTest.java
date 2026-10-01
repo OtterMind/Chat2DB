@@ -3,13 +3,10 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.task.*;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
 import ai.chat2db.community.domain.api.model.task.extension.TaskStatementContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.task.extension.ITaskExecutionGuard;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
 import ai.chat2db.community.tools.model.Context;
@@ -42,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
 
 class ParallelImportLifecycleTest {
     private static final String TYPE = "PARALLEL_IMPORT_LIFECYCLE_TEST";
@@ -67,6 +65,10 @@ class ParallelImportLifecycleTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // This class exercises the parallel lifecycle, not the size thresholds that decide whether
+        // parallel is worth it; the sample sources are small, so lower both gates for the run.
+        System.setProperty("chat2db.task.import.parallel.min-bytes", "0");
+        System.setProperty("chat2db.task.import.parallel.min-rows", "0");
         String url = "jdbc:h2:mem:parallel_lifecycle_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
         observer = DriverManager.getConnection(url);
         try (Statement statement = observer.createStatement()) {
@@ -80,6 +82,8 @@ class ParallelImportLifecycleTest {
         connectInfo.setDataSourceId(DATASOURCE_ID);
         connectInfo.setUrl(url);
         connectInfo.setDriverConfig(new DriverConfig());
+        // The calling thread keeps this bound connection; only the workers open dedicated ones, so
+        // the caller must not have to open a connection nobody closes.
         connectInfo.setConnection(observer);
         DBConfig config = new DBConfig();
         config.setDbType(TYPE);
@@ -88,6 +92,16 @@ class ParallelImportLifecycleTest {
             public DBConfig getDBConfig() { return config; }
             public IDbManager getDbManager() {
                 return new DefaultDBManager() {
+                    @Override
+                    public ImportResourceSnapshot probeImportResources(Connection connection,
+                            String databaseName, String schemaName) {
+                        // A plugin that cannot answer resource questions is degraded to serial by
+                        // admission, so the parallel path under test needs a healthy snapshot.
+                        return new ImportResourceSnapshot(true, 64, 1, true, false, 0L, true, 0, true, true,
+                                "h2 in-memory fixture");
+                    }
+
+
                     @Override public Connection getConnection(ConnectInfo info) {
                         assertSame(requestContext, ContextUtils.queryContext());
                         assertEquals("review-task", MDC.get("taskId"));
@@ -107,6 +121,8 @@ class ParallelImportLifecycleTest {
 
     @AfterEach
     void tearDown() throws Exception {
+        System.clearProperty("chat2db.task.import.parallel.min-bytes");
+        System.clearProperty("chat2db.task.import.parallel.min-rows");
         releaseDriver.countDown();
         Chat2DBContext.removeContext();
         ContextUtils.removeContext();
@@ -285,7 +301,11 @@ class ParallelImportLifecycleTest {
             writer.write("ID,NAME\n");
             for (int id = 1; id <= count; id++) writer.write(id + "," + name + "\n");
         }
+        // A real client acknowledges the relationship risk and imports from a staged file; without
+        // both the admission gate rejects a parallel CSV task before any JDBC work happens.
         return ImportTaskSpec.builder().sourceFile(csv.toString()).format("CSV").mode("FAST")
+                .importFileId("staged-parallel-lifecycle")
+                .confirmedNoStrongRelations(true)
                 .target(TaskTargetSnapshot.builder().tableName("ROWS_TARGET").build())
                 .columnMappings(List.of(new ImportColumnMapping("ID", "ID"), new ImportColumnMapping("NAME", "NAME"))).build();
     }
