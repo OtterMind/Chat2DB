@@ -19,13 +19,55 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class ArtifactService {
+public class ArtifactService implements ai.chat2db.community.domain.api.service.task.ArtifactService {
 
     private static final String DRAFT_FILE_SUFFIX = ".part";
 
     private static final String DELETION_FILE_MARKER = ".task-delete-";
 
     private final Set<Path> reservedTargets = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Role-free draft creation for callers that only carry the generic artifact contract, so both the
+     * task pipeline and the artifact API share one draft implementation.
+     */
+    @Override
+    public ArtifactDraft createDraft(Long taskId, String outputDirectory, String fileName, String mediaType) {
+        return createDraft(taskId, null, outputDirectory, fileName, mediaType);
+    }
+
+    @Override
+    public void stageForDeletion(Path original, Path staged) {
+        try {
+            move(original, staged);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not stage artifact for deletion", e);
+        }
+    }
+
+    /**
+     * Finishes an artifact whose publish died between the temporary and published paths. Reports whether
+     * a published file was found, so the caller can decide whether the publish needs retrying.
+     */
+    @Override
+    public boolean cleanupInterruptedArtifact(Long taskId, String temporaryPath, String publishedPath) {
+        if (StringUtils.isBlank(publishedPath)) {
+            return false;
+        }
+        Path published = Path.of(publishedPath).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(published)) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(temporaryPath)) {
+            try {
+                Files.deleteIfExists(Path.of(temporaryPath).toAbsolutePath().normalize());
+            } catch (IOException e) {
+                throw new IllegalStateException("Could not clear interrupted artifact draft", e);
+            }
+        }
+        reservedTargets.remove(published);
+        return true;
+    }
 
     ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType) {
         File directory = resolveDirectory(outputDirectory);
@@ -73,7 +115,8 @@ public class ArtifactService {
         return file.isFile() && name.startsWith(".task-" + taskId + "-") && name.endsWith(DRAFT_FILE_SUFFIX);
     }
 
-    String publish(ArtifactDraft draft) {
+    @Override
+    public String publish(ArtifactDraft draft) {
         if (draft == null) {
             throw new IllegalArgumentException("Artifact draft is incomplete");
         }
@@ -99,7 +142,8 @@ public class ArtifactService {
         }
     }
 
-    void deleteDraft(ArtifactDraft draft) {
+    @Override
+    public void deleteDraft(ArtifactDraft draft) {
         if (draft == null) {
             return;
         }
@@ -114,7 +158,8 @@ public class ArtifactService {
         }
     }
 
-    void deletePublished(String artifactId) {
+    @Override
+    public void deletePublished(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
             return;
         }
