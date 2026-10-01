@@ -1,5 +1,6 @@
 package ai.chat2db.spi;
 
+import ai.chat2db.spi.model.imports.ImportResourceSnapshot;
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
@@ -69,4 +70,6 @@ public interface IDbManager {
             TaskExecutionContext context) throws SQLException;
 
     void dropView(Connection connection, String databaseName, String schemaName, String viewName);
+    default ImportResourceSnapshot probeImportResources(Connection connection, String databaseName,             String schemaName) {         return ImportResourceSnapshot.unknown("This database plugin does not provide import resource probes");     } 
+
 }

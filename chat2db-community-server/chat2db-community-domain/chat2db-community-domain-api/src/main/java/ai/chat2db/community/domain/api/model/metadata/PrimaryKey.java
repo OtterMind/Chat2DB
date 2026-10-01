@@ -26,5 +26,6 @@ public class PrimaryKey {
 
     @JsonAlias({"PK_NAME"})
     private String primaryKeyName;
+    private Integer keySeq;
 
 }
