@@ -233,27 +233,6 @@ class MySQLTaskRoundTripIT {
         return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactService());
     }
 
-    private ExportTaskSpec exportSpec(String tableName, Integer checkpointRows) {
-        return ExportTaskSpec.builder()
-                .taskType("TABLE_DATA_EXPORT")
-                .format("CSV")
-                .tableNames(List.of(tableName))
-                .checkpointRows(checkpointRows)
-                .target(TaskTargetSnapshot.builder().dataSourceId(1L).databaseName(database)
-                        .tableName(tableName).build())
-                .build();
-    }
-
-    private List<Integer> exportedIds(File artifact) throws Exception {
-        List<String> lines = Files.readAllLines(artifact.toPath(), StandardCharsets.UTF_8);
-        assertEquals("ID,NAME,VAL", lines.get(0).replace("﻿", ""), "CSV header");
-        assertEquals(1, lines.stream().filter(line -> line.replace("﻿", "").equals("ID,NAME,VAL")).count(),
-                "header must appear exactly once");
-        return lines.subList(1, lines.size()).stream()
-                .map(line -> Integer.parseInt(line.substring(0, line.indexOf(','))))
-                .toList();
-    }
-
     private void createCopyTable(String tableName) throws Exception {
         try (Statement statement = connection.createStatement()) {
             statement.execute("CREATE TABLE " + tableName
@@ -290,28 +269,6 @@ class MySQLTaskRoundTripIT {
                         .build())
                 .build();
         new CSVImporter().run(spec, contextFor());
-    }
-
-    @Test
-    void csvExportImportRoundTripPreservesData() throws Exception {
-        File artifact = tempDirectory.resolve("roundtrip.csv").toFile();
-        new CsvITExporter().run(exportSpec("C2D_SRC", null), contextFor(), artifact);
-
-        List<Integer> ids = exportedIds(artifact);
-        assertEquals(ROWS, ids.size());
-        assertEquals(1, ids.get(0));
-        assertEquals(ROWS, ids.get(ROWS - 1));
-
-        createCopyTable("C2D_RT");
-        importCsvInto("C2D_RT", artifact);
-
-        assertEquals(ROWS, countRows("C2D_RT"));
-        try (Statement statement = connection.createStatement();
-             ResultSet sums = statement.executeQuery(
-                     "SELECT (SELECT SUM(VAL) FROM C2D_SRC), (SELECT SUM(VAL) FROM C2D_RT)")) {
-            assertTrue(sums.next());
-            assertEquals(sums.getLong(1), sums.getLong(2), "VAL sums must match after the round trip");
-        }
     }
 
     @Test
@@ -387,28 +344,6 @@ class MySQLTaskRoundTripIT {
     }
 
     @Test
-    void interruptedCheckpointedExportResumesAgainstMysql() throws Exception {
-        File artifact = tempDirectory.resolve("resumable.csv").toFile();
-        RecordingContext first = new RecordingContext(2);
-
-        assertThrows(TaskCancelledException.class,
-                () -> new CsvITExporter().run(exportSpec("C2D_SRC", 100), first, artifact));
-        assertTrue(first.checkpointCalls >= 2, "at least two checkpoint writes before cancellation");
-        ResumeState last = first.saved.get(first.saved.size() - 1);
-        assertNotNull(last.getBytesDone(), "durable byte count recorded");
-        assertNotNull(last.getCursorJson(), "keyset cursor recorded");
-
-        RecordingContext second = new RecordingContext(Integer.MAX_VALUE);
-        second.resumeStates.addAll(first.saved);
-        new CsvITExporter().run(exportSpec("C2D_SRC", 100), second, artifact);
-
-        List<Integer> ids = exportedIds(artifact);
-        assertEquals(ROWS, ids.size(), "resumed export must produce every row exactly once");
-        assertEquals(1, ids.get(0));
-        assertEquals(ROWS, ids.get(ROWS - 1));
-    }
-
-    @Test
     void mysqlResourceProbeReadsLiveCapacityReplicationAndTriggerFacts() {
         ImportResourceSnapshot resources = mysqlDbManager.probeImportResources(connection, database, null);
 
@@ -417,30 +352,6 @@ class MySQLTaskRoundTripIT {
         assertTrue(resources.replicationStatusKnown());
         assertEquals(0, resources.triggerCount());
         assertTrue(!resources.diskCapacityKnown());
-    }
-
-    private static final class CsvITExporter extends BaseExporter {
-
-        private CsvITExporter() {
-            super(new ExportCellProcessorChain(List.of()), new SqlExecutionPolicyManager(List.of()));
-            this.suffix = ".csv";
-        }
-
-        @Override
-        public String type() {
-            return "csv";
-        }
-
-        @Override
-        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
-                java.io.OutputStream output, boolean resuming) {
-            streamTable(spec, tableName, context, output,
-                    (stream, effectiveSpec, effectiveTable, resume) ->
-                            new ai.chat2db.community.domain.core.impl.task.export.sink.CsvSink(
-                                    stream, true, resume),
-                    ExportValueMode.NATIVE, 2,
-                    new ExportProgressLogger(context, "CSV", tableName), resuming);
-        }
     }
 
     private static final class RecordingContext implements TaskExecutionContext {

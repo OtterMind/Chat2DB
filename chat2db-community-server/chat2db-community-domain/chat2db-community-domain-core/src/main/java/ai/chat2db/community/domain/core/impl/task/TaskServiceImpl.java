@@ -381,6 +381,12 @@ public class TaskServiceImpl implements TaskService {
         }
     }
 
+    void recoverInterruptedArtifactDeletions() {
+        if (deletionService != null) {
+            deletionService.retryPendingDeletions();
+        }
+    }
+
     private List<ArtifactService.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
         List<ArtifactService.PublishedArtifactDeletion> deletions = new ArrayList<>();
         try {
