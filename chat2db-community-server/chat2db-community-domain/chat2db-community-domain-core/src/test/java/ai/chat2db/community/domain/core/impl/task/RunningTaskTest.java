@@ -87,7 +87,7 @@ class RunningTaskTest {
                     throw new UnsupportedOperationException(method.getName());
                 });
         TaskExecutionContextImpl context = new TaskExecutionContextImpl(
-                runningTask.taskId(), runningTask, storage, new ArtifactService());
+                runningTask.taskId(), runningTask, storage, new ArtifactServiceImpl());
         AtomicReference<Throwable> checkpointFailure = new AtomicReference<>();
         Thread checkpointThread = new Thread(() -> {
             try {

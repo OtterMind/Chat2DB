@@ -424,29 +424,6 @@ class MySQLTaskRoundTripIT {
         assertTrue(!resources.diskCapacityKnown());
     }
 
-    private static final class CsvITExporter extends BaseExporter {
-
-        private CsvITExporter() {
-            super(new ExportCellProcessorChain(List.of()), new SqlExecutionPolicyManager(List.of()));
-            this.suffix = ".csv";
-        }
-
-        @Override
-        public String type() {
-            return "csv";
-        }
-
-        @Override
-        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
-                java.io.OutputStream output, boolean resuming) {
-            streamTable(spec, tableName, context, output,
-                    (stream, effectiveSpec, effectiveTable, resume) ->
-                            new ai.chat2db.community.domain.core.impl.task.export.sink.CsvSink(
-                                    stream, true, resume),
-                    ExportValueMode.NATIVE, 2,
-                    new ExportProgressLogger(context, "CSV", tableName), resuming);
-        }
-    }
 
     private static final class RecordingContext implements TaskExecutionContext {
 
