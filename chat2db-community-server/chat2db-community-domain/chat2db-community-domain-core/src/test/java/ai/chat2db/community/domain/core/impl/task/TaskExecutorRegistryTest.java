@@ -15,7 +15,6 @@ import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
 import ai.chat2db.community.domain.api.model.task.extension.TaskOperation;
 import ai.chat2db.community.domain.api.model.task.extension.TaskSubmissionContext;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
@@ -120,9 +119,8 @@ class TaskExecutorRegistryTest {
                 });
         ArtifactService failingArtifactService = new ArtifactService() {
             @Override
-            void copyArtifact(Path source, java.io.OutputStream output) throws IOException {
-                output.write('x');
-                throw new IOException("Publish failed");
+            String publish(ArtifactDraft ignored) {
+                throw new IllegalStateException("Publish failed");
             }
         };
         TaskRunner<ExportTaskSpec> runner = new TaskRunner<>(
@@ -150,7 +148,7 @@ class TaskExecutorRegistryTest {
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
         taskManager = new LocalTaskManager(storage, registry, new ArtifactService(),
                 new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new TaskDeletionServiceImpl(storage, new ArtifactService()));
+        return new TaskServiceImpl(storage, taskManager, new ArtifactService());
     }
 
     private TaskExtensionManager emptyExtensionManager() {
