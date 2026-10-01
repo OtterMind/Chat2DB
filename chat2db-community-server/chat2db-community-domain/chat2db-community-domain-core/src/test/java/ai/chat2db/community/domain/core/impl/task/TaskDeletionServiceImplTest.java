@@ -394,7 +394,10 @@ class TaskDeletionServiceImplTest {
     }
 
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
-        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ai.chat2db.community.domain.core.impl.task.ArtifactService(), journalFile()));
+        return new TaskServiceImpl(storage, null,
+                new ai.chat2db.community.domain.core.impl.task.ArtifactService(), null, null,
+                new TaskDeletionServiceImpl(storage,
+                        new ai.chat2db.community.domain.core.impl.task.ArtifactService(), journalFile()));
     }
 
     private Task task(Long id, Path artifact) {
@@ -427,6 +430,10 @@ class TaskDeletionServiceImplTest {
         public void clearResumeStates(Long taskId) {
         }
         @Override
+        @Override
+        public void saveResumeState(Long taskId, ResumeState state) {
+        }
+
         public List<ResumeState> listResumeStates(Long taskId) {
             return List.of();
         }
