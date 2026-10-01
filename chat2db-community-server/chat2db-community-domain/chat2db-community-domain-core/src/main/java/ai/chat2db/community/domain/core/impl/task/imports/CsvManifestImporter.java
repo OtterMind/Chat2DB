@@ -99,6 +99,7 @@ public final class CsvManifestImporter {
                 }
             }
         }
+        deleteConsumedShards(manifest, context);
     }
 
     static int effectiveParallelism(int shardCount) {
@@ -254,6 +255,35 @@ public final class CsvManifestImporter {
     private static void closeDedicatedConnection(ConnectInfo connectInfo) {
         connectInfo.close();
         connectInfo.setConnection(null);
+    }
+
+    /**
+     * Once every shard has committed, the generated parts have no further use: their rows are
+     * durable, and a retry starts from the operator's source file rather than from the parts.
+     * Cleanup therefore runs only after the whole manifest lands, never per shard, so an
+     * interrupted manifest keeps everything it needs to resume. A cleanup failure must not
+     * turn a successful import into a failed one.
+     */
+    private void deleteConsumedShards(ImportManifest manifest, TaskExecutionContext context) {
+        for (ImportManifestShard shard : manifest.getShards()) {
+            if (shard == null || StringUtils.isBlank(shard.getSourcePath())) {
+                continue;
+            }
+            Path source = Path.of(shard.getSourcePath()).toAbsolutePath().normalize();
+            try {
+                Files.deleteIfExists(source);
+            } catch (Throwable cleanupFailure) {
+                try {
+                    context.logWarn("IMPORT_SHARD_CLEANUP_FAILED",
+                            "Committed CSV shard file could not be removed",
+                            Map.of("shardId", StringUtils.defaultString(shard.getShardId()),
+                                    "path", source.toString(),
+                                    "errorType", cleanupFailure.getClass().getSimpleName()));
+                } catch (Throwable loggingFailure) {
+                    cleanupFailure.addSuppressed(loggingFailure);
+                }
+            }
+        }
     }
 
     private ImportTaskSpec shardSpec(ImportTaskSpec original, ImportManifestShard shard, Path source) {
