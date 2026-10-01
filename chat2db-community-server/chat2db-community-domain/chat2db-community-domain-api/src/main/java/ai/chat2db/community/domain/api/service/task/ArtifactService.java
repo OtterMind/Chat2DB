@@ -50,10 +50,10 @@ public interface ArtifactService {
      * A deletion that has been staged on disk but not yet committed. The intent survives a crash so a
      * restart can finish it instead of leaving the file behind.
      *
-     * @param originalPath the published location the file will be restored to if the deletion aborts
+     * @param originalPath the published location the file returns to if the deletion aborts
      * @param stagedPath   the location the file currently occupies
      */
-    record PublishedArtifactDeletion(String originalPath, Path stagedPath) {
+    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
 
         public static PublishedArtifactDeletion empty() {
             return new PublishedArtifactDeletion(null, null);
@@ -70,9 +70,12 @@ public interface ArtifactService {
      */
     ArtifactDraft createDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType);
 
-    /** Continues writing into a draft this task created earlier, rather than starting a new one. */
+    /**
+     * Continues writing into the draft this task created earlier rather than starting a new one. The
+     * existing draft file lets a resumed task reuse the bytes it already wrote.
+     */
     ArtifactDraft resumeDraft(Long taskId, String role, String outputDirectory, String fileName, String mediaType,
-            ArtifactDraft existing);
+            File existingTemporaryFile);
 
     /** Whether the file looks like a draft this task never finished publishing. */
     static boolean isInterruptedDraft(Long taskId, File file) {
