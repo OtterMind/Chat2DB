@@ -23,6 +23,7 @@ import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.converter.ConnectionContextConverter;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -127,7 +128,7 @@ class TaskExecutorRegistryTest {
                 new TaskSubmission<>(task.getId(), exportSpec(), null, null,
                         new TaskSubmissionContext(task.getId(), TaskType.QUERY_RESULT_EXPORT, null,
                                 null, null, List.of(), TaskOperation.EXPORT).toExecutionContext()),
-                runningTask, runningTaskRegistry, storage, executor, new ArtifactService(),
+                runningTask, runningTaskRegistry, storage, executor, new ArtifactServiceImpl(),
                 emptyExtensionManager());
 
         runner.run();

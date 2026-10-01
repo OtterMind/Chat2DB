@@ -129,7 +129,7 @@ class TaskServiceImplTest {
                 .organizationId(100L)
                 .build();
         TaskServiceImpl service = new TaskServiceImpl(
-                new OwnershipTaskStorage(List.of(own, otherOwner)), null, new ArtifactService());
+                new OwnershipTaskStorage(List.of(own, otherOwner)), null, new ArtifactServiceImpl());
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)
@@ -216,7 +216,7 @@ class TaskServiceImplTest {
         Path topLevelSource = Files.writeString(outside.resolve("top-level.sql"),
                 "INSERT INTO orders (id) VALUES (2);");
         TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                new ArtifactService());
+                new ArtifactServiceImpl());
         Field field = TaskServiceImpl.class.getDeclaredField("importAllowedRoots");
         field.setAccessible(true);
         field.set(service, allowed.toString());
@@ -240,7 +240,7 @@ class TaskServiceImplTest {
         Path source = Files.writeString(tempDirectory.resolve("single-file.sql"),
                 "INSERT INTO orders (id) VALUES (1);");
         TaskServiceImpl service = new TaskServiceImpl(new OwnershipTaskStorage(List.of()), null,
-                new ArtifactService());
+                new ArtifactServiceImpl());
         ImportTaskSpec spec = ImportTaskSpec.builder()
                 .taskType("SQL_FILE_IMPORT")
                 .sourceFile(source.toString())
