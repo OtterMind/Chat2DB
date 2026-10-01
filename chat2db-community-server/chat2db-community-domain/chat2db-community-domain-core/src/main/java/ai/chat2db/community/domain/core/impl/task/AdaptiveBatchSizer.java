@@ -4,18 +4,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Self-tuning row-batch size for bulk I/O. Producers report the wall time of each executed batch;
- * the sizer hill-climbs on the measured throughput (rows per second): a batch that beats the
- * running reference by {@link #GROW_MARGIN} doubles the size, one that falls short by
- * {@link #SHRINK_MARGIN} halves it. Sizes therefore follow what the machine and the target
- * database actually sustain, bounded by {@link #MAX_BATCH}. {@link #MIN_BATCH} rows keeps a batch
- * worth sending even on the slowest target.
+ * the sizer hill-climbs on the measured throughput (rows per second) against a smoothed reference:
+ * a batch that beats the reference by {@link #GROW_MARGIN} doubles the size, one that falls short
+ * by {@link #SHRINK_MARGIN} halves it. Measuring throughput rather than wall time is what makes
+ * one sizer correct on a loopback target and a remote one alike, and the exponential moving
+ * average stops a single slow batch from flipping the direction. Sizes stay inside
+ * {@code [MIN_BATCH, MAX_BATCH]} so they remain sane under noisy measurements.
  */
 public final class AdaptiveBatchSizer {
 
-    /** Lowest batch the tuner will settle on (1 thread x 100 rows contract floor). */
+    /** Lowest batch the tuner will settle on; one row is still worth sending. */
     private static final int MIN_BATCH = 100;
 
-    static final int MAX_BATCH = 50_000;
+    private static final int MAX_BATCH = 100_000;
 
     private static final double GROW_MARGIN = 1.10D;
 
@@ -26,10 +27,18 @@ public final class AdaptiveBatchSizer {
 
     private final AtomicInteger batchSize;
 
+    /** When {@code false} the sizer stays fixed at its initial size (standard mode). */
+    private final boolean adaptive;
+
     private double referenceThroughput = -1.0D;
 
     public AdaptiveBatchSizer(int initialBatch) {
+        this(initialBatch, true);
+    }
+
+    public AdaptiveBatchSizer(int initialBatch, boolean adaptive) {
         this.batchSize = new AtomicInteger(clamp(initialBatch));
+        this.adaptive = adaptive;
     }
 
     public int batchSize() {
@@ -38,10 +47,11 @@ public final class AdaptiveBatchSizer {
 
     /**
      * Reports one executed batch of {@code rows} rows that took {@code nanos} wall time; later
-     * {@link #batchSize()} calls reflect the tuned size.
+     * {@link #batchSize()} calls reflect the tuned size. Callers report from worker threads, so
+     * the reference is only touched under the instance lock.
      */
     public synchronized void record(int rows, long nanos) {
-        if (rows <= 0 || nanos <= 0) {
+        if (!adaptive || rows <= 0 || nanos <= 0) {
             return;
         }
         double throughput = rows * 1_000_000_000.0D / nanos;
@@ -58,7 +68,12 @@ public final class AdaptiveBatchSizer {
                 : REFERENCE_ALPHA * throughput + (1.0D - REFERENCE_ALPHA) * referenceThroughput;
     }
 
-    private int clamp(long value) {
+    /** The smoothed reference in rows per second, or {@code -1} before the first report. */
+    synchronized double referenceRowsPerSecond() {
+        return referenceThroughput;
+    }
+
+    private static int clamp(long value) {
         return (int) Math.max(MIN_BATCH, Math.min(MAX_BATCH, value));
     }
 }

@@ -34,6 +34,7 @@ public class SelectFileHandler implements IJcefActionHandler {
     private static final String RESPONSE_KEY_DATA = "data";
     private static final String RESPONSE_KEY_FILE_PATH = "filePath";
     private static final String RESPONSE_KEY_FILE_NAME = "fileName";
+    private static final String RESPONSE_KEY_FILE_SIZE = "fileSize";
     private static final String DEFAULT_DIALOG_TITLE = "Select File";
     private static final String DEFAULT_FILE_PATH = "";
     private static final String FILE_EXTENSION_PREFIX = ".";
@@ -182,14 +183,28 @@ public class SelectFileHandler implements IJcefActionHandler {
         }
         List<Map<@Nullable Object, @Nullable Object>> results = Lists.newArrayList();
         for (String filePath : filePaths) {
-            HashMap<@Nullable Object, @Nullable Object> result = Maps.newHashMap();
-            result.put(RESPONSE_KEY_FILE_PATH, filePath);
-            result.put(RESPONSE_KEY_FILE_NAME, new File(filePath).getName());
-            results.add(result);
+            results.add(buildFileSelection(filePath));
         }
         ResponseBuilder.buildSuccessJcef(buildResponseData(results), callback);
     }
 
+    /**
+     * The renderer enforces the total selection size cap from {@code fileSize}; the native chooser
+     * and the CEF dialog must both report it in bytes or that cap silently stops applying.
+     */
+    private Map<@Nullable Object, @Nullable Object> buildFileSelection(String filePath) {
+        HashMap<@Nullable Object, @Nullable Object> result = Maps.newHashMap();
+        File file = new File(filePath);
+        result.put(RESPONSE_KEY_FILE_PATH, filePath);
+        result.put(RESPONSE_KEY_FILE_NAME, file.getName());
+        result.put(RESPONSE_KEY_FILE_SIZE, file.isFile() ? file.length() : null);
+        return result;
+    }
+
+    /**
+     * The native chooser can only return one file, so a multiple request degrades to a single
+     * selection. The renderer adds selections incrementally, so repeated calls still accumulate.
+     */
     private void openByNativeFileChooser(List<String> fileTypeList, long maxSizeMB, CefQueryCallback callback) {
         Pair<String, String> pair = OSOperateUtil.openNativeFileChooser(JcefContext.getInstance().getFrame_(),
                 null,
@@ -200,10 +215,7 @@ public class SelectFileHandler implements IJcefActionHandler {
             ResponseBuilder.buildSuccessJcef(buildResponseData(null), callback);
             return;
         }
-        HashMap<@Nullable Object, @Nullable Object> result = Maps.newHashMap();
-        result.put(RESPONSE_KEY_FILE_PATH, pair.getLeft());
-        result.put(RESPONSE_KEY_FILE_NAME, pair.getRight());
-        ResponseBuilder.buildSuccessJcef(buildResponseData(Lists.newArrayList(result)), callback);
+        ResponseBuilder.buildSuccessJcef(buildResponseData(Lists.newArrayList(buildFileSelection(pair.getLeft()))), callback);
     }
 
     private Map<String, Object> buildResponseData(@Nullable Object data) {

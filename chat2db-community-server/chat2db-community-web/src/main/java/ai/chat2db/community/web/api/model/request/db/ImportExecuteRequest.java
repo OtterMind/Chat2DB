@@ -32,4 +32,10 @@ public class ImportExecuteRequest extends DataSourceBaseRequest {
 
     private String mode;
 
+    /**
+     * Acknowledgement required before a ULTRA_FAST import may pass admission rule R1. The
+     * frontend sends it for every parallel import, so the backend has to accept and forward it.
+     */
+    private Boolean confirmedNoStrongRelations;
+
 }

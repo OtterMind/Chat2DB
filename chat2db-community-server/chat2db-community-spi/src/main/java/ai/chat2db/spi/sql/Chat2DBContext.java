@@ -200,6 +200,14 @@ public class Chat2DBContext {
         }
     }
 
+    /**
+     * Clears only the thread-local reference after the caller has already transferred or released
+     * ownership of its connection. Normal request cleanup must continue to use {@link #removeContext()}.
+     */
+    public static void clearContextReference() {
+        CONNECT_INFO_THREAD_LOCAL.remove();
+    }
+
     public static void close() {
         removeContext();
     }

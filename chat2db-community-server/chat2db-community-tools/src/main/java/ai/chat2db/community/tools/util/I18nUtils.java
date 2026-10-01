@@ -27,26 +27,28 @@ public class I18nUtils implements InitializingBean {
     }
 
     public static String getMessage(String messageCode, @Nullable Object[] args) {
-        MessageSource messageSource = messageSourceStatic;
-        if (messageSource == null) {
-            return messageCode + " : no message.";
+        MessageSource source = messageSourceStatic;
+        if (source == null) {
+            return messageCode;
         }
         try {
-            return messageSource.getMessage(messageCode, args, LocaleContextHolder.getLocale());
+            return source.getMessage(messageCode, args, LocaleContextHolder.getLocale());
         } catch (NoSuchMessageException e) {
             return messageCode + " : no message.";
         }
     }
 
     public static String getMessageByLang(String messageCode, Locale locale) {
-        MessageSource messageSource = messageSourceStatic;
-        if (messageSource == null) {
-            return messageCode + " : no message.";
+        MessageSource source = messageSourceStatic;
+        if (source == null) {
+            return messageCode;
         }
         try {
-            return messageSource.getMessage(messageCode, null, locale);
+            return source.getMessage(messageCode, null, locale);
         } catch (NoSuchMessageException e) {
-            return messageSource.getMessage(DEFAULT_MESSAGE_CODE, null, locale);
+            // Fall back to the localized generic message rather than leaking the raw key, which
+            // would reach the user as an untranslated identifier.
+            return source.getMessage(DEFAULT_MESSAGE_CODE, null, locale);
         }
     }
 

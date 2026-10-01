@@ -5,19 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.File;
-
+/** Optional post-import database maintenance requests. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ArtifactDraft {
+public class ImportFinalizationOptions {
 
-    private String role;
+    private Boolean resetSequences;
 
-    private File temporaryFile;
+    private Boolean rebuildIndexes;
 
-    private File targetFile;
-
-    private String mediaType;
+    private Boolean refreshStatistics;
 }

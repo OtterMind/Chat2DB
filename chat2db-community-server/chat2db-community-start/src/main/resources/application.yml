@@ -32,8 +32,8 @@ spring:
   # Database schema version management.
   servlet:
     multipart:
-      max-file-size: -1
-      max-request-size: -1
+      max-file-size: 1GB
+      max-request-size: 1025MB
   jackson:
     serialization:
       write-dates-as-timestamps: true
