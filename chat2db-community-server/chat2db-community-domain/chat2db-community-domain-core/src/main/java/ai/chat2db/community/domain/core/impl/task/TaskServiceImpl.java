@@ -379,7 +379,7 @@ public class TaskServiceImpl implements TaskService {
             if (!TaskStatus.isTerminal(task.getStatus())) {
                 throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
             }
-            List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions = stageArtifactDeletions(task);
+            List<ArtifactService.PublishedArtifactDeletion> deletions = stageArtifactDeletions(task);
             try {
                 if (!taskStorage.deleteTerminalTask(taskId, () -> { })) {
                     throw new DataNotFoundException();
@@ -388,7 +388,7 @@ public class TaskServiceImpl implements TaskService {
                 restoreArtifactDeletions(deletions, e);
                 throw e;
             }
-            for (ArtifactServiceImpl.PublishedArtifactDeletion deletion : deletions) {
+            for (ArtifactService.PublishedArtifactDeletion deletion : deletions) {
                 try {
                     artifactService.commitPublishedDeletion(deletion);
                 } catch (RuntimeException cleanupFailure) {
@@ -404,8 +404,8 @@ public class TaskServiceImpl implements TaskService {
     }
 
 
-    private List<ArtifactServiceImpl.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
-        List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions = new ArrayList<>();
+    private List<ArtifactService.PublishedArtifactDeletion> stageArtifactDeletions(Task task) {
+        List<ArtifactService.PublishedArtifactDeletion> deletions = new ArrayList<>();
         try {
             for (String path : artifactPaths(task)) {
                 deletions.add(artifactService.stagePublishedDeletion(path));
@@ -418,8 +418,8 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private void restoreArtifactDeletions(
-            List<ArtifactServiceImpl.PublishedArtifactDeletion> deletions, RuntimeException failure) {
-        for (ArtifactServiceImpl.PublishedArtifactDeletion deletion : deletions) {
+            List<ArtifactService.PublishedArtifactDeletion> deletions, RuntimeException failure) {
+        for (ArtifactService.PublishedArtifactDeletion deletion : deletions) {
             try {
                 artifactService.restorePublishedDeletion(deletion);
             } catch (RuntimeException rollbackFailure) {

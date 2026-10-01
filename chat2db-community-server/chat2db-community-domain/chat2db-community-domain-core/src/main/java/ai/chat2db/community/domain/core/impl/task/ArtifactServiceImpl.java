@@ -111,7 +111,7 @@ public class ArtifactServiceImpl implements ArtifactService {
      * Whether {@code file} is a draft this application wrote for this task (the only files a
      * resume may safely reopen).
      */
-    static boolean isInterruptedDraft(Long taskId, File file) {
+    public static boolean isInterruptedDraft(Long taskId, File file) {
         String name = file.getName();
         return file.isFile() && name.startsWith(".task-" + taskId + "-") && name.endsWith(DRAFT_FILE_SUFFIX);
     }
@@ -173,11 +173,11 @@ public class ArtifactServiceImpl implements ArtifactService {
 
     PublishedArtifactDeletion stagePublishedDeletion(String artifactId) {
         if (StringUtils.isBlank(artifactId)) {
-            return PublishedArtifactDeletion.empty();
+            return ArtifactService.PublishedArtifactDeletion.empty();
         }
         Path original = Path.of(artifactId).toAbsolutePath().normalize();
         if (!Files.exists(original)) {
-            return PublishedArtifactDeletion.empty();
+            return ArtifactService.PublishedArtifactDeletion.empty();
         }
         if (!Files.isRegularFile(original)) {
             throw artifactDeletionFailure(artifactId, null);
@@ -312,12 +312,5 @@ public class ArtifactServiceImpl implements ArtifactService {
     private BusinessException artifactDeletionFailure(String artifactId, Exception cause) {
         return new BusinessException(TaskConstants.DELETE_ARTIFACT_FAILED_MESSAGE_CODE,
                 new Object[]{artifactId}, cause);
-    }
-
-    record PublishedArtifactDeletion(Path originalPath, Path stagedPath) {
-
-        private static PublishedArtifactDeletion empty() {
-            return new PublishedArtifactDeletion(null, null);
-        }
     }
 }
