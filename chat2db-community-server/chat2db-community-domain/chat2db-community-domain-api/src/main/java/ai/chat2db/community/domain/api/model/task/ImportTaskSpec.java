@@ -54,6 +54,10 @@ public class ImportTaskSpec implements TaskSpec {
     private String format;
 
     private String dataTimeFormat;
+    private CsvOptions csvOptions;
+    private ExcelOptions excelOptions;
+    private JsonOptions jsonOptions;
+    private SqlImportOptions sqlImportOptions;
 
     /** Optional mapping supplied by the import-preview workflow. */
     private List<ImportColumnMapping> columnMappings;
@@ -76,3 +80,4 @@ public class ImportTaskSpec implements TaskSpec {
      */
     private Boolean confirmedNoStrongRelations;
 }
+
