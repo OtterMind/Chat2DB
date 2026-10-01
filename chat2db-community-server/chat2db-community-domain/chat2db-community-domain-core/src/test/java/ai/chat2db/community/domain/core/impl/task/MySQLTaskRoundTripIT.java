@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
+import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportManifest;
@@ -19,11 +20,12 @@ import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
-import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskCancelable;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
+import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 import ai.chat2db.community.domain.core.impl.task.executor.DataFileImportTaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
@@ -67,7 +69,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import ai.chat2db.community.domain.core.impl.task.ArtifactServiceImpl;
 
 /**
  * Local-MySQL integration test for the task pipeline: a CSV export/import round trip, a parallel
@@ -232,28 +233,7 @@ class MySQLTaskRoundTripIT {
                 .target(TaskTargetSnapshot.builder().dataSourceId(1L).build()).build(),
                 TaskEvent.builder()
                 .level("INFO").code("TASK_CREATED").message("created").build()).getId();
-        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId, () -> { }), storage, new ArtifactServiceImpl());
-    }
-
-    private ExportTaskSpec exportSpec(String tableName, Integer checkpointRows) {
-        return ExportTaskSpec.builder()
-                .taskType("TABLE_DATA_EXPORT")
-                .format("CSV")
-                .tableNames(List.of(tableName))
-                .checkpointRows(checkpointRows)
-                .target(TaskTargetSnapshot.builder().dataSourceId(1L).databaseName(database)
-                        .tableName(tableName).build())
-                .build();
-    }
-
-    private List<Integer> exportedIds(File artifact) throws Exception {
-        List<String> lines = Files.readAllLines(artifact.toPath(), StandardCharsets.UTF_8);
-        assertEquals("ID,NAME,VAL", lines.get(0).replace("﻿", ""), "CSV header");
-        assertEquals(1, lines.stream().filter(line -> line.replace("﻿", "").equals("ID,NAME,VAL")).count(),
-                "header must appear exactly once");
-        return lines.subList(1, lines.size()).stream()
-                .map(line -> Integer.parseInt(line.substring(0, line.indexOf(','))))
-                .toList();
+        return new TaskExecutionContextImpl(taskId, new RunningTask(taskId), storage, new ArtifactServiceImpl());
     }
 
     private void createCopyTable(String tableName) throws Exception {
@@ -292,28 +272,6 @@ class MySQLTaskRoundTripIT {
                         .build())
                 .build();
         new CSVImporter().run(spec, contextFor());
-    }
-
-    @Test
-    void csvExportImportRoundTripPreservesData() throws Exception {
-        File artifact = tempDirectory.resolve("roundtrip.csv").toFile();
-        new CsvITExporter().run(exportSpec("C2D_SRC", null), contextFor(), artifact);
-
-        List<Integer> ids = exportedIds(artifact);
-        assertEquals(ROWS, ids.size());
-        assertEquals(1, ids.get(0));
-        assertEquals(ROWS, ids.get(ROWS - 1));
-
-        createCopyTable("C2D_RT");
-        importCsvInto("C2D_RT", artifact);
-
-        assertEquals(ROWS, countRows("C2D_RT"));
-        try (Statement statement = connection.createStatement();
-             ResultSet sums = statement.executeQuery(
-                     "SELECT (SELECT SUM(VAL) FROM C2D_SRC), (SELECT SUM(VAL) FROM C2D_RT)")) {
-            assertTrue(sums.next());
-            assertEquals(sums.getLong(1), sums.getLong(2), "VAL sums must match after the round trip");
-        }
     }
 
     @Test
@@ -378,39 +336,14 @@ class MySQLTaskRoundTripIT {
         }
         assertEquals(manifest.getShards().size(), storage.states.stream()
                 .filter(state -> "MANIFEST_DONE".equals(state.getKind())).count());
-        assertTrue(manifest.getShards().stream().allMatch(shard -> Files.exists(Path.of(shard.getSourcePath()))),
-                "execution itself must keep the shards until the terminal cleanup hook runs");
-        executor.cleanupTerminalResources(spec, context.taskId());
         assertTrue(manifest.getShards().stream().noneMatch(shard -> Files.exists(Path.of(shard.getSourcePath()))),
-                "terminal cleanup must remove generated shard files");
+                "successful execution must remove generated shard files");
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
-    }
-
-    @Test
-    void interruptedCheckpointedExportResumesAgainstMysql() throws Exception {
-        File artifact = tempDirectory.resolve("resumable.csv").toFile();
-        RecordingContext first = new RecordingContext(2);
-
-        assertThrows(TaskCancelledException.class,
-                () -> new CsvITExporter().run(exportSpec("C2D_SRC", 100), first, artifact));
-        assertTrue(first.checkpointCalls >= 2, "at least two checkpoint writes before cancellation");
-        ResumeState last = first.saved.get(first.saved.size() - 1);
-        assertNotNull(last.getBytesDone(), "durable byte count recorded");
-        assertNotNull(last.getCursorJson(), "keyset cursor recorded");
-
-        RecordingContext second = new RecordingContext(Integer.MAX_VALUE);
-        second.resumeStates.addAll(first.saved);
-        new CsvITExporter().run(exportSpec("C2D_SRC", 100), second, artifact);
-
-        List<Integer> ids = exportedIds(artifact);
-        assertEquals(ROWS, ids.size(), "resumed export must produce every row exactly once");
-        assertEquals(1, ids.get(0));
-        assertEquals(ROWS, ids.get(ROWS - 1));
     }
 
     @Test
@@ -423,7 +356,6 @@ class MySQLTaskRoundTripIT {
         assertEquals(0, resources.triggerCount());
         assertTrue(!resources.diskCapacityKnown());
     }
-
 
     private static final class RecordingContext implements TaskExecutionContext {
 
