@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+import './sessionRequestCoordinator.test';
 
 const sourceRoot = path.resolve('src');
 const retiredFiles = [
