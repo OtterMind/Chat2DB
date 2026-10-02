@@ -64,6 +64,7 @@ for (const sourceFile of sourceFiles) {
 }
 
 const aiSource = readFileSync('src/blocks/AI/index.tsx', 'utf8');
+const inputSource = readFileSync('src/blocks/AI/components/AIChatInput/index.tsx', 'utf8');
 const treeStoreSource = readFileSync('src/store/tree/index.tsx', 'utf8');
 const i18nSource = readdirSync('src/i18n')
   .filter((locale) => statSync(path.join('src/i18n', locale)).isDirectory())
@@ -74,6 +75,13 @@ const i18nSource = readdirSync('src/i18n')
   )
   .join('\n');
 assert.match(aiSource, /baseURL: '\/api\/v3\/ai\/chat\/stream'/);
+const mentionTableRequestSource = inputSource.slice(
+  inputSource.indexOf('const fetchTableList'),
+  inputSource.indexOf('const handleSend'),
+);
+assert.match(mentionTableRequestSource, /getOwnedErrorPage\(requestOwner\)/);
+assert.doesNotMatch(mentionTableRequestSource, /mainPageActiveTab/);
+assert.doesNotMatch(inputSource, /knowledgeMentions|fetchKnowledgeList|selectedKnowledge/);
 assert.match(treeStoreSource, /import \{ clientRuntime \} from '@client-runtime';/);
 assert.doesNotMatch(i18nSource, /aiDataCollection|databaseOrDataCollection/);
 
