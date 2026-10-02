@@ -105,6 +105,9 @@ jobs:
       - name: Run SQL execution batch contract
         run: yarn run test:sql-execution-batch
 
+      - name: Run SQL format failure contract
+        run: yarn run test:sql-format
+
       - name: Run SQL execution request tracker contract
         run: yarn run test:sql-execution-request-tracker
 
