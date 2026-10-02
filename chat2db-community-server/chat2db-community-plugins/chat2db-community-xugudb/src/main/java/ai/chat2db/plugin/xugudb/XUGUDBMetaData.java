@@ -329,7 +329,8 @@ public class XUGUDBMetaData extends DefaultMetaService implements IDbMetaData {
                 column.setDefaultValue(resultSet.getString("DEF_VAL"));
                 column.setComment(resultSet.getString("COMMENTS"));
                 column.setNullable(resultSet.getBoolean("NOT_NULL") ? 0 : 1);
-                column.setOrdinalPosition(resultSet.getInt("SCALE"));
+                int ordinalPosition = resultSet.getInt("COL_NO");
+                column.setOrdinalPosition(resultSet.wasNull() ? null : ordinalPosition);
                 column.setColumnSize(resultSet.getInt("SCALE") == -1 ? null : resultSet.getInt("SCALE"));
                 tableColumns.add(column);
             }
