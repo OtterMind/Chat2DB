@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand/vanilla';
+import { v4 as uuid } from 'uuid';
 import { WorkspaceStore } from '../../store';
 import { ConsoleState } from './initialState';
 import { createNextWorkspaceTabScrollRequest } from '../../utils/workspaceTabScrollRequest';
@@ -13,6 +14,11 @@ import { getPersistableActiveConsoleId } from '../../utils/workspaceTabPersisten
 import { executeSavedConsoleRemoval, resolveSavedConsoleRemoval } from '../../utils/savedConsoleLifecycle';
 import { confirmWorkspaceTabsClose } from '@/utils/editorCloseConfirmation';
 import { applyWorkspaceTabBoundInfo, buildConsoleDefaultTabName } from '../../utils/consoleTabName';
+import {
+  addPendingConsoleRequest,
+  removePendingConsoleRequest,
+  runCreateConsoleRequest,
+} from '../../utils/createConsoleRequest';
 
 const RECENTLY_CLOSED_WORKSPACE_TAB_LIMIT = 20;
 
@@ -152,7 +158,7 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
     });
   },
   createConsole: (params) => {
-    const workspaceTabList = get().workspaceTabList;
+    const requestId = uuid();
     const currentConnectionDetails = get().currentConnectionDetails;
     const nameCustomized = Boolean(params.name);
     const name = params.name || buildConsoleDefaultTabName(params);
@@ -168,35 +174,36 @@ export const createConsoleAction: StateCreator<WorkspaceStore, [['zustand/devtoo
       supportSchema: currentConnectionDetails?.supportSchema,
     };
 
-    return new Promise((resolve) => {
-      // if ((workspaceTabList?.length || 0) >= 100) {
-      //   message.warning(i18n('workspace.tips.maxConsole'));
-      //   return;
-      // }
-      set({ createConsoleLoading: true });
-      historyService
-        .createConsole(newConsole)
-        .then((res) => {
-          const newList = [
-            ...(workspaceTabList || []),
-            {
-              id: res,
-              title: newConsole.name,
-              type: newConsole.operationType,
-              uniqueData: {
-                ...newConsole,
-                consoleId: res,
-              },
-            },
-          ];
-
-          get().setWorkspaceTabList(newList);
-          get().setActiveConsoleId(res);
-          resolve(res);
-        })
-        .finally(() => {
-          set({ createConsoleLoading: false });
-        });
+    return runCreateConsoleRequest<IWorkspaceTab>({
+      create: () => historyService.createConsole(newConsole),
+      getTabs: () => get().workspaceTabList,
+      buildTab: (consoleId) => ({
+        id: consoleId,
+        title: newConsole.name,
+        type: newConsole.operationType,
+        uniqueData: {
+          ...newConsole,
+          consoleId,
+        },
+      }),
+      setTabs: (tabs) => get().setWorkspaceTabList(tabs),
+      setActive: (consoleId) => get().setActiveConsoleId(consoleId),
+      begin: () =>
+        set((state) => {
+          const requestIds = addPendingConsoleRequest(state.createConsolePendingRequestIds || [], requestId);
+          return {
+            createConsolePendingRequestIds: requestIds,
+            createConsoleLoading: requestIds.length > 0,
+          };
+        }),
+      finish: () =>
+        set((state) => {
+          const requestIds = removePendingConsoleRequest(state.createConsolePendingRequestIds || [], requestId);
+          return {
+            createConsolePendingRequestIds: requestIds,
+            createConsoleLoading: requestIds.length > 0,
+          };
+        }),
     });
   },
   addWorkspaceTab: (params, options) => {
