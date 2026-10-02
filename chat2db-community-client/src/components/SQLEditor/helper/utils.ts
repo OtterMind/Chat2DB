@@ -44,7 +44,7 @@ export function formatSql(sql: string, dbType?: DatabaseTypeCode): Promise<strin
  * @returns
  */
 
-export function findSqlStatement(curPosition: monaco.Position, sqlStatementList: SqlStatement[]) {
+export function findSqlStatement(curPosition: monaco.IPosition, sqlStatementList: SqlStatement[]) {
   return (sqlStatementList || []).find(
     (statement) =>
       (curPosition.lineNumber > statement.sqlStartRowNum ||
@@ -54,7 +54,7 @@ export function findSqlStatement(curPosition: monaco.Position, sqlStatementList:
   );
 }
 
-export function findNearestSQL(curPosition: monaco.Position, sqlStatementList: SqlStatement[]) {
+export function findNearestSQL(curPosition: monaco.IPosition, sqlStatementList: SqlStatement[]) {
   const curLine = curPosition.lineNumber;
   const curCol = curPosition.column;
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { getSqlCompletionContextId } from './sqlCompletionContext';
+import './sqlParserRequestCoordinator.test';
 
 assert.equal(
   getSqlCompletionContextId({ consoleId: 42, workspaceTabId: 99 }),
