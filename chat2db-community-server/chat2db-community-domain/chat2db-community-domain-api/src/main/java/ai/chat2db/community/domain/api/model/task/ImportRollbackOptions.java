@@ -5,19 +5,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.File;
-
+/** Optional rollback and rehearsal requests. A rehearsal must finish by rolling back its writes. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ArtifactDraft {
+public class ImportRollbackOptions {
 
-    private String role;
+    private Boolean fullRollback;
 
-    private File temporaryFile;
-
-    private File targetFile;
-
-    private String mediaType;
+    private Boolean rehearsal;
 }

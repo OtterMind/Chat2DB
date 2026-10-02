@@ -40,4 +40,11 @@ public class MappedImportExecution {
 
     private String mode;
 
+    /**
+     * The operator confirmed that the target has no strong relationship or ordering dependency.
+     * The parallel admission gate rejects ULTRA_FAST imports without it (rule R1), so this has
+     * to survive the whole web-to-domain conversion rather than being dropped on the way in.
+     */
+    private Boolean confirmedNoStrongRelations;
+
 }

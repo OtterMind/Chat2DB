@@ -13,11 +13,42 @@ import java.util.List;
 @AllArgsConstructor
 public class ImportTaskSpec implements TaskSpec {
 
+    /** Client-generated key used to recover the original task after an ambiguous submit response. */
+    private String clientSubmissionId;
+
+    /** Server-generated fingerprint that binds the client submission key to this exact request. */
+    private String clientSubmissionFingerprint;
+
     private String taskType;
 
     private String taskName;
 
     private TaskTargetSnapshot target;
+
+    /** TABLE (legacy default), SCHEMA or DATABASE. */
+    private String scope;
+
+    /** Per-table sources for schema/database imports; absent for the legacy single-table contract. */
+    private List<ImportTableSource> tableSources;
+
+    /** Operator-supplied relationships that are not represented by database constraints. */
+    private List<ImportTableDependency> logicalDependencies;
+
+    /** TRUSTED or THIRD_PARTY; absent retains the legacy trusted-source behavior. */
+    private String sourceKind;
+
+    /** REJECT, DEFER_CONSTRAINTS or STAGING_TWO_PHASE. */
+    private String cycleStrategy;
+
+    private ImportStagingPolicy stagingPolicy;
+
+    private ImportValidationOptions validationOptions;
+
+    private ImportFinalizationOptions finalizationOptions;
+
+    private ImportRollbackOptions rollbackOptions;
+
+    private Integer performanceSamplePercent;
 
     private String sourceFile;
 
@@ -29,23 +60,37 @@ public class ImportTaskSpec implements TaskSpec {
     private String format;
 
     private String dataTimeFormat;
-
     private CsvOptions csvOptions;
-
     private ExcelOptions excelOptions;
-
     private JsonOptions jsonOptions;
-
     private SqlImportOptions sqlImportOptions;
 
     /** Optional mapping supplied by the import-preview workflow. */
     private List<ImportColumnMapping> columnMappings;
 
     private UnmappedTargetStrategy unmappedTarget;
+    /**
+     * Optional behaviour overrides (encoding, delimiters, column mapping, error tolerance).
+     */
+    private ImportOptions options;
 
     /**
      * Execution mode; {@code null} resolves to {@code STANDARD}.
      */
     private String mode;
 
+    /**
+     * Explicit operator assertion required for parallel row imports. It covers relationship and
+     * ordering semantics that metadata alone cannot prove (logical foreign keys, triggers and
+     * application-level parent/child ID dependencies); it does not bypass file-format blockers.
+     */
+    private Boolean confirmedNoStrongRelations;
+
+    /**
+     * Set on the per-shard spec handed to a manifest worker. The manifest's execution mode was
+     * already decided from the whole source before sharding, so admission for a shard must not
+     * re-apply the "small source" rule: a shard is small by construction and would otherwise
+     * degrade every sharded import back to serial execution.
+     */
+    private Boolean manifestShard;
 }
