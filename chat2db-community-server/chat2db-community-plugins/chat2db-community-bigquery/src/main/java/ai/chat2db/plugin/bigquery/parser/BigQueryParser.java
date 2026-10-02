@@ -1,6 +1,507 @@
 package ai.chat2db.plugin.bigquery.parser;
 
+import ai.chat2db.community.domain.api.model.parser.statement.Statement;
+import ai.chat2db.community.domain.api.service.db.ISqlBatchHandler;
+import ai.chat2db.community.domain.api.service.task.ITaskProgressListener;
 import ai.chat2db.plugin.postgresql.parser.PgsqlSqlParser;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.PushbackReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+
+/**
+ * BigQuery SQL parser.
+ *
+ * <p>The existing PostgreSQL parser still provides the shared statement-analysis behavior. BigQuery
+ * script splitting is handled here because PostgreSQL's lexer does not understand BigQuery
+ * backtick identifiers or triple-quoted strings.</p>
+ */
 public class BigQueryParser extends PgsqlSqlParser {
+
+    @Override
+    public List<Statement> parserSqlScript(String sql) {
+        List<Statement> statements = new ArrayList<>();
+        try {
+            splitScript(new StringReader(sql), (statementSql, bytesRead) ->
+                    statements.add(createStatement(statementSql)));
+            return statements;
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read SQL string", e);
+        }
+    }
+
+    @Override
+    public int parserSqlScript(File file, ITaskProgressListener progressListener,
+                               ISqlBatchHandler sqlBatchHandler) {
+        int[] statementCount = {0};
+        try {
+            splitScript(Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8),
+                    (statementSql, bytesRead) -> {
+                        sqlBatchHandler.handle(createStatement(statementSql));
+                        statementCount[0]++;
+                        progressListener.onProgress(bytesRead, statementCount[0]);
+                    });
+            sqlBatchHandler.flush();
+            return statementCount[0];
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to parse SQL file " + file, e);
+        }
+    }
+
+    private static void splitScript(Reader source, StatementConsumer consumer) throws IOException {
+        try (PushbackReader reader = new PushbackReader(source, 3)) {
+            StringBuilder statement = new StringBuilder();
+            StringBuilder token = new StringBuilder();
+            Deque<Character> closingBrackets = new ArrayDeque<>();
+            ScriptBlockTracker scriptBlocks = new ScriptBlockTracker();
+            LexicalState state = LexicalState.DEFAULT;
+            boolean hasExecutableContent = false;
+            long bytesRead = 0L;
+
+            int value;
+            while ((value = reader.read()) != -1) {
+                char current = (char) value;
+                statement.append(current);
+                bytesRead += utf8Length(current);
+
+                switch (state) {
+                    case SINGLE_QUOTE, DOUBLE_QUOTE -> {
+                        char quote = state == LexicalState.SINGLE_QUOTE ? '\'' : '"';
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == quote) {
+                            if (nextCharactersAre(reader, quote, 1)) {
+                                bytesRead += appendNext(reader, statement);
+                            } else {
+                                state = LexicalState.DEFAULT;
+                            }
+                        }
+                    }
+                    case TRIPLE_SINGLE_QUOTE, TRIPLE_DOUBLE_QUOTE -> {
+                        char quote = state == LexicalState.TRIPLE_SINGLE_QUOTE ? '\'' : '"';
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == quote && nextCharactersAre(reader, quote, 2)) {
+                            bytesRead += appendNext(reader, statement);
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.DEFAULT;
+                        }
+                    }
+                    case BACKTICK -> {
+                        if (current == '\\') {
+                            bytesRead += appendNext(reader, statement);
+                        } else if (current == '`') {
+                            if (nextCharactersAre(reader, '`', 1)) {
+                                bytesRead += appendNext(reader, statement);
+                            } else {
+                                state = LexicalState.DEFAULT;
+                            }
+                        }
+                    }
+                    case LINE_COMMENT -> {
+                        if (current == '\n' || current == '\r') {
+                            state = LexicalState.DEFAULT;
+                        }
+                    }
+                    case BLOCK_COMMENT -> {
+                        if (current == '*' && nextCharactersAre(reader, '/', 1)) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.DEFAULT;
+                        }
+                    }
+                    case DEFAULT -> {
+                        boolean dashCommentStart = current == '-'
+                                && nextCharactersAre(reader, '-', 1);
+                        boolean blockCommentStart = current == '/'
+                                && nextCharactersAre(reader, '*', 1);
+                        boolean commentStart = dashCommentStart || current == '#'
+                                || blockCommentStart;
+                        if (isTokenCharacter(current)) {
+                            token.append(Character.toUpperCase(current));
+                            hasExecutableContent = true;
+                        } else {
+                            flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
+                            if (!commentStart) {
+                                scriptBlocks.acceptDelimiter(current, !closingBrackets.isEmpty());
+                            }
+                        }
+                        if (isTokenCharacter(current)) {
+                            // The token is processed when the following delimiter is read.
+                        } else if (dashCommentStart) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.LINE_COMMENT;
+                        } else if (current == '#') {
+                            state = LexicalState.LINE_COMMENT;
+                        } else if (blockCommentStart) {
+                            bytesRead += appendNext(reader, statement);
+                            state = LexicalState.BLOCK_COMMENT;
+                        } else if (current == '\'' || current == '"') {
+                            hasExecutableContent = true;
+                            if (nextCharactersAre(reader, current, 2)) {
+                                bytesRead += appendNext(reader, statement);
+                                bytesRead += appendNext(reader, statement);
+                                state = current == '\''
+                                        ? LexicalState.TRIPLE_SINGLE_QUOTE
+                                        : LexicalState.TRIPLE_DOUBLE_QUOTE;
+                            } else {
+                                state = current == '\''
+                                        ? LexicalState.SINGLE_QUOTE
+                                        : LexicalState.DOUBLE_QUOTE;
+                            }
+                        } else if (current == '`') {
+                            hasExecutableContent = true;
+                            state = LexicalState.BACKTICK;
+                        } else if (isOpeningBracket(current)) {
+                            hasExecutableContent = true;
+                            closingBrackets.push(matchingCloseBracket(current));
+                        } else if (!closingBrackets.isEmpty() && current == closingBrackets.peek()) {
+                            hasExecutableContent = true;
+                            closingBrackets.pop();
+                        } else if (current == ';' && closingBrackets.isEmpty()
+                                && scriptBlocks.shouldSplitAtSemicolon()) {
+                            statement.setLength(statement.length() - 1);
+                            if (hasExecutableContent) {
+                                consumer.accept(statement.toString().strip(), bytesRead);
+                            }
+                            statement.setLength(0);
+                            hasExecutableContent = false;
+                        } else if (!Character.isWhitespace(current)) {
+                            hasExecutableContent = true;
+                        }
+                    }
+                }
+            }
+
+            flushToken(token, scriptBlocks, !closingBrackets.isEmpty());
+            scriptBlocks.finishInput();
+            if (hasExecutableContent) {
+                consumer.accept(statement.toString().strip(), bytesRead);
+            }
+        }
+    }
+
+    private static Statement createStatement(String sql) {
+        Statement statement = new Statement();
+        statement.setSql(sql);
+        statement.setOriginalSql(sql);
+        return statement;
+    }
+
+    private static boolean nextCharactersAre(PushbackReader reader, char expected, int count)
+            throws IOException {
+        char[] characters = new char[count];
+        int readCount = 0;
+        while (readCount < count) {
+            int value = reader.read();
+            if (value == -1) {
+                break;
+            }
+            characters[readCount++] = (char) value;
+        }
+        for (int i = readCount - 1; i >= 0; i--) {
+            reader.unread(characters[i]);
+        }
+        if (readCount != count) {
+            return false;
+        }
+        for (char character : characters) {
+            if (character != expected) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int appendNext(PushbackReader reader, StringBuilder target) throws IOException {
+        int value = reader.read();
+        if (value == -1) {
+            return 0;
+        }
+        char character = (char) value;
+        target.append(character);
+        return utf8Length(character);
+    }
+
+    private static int utf8Length(char character) {
+        if (character <= 0x7F) {
+            return 1;
+        }
+        if (character <= 0x7FF) {
+            return 2;
+        }
+        // A valid supplementary code point is decoded as a surrogate pair: two bytes per code unit.
+        return Character.isSurrogate(character) ? 2 : 3;
+    }
+
+    private static boolean isTokenCharacter(char character) {
+        return Character.isLetterOrDigit(character) || character == '_';
+    }
+
+    private static void flushToken(StringBuilder token, ScriptBlockTracker scriptBlocks,
+                                   boolean insideBrackets) {
+        if (token.isEmpty()) {
+            return;
+        }
+        scriptBlocks.acceptToken(token.toString(), insideBrackets);
+        token.setLength(0);
+    }
+
+    private static boolean isOpeningBracket(char character) {
+        return character == '(' || character == '[' || character == '{';
+    }
+
+    private static char matchingCloseBracket(char character) {
+        return switch (character) {
+            case '(' -> ')';
+            case '[' -> ']';
+            case '{' -> '}';
+            default -> throw new IllegalArgumentException("Unsupported bracket: " + character);
+        };
+    }
+
+    private enum LexicalState {
+        DEFAULT,
+        SINGLE_QUOTE,
+        DOUBLE_QUOTE,
+        TRIPLE_SINGLE_QUOTE,
+        TRIPLE_DOUBLE_QUOTE,
+        BACKTICK,
+        LINE_COMMENT,
+        BLOCK_COMMENT
+    }
+
+    private enum ScriptBlock {
+        BEGIN,
+        IF,
+        LOOP,
+        WHILE,
+        FOR,
+        REPEAT,
+        CASE_STATEMENT
+    }
+
+    private static final class ScriptBlockTracker {
+
+        private final Deque<ScriptBlock> blocks = new ArrayDeque<>();
+        private boolean atStatementStart = true;
+        private boolean pendingLabel;
+        private boolean pendingBegin;
+        private boolean pendingEnd;
+        private boolean pendingEndAtStatementStart;
+        private boolean pendingExceptionHandler;
+        private boolean nonControlToken;
+
+        void acceptToken(String token, boolean insideBrackets) {
+            if (insideBrackets) {
+                return;
+            }
+            if (nonControlToken) {
+                nonControlToken = false;
+                pendingLabel = false;
+                atStatementStart = false;
+                return;
+            }
+            pendingLabel = false;
+            if (pendingEnd) {
+                boolean endStartedStatement = pendingEndAtStatementStart;
+                pendingEnd = false;
+                pendingEndAtStatementStart = false;
+                // END REPEAT follows the UNTIL condition without an intervening semicolon, so
+                // it does not begin a statement. A matching suffix is nevertheless unambiguous
+                // for the block at the top of the stack. Bare END remains restricted to a
+                // statement boundary to avoid an expression's CASE ... END closing BEGIN.
+                if (closeSuffixedBlock(token)) {
+                    atStatementStart = false;
+                    return;
+                }
+                if (endStartedStatement) {
+                    closeBareEnd();
+                }
+            }
+            if (pendingBegin) {
+                pendingBegin = false;
+                if ("TRANSACTION".equals(token) || "WORK".equals(token)) {
+                    atStatementStart = false;
+                    return;
+                }
+                blocks.push(ScriptBlock.BEGIN);
+                atStatementStart = true;
+            }
+            boolean tokenStartsStatement = atStatementStart;
+
+            switch (token) {
+                case "BEGIN" -> {
+                    pendingBegin = true;
+                    atStatementStart = false;
+                }
+                case "END" -> {
+                    pendingEnd = true;
+                    pendingEndAtStatementStart = atStatementStart;
+                    atStatementStart = false;
+                }
+                case "CASE" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.CASE_STATEMENT);
+                    }
+                    atStatementStart = false;
+                }
+                case "IF" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.IF);
+                    }
+                    atStatementStart = false;
+                }
+                case "LOOP" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.LOOP);
+                        atStatementStart = true;
+                    } else {
+                        atStatementStart = false;
+                    }
+                }
+                case "WHILE" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.WHILE);
+                    }
+                    atStatementStart = false;
+                }
+                case "FOR" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.FOR);
+                    }
+                    atStatementStart = false;
+                }
+                case "REPEAT" -> {
+                    if (atStatementStart) {
+                        blocks.push(ScriptBlock.REPEAT);
+                        atStatementStart = true;
+                    } else {
+                        atStatementStart = false;
+                    }
+                }
+                case "EXCEPTION" -> {
+                    pendingExceptionHandler = atStatementStart && isTop(ScriptBlock.BEGIN);
+                    atStatementStart = false;
+                }
+                case "THEN" -> {
+                    atStatementStart = isTop(ScriptBlock.IF)
+                            || isTop(ScriptBlock.CASE_STATEMENT)
+                            || pendingExceptionHandler;
+                    pendingExceptionHandler = false;
+                }
+                case "DO" -> atStatementStart = isTop(ScriptBlock.WHILE)
+                        || isTop(ScriptBlock.FOR);
+                case "ELSE" -> atStatementStart = isTop(ScriptBlock.IF)
+                        || isTop(ScriptBlock.CASE_STATEMENT);
+                case "ELSEIF" -> atStatementStart = false;
+                case "WHEN" -> atStatementStart = false;
+                case "UNTIL" -> atStatementStart = false;
+                default -> {
+                    atStatementStart = false;
+                    pendingLabel = tokenStartsStatement;
+                }
+            }
+        }
+
+        void acceptDelimiter(char delimiter, boolean insideBrackets) {
+            if (insideBrackets) {
+                return;
+            }
+            if (Character.isWhitespace(delimiter)) {
+                return;
+            }
+            if (delimiter == '.' || delimiter == '@' || delimiter == '-' || delimiter == '/') {
+                // BigQuery permits reserved keywords in path parts and named/system query
+                // parameters. Treating the following token as a control token would make a
+                // splitter-dependent parse of table targets (including comma lists, DDL and
+                // DML targets) necessary. These punctuation marks cannot introduce a script
+                // block, so they safely suppress control handling for the following token.
+                nonControlToken = true;
+                pendingLabel = false;
+                return;
+            }
+            if (delimiter == ':') {
+                if (pendingLabel) {
+                    atStatementStart = true;
+                } else {
+                    // A colon is also permitted in a legacy-style table path. A real label
+                    // has already been recognized above, so remaining uses cannot start a
+                    // script block with their following identifier.
+                    nonControlToken = true;
+                }
+                pendingLabel = false;
+                return;
+            }
+            nonControlToken = false;
+            pendingLabel = false;
+        }
+
+        boolean shouldSplitAtSemicolon() {
+            finishPending();
+            boolean shouldSplit = blocks.isEmpty();
+            atStatementStart = true;
+            pendingLabel = false;
+            pendingExceptionHandler = false;
+            nonControlToken = false;
+            return shouldSplit;
+        }
+
+        void finishInput() {
+            finishPending();
+        }
+
+        private void finishPending() {
+            if (pendingBegin) {
+                pendingBegin = false;
+                blocks.push(ScriptBlock.BEGIN);
+            }
+            if (pendingEnd) {
+                pendingEnd = false;
+                if (pendingEndAtStatementStart) {
+                    closeBareEnd();
+                }
+                pendingEndAtStatementStart = false;
+            }
+        }
+
+        private boolean closeSuffixedBlock(String token) {
+            ScriptBlock expected = switch (token) {
+                case "IF" -> ScriptBlock.IF;
+                case "LOOP" -> ScriptBlock.LOOP;
+                case "WHILE" -> ScriptBlock.WHILE;
+                case "FOR" -> ScriptBlock.FOR;
+                case "REPEAT" -> ScriptBlock.REPEAT;
+                case "CASE" -> ScriptBlock.CASE_STATEMENT;
+                default -> null;
+            };
+            if (expected == null || !isTop(expected)) {
+                return false;
+            }
+            blocks.pop();
+            return true;
+        }
+
+        private void closeBareEnd() {
+            if (isTop(ScriptBlock.BEGIN)) {
+                blocks.pop();
+            }
+        }
+
+        private boolean isTop(ScriptBlock block) {
+            return !blocks.isEmpty() && blocks.peek() == block;
+        }
+    }
+
+    @FunctionalInterface
+    private interface StatementConsumer {
+        void accept(String sql, long bytesRead);
+    }
 }
