@@ -4,7 +4,10 @@ import { collectExpandedWorkspaceTreeNodeKeys } from './lifecycle';
 
 export interface IWorkspaceTreeRefreshState {
   expandedKeys: Key[];
+  searchRequiredExpandedKeys: Key[];
+  invalidatedTreeNodeKeys: Key[];
   searchBarValue: string;
+  searchRevision: number;
   treeData: TreeNodeData[] | null;
   treeDataRevision: number;
 }
@@ -31,12 +34,18 @@ export async function refreshWorkspaceTreeData({
   const refreshTargetKeys = collectExpandedWorkspaceTreeNodeKeys(
     refreshedState.treeData,
     refreshedState.expandedKeys,
+    refreshedState.searchRequiredExpandedKeys,
+    refreshedState.invalidatedTreeNodeKeys,
   );
   const treeDataRevision = refreshedState.treeDataRevision;
+  const searchRevision = refreshedState.searchRevision;
 
   for (const key of refreshTargetKeys) {
     const currentState = getState();
-    if (currentState.treeDataRevision !== treeDataRevision) {
+    if (
+      currentState.treeDataRevision !== treeDataRevision ||
+      currentState.searchRevision !== searchRevision
+    ) {
       return true;
     }
     if (!currentState.treeData) {

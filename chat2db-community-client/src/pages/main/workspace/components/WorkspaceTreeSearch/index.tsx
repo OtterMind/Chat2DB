@@ -3,9 +3,8 @@ import { useUpdateEffect } from 'ahooks';
 import { debounce } from 'lodash';
 
 import { useTreeStore } from '@/store/tree';
-import { searchTreeNodes } from '@/utils';
-import { filterTreeNodesForDisplay } from '@/utils/filterTreeNodes';
 import WorkspaceHeaderSearch from '../WorkspaceHeaderSearch';
+import { resolveWorkspaceTreeSearch } from './lifecycle';
 
 const WorkspaceTreeSearch = () => {
   const { searchBarValue, setSearchBarValue, searchResultKeys, hiddenTreeNodeIds } = useTreeStore((state) => ({
@@ -18,6 +17,7 @@ const WorkspaceTreeSearch = () => {
     const treeStore = useTreeStore.getState();
     treeStore.setSearchResult(null);
     treeStore.setSearchResultKeys(null);
+    treeStore.setSearchRequiredExpandedKeys([]);
   }, []);
 
   const debouncedSearch = useCallback(
@@ -27,15 +27,18 @@ const WorkspaceTreeSearch = () => {
       if (!value) {
         treeStore.setSearchResult(null);
         treeStore.setSearchResultKeys(null);
+        treeStore.setSearchRequiredExpandedKeys([]);
         return;
       }
-      const visibleTreeData = filterTreeNodesForDisplay(treeStore.treeData || [], {
-        hiddenTreeNodeIds: treeStore.hiddenTreeNodeIds,
-      });
-      const { matchedNodes, matchedKeys, parentIdsWithMatches } = searchTreeNodes(visibleTreeData, value);
-      treeStore.setSearchResult(matchedNodes);
-      treeStore.setSearchResultKeys(matchedKeys);
-      treeStore.setExpandedKeys([...parentIdsWithMatches, ...treeStore.expandedKeys]);
+      const searchState = resolveWorkspaceTreeSearch(
+        treeStore.treeData || [],
+        value,
+        treeStore.hiddenTreeNodeIds,
+        treeStore.invalidatedTreeNodeKeys,
+      );
+      treeStore.setSearchResult(searchState.matchedNodes);
+      treeStore.setSearchResultKeys(searchState.matchedKeys);
+      treeStore.setSearchRequiredExpandedKeys(searchState.requiredExpandedKeys);
     }, 300),
     [],
   );
