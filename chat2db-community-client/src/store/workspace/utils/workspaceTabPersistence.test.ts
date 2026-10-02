@@ -191,6 +191,7 @@ const persistableLayout = getPersistableWorkspaceLayout({
   panelLeftWidth: 260,
   panelRight: circularPanelState,
   panelRightWidth: 300,
+  lastPanelLeftWidth: 420,
 } as any);
 
 assert.equal(persistableLayout.panelRight, false, 'non-boolean panel state must not reach persisted storage');
@@ -201,9 +202,10 @@ assert.doesNotThrow(
 
 const migratedClosedLeftPanelLayout = getPersistableWorkspaceLayout({
   panelLeft: false,
-  panelLeftWidth: 260,
+  panelLeftWidth: 0,
   panelRight: false,
   panelRightWidth: 300,
+  lastPanelLeftWidth: 420,
 });
 
 assert.equal(
@@ -212,12 +214,19 @@ assert.equal(
   'legacy closed-left-panel state must remain closed after width-based layout migration',
 );
 
+assert.equal(
+  migratedClosedLeftPanelLayout.lastPanelLeftWidth,
+  420,
+  'a collapsed left panel must keep its remembered width in persisted storage',
+);
+
 const hydratedLegacyLayout = getHydratedWorkspaceLayout(
   {
     panelLeft: true,
     panelLeftWidth: 240,
     panelRight: false,
     panelRightWidth: 300,
+    lastPanelLeftWidth: 240,
   },
   {
     panelLeft: false,
@@ -232,10 +241,33 @@ assert.deepEqual(
   {
     panelLeft: false,
     panelLeftWidth: 0,
+    lastPanelLeftWidth: 240,
     panelRight: false,
     panelRightWidth: 300,
   },
   'hydration must normalize legacy and malformed panel values before the workspace renders',
+);
+
+const legacyHydrationWithoutRememberedWidth = getHydratedWorkspaceLayout(
+  {
+    panelLeft: true,
+    panelLeftWidth: 240,
+    panelRight: false,
+    panelRightWidth: 300,
+    lastPanelLeftWidth: 240,
+  },
+  {
+    panelLeft: false,
+    panelLeftWidth: 0,
+    panelRight: false,
+    panelRightWidth: 300,
+  },
+);
+
+assert.equal(
+  legacyHydrationWithoutRememberedWidth.lastPanelLeftWidth,
+  240,
+  'legacy persisted layouts without a remembered width fall back to the current width',
 );
 
 console.log('workspace tab persistence tests passed');
