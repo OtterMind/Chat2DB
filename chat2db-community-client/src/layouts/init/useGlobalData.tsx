@@ -9,6 +9,7 @@ import { databaseMap, databaseTypeList } from '@/constants/database';
 import supportedDatabaseService from '@/service/supportedDatabase';
 import { useTreeStore } from '@/store/tree';
 import { buildIconSprite, registerDynamicDatabases } from '@/utils/dynamicDatabaseRegistry';
+import { useCallback } from 'react';
 
 const useGlobalData = () => {
   // const { getModelList } = useAIStore((state) => ({
@@ -19,7 +20,7 @@ const useGlobalData = () => {
     getTreeData: state.getTreeData,
   }));
 
-  return () => {
+  return useCallback(() => {
     // Business metadata must not load before the host product grants workspace access.
     supportedDatabaseService
       .listSupported({})
@@ -44,7 +45,7 @@ const useGlobalData = () => {
         // Older backends without the endpoint keep the built-in list.
       });
     getTreeData();
-  };
+  }, [getTreeData]);
 };
 
 export default useGlobalData;
