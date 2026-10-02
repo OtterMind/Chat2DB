@@ -145,8 +145,8 @@ public class DB2SqlBuilder extends DefaultSqlBuilder {
         int offset = request.getOffset();
         int pageNo = request.getPageNo();
         int pageSize = request.getPageSize();
-        int startRow = offset + 1;
-        int endRow = offset + pageSize;
+        long startRow = (long) offset + 1;
+        long endRow = (long) offset + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
         sqlBuilder.append(SQL_SELECT_SELECT_TMP_PAGE_ROWNUMBER);
         sqlBuilder.append(sql);

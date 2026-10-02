@@ -113,7 +113,7 @@ public class OscarSqlBuilder extends OscarBaseSqlBuilder {
         String sql = request.getSql();
         int startRow = request.getOffset();
         int pageSize = request.getPageSize();
-        int endRow = startRow + pageSize;
+        long endRow = (long) startRow + pageSize;
         StringBuilder sqlBuilder = new StringBuilder(sql.length() + 120);
         sqlBuilder.append(OscarConstants.PAGE_OUTER_SELECT_PREFIX);
         if (startRow > 0) {
