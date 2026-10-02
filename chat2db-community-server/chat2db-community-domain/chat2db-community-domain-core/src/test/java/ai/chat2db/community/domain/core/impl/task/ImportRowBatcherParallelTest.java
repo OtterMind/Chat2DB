@@ -276,12 +276,14 @@ class ImportRowBatcherParallelTest {
         private long sequence;
 
         @Override
-        public Task create(Task task, TaskEvent createdEvent) {
+        public Task create(Task task, List<TaskEvent> initialEvents) {
             task.setId(1L);
             task.setStatus(TaskStatus.PENDING.name());
             tasks.add(task);
-            createdEvent.setTaskId(task.getId());
-            appendEvent(createdEvent);
+            for (TaskEvent initialEvent : initialEvents) {
+                initialEvent.setTaskId(task.getId());
+                appendEvent(initialEvent);
+            }
             return task;
         }
 

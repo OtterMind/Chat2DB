@@ -75,6 +75,17 @@ public class TaskWebConverter {
                 .build();
     }
 
+    public ImportTaskSpec importUploadRequest2spec(TaskImportRequest request, String sourceFile,
+            String cleanupToken, String displayFileName) {
+        ImportTaskSpec spec = importRequest2spec(request);
+        spec.setSourceFile(sourceFile);
+        spec.setImportFileId(null);
+        spec.setDisplayFileName(StringUtils.defaultIfBlank(displayFileName, spec.getDisplayFileName()));
+        spec.setTemporarySourceFile(true);
+        spec.setTemporarySourceToken(cleanupToken);
+        return spec;
+    }
+
     private CsvOptions csvOptions(String format, CsvOptions csvOptions) {
         if (!TaskFileFormat.CSV.name().equals(format)) {
             return null;

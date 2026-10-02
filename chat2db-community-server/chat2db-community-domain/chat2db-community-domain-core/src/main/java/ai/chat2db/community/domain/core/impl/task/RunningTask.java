@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
@@ -37,6 +38,8 @@ final class RunningTask {
 
     private final Set<TaskCancelable> cancelables = new HashSet<>();
 
+    private final AtomicReference<Runnable> inputCleanup;
+
     private final ReentrantLock completionLock = new ReentrantLock();
 
     private final CountDownLatch executionFinished = new CountDownLatch(1);
@@ -48,12 +51,21 @@ final class RunningTask {
     private boolean resourcesCancelled;
 
     RunningTask(Long taskId) {
-        this(taskId, CANCELLATION_EXECUTOR);
+        this(taskId, CANCELLATION_EXECUTOR, null);
+    }
+
+    RunningTask(Long taskId, Runnable inputCleanup) {
+        this(taskId, CANCELLATION_EXECUTOR, inputCleanup);
     }
 
     RunningTask(Long taskId, Executor cancellationExecutor) {
+        this(taskId, cancellationExecutor, null);
+    }
+
+    RunningTask(Long taskId, Executor cancellationExecutor, Runnable inputCleanup) {
         this.taskId = taskId;
         this.cancellationExecutor = cancellationExecutor;
+        this.inputCleanup = new AtomicReference<>(inputCleanup);
     }
 
     Long taskId() {
@@ -140,6 +152,18 @@ final class RunningTask {
 
     void markFinished() {
         executionFinished.countDown();
+    }
+
+    void cleanupInput() {
+        Runnable cleanup = inputCleanup.get();
+        if (cleanup != null) {
+            try {
+                cleanup.run();
+                inputCleanup.compareAndSet(cleanup, null);
+            } catch (RuntimeException e) {
+                log.warn("Failed to clean task input for task {}", taskId, e);
+            }
+        }
     }
 
     boolean awaitFinished(long timeout, TimeUnit unit) throws InterruptedException {

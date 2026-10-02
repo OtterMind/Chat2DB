@@ -40,10 +40,15 @@ public class TaskServiceImpl implements TaskService {
 
     private final TaskDeletionService deletionService;
 
-    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, TaskDeletionService deletionService) {
+    private final TaskInputCleanupCoordinator taskInputCleanupCoordinator;
+
+    public TaskServiceImpl(TaskStorage taskStorage, LocalTaskManager localTaskManager, TaskDeletionService deletionService,
+            TaskInputCleanupCoordinator taskInputCleanupCoordinator) {
         this.taskStorage = taskStorage;
         this.localTaskManager = localTaskManager;
         this.deletionService = deletionService;
+        this.taskInputCleanupCoordinator = Objects.requireNonNull(
+                taskInputCleanupCoordinator, "taskInputCleanupCoordinator");
     }
 
     @PostConstruct
@@ -100,6 +105,9 @@ public class TaskServiceImpl implements TaskService {
         }
         if (!TaskStatus.isTerminal(task.getStatus())) {
             throw new BusinessException(TaskConstants.DELETE_ACTIVE_FORBIDDEN_MESSAGE_CODE);
+        }
+        if (!taskInputCleanupCoordinator.cleanupTaskInput(taskId)) {
+            throw new BusinessException(TaskConstants.DELETE_INPUT_FAILED_MESSAGE_CODE);
         }
         deletionService.delete(task);
     }

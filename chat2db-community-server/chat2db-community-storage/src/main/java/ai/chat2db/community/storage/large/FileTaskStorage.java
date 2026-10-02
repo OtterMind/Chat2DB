@@ -12,7 +12,6 @@ import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.storage.IdUtil;
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,9 +78,10 @@ public class FileTaskStorage implements TaskStorage {
     }
 
     @Override
-    public synchronized Task create(Task task, TaskEvent createdEvent) {
-        if (task == null || createdEvent == null) {
-            throw new IllegalArgumentException("task and createdEvent are required");
+    public synchronized Task create(Task task, List<TaskEvent> initialEvents) {
+        if (task == null || initialEvents == null || initialEvents.isEmpty()
+                || initialEvents.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("task and initialEvents are required");
         }
         Task stored = copy(task);
         Long taskId;
@@ -95,8 +95,8 @@ public class FileTaskStorage implements TaskStorage {
         stored.setCreatedAt(now);
         stored.setUpdatedAt(now);
 
-        TaskEvent event = prepareEvent(taskId, createdEvent);
-        TaskTransition transition = new TaskTransition(stored, event);
+        List<TaskEvent> events = prepareEvents(taskId, initialEvents);
+        TaskTransition transition = new TaskTransition(stored, events);
         writeTransition(transition);
         commitTransition(transition, false);
         copyInto(stored, task);
@@ -146,7 +146,7 @@ public class FileTaskStorage implements TaskStorage {
 
         Task updated = copy(current);
         applyPatch(updated, targetStatus, patch);
-        TaskTransition transition = new TaskTransition(updated, prepareEvent(taskId, lifecycleEvent));
+        TaskTransition transition = new TaskTransition(updated, List.of(prepareEvent(taskId, lifecycleEvent)));
         writeTransition(transition);
         commitTransition(transition, false);
         return true;
@@ -383,24 +383,33 @@ public class FileTaskStorage implements TaskStorage {
     }
 
     private void commitTransition(TaskTransition transition, boolean recovery) {
-        TaskEvent event = transition.getEvent();
-        long previousLength = eventFileLength(event.getTaskId());
+        List<TaskEvent> events = transition.effectiveEvents();
+        if (events.isEmpty()) {
+            throw new IllegalStateException("Task transition must contain at least one event");
+        }
+        Long taskId = events.get(0).getTaskId();
+        long previousLength = eventFileLength(taskId);
+        long previousSequence = events.get(0).getSequence() - 1L;
         boolean appended = false;
         try {
-            appended = ensureEvent(event);
+            for (TaskEvent event : events) {
+                appended |= ensureEvent(event);
+            }
             snapshots.upsertStrict(transition.getTask());
         } catch (RuntimeException e) {
-            if (!recovery && appended) {
+            if (!recovery) {
                 try {
-                    truncateEventFile(event.getTaskId(), previousLength, event.getSequence() - 1L);
-                    deleteTransitionFile(event.getTaskId());
+                    if (appended) {
+                        truncateEventFile(taskId, previousLength, previousSequence);
+                    }
+                    deleteTransitionFile(taskId);
                 } catch (RuntimeException rollbackFailure) {
                     e.addSuppressed(rollbackFailure);
                 }
             }
             throw e;
         }
-        deleteTransitionFile(event.getTaskId());
+        deleteTransitionFile(taskId);
     }
 
     private boolean ensureEvent(TaskEvent event) {
@@ -421,12 +430,21 @@ public class FileTaskStorage implements TaskStorage {
     }
 
     private TaskEvent prepareEvent(Long taskId, TaskEvent source) {
-        TaskEvent event = copyEvent(source);
-        event.setTaskId(taskId);
-        event.setEventId(event.getEventId() == null ? IdUtil.generateId() : event.getEventId());
-        event.setSequence(lastSequence(taskId) + 1L);
-        event.setCreatedAt(event.getCreatedAt() == null ? new Date() : event.getCreatedAt());
-        return event;
+        return prepareEvents(taskId, List.of(source)).get(0);
+    }
+
+    private List<TaskEvent> prepareEvents(Long taskId, List<TaskEvent> sources) {
+        long sequence = lastSequence(taskId);
+        List<TaskEvent> events = new ArrayList<>(sources.size());
+        for (TaskEvent source : sources) {
+            TaskEvent event = copyEvent(source);
+            event.setTaskId(taskId);
+            event.setEventId(event.getEventId() == null ? IdUtil.generateId() : event.getEventId());
+            event.setSequence(++sequence);
+            event.setCreatedAt(event.getCreatedAt() == null ? new Date() : event.getCreatedAt());
+            events.add(event);
+        }
+        return List.copyOf(events);
     }
 
     private void appendEventLine(TaskEvent event) {
@@ -562,7 +580,7 @@ public class FileTaskStorage implements TaskStorage {
             try {
                 TaskTransition transition = JSON.parseObject(FileUtil.readUtf8String(journalFile),
                         TaskTransition.class);
-                if (transition == null || transition.getTask() == null || transition.getEvent() == null) {
+                if (transition == null || transition.getTask() == null || transition.effectiveEvents().isEmpty()) {
                     throw new IllegalStateException("Task transition journal is incomplete");
                 }
                 commitTransition(transition, true);
@@ -728,10 +746,23 @@ public class FileTaskStorage implements TaskStorage {
 
     @Data
     @NoArgsConstructor
-    @AllArgsConstructor
     private static final class TaskTransition {
         private Task task;
+
+        // Retained for recovery of transition journals written by older versions.
         private TaskEvent event;
+
+        private List<TaskEvent> events;
+
+        private TaskTransition(Task task, List<TaskEvent> events) {
+            this.task = task;
+            this.events = events;
+        }
+
+        private List<TaskEvent> effectiveEvents() {
+            return events == null || events.isEmpty()
+                    ? (event == null ? List.of() : List.of(event)) : events;
+        }
     }
 
     private static final class TaskSnapshotStorage extends LargeDataStorage<Task> {

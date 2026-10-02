@@ -22,6 +22,22 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 class RunningTaskTest {
 
     @Test
+    void failedInputCleanupRemainsRegisteredForRetry() {
+        AtomicInteger attempts = new AtomicInteger();
+        RunningTask runningTask = new RunningTask(43L, () -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new IllegalStateException("locked");
+            }
+        });
+
+        runningTask.cleanupInput();
+        runningTask.cleanupInput();
+        runningTask.cleanupInput();
+
+        assertEquals(2, attempts.get());
+    }
+
+    @Test
     void blockingJdbcCancellationDoesNotBlockTheCancellationRequest() throws Exception {
         RunningTask runningTask = new RunningTask(42L);
         CountDownLatch cancelStarted = new CountDownLatch(1);

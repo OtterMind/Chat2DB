@@ -6,6 +6,7 @@ import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
 import interceptorsResponse from '@/service/interceptorsResponse';
+import { createRequestFormData } from './formData';
 
 export type IErrorLevel = 'toast' | 'notification' | 'prompt' | 'critical' | false;
 export type PermissionError = 'apply' | false;
@@ -156,17 +157,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
         };
 
         if (contentType === 'formData') {
-          // Use FormData to handle file uploads
-          const formData = new FormData();
-
-          // Add files to FormData
-          formData.append('file', params.file);
-
-          Object.keys(params).forEach((key) => {
-            if (key !== 'file') {
-              formData.append(key, params[key]);
-            }
-          });
+          const formData = createRequestFormData(params);
 
           // Remove params or data in requestOptions
 

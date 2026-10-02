@@ -7,6 +7,7 @@ import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices from '@/service/importExport';
 import Log from '@/blocks/ImportAndExport/components/Log';
+import { createPendingSubmissionGuard } from '../../submissionGuard';
 
 interface IProps {
   className?: string;
@@ -16,6 +17,8 @@ export default memo<IProps>((_props) => {
   const [isReady, setIsReady] = useState(false);
   const runSqlRef = useRef<RunSqlRef>(null);
   const [taskId, setTaskId] = useState<number>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionGuard = useRef(createPendingSubmissionGuard()).current;
 
   const { runSqlBoundInfo, setRunSqlBoundInfo, getTaskList } = useImportExportStore((state) => {
     return {
@@ -34,10 +37,17 @@ export default memo<IProps>((_props) => {
   const handleRunSQl = () => {
     const params = runSqlRef.current?.getValues();
     if (!params) return;
-    importExportServices.submitImport(params).then((res) => {
-      setTaskId(res.taskId);
-      getTaskList();
+    const submission = submissionGuard.run(async () => {
+      setIsSubmitting(true);
+      try {
+        const response = await importExportServices.submitImport(params);
+        setTaskId(response.taskId);
+        getTaskList();
+      } finally {
+        setIsSubmitting(false);
+      }
     });
+    void submission?.catch(() => undefined);
   };
 
   const renderFooter = () => {
@@ -46,13 +56,14 @@ export default memo<IProps>((_props) => {
         footerRight={
           <>
             <Button
+              disabled={isSubmitting}
               onClick={() => {
                 setRunSqlBoundInfo(null);
               }}
             >
               {i18n('common.button.cancel')}
             </Button>
-            <Button type="primary" disabled={!isReady} onClick={handleRunSQl}>
+            <Button type="primary" loading={isSubmitting} disabled={!isReady || isSubmitting} onClick={handleRunSQl}>
               {i18n('common.button.start')}
             </Button>
           </>
@@ -89,7 +100,9 @@ export default memo<IProps>((_props) => {
       maskClosable={false}
       footer={taskId ? logRenderFooter() : renderFooter()}
       onCancel={() => {
-        setRunSqlBoundInfo(null);
+        if (!isSubmitting) {
+          setRunSqlBoundInfo(null);
+        }
       }}
     >
       {taskId ? <Log taskId={taskId} /> : <RunSql ref={runSqlRef} setIsReady={setIsReady} />}

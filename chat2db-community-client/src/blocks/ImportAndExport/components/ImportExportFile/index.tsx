@@ -11,6 +11,7 @@ import { ImportExportType, ImportExportFileType, ImportExportTaskType } from '@/
 import { ExportTaskParams, ImportTaskParams } from '@/service/importExport';
 import { isDesktop, isDevelopment } from '@/utils/env';
 import jcefApi from '@/jcef';
+import { resolveLocalImportSource } from '@/utils/localImportFile';
 import { hasSelectedImportFile } from './selection';
 
 interface IProps {
@@ -120,6 +121,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
           exportPath: exportLocation || formValue.fileUrl,
         };
       }
+      const importSource = resolveLocalImportSource(selectedFiles[0], formValue.fileUrl || '');
       return {
         ...commonValues,
         taskType:
@@ -127,7 +129,7 @@ const ImportExportFile = forwardRef((props: IProps, ref: ForwardedRef<ImportExpo
             ? ImportExportTaskType.SQL_FILE_IMPORT
             : ImportExportTaskType.DATA_FILE_IMPORT,
         tableName,
-        sourceFile: selectedFiles[0]?.filePath || '',
+        ...importSource,
         ...(formValue.exportType === ImportExportFileType.SQL ? { sqlImportOptions } : {}),
       };
     },

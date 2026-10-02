@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -392,8 +394,47 @@ class TaskDeletionServiceImplTest {
         assertFalse(Files.exists(validArtifact));
     }
 
+    @Test
+    void taskInputCleanupRunsBeforeArtifactAndTaskDeletion() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("ordered.csv"), "value");
+        RecordingTaskStorage storage = storage(1L, artifact);
+        List<String> actions = new ArrayList<>();
+        ArtifactService artifactService = new ArtifactServiceImpl() {
+            @Override
+            public void stageForDeletion(Path original, Path staged) throws IOException {
+                actions.add("artifact");
+                super.stageForDeletion(original, staged);
+            }
+        };
+        TaskServiceImpl service = new TaskServiceImpl(storage, null,
+                new TaskDeletionServiceImpl(storage, artifactService, journalFile()), taskId -> {
+                    actions.add("input");
+                    return true;
+                });
+
+        service.delete(1L);
+
+        assertEquals(List.of("input", "artifact"), actions);
+        assertTrue(storage.get(1L).isEmpty());
+    }
+
+    @Test
+    void taskInputCleanupFailurePreservesTaskAndPublishedArtifact() throws IOException {
+        Path artifact = Files.writeString(tempDirectory.resolve("input-cleanup-failure.csv"), "value");
+        RecordingTaskStorage storage = storage(1L, artifact);
+        TaskServiceImpl service = new TaskServiceImpl(storage, null,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()), taskId -> false);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.delete(1L));
+
+        assertEquals(TaskConstants.DELETE_INPUT_FAILED_MESSAGE_CODE, exception.getCode());
+        assertTrue(Files.exists(artifact));
+        assertTrue(storage.get(1L).isPresent());
+        assertFalse(journalFile().exists());
+    }
+
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
-        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()));
+        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()), taskId -> true);
     }
 
     private Task task(Long id, Path artifact) {
@@ -451,7 +492,7 @@ class TaskDeletionServiceImplTest {
         }
 
         @Override
-        public Task create(Task task, TaskEvent event) {
+        public Task create(Task task, List<TaskEvent> initialEvents) {
             throw new UnsupportedOperationException();
         }
 

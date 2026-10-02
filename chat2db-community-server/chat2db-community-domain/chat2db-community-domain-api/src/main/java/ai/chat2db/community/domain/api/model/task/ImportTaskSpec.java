@@ -26,6 +26,10 @@ public class ImportTaskSpec implements TaskSpec {
 
     private String displayFileName;
 
+    private boolean temporarySourceFile;
+
+    private String temporarySourceToken;
+
     private String format;
 
     private String dataTimeFormat;
