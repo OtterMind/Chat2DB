@@ -7,6 +7,19 @@ export interface WorkspacePaneContentBounds {
 
 export type WorkspacePaneContentBoundsMap = Record<string, WorkspacePaneContentBounds>;
 
+export function resolveWorkspaceTabContentActivation(params: {
+  paneId: string | undefined;
+  tabId: string | number;
+  activePaneId: string;
+  activeConsoleId: string | number | null | undefined;
+}) {
+  const { paneId, tabId, activePaneId, activeConsoleId } = params;
+  if (!paneId || (paneId === activePaneId && tabId === activeConsoleId)) {
+    return null;
+  }
+  return { paneId, tabId };
+}
+
 export function resolveActiveWorkspaceTabPaneIds(params: {
   activeConsoleId: string | number | null | undefined;
   paneActiveTabIds?: Record<string, string | number | null>;
