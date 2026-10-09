@@ -1,6 +1,8 @@
 package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.spi.model.request.FetchAllTableRecordsRequest;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
@@ -8,6 +10,7 @@ import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Executes SQL commands for a database dialect.
@@ -57,6 +60,24 @@ public interface ICommandExecutor {
      * @throws SQLException when count execution fails.
      */
     Long count(String sql, Connection connection) throws SQLException;
+
+    /**
+     * Counts the rows returned by a parameterised SQL query, binding the values of
+     * its {@code :name} placeholders through JDBC.
+     *
+     * @param sql SQL query to count, with named placeholders.
+     * @param connection active database connection.
+     * @param parameters values keyed by placeholder name; empty counts plain SQL.
+     * @return row count returned by the count query.
+     * @throws SQLException when count execution fails.
+     */
+    default Long count(String sql, Connection connection, Map<String, SqlParameterValue> parameters)
+            throws SQLException {
+        if (parameters != null && !parameters.isEmpty()) {
+            throw new BusinessException("sqlParameter.unsupportedDatabase");
+        }
+        return count(sql, connection);
+    }
 
     /**
      * Streams all records from a query to a result-set consumer.

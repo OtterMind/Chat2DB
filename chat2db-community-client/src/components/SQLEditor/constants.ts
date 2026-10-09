@@ -22,6 +22,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   keywordCase: false,
   completion: [],
   errorContinue: true,
+  sqlParameters: false,
   tableDDLTriggerMode: 'hover',
   completionAcceptKey: DEFAULT_SQL_COMPLETION_ACCEPT_KEY,
   renderLineHighlight: 'line',

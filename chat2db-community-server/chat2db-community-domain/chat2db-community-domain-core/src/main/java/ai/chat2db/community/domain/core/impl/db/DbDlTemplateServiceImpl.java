@@ -20,6 +20,7 @@ import ai.chat2db.spi.DefaultSqlBuilder;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.community.domain.api.model.result.*;
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionContext;
 import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionOperation;
@@ -28,6 +29,7 @@ import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyMana
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.JdbcUtils;
+import ai.chat2db.spi.util.SqlParameterParser;
 import ai.chat2db.spi.util.SqlUtils;
 import com.alibaba.druid.DbType;
 import lombok.extern.slf4j.Slf4j;
@@ -71,9 +73,13 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         }
         long s1 = System.currentTimeMillis();
         ICommandExecutor executor = Chat2DBContext.getDbMetaData().getCommandExecutor();
-        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param));
+        SqlParameterParser.NormalizedSql parameterisedSql = SqlParameterRequests.normalize(param.getSql(),
+                param.getSqlParameters(), param.getParameters(), param.getPositionalParameters());
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param,
+                parameterisedSql == null ? param.getSql() : parameterisedSql.sql()));
         SqlExecuteRequest command = commandConverter.param2model(param);
         command.setScript(executionPlan.getSql());
+        SqlParameterRequests.apply(command, parameterisedSql);
         sqlExecutionPolicyManager.applyMaxRows(command, executionPlan);
         sqlExecutionPolicyManager.beforeExecute(executionPlan);
         List<ExecuteResponse> results = executor.execute(command);
@@ -154,6 +160,13 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         if (StringUtils.isBlank(sql)) {
             return 0L;
         }
+        // COUNT reuses the values of the result it counts; the editor switch does not apply.
+        SqlParameterParser.NormalizedSql parameterisedSql = SqlParameterRequests.normalize(sql, null,
+                param.getParameters(), param.getPositionalParameters());
+        Map<String, SqlParameterValue> parameters = parameterisedSql == null ? null : parameterisedSql.parameters();
+        if (parameterisedSql != null) {
+            sql = parameterisedSql.sql();
+        }
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(param.getDataSourceId(),
                 param.getDatabaseName(), connectInfo == null ? null : connectInfo.getSchemaName(),
@@ -169,13 +182,14 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         try {
             String countSql = SqlUtils.count(sql, dataBaseType);
             if (countSql == null) {
-                Long count = executor.count(sql, Chat2DBContext.getConnection());
+                Long count = executor.count(sql, Chat2DBContext.getConnection(), parameters);
                 return sqlExecutionPolicyManager.limitCount(executionPlan, count);
             }
             ExecuteResponse executeResult = executor.execute(SqlStatementExecuteRequest.builder()
                     .sql(countSql)
                     .connection(Chat2DBContext.getConnection())
                     .limitRowSize(true)
+                    .parameters(parameters)
                     .build());
             List<List<String>> dataList = executeResult.getDisplayDataList();
             if (CollectionUtils.isEmpty(dataList)) {
@@ -191,7 +205,7 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
         } catch (Exception e) {
             log.warn("Failed to execute SQL: {}", sql, e);
             try {
-                Long count = executor.count(sql, Chat2DBContext.getConnection());
+                Long count = executor.count(sql, Chat2DBContext.getConnection(), parameters);
                 return sqlExecutionPolicyManager.limitCount(executionPlan, count);
             } catch (Exception e1) {
                 throw new BusinessException("count error", new Object[]{sql, e1.getMessage()}, e1);
@@ -334,11 +348,15 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
     }
 
     private SqlExecutionContext executionContext(DbDlExecuteRequest request) {
+        return executionContext(request, request.getSql());
+    }
+
+    private SqlExecutionContext executionContext(DbDlExecuteRequest request, String sql) {
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         return new SqlExecutionContext(
                 connectInfo == null ? request.getDataSourceId() : connectInfo.getDataSourceId(),
                 connectInfo == null ? null : connectInfo.getDbType(),
-                request.getDatabaseName(), request.getSchemaName(), request.getTableName(), request.getSql(),
+                request.getDatabaseName(), request.getSchemaName(), request.getTableName(), sql,
                 SqlExecutionOperation.EXECUTE, null, request.getApplyId());
     }
 

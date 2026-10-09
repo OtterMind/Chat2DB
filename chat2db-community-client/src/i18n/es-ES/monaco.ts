@@ -82,6 +82,9 @@ export default {
   'monaco.errorContinue': 'Continuar tras un error',
   'monaco.errorContinue.tooltip':
     'Al ejecutar varias sentencias SQL, continúa con las restantes cuando una de ellas falla.',
+  'monaco.sqlParameters': 'Parámetros SQL',
+  'monaco.sqlParameters.tooltip':
+    'Pide los valores de los marcadores :name y ? antes de ejecutar el SQL. El controlador de la base de datos vincula los valores y nunca se insertan en el texto SQL. En PostgreSQL, escribe el operador ? de jsonb como jsonb_exists() o usa un parámetro :name.',
   'monaco.errorContinue.true': 'Sí',
   'monaco.errorContinue.false': 'No',
   'monaco.confirmBeforeClose': 'Confirmar antes de cerrar',

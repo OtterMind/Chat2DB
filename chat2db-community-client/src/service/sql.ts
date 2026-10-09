@@ -26,6 +26,7 @@ import type {
 import type {
   IDdlExecuteRequest,
   ISqlEditorExecuteRequest,
+  ISqlParameterValues,
   ITableBrowseRequest,
   ITableEditExecuteRequest,
 } from './dmlRequest';
@@ -37,7 +38,7 @@ export interface IGetTableListParams extends IPageParams {
   databaseType?: DatabaseTypeCode;
 }
 
-interface IDmlResultRequest {
+interface IDmlResultRequest extends ISqlParameterValues {
   sql?: string;
   single?: boolean;
   dataSourceId?: number;

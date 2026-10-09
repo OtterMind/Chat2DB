@@ -14,7 +14,10 @@ import org.mapstruct.Mappings;
 public abstract class CommandConverter implements IDbSqlCommandService {
 
     @Mappings({
-            @Mapping(target = "script", source = "sql")
+            @Mapping(target = "script", source = "sql"),
+            // Only normalised parameters reach the executor; see SqlParameterRequests.
+            @Mapping(target = "parameters", ignore = true),
+            @Mapping(target = "positionalParameterStyle", ignore = true)
     })
     public abstract SqlExecuteRequest param2model(DbDlExecuteRequest param);
 

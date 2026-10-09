@@ -8,6 +8,7 @@ import ai.chat2db.plugin.postgresql.enums.type.*;
 import ai.chat2db.plugin.postgresql.value.PostgreSQLValueProcessor;
 import ai.chat2db.community.tools.util.EasyCollectionUtils;
 import ai.chat2db.community.tools.util.I18nUtils;
+import ai.chat2db.spi.ICommandExecutor;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
@@ -808,5 +809,10 @@ public class PostgreSQLMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public Boolean supportCrossSchema() {
         return Boolean.TRUE;
+    }
+
+    @Override
+    public ICommandExecutor getCommandExecutor() {
+        return PostgreSQLCommandExecutor.INSTANCE;
     }
 }
