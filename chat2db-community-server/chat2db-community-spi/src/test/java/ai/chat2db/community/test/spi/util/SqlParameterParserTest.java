@@ -1,16 +1,27 @@
 package ai.chat2db.community.test.spi.util;
 
+import ai.chat2db.community.domain.api.model.sql.SqlParameterType;
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.util.SqlParameterParser;
+import ai.chat2db.spi.util.SqlParameterParser.BoundSql;
+import ai.chat2db.spi.util.SqlParameterParser.NormalizedSql;
 import ai.chat2db.spi.util.SqlParameterParser.Placeholder;
 import ai.chat2db.spi.util.SqlParameterParser.Style;
 import ai.chat2db.spi.util.SqlParameterSyntax;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlParameterParserTest {
@@ -20,6 +31,17 @@ class SqlParameterParserTest {
     @Test
     void namedParameterIsDetected() {
         assertEquals(List.of("id"), names("SELECT * FROM users WHERE id = :id;", ANSI));
+    }
+
+    @Test
+    void duplicateNamedParameterIsOneLogicalParameterBoundToEveryOccurrence() {
+        String sql = "SELECT *\nFROM users\nWHERE id = :id OR manager_id = :id;";
+
+        assertEquals(List.of("id", "id"), names(sql, ANSI));
+        BoundSql bound = SqlParameterParser.compile(sql, Map.of("id", SqlParameterValue.number("123")), ANSI);
+
+        assertEquals("SELECT *\nFROM users\nWHERE id = ? OR manager_id = ?;", bound.sql());
+        assertEquals(List.of(SqlParameterValue.number("123"), SqlParameterValue.number("123")), bound.values());
     }
 
     @Test
@@ -41,6 +63,44 @@ class SqlParameterParserTest {
 
         assertEquals(1, placeholders.size());
         assertEquals(Style.POSITIONAL, placeholders.get(0).style());
+    }
+
+    @Test
+    void positionalParametersAreNormalisedToSyntheticNamesLeftToRight() {
+        String sql = "SELECT *\nFROM users\nWHERE name = ? AND age > ?;";
+
+        NormalizedSql normalized = SqlParameterParser.normalize(sql, null,
+                List.of(SqlParameterValue.string("alice"), SqlParameterValue.number("30")), ANSI);
+
+        assertEquals("SELECT *\nFROM users\nWHERE name = :__p1 AND age > :__p2;", normalized.sql());
+        assertTrue(normalized.positional());
+        assertEquals(Map.of("__p1", SqlParameterValue.string("alice"), "__p2", SqlParameterValue.number("30")),
+                normalized.parameters());
+        assertEquals(sql, SqlParameterParser.restorePositional(normalized.sql(), ANSI));
+    }
+
+    @Test
+    void positionalValuesSurviveARewriteThatDropsEarlierPlaceholders() {
+        NormalizedSql normalized = SqlParameterParser.normalize(
+                "SELECT ? AS tag, name FROM users WHERE age > ? ORDER BY ?", null,
+                List.of(SqlParameterValue.string("x"), SqlParameterValue.number("30"),
+                        SqlParameterValue.number("1")), ANSI);
+        // A COUNT rewrite drops the projection and ORDER BY; only the WHERE value remains.
+        String countSql = "SELECT COUNT(*) FROM users WHERE age > :__p2";
+
+        BoundSql bound = SqlParameterParser.compile(countSql, normalized.parameters(), ANSI);
+
+        assertEquals("SELECT COUNT(*) FROM users WHERE age > ?", bound.sql());
+        assertEquals(List.of(SqlParameterValue.number("30")), bound.values());
+    }
+
+    @Test
+    void syntheticNamesStaySeparateTokens() {
+        NormalizedSql normalized = SqlParameterParser.normalize("SELECT a FROM t WHERE x=?AND y IN(?,?)", null,
+                List.of(SqlParameterValue.number("1"), SqlParameterValue.number("2"), SqlParameterValue.number("3")),
+                ANSI);
+
+        assertEquals(List.of("__p1", "__p2", "__p3"), names(normalized.sql(), ANSI));
     }
 
     @Test
@@ -123,6 +183,119 @@ class SqlParameterParserTest {
     }
 
     @Test
+    void mixedStylesAreRejected() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT *\nFROM users\nWHERE id = :id AND status = ?;",
+                Map.of("id", SqlParameterValue.number("1")), null, ANSI));
+
+        assertEquals("sqlParameter.mixedStyles", exception.getCode());
+    }
+
+    @Test
+    void missingNamedValueIsRejectedWithTheParameterName() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT * FROM users WHERE id = :id AND status = :status",
+                Map.of("id", SqlParameterValue.number("1")), null, ANSI));
+
+        assertEquals("sqlParameter.missing", exception.getCode());
+        assertArrayEquals(new Object[]{"status"}, exception.getArgs());
+    }
+
+    @Test
+    void missingPositionalValueIsRejectedWithTheParameterNumber() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT * FROM users WHERE name = ? AND age > ?", null,
+                List.of(SqlParameterValue.string("alice")), ANSI));
+
+        assertEquals("sqlParameter.missing", exception.getCode());
+        assertArrayEquals(new Object[]{2}, exception.getArgs());
+    }
+
+    @Test
+    void valuesThatDoNotMatchThePlaceholdersAreRejected() {
+        assertInvalid("SELECT :id", Map.of("id", SqlParameterValue.number("1"),
+                "other", SqlParameterValue.number("2")), null);
+        assertInvalid("SELECT :id", null, List.of(SqlParameterValue.number("1")));
+        assertInvalid("SELECT ?", Map.of("id", SqlParameterValue.number("1")), null);
+        assertInvalid("SELECT ?", null, List.of(SqlParameterValue.number("1"), SqlParameterValue.number("2")));
+        assertInvalid("SELECT :id", Map.of("id", SqlParameterValue.number("1")),
+                List.of(SqlParameterValue.number("1")));
+    }
+
+    @Test
+    void valuesForSqlWithoutPlaceholdersAreRejected() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT ':id'", Map.of("id", SqlParameterValue.number("1")), null, ANSI));
+
+        assertEquals("sqlParameter.notFound", exception.getCode());
+    }
+
+    @Test
+    void noValuesMeansNoParameterisedExecution() {
+        assertNull(SqlParameterParser.normalize("SELECT :id", null, null, ANSI));
+        assertNull(SqlParameterParser.normalize("SELECT :id", Map.of(), List.of(), ANSI));
+    }
+
+    @Test
+    void everyValueNeedsAKnownType() {
+        BusinessException missingType = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT :id", Map.of("id", new SqlParameterValue(null, "1")), null, ANSI));
+        BusinessException nullEntry = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT ?", null, Arrays.asList((SqlParameterValue) null), ANSI));
+
+        assertEquals("sqlParameter.invalidType", missingType.getCode());
+        assertArrayEquals(new Object[]{"id"}, missingType.getArgs());
+        assertEquals("sqlParameter.invalidType", nullEntry.getCode());
+    }
+
+    @Test
+    void valuesMustBeValidForTheirType() {
+        for (String number : List.of("42", "-1", "+3.50", ".5", "1e10", "6.02E-23")) {
+            assertNotNull(SqlParameterParser.normalize("SELECT :n", Map.of("n", SqlParameterValue.number(number)),
+                    null, ANSI), number);
+        }
+        for (String number : Arrays.asList("", " 1", "1,000", "abc", "0x10", "NaN", null)) {
+            assertInvalidValue(SqlParameterValue.number(number), "NUMBER");
+        }
+        assertNotNull(SqlParameterParser.normalize("SELECT :b", Map.of("b", SqlParameterValue.bool("false")),
+                null, ANSI));
+        for (String bool : Arrays.asList("TRUE", "1", "yes", "", null)) {
+            assertInvalidValue(SqlParameterValue.bool(bool), "BOOLEAN");
+        }
+        assertInvalidValue(new SqlParameterValue(SqlParameterType.NULL, "x"), "NULL");
+        assertInvalidValue(SqlParameterValue.string(null), "STRING");
+    }
+
+    @Test
+    void nullEmptyStringAndMissingStayDistinct() {
+        NormalizedSql normalized = SqlParameterParser.normalize("SELECT ?, ?", null,
+                List.of(SqlParameterValue.nullValue(), SqlParameterValue.string("")), ANSI);
+        BoundSql bound = SqlParameterParser.compile(normalized.sql(), normalized.parameters(), ANSI);
+
+        assertEquals(List.of(SqlParameterValue.nullValue(), SqlParameterValue.string("")), bound.values());
+        BusinessException missing = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "SELECT :a, :b", Map.of("a", SqlParameterValue.string("")), null, ANSI));
+        assertEquals("sqlParameter.missing", missing.getCode());
+    }
+
+    @Test
+    void compileRejectsNamesWithoutValuesAndBarePositionalMarkers() {
+        BusinessException missing = assertThrows(BusinessException.class, () -> SqlParameterParser.compile(
+                "SELECT :a", Map.of("b", SqlParameterValue.number("1")), ANSI));
+        BusinessException positional = assertThrows(BusinessException.class, () -> SqlParameterParser.compile(
+                "SELECT :a, ?", Map.of("a", SqlParameterValue.number("1")), ANSI));
+
+        assertEquals("sqlParameter.missing", missing.getCode());
+        assertEquals("sqlParameter.mixedStyles", positional.getCode());
+    }
+
+    @Test
+    void restoringOnlyTouchesSyntheticNames() {
+        assertEquals("SELECT ?, :id, ':__p1', :__p, :__p01",
+                SqlParameterParser.restorePositional("SELECT :__p1, :id, ':__p1', :__p, :__p01", ANSI));
+    }
+
+    @Test
     void postgresqlQuestionMarkOperatorsAreNeverPlaceholders() {
         SqlParameterSyntax postgres = SqlParameterSyntax.POSTGRESQL;
 
@@ -131,6 +304,21 @@ class SqlParameterParserTest {
                 postgres).stream().filter(p -> p.style() == Style.POSITIONAL).count());
         // Elsewhere ?| is a placeholder followed by the | operator.
         assertEquals(1, SqlParameterParser.findPlaceholders("SELECT ?|| 'x'", ANSI).size());
+    }
+
+    @Test
+    void bindingNeverCopiesValuesIntoTheSql() {
+        String hostile = "1; DROP TABLE users; --' OR '1'='1";
+        NormalizedSql normalized = SqlParameterParser.normalize("SELECT name FROM users WHERE id = :id",
+                Map.of("id", SqlParameterValue.string(hostile)), null, ANSI);
+        BoundSql bound = SqlParameterParser.compile(normalized.sql(), normalized.parameters(), ANSI);
+
+        assertEquals("SELECT name FROM users WHERE id = ?", bound.sql());
+        assertFalse(bound.sql().contains(hostile));
+        assertEquals(List.of(SqlParameterValue.string(hostile)), bound.values());
+        assertFalse(bound.toString().contains(hostile), "values must stay out of logs");
+        assertFalse(normalized.toString().contains(hostile), "values must stay out of logs");
+        assertFalse(SqlParameterValue.string(hostile).toString().contains(hostile), "values must stay out of logs");
     }
 
     @Test
@@ -158,6 +346,21 @@ class SqlParameterParserTest {
         String sql = "SELECT a::text, b FROM t WHERE c = 'x?'";
 
         assertEquals(sql, SqlParameterParser.maskPlaceholdersAsLiterals(sql, SqlParameterSyntax.POSTGRESQL));
+    }
+
+    private static void assertInvalid(String sql, Map<String, SqlParameterValue> named,
+                                      List<SqlParameterValue> positional) {
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> SqlParameterParser.normalize(sql, named, positional, ANSI));
+        assertEquals("sqlParameter.invalid", exception.getCode(), sql);
+    }
+
+    private static void assertInvalidValue(SqlParameterValue value, String type) {
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> SqlParameterParser.normalize("SELECT :v", Map.of("v", value), null, ANSI),
+                () -> type + " " + value.getValue());
+        assertEquals("sqlParameter.invalidValue", exception.getCode());
+        assertArrayEquals(new Object[]{"v", type}, exception.getArgs());
     }
 
     private static void assertNoPlaceholders(String sql, SqlParameterSyntax syntax) {

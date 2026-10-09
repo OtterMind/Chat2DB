@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.constant.IEasyToolsConstant;
 import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.community.domain.api.enums.plugin.DataTypeEnum;
@@ -105,6 +106,10 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
     }
 
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
+        // MongoDB scripts have no JDBC placeholders; never run them with parameters silently dropped.
+        if (command.getParameters() != null && !command.getParameters().isEmpty()) {
+            throw new BusinessException("sqlParameter.unsupportedDatabase");
+        }
         int pageNo = Optional.ofNullable(command.getPageNo()).orElse(1);
         command.setPageNo(pageNo);
         int pageSize = Optional.ofNullable(command.getPageSize()).orElse(IEasyToolsConstant.DEFAULT_PAGE_SIZE);

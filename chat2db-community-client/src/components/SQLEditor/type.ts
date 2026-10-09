@@ -26,6 +26,8 @@ export interface EditorSettings {
   completion?: string[];
   keywordCase?: boolean;
   errorContinue?: boolean;
+  /** Ask for :name and ? parameter values before running SQL. Off by default. */
+  sqlParameters?: boolean;
   tableDDLTriggerMode?: 'hover' | 'click';
   completionAcceptKey?: SqlCompletionAcceptKey;
   renderLineHighlight?: monaco.editor.IEditorOptions['renderLineHighlight'];

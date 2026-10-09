@@ -5,15 +5,18 @@ import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
 import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
 import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.sql.ConnectionPool;
+import com.alibaba.druid.DbType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -28,10 +31,13 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlServerExecutorTest {
@@ -218,6 +224,63 @@ class SqlServerExecutorTest {
         assertPreservedBatchUsesPostExecutionContext(true);
     }
 
+    @Test
+    void parameterisedGoBatchesAreRejectedBeforeReachingTheDatabase() {
+        List<String> preparedSql = new ArrayList<>();
+        putContext(streamingConnection(new String[]{"source_database"}, preparedSql));
+        SqlExecuteRequest request = request("SELECT name FROM users WHERE id = :id\nGO\nSELECT 1");
+        request.setParameters(Map.of("id", SqlParameterValue.string("123")));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> new SqlServerExecutor().execute(request));
+
+        assertEquals("sqlParameter.multipleStatements", exception.getCode());
+        assertEquals(List.of(), preparedSql);
+    }
+
+    @Test
+    void singleTrailingGoStillBindsParameters() {
+        List<String> preparedSql = new ArrayList<>();
+        List<String> bindings = new ArrayList<>();
+        putContext(bindingConnection(preparedSql, bindings));
+        SqlExecuteRequest request = request("UPDATE sample SET value = 1 WHERE id = :id;\nGO");
+        request.setSingle(true);
+        request.setParameters(Map.of("id", SqlParameterValue.string("123")));
+
+        List<ExecuteResponse> results = new SqlServerExecutor().execute(request);
+
+        assertEquals(1, results.size());
+        assertTrue(results.get(0).getSuccess());
+        assertEquals(List.of("UPDATE sample SET value = 1 WHERE id = ?;"), preparedSql);
+        assertEquals(List.of("setString(1, 123)"), bindings);
+    }
+
+    @Test
+    void executeMultiRejectsBoundStatementThatStillContainsGoBatches() {
+        TestSqlServerExecutor executor = new TestSqlServerExecutor();
+        List<String> preparedSql = new ArrayList<>();
+        SimpleSqlStatement bound = executor.bind("SELECT name FROM users WHERE id = :id\nGO\nSELECT 1",
+                Map.of("id", SqlParameterValue.string("123")));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> executor.executeStatement(bound, bindingConnection(preparedSql, new ArrayList<>())));
+
+        assertEquals("sqlParameter.multipleStatements", exception.getCode());
+        assertEquals(List.of(), preparedSql, "GO batches must not run with unbound placeholders");
+    }
+
+    @Test
+    void executeMultiStillSplitsPlainGoBatches() throws Exception {
+        List<String> preparedSql = new ArrayList<>();
+        TestSqlServerExecutor executor = new TestSqlServerExecutor();
+
+        executor.executeAll("UPDATE sample SET value = 1\nGO\nUPDATE sample SET value = 2",
+                bindingConnection(preparedSql, new ArrayList<>()));
+
+        assertEquals(List.of("UPDATE sample SET value = 1", "UPDATE sample SET value = 2"), preparedSql);
+        assertFalse(preparedSql.stream().anyMatch(sql -> sql.contains("?")));
+    }
+
     private void assertPreservedBatchUsesPostExecutionContext(boolean single) throws Exception {
         List<String> preparedSql = new ArrayList<>();
         String[] catalog = {"source_database"};
@@ -277,6 +340,42 @@ class SqlServerExecutorTest {
                     case "getSchema" -> "dbo";
                     case "isClosed" -> false;
                     default -> defaultValue(method.getReturnType());
+                });
+    }
+
+    private static Connection bindingConnection(List<String> preparedSql, List<String> bindings) {
+        return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[]{Connection.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "prepareStatement" -> bindingStatement((String) args[0], preparedSql, bindings);
+                    case "getCatalog" -> "source_database";
+                    case "getSchema" -> "dbo";
+                    case "isClosed" -> false;
+                    default -> defaultValue(method.getReturnType());
+                });
+    }
+
+    private static PreparedStatement bindingStatement(String sql, List<String> preparedSql, List<String> bindings) {
+        preparedSql.add(sql);
+        boolean[] exhausted = {false};
+        return (PreparedStatement) Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(),
+                new Class<?>[]{PreparedStatement.class}, (proxy, method, args) -> {
+                    String name = method.getName();
+                    if (name.startsWith("set") && args != null && args.length == 2 && args[0] instanceof Integer) {
+                        bindings.add(name + "(" + args[0] + ", " + args[1] + ")");
+                        return null;
+                    }
+                    return switch (name) {
+                        case "execute" -> {
+                            exhausted[0] = false;
+                            yield false;
+                        }
+                        case "getUpdateCount" -> exhausted[0] ? -1 : 1;
+                        case "getMoreResults" -> {
+                            exhausted[0] = true;
+                            yield false;
+                        }
+                        default -> defaultValue(method.getReturnType());
+                    };
                 });
     }
 
@@ -399,6 +498,19 @@ class SqlServerExecutorTest {
 
         private List<ExecuteResponse> executeAll(String sql, Connection connection) throws Exception {
             return executeMulti(new SimpleSqlStatement(sql), connection, true, 0, 10, null);
+        }
+
+        private SimpleSqlStatement bind(String sql, Map<String, SqlParameterValue> parameters) {
+            SqlExecuteRequest command = new SqlExecuteRequest();
+            command.setScript(sql);
+            command.setParameters(parameters);
+            return bindSqlParameters(command, List.of(new SimpleSqlStatement(sql)), DbType.sqlserver, "SQLSERVER")
+                    .get(0);
+        }
+
+        private List<ExecuteResponse> executeStatement(SimpleSqlStatement statement, Connection connection)
+                throws Exception {
+            return executeMulti(statement, connection, true, 0, 10, null);
         }
     }
 }
