@@ -59,10 +59,10 @@ class FileResultSnapshotStoreTest {
     void defaultRootDirectoryFollowsTheSharedStorageConvention() {
         TestHome.init();
         FileResultSnapshotStore defaultStore = new FileResultSnapshotStore();
-        String root = defaultStore.getRootDirectory().toString();
-        assertTrue(root.endsWith("/storage/" + FileResultSnapshotStore.SNAPSHOT_DIRECTORY),
+        Path root = defaultStore.getRootDirectory();
+        assertTrue(root.endsWith(Path.of("storage", FileResultSnapshotStore.SNAPSHOT_DIRECTORY)),
                 "unexpected snapshot root: " + root);
-        assertTrue(root.startsWith(System.getProperty("user.home")), "snapshot root must stay inside the state directory: " + root);
+        assertTrue(root.startsWith(Path.of(System.getProperty("user.home"))), "snapshot root must stay inside the state directory: " + root);
     }
 
     @Test

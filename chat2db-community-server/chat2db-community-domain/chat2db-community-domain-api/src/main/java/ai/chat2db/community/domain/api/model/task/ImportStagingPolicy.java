@@ -5,19 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.File;
-
+/** Requested staging behavior; execution support is capability-gated by the importer. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ArtifactDraft {
+public class ImportStagingPolicy {
 
-    private String role;
+    private Boolean enabled;
 
-    private File temporaryFile;
+    private Boolean allVarchar;
 
-    private File targetFile;
-
-    private String mediaType;
+    private Boolean twoPhase;
 }
