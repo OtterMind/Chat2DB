@@ -2,6 +2,7 @@ package ai.chat2db.community.sqlx;
 
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
+import ai.chat2db.community.tools.http.DesktopSessionContext;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,10 +24,16 @@ public final class SqlxDataSourceReader implements SqlxStatusService.DataSourceR
 
     @Override
     public List<WorkspaceDataSource> read(List<Long> datasourceIds) {
-        List<WorkspaceDataSource> found = new ArrayList<>();
         if (datasourceIds == null || datasourceIds.isEmpty()) {
-            return found;
+            return new ArrayList<>();
         }
+        // This read runs on a JCEF thread that never passed through the request context, and decrypting
+        // a cloud-stored connection needs the logged-in desktop identity.
+        return DesktopSessionContext.call(() -> readAll(datasourceIds));
+    }
+
+    private List<WorkspaceDataSource> readAll(List<Long> datasourceIds) {
+        List<WorkspaceDataSource> found = new ArrayList<>();
         for (Long id : datasourceIds) {
             if (id == null) {
                 continue;

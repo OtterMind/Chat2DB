@@ -7,7 +7,6 @@ import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.constant.SqlValueConstants;
 import ai.chat2db.community.domain.api.enums.plugin.DmlTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.IndexTypeEnum;
-import ai.chat2db.community.domain.api.enums.value.LargeValueTypeEnum;
 import ai.chat2db.community.domain.api.model.account.*;
 import ai.chat2db.community.domain.api.config.*;
 import ai.chat2db.spi.model.datasource.*;
@@ -48,7 +47,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -594,12 +592,12 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
             }
 
             Integer columnIndex = selectCols.get(0);
-            if (columnIndex == null || columnIndex < 0 || columnIndex >= headerList.size()) {
+            if (columnIndex == null || columnIndex < 0 || columnIndex >= headerList.size()
+                    || headerList.get(columnIndex) == null) {
                 throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_INVALID_SELECTION);
             }
             if (selectedColumnIndex == null) {
                 selectedColumnIndex = columnIndex;
-                rejectUnsupportedCopyInValuesColumn(headerList.get(columnIndex));
             } else if (!Objects.equals(selectedColumnIndex, columnIndex)) {
                 throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_SINGLE_COLUMN_REQUIRED);
             }
@@ -616,29 +614,17 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                 throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_LARGE_VALUE_REJECTED);
             }
             sqlDataValue.setValue(selectedValue);
-            values.add(valueProcessor.getSqlValueString(sqlDataValue));
+            values.add(getComparisonSqlValue(sqlDataValue, valueProcessor));
         }
 
         return SQLConstants.OPEN_PARENTHESIS + String.join(SQLConstants.COMMA_SPACE, values) + SQLConstants.CLOSE_PARENTHESIS;
-    }
-
-    private void rejectUnsupportedCopyInValuesColumn(Header header) {
-        if (header == null) {
-            throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_INVALID_SELECTION);
-        }
-        String columnType = StringUtils.defaultString(StringUtils.defaultIfBlank(header.getColumnType(), header.getDataType())).toLowerCase();
-        if (COPY_IN_VALUES_BLOCKED_COLUMN_TYPES.stream().anyMatch(columnType::contains)) {
-            throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_LARGE_VALUE_REJECTED);
-        }
     }
 
     private void rejectUnsupportedCopyInValuesCell(ResultCell selectedCell) {
         if (selectedCell == null) {
             throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_INVALID_SELECTION);
         }
-        String valueType = StringUtils.defaultString(selectedCell.getValueType()).toUpperCase(Locale.ROOT);
-        if (selectedCell.isLargeValue() || selectedCell.isTruncated() || StringUtils.isNotBlank(selectedCell.getLargeValueId())
-                || LargeValueTypeEnum.fromCode(valueType).isBinaryLike()) {
+        if (selectedCell.isLargeValue() || selectedCell.isTruncated() || StringUtils.isNotBlank(selectedCell.getLargeValueId())) {
             throw new BusinessException(ERROR_KEY_COPY_IN_VALUES_LARGE_VALUE_REJECTED);
         }
     }
@@ -688,7 +674,7 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                     script.append(metaSchema.getMetaDataName(header.getName()))
                             .append(SQLConstants.SQL_IS_NULL_LOWER_AND);
                 } else {
-                    String value = valueProcessor.getSqlValueString(sqlDataValue);
+                    String value = getComparisonSqlValue(sqlDataValue, valueProcessor);
                     script.append(metaSchema.getMetaDataName(header.getName()))
                             .append(SQLConstants.EQUAL_SQL)
                             .append(value)
@@ -921,9 +907,9 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                             columnName, sqlDataValue.getDataType().getDataTypeName());
                     if (useLikeForCopyWhere()
                             && valueProcessor.isStringDataType(sqlDataValue.getDataType().getDataTypeName())) {
-                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.SQL_LIKE + valueProcessor.getSqlValueString(sqlDataValue);
+                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.SQL_LIKE + getComparisonSqlValue(sqlDataValue, valueProcessor);
                     } else {
-                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.EQUAL_SQL + valueProcessor.getSqlValueString(sqlDataValue);
+                        return SQLConstants.WHERE_SQL_PREFIX + columnExpression + SQLConstants.EQUAL_SQL + getComparisonSqlValue(sqlDataValue, valueProcessor);
                     }
                 }
             } else {
@@ -953,7 +939,7 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                                 rowConditionBuilder.append(SQLConstants.EQUAL_SQL);
                             }
                             sqlDataValue.setValue(value);
-                            rowConditionBuilder.append(valueProcessor.getSqlValueString(sqlDataValue));
+                            rowConditionBuilder.append(getComparisonSqlValue(sqlDataValue, valueProcessor));
                         }
                         if (i != selectCols.size() - 1) {
                             rowConditionBuilder.append(SQL_AND);
@@ -975,6 +961,10 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
         return columnName;
     }
 
+    protected String getComparisonSqlValue(SQLDataValue sqlDataValue, IValueProcessor valueProcessor) {
+        return valueProcessor.getSqlValueString(sqlDataValue);
+    }
+
     private String buildWhereClauseForSameColumnValues(String columnName, List<String> values, SQLDataValue sqlDataValue,
                                                        IValueProcessor valueProcessor) {
         List<String> conditions = new ArrayList<>();
@@ -986,7 +976,7 @@ public class DefaultSqlBuilder implements ISqlBuilder, IIdentifierSqlBuilder, ID
                 .filter(Objects::nonNull)
                 .map(value -> {
                     sqlDataValue.setValue(value);
-                    return valueProcessor.getSqlValueString(sqlDataValue);
+                    return getComparisonSqlValue(sqlDataValue, valueProcessor);
                 })
                 .toList();
         if (CollectionUtils.isNotEmpty(nonNullValues)) {

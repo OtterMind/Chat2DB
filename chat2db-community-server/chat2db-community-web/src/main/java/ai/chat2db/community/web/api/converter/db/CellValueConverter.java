@@ -28,17 +28,14 @@ public class CellValueConverter {
             return null;
         }
         return LargeValueReference.builder()
-                .dataSourceId(token.getDataSourceId())
-                .databaseName(token.getDatabaseName())
-                .schemaName(token.getSchemaName())
                 .tableName(token.getTableName())
                 .columnName(token.getColumnName())
-                .primaryKey(token.getPrimaryKey())
                 .valueType(token.getValueType())
                 .sqlType(token.getSqlType())
                 .columnType(token.getColumnType())
-                .sizeBytes(token.getSizeBytes())
-                .sizeChars(token.getSizeChars())
+                .snapshotId(token.getSnapshotId())
+                .rowIndex(token.getRowIndex())
+                .columnIndex(token.getColumnIndex())
                 .build();
     }
 

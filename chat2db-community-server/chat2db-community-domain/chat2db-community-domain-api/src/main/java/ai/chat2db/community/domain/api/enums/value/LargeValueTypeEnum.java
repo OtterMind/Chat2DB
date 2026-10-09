@@ -2,8 +2,6 @@ package ai.chat2db.community.domain.api.enums.value;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.sql.Blob;
-import java.sql.Clob;
 import java.sql.Types;
 import java.util.Locale;
 
@@ -74,18 +72,22 @@ public enum LargeValueTypeEnum {
         return resolve(columnType, sqlType).canBeLarge();
     }
 
-    public static LargeValueTypeEnum resolveForRead(Object value, String columnType, int sqlType, String preferredType) {
+    /**
+     * Resolves the type of a large value while it is being read back from a result snapshot.
+     * <p>
+     * The type recorded when the value was captured wins; column metadata is only a fallback, and a value whose type
+     * cannot be determined at all is treated as text. The nullable {@code sqlType} keeps callers that have no JDBC
+     * metadata at hand from having to special case it.
+     */
+    public static LargeValueTypeEnum resolveForRead(String columnType, Integer sqlType, String preferredType) {
         LargeValueTypeEnum type = fromCode(preferredType);
         if (type == UNKNOWN) {
-            type = resolve(columnType, sqlType);
+            type = resolve(columnType, sqlType == null ? Types.OTHER : sqlType);
         }
         if (type == IMAGE) {
             return IMAGE;
         }
-        if (value instanceof Blob || value instanceof byte[]) {
-            return BINARY;
-        }
-        if (value instanceof Clob || type.isTextLike()) {
+        if (type.isTextLike()) {
             return type;
         }
         return type == UNKNOWN ? TEXT : type;

@@ -34,6 +34,7 @@ import org.springframework.stereotype.Indexed;
 import reactor.core.publisher.Hooks;
 import reactor.util.context.ReactorContextAccessor;
 
+import java.io.File;
 import java.io.PrintStream;
 import java.util.Arrays;
 
@@ -49,6 +50,9 @@ public class Application {
 
     public static void main(String[] args) {
         initializeCommunityRuntimeMode();
+        // Select the log configuration, and with it the log directory, before anything logs: the property has to be in
+        // place when the logging system initialises, otherwise the first lines land in the wrong directory.
+        filterPrintln();
         if (!SingleInstanceUtil.registerDesktopInstance(args)) {
             return;
         }
@@ -56,7 +60,6 @@ public class Application {
         log.info("Starting Application, args: {}", Arrays.toString(args));
         log.info("Chat2DB runtime mode: {}, networkStatus: {}, basePath: {}",
                 ConfigUtils.getRuntimeMode(), ConfigUtils.getNetworkStatus(), ConfigUtils.getBasePath());
-        filterPrintln();
         initializeContextPropagation();
         initializeDesktopBridge();
         initializeSqlxBridge();
@@ -157,6 +160,8 @@ public class Application {
     }
 
     private static void filterPrintln() {
+        // Logs belong next to the rest of this product's state, not in a directory named after another edition
+        System.setProperty("chat2db.log.path", ConfigUtils.getEnvBasePath() + File.separator + "logs");
         if (ConfigUtils.isDesktop()) {
             if (ConfigUtils.isLocalPersistence()) {
                 System.setProperty("logging.config", "classpath:logback-desktop-local.xml");

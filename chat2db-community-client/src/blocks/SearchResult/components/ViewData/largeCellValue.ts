@@ -22,9 +22,9 @@ export const LARGE_VALUE_TYPE = {
   UNKNOWN: 'UNKNOWN',
 } as const satisfies Record<LargeValueType, LargeValueType>;
 
+// The cell value endpoint also accepts "text" and "hex"; the client always transfers base64 bytes and decodes them
+// once, which is what keeps a value spanning many chunks byte exact.
 export const LARGE_CELL_REQUEST_FORMAT = {
-  TEXT: 'text',
-  HEX: 'hex',
   BASE64: 'base64',
 } as const;
 
@@ -36,14 +36,30 @@ export const LARGE_CELL_DOWNLOAD_FORMAT = {
 
 export const LARGE_CELL_ERROR_CODE = {
   TOKEN_EXPIRED: 'largeCellValue.tokenExpired',
+  TOKEN_REQUIRED: 'largeCellValue.tokenRequired',
   FULL_VALUE_UNSUPPORTED: 'largeCellValue.fullValueUnsupported',
+  READ_FAILED: 'largeCellValue.readFailed',
+  DOWNLOAD_FAILED: 'largeCellValue.downloadFailed',
+  PARTIAL_PREVIEW_EDIT_REJECTED: 'largeCellValue.partialPreviewEditRejected',
+  UNSUPPORTED_FORMAT: 'largeCellValue.unsupportedFormat',
+  SNAPSHOT_EXPIRED: 'largeCellValue.snapshotExpired',
+  SNAPSHOT_CELL_MISSING: 'largeCellValue.snapshotCellMissing',
+  SNAPSHOT_READ_FAILED: 'largeCellValue.snapshotReadFailed',
+  SNAPSHOT_WRITE_FAILED: 'largeCellValue.snapshotWriteFailed',
 } as const;
 
 export const LARGE_CELL_ERROR_MESSAGE = {
   TOKEN_EXPIRED: 'common.largeCellValue.error.tokenExpired',
+  TOKEN_REQUIRED: 'common.largeCellValue.error.tokenRequired',
   LOAD_FAILED: 'common.largeCellValue.error.loadFailed',
   DOWNLOAD_FAILED: 'common.largeCellValue.error.downloadFailed',
   FULL_VALUE_UNSUPPORTED: 'common.largeCellValue.error.fullValueUnsupported',
+  PARTIAL_PREVIEW_EDIT_REJECTED: 'common.largeCellValue.error.partialPreviewEditRejected',
+  UNSUPPORTED_FORMAT: 'common.largeCellValue.error.unsupportedFormat',
+  SNAPSHOT_EXPIRED: 'common.largeCellValue.error.snapshotExpired',
+  SNAPSHOT_CELL_MISSING: 'common.largeCellValue.error.snapshotCellMissing',
+  SNAPSHOT_READ_FAILED: 'common.largeCellValue.error.snapshotReadFailed',
+  SNAPSHOT_WRITE_FAILED: 'common.largeCellValue.error.snapshotWriteFailed',
 } as const;
 
 export const LARGE_CELL_TEXT_EDITOR_LIMIT = 10 * 1024 * 1024;
@@ -176,5 +192,12 @@ export function getLargeCellViewerValue(params: {
 }
 
 export function isLargeCellTokenExpiredError(error: any) {
-  return error?.errorCode === LARGE_CELL_ERROR_CODE.TOKEN_EXPIRED;
+  const errorCode = error?.errorCode;
+  // The handle can be gone in three ways: the handle itself expired, the snapshot behind it expired, or the cell is no
+  // longer part of it. All three mean "load again from the database".
+  return (
+    errorCode === LARGE_CELL_ERROR_CODE.TOKEN_EXPIRED ||
+    errorCode === LARGE_CELL_ERROR_CODE.SNAPSHOT_EXPIRED ||
+    errorCode === LARGE_CELL_ERROR_CODE.SNAPSHOT_CELL_MISSING
+  );
 }

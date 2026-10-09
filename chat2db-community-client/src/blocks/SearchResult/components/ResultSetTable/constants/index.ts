@@ -6,8 +6,6 @@ export enum ContextmenuType {
   viewRowDetail = 'viewRowDetail',
   // View the complete large field
   viewFullValue = 'viewFullValue',
-  // Copy large field preview
-  copyPreview = 'copyPreview',
   // Save large fields to file
   saveToFile = 'saveToFile',
   // copy

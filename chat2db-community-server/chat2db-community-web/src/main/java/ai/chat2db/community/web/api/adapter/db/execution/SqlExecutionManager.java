@@ -3,6 +3,7 @@ package ai.chat2db.community.web.api.adapter.db.execution;
 import ai.chat2db.community.domain.api.service.db.IDbConnectionContextService;
 import ai.chat2db.community.domain.api.service.db.IDbExecuteResultEnhanceService;
 import ai.chat2db.community.domain.api.service.db.IDbLargeValueTokenService;
+import ai.chat2db.community.domain.api.service.result.IResultSnapshotStore;
 import ai.chat2db.community.domain.api.service.db.IDbSqlExecutionService;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
@@ -53,19 +54,22 @@ public class SqlExecutionManager {
     private final IDbLargeValueTokenService largeValueTokenService;
     private final IDbExecuteResultEnhanceService executeResultEnhanceService;
     private final IOpsSqlOperationLogService sqlOperationLogRecorder;
+    private final IResultSnapshotStore resultSnapshotStore;
 
     public SqlExecutionManager(IDbConnectionContextService connectionContextService,
                                IDbSqlExecutionService sqlExecutionService,
                                DbWebConverter dbWebConverter,
                                IDbLargeValueTokenService largeValueTokenService,
                                IDbExecuteResultEnhanceService executeResultEnhanceService,
-                               IOpsSqlOperationLogService sqlOperationLogRecorder) {
+                               IOpsSqlOperationLogService sqlOperationLogRecorder,
+                               IResultSnapshotStore resultSnapshotStore) {
         this.connectionContextService = connectionContextService;
         this.sqlExecutionService = sqlExecutionService;
         this.dbWebConverter = dbWebConverter;
         this.largeValueTokenService = largeValueTokenService;
         this.executeResultEnhanceService = executeResultEnhanceService;
         this.sqlOperationLogRecorder = sqlOperationLogRecorder;
+        this.resultSnapshotStore = resultSnapshotStore;
         outputPoller.scheduleAtFixedRate(this::pollMessages, 200, 200, TimeUnit.MILLISECONDS);
     }
 
@@ -81,7 +85,8 @@ public class SqlExecutionManager {
         ISqlExecutionSink sink = new ConsoleSqlExecutionSink(request.getRequestUuid(), executionId);
         SqlExecutionJob job = new SqlExecutionJob(request, sink, connectionContextService, sqlExecutionService,
                 dbWebConverter,
-                largeValueTokenService, executeResultEnhanceService, sqlOperationLogRecorder, this::onJobFinished);
+                largeValueTokenService, executeResultEnhanceService, sqlOperationLogRecorder, resultSnapshotStore,
+                this::onJobFinished);
         jobs.put(executionId, job);
         try {
             Future<?> future = executionPool.submit(job);

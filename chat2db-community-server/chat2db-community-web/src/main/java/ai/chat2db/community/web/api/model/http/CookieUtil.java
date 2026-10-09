@@ -1,6 +1,7 @@
 package ai.chat2db.community.web.api.model.http;
 
 
+import ai.chat2db.community.tools.http.DesktopSessionContext;
 import ai.chat2db.community.tools.http.LocalCookie;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.model.HeaderAndCookies;
@@ -21,9 +22,9 @@ import java.util.*;
 
 public class CookieUtil {
 
-    public static final String CHAT2DB_ORGANIZATION_TOKEN = "Chat2db-Organization-Token";
+    public static final String CHAT2DB_ORGANIZATION_TOKEN = DesktopSessionContext.ORGANIZATION_TOKEN_COOKIE;
 
-    public static final String CHAT2DB_ORGANIZATION_ID = "Chat2db-Organization-Id";
+    public static final String CHAT2DB_ORGANIZATION_ID = DesktopSessionContext.ORGANIZATION_ID_COOKIE;
 
     public static final String CHAT2DB_USER_ID = "Chat2db-BS-TOKEN";
 

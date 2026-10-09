@@ -10,6 +10,8 @@ import ai.chat2db.plugin.mysql.enums.type.MysqlColumnTypeEnum;
 import ai.chat2db.plugin.mysql.enums.type.MysqlIndexTypeEnum;
 import ai.chat2db.community.domain.api.enums.plugin.EditStatusEnum;
 import ai.chat2db.spi.DefaultSqlBuilder;
+import ai.chat2db.spi.IValueProcessor;
+import ai.chat2db.community.domain.api.model.value.SQLDataValue;
 import ai.chat2db.spi.constant.SQLConstants;
 import ai.chat2db.spi.model.request.PageLimitRequest;
 import ai.chat2db.community.domain.api.model.account.*;
@@ -74,6 +76,16 @@ public class MysqlSqlBuilder extends DefaultSqlBuilder {
     @Override
     public String quoteAlias(String alias) {
         return quoteIdentifier(alias);
+    }
+
+    @Override
+    protected String getComparisonSqlValue(SQLDataValue sqlDataValue, IValueProcessor valueProcessor) {
+        String value = super.getComparisonSqlValue(sqlDataValue, valueProcessor);
+        if (sqlDataValue.getValue() != null
+                && StringUtils.equalsIgnoreCase(sqlDataValue.getDateTypeName(), MysqlColumnTypeEnum.JSON.name())) {
+            return "CAST(" + value + " AS JSON)";
+        }
+        return value;
     }
 
     @Override

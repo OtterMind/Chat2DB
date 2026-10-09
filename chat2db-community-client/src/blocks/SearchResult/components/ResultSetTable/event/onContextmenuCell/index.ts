@@ -2,16 +2,13 @@ import { isSelected } from '@/blocks/CanvasTable/utils';
 import { IOnContextmenuEvent } from '../../typings';
 import { ContextmenuType } from '../../constants';
 import handlePaste from './handlePaste';
-import handleCopy from './handleCopy';
 import handleViewUpdateData from './handleViewUpdateData';
 import handleSetNull from './handleSetNull';
-import handleCopyRow from './handleCopyRow';
-import handleCopyAsSqlInValues from './handleCopyAsSqlInValues';
-import handleCopyAsMarkdown from './handleCopyAsMarkdown';
+import { cancelResultCopy, copyResultData } from '../../copyResultData';
+import type { ResultCopyFormat } from '../../copyValues';
 import i18n from '@/i18n';
 import { copyToClipboard } from '@/utils';
 import { downloadLargeCellValue } from '@/utils/file';
-import { isDesktop } from '@/utils/env';
 import feedback from '@/utils/feedback';
 import {
   getLargeCellDownloadFormat,
@@ -19,7 +16,6 @@ import {
 } from '@/blocks/SearchResult/components/ViewData/largeCellValue';
 import { getLargeCellErrorMessage } from '@/blocks/SearchResult/components/ViewData/largeCellValueMessage';
 
-import { staticMessage } from '@chat2db/ui';
 import { useGlobalStore } from '@/store/global';
 import {
   canFreezeResultColumns,
@@ -47,6 +43,11 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
     onFreezeColumns,
     onUnfreezeAllColumns,
   } = props;
+  const copy = (format: ResultCopyFormat = 'cells') => {
+    void copyResultData(tableInstance, format, {
+      headers: resultData.headerList, operations: onTableOperationUtils,
+    });
+  };
   const id = tableInstance.on('contextmenu_cell', (selectEvent) => {
     const { dataTableSettings, updateDataTableSettings } = useGlobalStore.getState();
     const showFieldType = dataTableSettings.showFieldType ?? true;
@@ -107,7 +108,7 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         label: i18n('common.button.copy'),
         icon: 'icon-copy',
         onClick: () => {
-          handleCopy(tableInstance);
+          copy();
         },
       },
       [ContextmenuType.viewFullValue]: {
@@ -117,21 +118,6 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         onClick: () => {
           const data = handleViewUpdateData(tableInstance, selectEvent);
           onTableOperationUtils.handleViewUpdateData?.(data);
-        },
-      },
-      [ContextmenuType.copyPreview]: {
-        key: ContextmenuType.copyPreview,
-        label: i18n('common.largeCellValue.button.copyPreview'),
-        icon: 'icon-copy',
-        onClick: () => {
-          const record = tableInstance.getRecordByCell(selectEvent.col, selectEvent.row);
-          const cellMeta = getResultCellMetaAtTableColumn(
-            tableInstance,
-            record,
-            selectEvent.col,
-            selectEvent.row,
-          );
-          copyToClipboard(cellMeta?.value || selectEvent.dataValue || '');
         },
       },
       [ContextmenuType.saveToFile]: {
@@ -161,6 +147,7 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         icon: 'icon-copy',
         onClick: () => {
           if (currentColumnName !== undefined) {
+            cancelResultCopy(tableInstance);
             copyToClipboard(currentColumnName);
           }
         },
@@ -206,64 +193,56 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
             key: ContextmenuType.copyRowInsert,
             label: i18n('common.button.insertSql'),
             onClick: () => {
-              const operations = handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.copyRowInsert });
-              onTableOperationUtils.copyGenerateSQL?.(operations);
+              copy('CREATE');
             },
           },
           {
             key: ContextmenuType.copyRowUpdate,
             label: i18n('common.button.updateSql'),
             onClick: () => {
-              const operations = handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.copyRowUpdate });
-              onTableOperationUtils.copyGenerateSQL?.(operations);
+              copy('UPDATE_COPY');
             },
           },
           {
             key: ContextmenuType.copyRowWhere,
             label: i18n('common.button.whereSql'),
             onClick: () => {
-              const operations = handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.copyRowWhere });
-              onTableOperationUtils.copyGenerateSQL?.(operations);
+              copy('WHERE');
             },
           },
           {
             key: ContextmenuType.copyAsSqlInValues,
             label: i18n('common.button.copyAsSqlInValues'),
             onClick: () => {
-              const { operations, errorKey } = handleCopyAsSqlInValues({ tableInstance });
-              if (errorKey) {
-                staticMessage.warning(i18n(errorKey));
-                return;
-              }
-              onTableOperationUtils.copyGenerateInValues?.(operations);
+              copy('IN_VALUES');
             },
           },
           {
             key: ContextmenuType.tabSplit,
             label: i18n('common.button.tabularSeparatedValues'),
             onClick: () => {
-              handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.tabSplit });
+              copy('tsv');
             },
           },
           {
             key: ContextmenuType.tabSplitField,
             label: i18n('common.button.tabularSeparatedValuesFieldName'),
             onClick: () => {
-              handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.tabSplitField });
+              copy('headers');
             },
           },
           {
             key: ContextmenuType.tabSplitFieldAndValue,
             label: i18n('common.button.tabularSeparatedValuesFieldNameAndData'),
             onClick: () => {
-              handleCopyRow({ tableInstance, selectEvent, type: ContextmenuType.tabSplitFieldAndValue });
+              copy('tsvWithHeaders');
             },
           },
           {
             key: ContextmenuType.markdownTable,
             label: i18n('common.button.markdownTable'),
             onClick: () => {
-              handleCopyAsMarkdown(tableInstance);
+              copy('markdown');
             },
           },
         ],
@@ -371,11 +350,12 @@ const onContextmenuCell = (props: IOnContextmenuEvent) => {
         ? [
             [
               contextmenuMap[ContextmenuType.viewRowDetail],
-              ...(isDesktop ? [contextmenuMap[ContextmenuType.viewFullValue]] : []),
+              contextmenuMap[ContextmenuType.viewFullValue],
             ],
             [
-              contextmenuMap[ContextmenuType.copyPreview],
-              ...(isDesktop && cellMeta.largeValueId ? [contextmenuMap[ContextmenuType.saveToFile]] : []),
+              contextmenuMap[ContextmenuType.copy],
+              contextmenuMap[ContextmenuType.copyRow],
+              ...(cellMeta.largeValueId ? [contextmenuMap[ContextmenuType.saveToFile]] : []),
             ],
           ]
         : [

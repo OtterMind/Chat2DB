@@ -4,31 +4,28 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
+/**
+ * Server side handle for one large value of a result set.
+ * <p>
+ * The client only ever sees {@link #id}; everything else stays in the process. The handle points at the content of a
+ * result snapshot, which is why reads never have to touch the database again.
+ */
 @Data
 @Builder
 public class LargeValueToken {
 
     private String id;
 
-    private Long dataSourceId;
-
-    private String databaseName;
-
-    private String schemaName;
-
+    /**
+     * Name of the result table, used to build a readable download file name.
+     */
     private String tableName;
 
+    /**
+     * Name of the column the value came from, used to build a readable download file name.
+     */
     private String columnName;
-
-    @Builder.Default
-    private Map<String, Object> primaryKey = new LinkedHashMap<>();
-
-    private Long userId;
-
-    private Long organizationId;
 
     private Instant expiresAt;
 
@@ -38,7 +35,10 @@ public class LargeValueToken {
 
     private String columnType;
 
-    private Long sizeBytes;
+    private String snapshotId;
 
-    private Long sizeChars;
+    private Integer rowIndex;
+
+    private Integer columnIndex;
+
 }

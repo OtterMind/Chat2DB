@@ -18,7 +18,6 @@ import type { OperationRecordUtils } from '@/blocks/SearchResult/components/Resu
 import sqlService from '@/service/sql';
 import { IResultCell } from '@/typings/database';
 import { downloadLargeCellValue } from '@/utils/file';
-import { isDesktop } from '@/utils/env';
 import {
   LoadedLargeCellChunk,
   LargeCellViewerMode,
@@ -32,13 +31,29 @@ import {
   getLargeCellViewerLimit,
   getLargeCellViewerValue,
   getNextLargeCellChunkLimit,
+  LARGE_CELL_ERROR_CODE,
   LARGE_CELL_ERROR_MESSAGE,
   isBinaryDisplayMode,
   isLargeCellTokenExpiredError,
+  LARGE_VALUE_TYPE,
 } from './largeCellValue';
 import { getLargeCellDisplayMessage, getLargeCellErrorMessage } from './largeCellValueMessage';
 import JsonAwareMonacoEditor from './JsonAwareMonacoEditor';
 import { getResultFieldAtTableColumn } from '../ResultSetTable/columnState';
+
+/**
+ * Picks the viewer that makes sense for the cell type, so an image does not open as mojibake text.
+ */
+function defaultViewerModeFor(valueType?: string | null): LargeCellViewerMode {
+  const normalized = String(valueType || '').toUpperCase();
+  if (normalized === LARGE_VALUE_TYPE.IMAGE) {
+    return LARGE_CELL_VIEWER_MODE.IMAGE;
+  }
+  if (normalized === LARGE_VALUE_TYPE.BINARY) {
+    return LARGE_CELL_VIEWER_MODE.HEX;
+  }
+  return LARGE_CELL_VIEWER_MODE.TEXT;
+}
 
 interface IProps {
   className?: string;
@@ -83,6 +98,8 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
   const [largeValueError, setLargeValueError] = useState<string>('');
   const [largeValueExpired, setLargeValueExpired] = useState(false);
   const [viewerMode, setViewerMode] = useState<LargeCellViewerMode>(LARGE_CELL_VIEWER_MODE.TEXT);
+  const lastViewerCellKeyRef = useRef('');
+  const viewerModeTouchedRef = useRef(false);
   const [imagePreviewSrc, setImagePreviewSrc] = useState('');
   const largeValueRequestVersionRef = useRef(0);
   const activeLargeValueIdRef = useRef<string>('');
@@ -111,7 +128,12 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
       setLargeValueDownloading(false);
       setLargeValueExpired(false);
       setIsJsonContent(false);
-      setViewerMode(LARGE_CELL_VIEWER_MODE.TEXT);
+      const viewerCellKey = `${cellMeta?.largeValueId || ''}:${field || ''}:${viewData.rowId ?? ''}`;
+      if (lastViewerCellKeyRef.current !== viewerCellKey) {
+        lastViewerCellKeyRef.current = viewerCellKey;
+        viewerModeTouchedRef.current = false;
+        setViewerMode(defaultViewerModeFor(cellMeta?.valueType));
+      }
       originalLargeValueRef.current = null;
       if (cellMeta?.largeValue) {
         originalLargeValueRef.current = {
@@ -120,9 +142,6 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
           cellMeta: cloneCellMeta(cellMeta),
         };
         setEditorValue(cellMeta.value || '');
-        if (!isDesktop) {
-          return;
-        }
         if (cellMeta.largeValueId) {
           loadLargeValueChunk(cellMeta.largeValueId, 0, false, undefined, 'initial');
         } else if (cellMeta.unsupportedReason) {
@@ -154,7 +173,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
   const latestChunk = largeValueChunks[largeValueChunks.length - 1];
   const largeValueMeta = viewData?.cellMeta;
   const isLargeValue = !!largeValueMeta?.largeValue;
-  const canUseLargeValueActions = isLargeValue && isDesktop;
+  const canUseLargeValueActions = isLargeValue;
   const displayMode = latestChunk?.displayMode || largeValueMeta?.valueType;
   const editorLimit = getLargeCellViewerLimit(viewerMode, displayMode);
   const loadedSize = getLargeCellLoadedBytes(largeValueChunks);
@@ -237,6 +256,18 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
     };
   }, [isLargeValue, viewerMode, displayMode, latestChunk?.eof, largeValueViewerValue, largeValueMeta, viewData]);
 
+  // The cell metadata can be incomplete (for example when a blob only turns out to be an image once it is read),
+  // so the display mode reported with the first loaded chunk has the final say unless the user picked a view.
+  useEffect(() => {
+    if (!isLargeValue || viewerModeTouchedRef.current) {
+      return;
+    }
+    const detected = defaultViewerModeFor(latestChunk?.displayMode || largeValueMeta?.valueType);
+    if (detected !== LARGE_CELL_VIEWER_MODE.TEXT && detected !== viewerMode) {
+      setViewerMode(detected);
+    }
+  }, [isLargeValue, largeValueMeta?.valueType, latestChunk?.displayMode, viewerMode]);
+
   const loadLargeValueChunk = async (
     largeValueId: string,
     offset: number,
@@ -306,7 +337,14 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
         if (requestVersion !== largeValueRequestVersionRef.current || activeLargeValueIdRef.current !== largeValueId) {
           break;
         }
-        loadedChunks.push(decodeLargeCellChunk(chunk));
+        const decoded = decodeLargeCellChunk(chunk);
+        if (!chunk.eof && chunk.nextOffset <= chunk.offset) {
+          // A chunk that carries no progress would spin here forever
+          throw Object.assign(new Error(LARGE_CELL_ERROR_MESSAGE.LOAD_FAILED), {
+            errorCode: LARGE_CELL_ERROR_CODE.READ_FAILED,
+          });
+        }
+        loadedChunks.push(decoded);
         eof = chunk.eof;
         nextLoadedSize += chunk.nextOffset - chunk.offset;
         offset = chunk.nextOffset;
@@ -351,6 +389,7 @@ const ViewData = forwardRef((_props: IProps, ref: ForwardedRef<ViewDataRef>) => 
 
   const changeViewerMode = (value: LargeCellViewerMode) => {
     setIsJsonContent(false);
+    viewerModeTouchedRef.current = true;
     setViewerMode(value);
   };
 

@@ -67,6 +67,7 @@ public class ExecuteResultResponse {
     private List<RefreshTarget> refreshTargets;
     private String comment;
     private Integer resultSetId;
+
     private Integer statementSequence;
     private ExecutionMetrics executionMetrics;
     private ExecutionContext executionContext;

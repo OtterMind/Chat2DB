@@ -2,10 +2,15 @@ package ai.chat2db.community.sqlx;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ai.chat2db.community.domain.api.model.storage.WorkspaceDataSource;
 import ai.chat2db.community.domain.api.service.db.IDbWorkspaceDataSourceService;
+import ai.chat2db.community.tools.model.Context;
+import ai.chat2db.community.tools.util.ContextUtils;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -20,6 +25,7 @@ class SqlxDataSourceReaderTest {
 
         private final List<String> calls = new ArrayList<>();
         private final List<Long> requestedPasswords = new ArrayList<>();
+        private Context observedContext;
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) {
@@ -27,6 +33,7 @@ class SqlxDataSourceReaderTest {
             if ("queryDisplayDataSourceById".equals(name)) {
                 calls.add(name);
                 requestedPasswords.add((Boolean) args[1] ? (Long) args[0] : null);
+                observedContext = ContextUtils.queryContext();
                 return dataSource((Long) args[0], "decrypted-secret");
             }
             if ("exportDataSources".equals(name)) {
@@ -58,6 +65,36 @@ class SqlxDataSourceReaderTest {
                 SqlxDataSourceReaderTest.class.getClassLoader(),
                 new Class<?>[] {IDbWorkspaceDataSourceService.class},
                 stub);
+    }
+
+    @Test
+    void readsUnderTheDesktopSessionContextAndRestoresIt() {
+        ContextUtils.removeContext();
+        Stub stub = new Stub();
+        try {
+            new SqlxDataSourceReader(service(stub)).read(List.of(7L));
+
+            assertNotNull(stub.observedContext, "a cloud-stored connection needs a session context to decrypt");
+            assertNull(ContextUtils.queryContext(), "the reader must not leave its context behind");
+        } finally {
+            ContextUtils.removeContext();
+        }
+    }
+
+    @Test
+    void keepsAnExistingRequestContext() {
+        Context existing = Context.builder().organizationToken("token").build();
+        Stub stub = new Stub();
+        try {
+            ContextUtils.setContext(existing);
+
+            new SqlxDataSourceReader(service(stub)).read(List.of(7L));
+
+            assertSame(existing, stub.observedContext, "an existing request context must be kept");
+            assertSame(existing, ContextUtils.queryContext(), "the previous context must be restored");
+        } finally {
+            ContextUtils.removeContext();
+        }
     }
 
     @Test

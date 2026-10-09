@@ -3,25 +3,23 @@ package ai.chat2db.community.domain.api.model.db;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
+/**
+ * Resolved reading instruction for a large value: where the content lives inside a result snapshot plus the type
+ * information needed to slice and label it.
+ */
 @Data
 @Builder
 public class LargeValueReference {
 
-    private Long dataSourceId;
-
-    private String databaseName;
-
-    private String schemaName;
-
+    /**
+     * Name of the result table, used to build a readable download file name.
+     */
     private String tableName;
 
+    /**
+     * Name of the column the value came from, used to build a readable download file name.
+     */
     private String columnName;
-
-    @Builder.Default
-    private Map<String, Object> primaryKey = new LinkedHashMap<>();
 
     private String valueType;
 
@@ -29,7 +27,13 @@ public class LargeValueReference {
 
     private String columnType;
 
-    private Long sizeBytes;
+    private String snapshotId;
 
-    private Long sizeChars;
+    private Integer rowIndex;
+
+    private Integer columnIndex;
+
+    public boolean snapshotBacked() {
+        return snapshotId != null;
+    }
 }

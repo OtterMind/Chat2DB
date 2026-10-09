@@ -15,6 +15,7 @@ import ai.chat2db.community.domain.api.model.operation.SqlOperationLogRecord;
 import ai.chat2db.community.domain.api.service.ops.IOpsSqlOperationLogService;
 import ai.chat2db.community.domain.api.enums.operation.SqlOperationLogSourceEnum;
 import ai.chat2db.community.domain.api.service.db.IDbLargeValueTokenService;
+import ai.chat2db.community.domain.api.service.result.IResultSnapshotStore;
 import ai.chat2db.community.web.api.converter.db.DbWebConverter;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.community.domain.api.service.db.IDbSqlExecutionService;
@@ -44,6 +45,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
     private final IDbLargeValueTokenService largeValueTokenService;
     private final IDbExecuteResultEnhanceService executeResultEnhanceService;
     private final IOpsSqlOperationLogService sqlOperationLogRecorder;
+    private final IResultSnapshotStore resultSnapshotStore;
     private final Consumer<SqlExecutionJob> finishCallback;
     private final AtomicBoolean canceled = new AtomicBoolean(false);
     private final SqlExecutionEventContext eventContext = new SqlExecutionEventContext();
@@ -61,6 +63,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
                            IDbLargeValueTokenService largeValueTokenService,
                            IDbExecuteResultEnhanceService executeResultEnhanceService,
                            IOpsSqlOperationLogService sqlOperationLogRecorder,
+                           IResultSnapshotStore resultSnapshotStore,
                            Consumer<SqlExecutionJob> finishCallback) {
         this.request = request;
         this.sink = sink;
@@ -70,6 +73,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
         this.largeValueTokenService = largeValueTokenService;
         this.executeResultEnhanceService = executeResultEnhanceService;
         this.sqlOperationLogRecorder = sqlOperationLogRecorder;
+        this.resultSnapshotStore = resultSnapshotStore;
         this.finishCallback = finishCallback;
     }
 
@@ -79,6 +83,7 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
         ConsoleHelper.setHeaders(request.getConsoleMessage());
         restoreLocalHeaders();
         SqlExecutionLogConsumer logConsumer = null;
+        SqlExecutionConsumer resultConsumer = null;
         try {
             Context context = request.getContext();
             if (context != null) {
@@ -87,11 +92,9 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             bindConnectionContext();
             sink.send("started", Map.of("executionId", request.getExecutionId()));
             DbDlExecuteRequest param = dbWebConverter.request2param(request.getSqlEditorRequest());
-            logConsumer = new SqlExecutionLogConsumer(
-                    new SqlExecutionConsumer(request, sink, dbWebConverter, largeValueTokenService,
-                            executeResultEnhanceService, eventContext),
-                    request,
-                    sqlOperationLogRecorder);
+            resultConsumer = new SqlExecutionConsumer(request, sink, dbWebConverter, largeValueTokenService,
+                    executeResultEnhanceService, eventContext, resultSnapshotStore);
+            logConsumer = new SqlExecutionLogConsumer(resultConsumer, request, sqlOperationLogRecorder);
             DbStreamingExecuteRequest executeStreamingRequest = new DbStreamingExecuteRequest();
             executeStreamingRequest.setExecutionId(request.getExecutionId());
             executeStreamingRequest.setDlExecuteRequest(param);
@@ -116,9 +119,25 @@ public class SqlExecutionJob implements Runnable, ISqlExecutionStatementListener
             }
         } finally {
             currentStatement = null;
-            ContextUtils.removeContext();
-            connectionContextService.clear();
-            finishCallback.accept(this);
+            if (resultConsumer != null) {
+                try {
+                    resultConsumer.close();
+                } catch (Throwable e) {
+                    // Even an Error (an OOM while flushing, for example) must not skip the teardown below
+                    log.warn("Failed to close the result consumer: {}", e.getMessage());
+                }
+            }
+            // Every teardown step must run even if an earlier one fails, otherwise the job would stay registered and
+            // the pooled thread would keep serving with the previous context.
+            try {
+                ContextUtils.removeContext();
+            } finally {
+                try {
+                    connectionContextService.clear();
+                } finally {
+                    finishCallback.accept(this);
+                }
+            }
         }
     }
 

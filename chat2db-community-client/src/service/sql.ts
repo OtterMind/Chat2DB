@@ -94,6 +94,11 @@ const getLargeCellValue = createRequest<ILargeCellValueRequest, ILargeCellChunk>
   errorLevel: 'toast',
 });
 
+const releaseLargeCellValues = createRequest<{ largeValueIds: string[] }, void>('/api/rdb/cell/release', {
+  method: 'post',
+  errorLevel: false,
+});
+
 const downloadLargeCellValue = createRequest<ILargeCellDownloadRequest, string>('/api/rdb/cell/download_path', {
   method: 'post',
   errorLevel: 'toast',
@@ -578,6 +583,7 @@ export default {
   copyTable,
   prepareCopyTable,
   downloadLargeCellValue,
+  releaseLargeCellValues,
   getLargeCellValue,
   truncateTable,
   getCreateSchemaSql,

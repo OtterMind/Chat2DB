@@ -16,6 +16,8 @@ import { IManageResultData } from '@/typings/database';
 import onContextmenuCell from './event/onContextmenuCell';
 import onChangeCellValue from './event/onChangeCellValue';
 import onCopyData from './event/onCopyData';
+import { cancelResultCopy } from './copyResultData';
+
 import onPasteData from './event/onPasteData';
 import { buildResultColumns, buildResultRecords } from './utils/dataTreating';
 import useOperationRecord, { OperationRecordUtils } from './hooks/useOperationRecord';
@@ -194,6 +196,9 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
     hiddenColumnFields,
   ]);
   const records = useMemo(() => buildResultRecords(resultData), [resultData]);
+  useEffect(() => () => {
+    if (tableInstance) cancelResultCopy(tableInstance);
+  }, [tableInstance, resultData.dataList]);
   const headerTooltip = useHeaderTooltip({ tableInstance });
 
   useEffect(() => {
@@ -443,6 +448,7 @@ const ResultSetTable = forwardRef((props: IProps, ref: ForwardedRef<ResultSetTab
   }, []);
 
   const handleBeforeRecordsChange = useCallback((table: ITableInstance) => {
+    cancelResultCopy(table);
     resetResultTableLayout(table);
   }, []);
 

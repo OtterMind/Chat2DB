@@ -14,6 +14,7 @@ import classnames from 'classnames';
 import { Dropdown, type MenuProps } from 'antd';
 import { ArrowDownUp, Check, SlidersHorizontal } from 'lucide-react';
 import CustomTabs, { ITabItem } from '@/components/Tabs';
+import { collectLargeCellValueIds, releaseLargeCellValues } from './releaseLargeCellValues';
 import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import SearchResultItem from './components/SearchResultItem';
 import Abstract from '@/components/Abstract';
@@ -134,6 +135,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   const showFieldComment = dataTableSettings.showFieldComment ?? true;
   const dataSourceList = useTreeStore((state) => state.dataSourceList);
   const [resultDataList, setResultDataList] = useState<IManageResultData[] | null>(props.resultDataList);
+  const knownResultLargeIdsRef = useRef<Map<string, string[]>>(new Map());
   const [historyResultDataList, setHistoryResultDataList] = useState<IManageResultData[]>(
     props.historyResultDataList || [],
   );
@@ -210,6 +212,34 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     });
     const latestChangedResult = changedResults[changedResults.length - 1];
 
+    // A re-run can replace the result of the same tab (same identity, new version) or publish a brand new result and
+    // drop the old one. Both leave the previous handles dangling, so hand them back instead of letting the server keep
+    // the captured bytes until their lifetime runs out.
+    // Results can move between the active list and the history bar, so only a key that is gone from both is really
+    // discarded; anything else would release content the user can still open.
+    const nextResultKeys = new Set(
+      [...nextResultDataList, ...(props.historyResultDataList || [])]
+        .map((item) => getResultIdentity(item))
+        .filter((key): key is string => !!key),
+    );
+    knownResultLargeIdsRef.current.forEach((previousIds, previousKey) => {
+      if (!nextResultKeys.has(previousKey)) {
+        releaseLargeCellValues(previousIds);
+      }
+    });
+    changedResults.forEach((item) => {
+      const resultKey = getResultIdentity(item);
+      const previousIds = resultKey ? knownResultLargeIdsRef.current.get(resultKey) : undefined;
+      // Streamed batches are merged into the previous data, so the handles of older rows are still shown. Only the
+      // ones that really disappeared may be handed back, otherwise rows the user can still open go stale.
+      const currentIds = new Set(collectLargeCellValueIds(item));
+      releaseLargeCellValues(previousIds?.filter((id) => !currentIds.has(id)));
+    });
+    knownResultLargeIdsRef.current = new Map(
+      nextResultDataList
+        .map((item) => [getResultIdentity(item), collectLargeCellValueIds(item)] as const)
+        .filter((entry): entry is readonly [string, string[]] => !!entry[0]),
+    );
     knownResultVersionMapRef.current = new Map(
       nextResultDataList
         .map((item) => [getResultIdentity(item), getResultVersion(item, consoleMode)] as const)
@@ -523,6 +553,10 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
           .filter((result) => closedKeys.has(result.uuid || ''))
           .map(getSqlExecutionResultIdentity)
           .filter((identity): identity is SqlExecutionResultIdentity => identity !== undefined);
+        const closedResults = [...(resultDataList || []), ...historyResultDataList].filter((result) =>
+          closedKeys.has(result.uuid || ''),
+        );
+        closedResults.forEach((result) => releaseLargeCellValues(collectLargeCellValueIds(result)));
         const newResultDataList = resultDataList?.filter((d) => {
           return data.findIndex((item) => item.key === d.uuid) === -1;
         });

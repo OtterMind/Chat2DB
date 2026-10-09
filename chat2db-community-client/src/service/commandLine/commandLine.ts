@@ -6,6 +6,8 @@ import interceptorsResponse from '@/service/interceptorsResponse';
 import { IErrorLevel, PermissionError } from '@/service/base';
 import { staticMessage } from '@chat2db/ui';
 import { redactForLog } from './redactForLog';
+// The backend reports large-value failures as i18n keys, so the raw toast would show the key itself.
+import { getLargeCellDisplayMessage } from '@/blocks/SearchResult/components/ViewData/largeCellValueMessage';
 
 export interface ICommandLineRequest {
   requestUrl: string;
@@ -162,7 +164,7 @@ export const pushMessageFlow = (_data) => {
       }
       switch (options.errorLevel) {
         case 'toast':
-          staticMessage.error(errorMessage);
+          staticMessage.error(getLargeCellDisplayMessage(errorMessage));
           break;
         case 'notification':
           useGlobalStore?.getState()?.systemErrorMessageApi?.({

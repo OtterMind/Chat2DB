@@ -289,33 +289,45 @@ export function clipboardToArray(text: string): Array<Array<string | null>> {
   }
 }
 
+type ClipboardData = string | number | Array<string | number | null> | Array<Array<string | null>>;
+
+function getClipboardText(
+  data: ClipboardData,
+  direction: 'horizontal' | 'vertical',
+) {
+  if (typeof data === 'string' || typeof data === 'number') return data.toString();
+  if (data[0] instanceof Array) {
+    return (data as Array<Array<string | null>>)
+      .map((row) => row.map((item) => (item === null ? '' : item)).join('\t'))
+      .join('\n');
+  }
+  const separator = direction === 'horizontal' ? '\t' : '\n';
+  const text = (data as Array<string | number | null>)
+    .map((item) => (item === null ? '' : item.toString()))
+    .join(separator);
+  return direction === 'vertical' && text ? `${text}\n` : text;
+}
+
+export async function copyToClipboardAsync(data: ClipboardData): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(normalizeClipboardText(getClipboardText(data, 'horizontal'), navigator.userAgent));
+      clearInternalClipboard();
+      return true;
+    } catch {
+      // Older embedded browsers may require the existing clipboard fallback.
+    }
+  }
+  return copyToClipboard(data);
+}
+
 export function copyToClipboard(
-  data: string | number | Array<string | number | null> | Array<Array<string | null>>,
+  data: ClipboardData,
   direction: 'horizontal' | 'vertical' = 'horizontal',
 ) {
   clearInternalClipboard();
   try {
-    let text = '';
-    if (typeof data === 'string' || typeof data === 'number') {
-      text = data.toString();
-    } else if (data instanceof Array) {
-      if (data[0] instanceof Array) {
-        // two-dimensional array
-        text = (data as Array<Array<string | null>>)
-          .map((row) => row.map((item) => (item === null ? '' : item)).join('\t'))
-          .join('\n');
-      } else {
-        // one-dimensional array
-        const separator = direction === 'horizontal' ? '\t' : '\n';
-        text = (data as Array<string | number | null>)
-          .map((item) => (item === null ? '' : item.toString()))
-          .join(separator);
-        // Ensure last item is accounted for in the text
-        if (direction === 'vertical' && text.length > 0) {
-          text += '\n';
-        }
-      }
-    }
+    const text = getClipboardText(data, direction);
 
     // For empty strings, we force a space and then delete it to ensure the clipboard is cleared
     if (text === '') {

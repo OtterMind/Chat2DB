@@ -4,6 +4,7 @@ import { ContextmenuType } from '../constants';
 import { ITableInstance } from '@/blocks/CanvasTable/typings';
 import { OperationRecordUtils } from '../hooks/useOperationRecord';
 import { IManageResultData, IResultCell } from '@/typings';
+import type { CopyRequestSignal, ResultCopyOperation } from '../copyValues';
 
 // selected cell
 export type ISelectEvent = VTable.TYPES.MousePointerMultiCellEvent;
@@ -66,9 +67,9 @@ export interface IHandleViewRowDetailParams {
 // Callback after some operations on the table
 export interface ITableOperationUtils {
   // Copy as sql statement such as insert, update, where
-  copyGenerateSQL: (operations: any) => void;
+  generateCopySQL: (operations: ResultCopyOperation[], signal: CopyRequestSignal) => Promise<string>;
   // Copy as SQL IN list of values
-  copyGenerateInValues?: (operations: any) => void;
+  generateCopyInValues: (operations: ResultCopyOperation[], signal: CopyRequestSignal) => Promise<string>;
   // View or modify data
   handleViewUpdateData?: (params: IHandleViewUpdateDataParams) => void;
   // View single line details

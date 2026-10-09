@@ -65,13 +65,45 @@ export async function downloadFile(url: string, params: any) {
 }
 
 export async function downloadLargeCellValue(largeValueId: string, format: LargeCellDownloadFormat = 'raw') {
-  if (!isDesktop) {
+  if (isDesktop) {
+    const filePath = await sqlService.downloadLargeCellValue({ largeValueId, format });
+    if (filePath) {
+      jcefApi?.revealInExplorer(filePath);
+    }
     return;
   }
-  const filePath = await sqlService.downloadLargeCellValue({ largeValueId, format });
-  if (filePath) {
-    jcefApi?.revealInExplorer(filePath);
+  // Browsers cannot reveal a server side file, and the endpoint already answers with a Content-Disposition
+  // attachment header, so the content is streamed straight into the browser download.
+  const response = await fetch(
+    `/api/rdb/cell/download?largeValueId=${encodeURIComponent(largeValueId)}&format=${encodeURIComponent(format)}`,
+  );
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const result = await response.json();
+    // Keep the error code so the caller can tell an expired handle from a real failure
+    throw Object.assign(new Error(result?.errorMessage || result?.message || i18n('common.text.failure')), {
+      errorCode: result?.errorCode,
+    });
   }
+  if (!response.ok) {
+    throw new Error(`${response.status}: ${response.statusText}`);
+  }
+  const blob = await response.blob();
+  saveResponseAsFile(response, blob);
+}
+
+function saveResponseAsFile(response: Response, blob: Blob) {
+  const filename = getDownloadFilename(response.headers.get('content-disposition'));
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Revoking in the same tick can cancel the download in some browsers
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
 }
 
 // Update file content

@@ -6,6 +6,8 @@ import { staticMessage } from '@chat2db/ui';
 import request, { ResponseError } from 'umi-request';
 import { commandLineRequest, DesktopRequestOptions } from './commandLine/commandLine';
 import interceptorsResponse from '@/service/interceptorsResponse';
+// The backend reports large-value failures as i18n keys, so a raw toast would show the key to the user.
+import { getLargeCellDisplayMessage } from '@/blocks/SearchResult/components/ViewData/largeCellValueMessage';
 
 export type IErrorLevel = 'toast' | 'notification' | 'prompt' | 'critical' | false;
 export type PermissionError = 'apply' | false;
@@ -208,7 +210,7 @@ export default function createRequest<P = void, R = void>(url: string, options?:
             // Handle errors based on errorLevel
             switch (effectiveErrorLevel) {
               case 'toast':
-                staticMessage.error(errorMessage);
+                staticMessage.error(getLargeCellDisplayMessage(errorMessage));
                 break;
               case 'notification':
                 useGlobalStore?.getState()?.systemErrorMessageApi?.({

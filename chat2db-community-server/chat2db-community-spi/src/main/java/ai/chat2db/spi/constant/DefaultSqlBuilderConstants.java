@@ -1,7 +1,5 @@
 package ai.chat2db.spi.constant;
 
-import java.util.List;
-
 public final class DefaultSqlBuilderConstants {
 
     public static final String VALUE_DOUBLE_QUOTE = SQLConstants.TAB + SQLConstants.SPACE
@@ -47,10 +45,6 @@ public final class DefaultSqlBuilderConstants {
     public static final String SQL_WHERE = SQLConstants.WHERE_SQL_LOWER;
     public static final String SQL_WHERE_2 = SQLConstants.WHERE_SQL;
     public static final String SQL_DROP_SCHEMA_PREFIX = "DROP SCHEMA ";
-    public static final List<String> COPY_IN_VALUES_BLOCKED_COLUMN_TYPES = List.of(
-            "blob", "binary", "varbinary", "image", "bytea", "raw", "long raw", "bfile"
-    );
-
     private DefaultSqlBuilderConstants() {
     }
 }

@@ -20,7 +20,6 @@ import SelectionAggregates from '../SelectionAggregates';
 import { IExecuteSqlParams, IManageResultData } from '@/typings';
 import { Button, Tabs, Tooltip } from 'antd';
 import i18n from '@/i18n';
-import { copyToClipboard } from '@/utils';
 import StatusBar, { StatusBarRef } from '../StatusBar';
 import { getBlankCreateCellValue, transformOperations } from '@/blocks/SearchResult/utils';
 import MonacoEditorErrorTips from '@/components/SQLEditor/components/MonacoEditorErrorTips';
@@ -50,7 +49,7 @@ import {
   toggleResultInspectorMode,
   WORKSPACE_RESULT_INSPECTOR_PORTAL_ID,
 } from '@/store/workspace/utils/resultInspector';
-import { Modal, staticMessage } from '@chat2db/ui';
+import { Modal } from '@chat2db/ui';
 import { PanelRight, SquareSquare, X } from 'lucide-react';
 import {
   applyResultSearchVisibilityAction,
@@ -65,6 +64,8 @@ import { resolveResultInspectorActiveCell } from '../ResultSetTable/selectionSta
 import { areResultCellValuesEquivalent } from './inspectorState';
 import SqlExecutionLoading from '@/components/SqlExecutionLoading';
 import { hasPendingResultEdit, resolvePendingResultEditOperations } from './resultEditActions';
+import type { CopyRequestSignal, ResultCopyOperation } from '../ResultSetTable/copyValues';
+import { cancelResultCopy } from '../ResultSetTable/copyResultData';
 
 interface IProps {
   resultData: IManageResultData;
@@ -245,6 +246,8 @@ export default memo<IProps>(
     const handleExecuteSQL = useCallback(
       (pagingOverride?: Partial<ResultPaging>) => {
         if (!canExecuteSQL()) return;
+        const table = resultSetTableRef.current?.tableInstance;
+        if (table) cancelResultCopy(table);
         // Clear operation records
         resultSetTableRef.current?.operationRecordUtils?.clearOperationRecord?.();
         // If there is no executeSqlParams, the execution information is not known, and no execution is performed.
@@ -528,33 +531,26 @@ export default memo<IProps>(
     const onTableOperationUtils = useMemo(() => {
       return {
         // Copy as insert or update or where statement
-        copyGenerateSQL: (operations: any) => {
-          executeSql
-            .getCopyUpdateDataSql({
+        generateCopySQL: (operations: ResultCopyOperation[], signal: CopyRequestSignal) =>
+          executeSql.getCopyUpdateDataSql(
+            {
               ...(resultData.executeSqlParams || {}),
               tableName: resultData.tableName,
               headerList: resultData.headerList,
               operations: transformOperations(operations, resultData.headerList),
-            })
-            .then((sql) => {
-              copyToClipboard(sql);
-            });
-        },
-        copyGenerateInValues: (operations: any) => {
-          executeSql
-            .getCopyInValuesSql({
-              ...(resultData.executeSqlParams || {}),
-              headerList: resultData.headerList,
-              sourceType: 'RESULT_SET',
-              operations: transformOperations(operations, resultData.headerList),
-            })
-            .then((sql) => {
-              if (copyToClipboard(sql)) {
-                staticMessage.success(i18n('common.button.copySuccessfully'));
-              } else {
-                staticMessage.warning(i18n('common.sqlInValues.copyFailed'));
-              }
-            });
+              errorLevel: false,
+            },
+            { signal },
+          ),
+        generateCopyInValues: (operations: ResultCopyOperation[], signal: CopyRequestSignal) => {
+          const request = {
+            ...(resultData.executeSqlParams || {}),
+            headerList: resultData.headerList,
+            sourceType: 'RESULT_SET' as const,
+            operations: transformOperations(operations, resultData.headerList),
+            errorLevel: false as const,
+          };
+          return executeSql.getCopyInValuesSql(request, { signal });
         },
         handleViewUpdateData: (params) => {
           openValueInspector(params);
