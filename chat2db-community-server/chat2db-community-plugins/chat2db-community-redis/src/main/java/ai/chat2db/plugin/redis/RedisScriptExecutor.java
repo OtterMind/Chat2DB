@@ -122,6 +122,10 @@ public class RedisScriptExecutor extends DefaultSQLExecutor {
     }
 
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
+        // Redis commands have no JDBC placeholders; never run them with parameters silently dropped.
+        if (command.getParameters() != null && !command.getParameters().isEmpty()) {
+            throw new BusinessException("sqlParameter.unsupportedDatabase");
+        }
         String type = Chat2DBContext.getConnectInfo().getDbType();
         DbType dbType = JdbcUtils.parse2DruidDbType(type);
 

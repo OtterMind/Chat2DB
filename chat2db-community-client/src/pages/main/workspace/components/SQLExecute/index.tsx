@@ -34,6 +34,7 @@ import {
   subscribeResultTabKeepHistory,
 } from '@/blocks/SearchResult/resultTabPreferences';
 import { useWorkspaceStore } from '@/store/workspace';
+import { useGlobalStore } from '@/store/global';
 import { useTreeStore } from '@/store/tree';
 import {
   IConsoleReturnExecuteSql,
@@ -108,6 +109,8 @@ import {
 import { isDesktop } from '@/utils/env';
 import { v4 as uuidv4 } from 'uuid';
 import { buildStreamResultExecuteSqlParams } from './streamResultExecutionParams';
+import { detectSqlParameters } from '@/utils/sqlParameters';
+import { useSqlParameterPrompt } from '@/components/SqlParameterModal';
 
 const SplitPaneAny = SplitPane as any;
 const HISTORY_BATCH_LIMIT = 30;
@@ -703,6 +706,8 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       restoreDataSourceRuntimeAvailability,
     ],
   );
+  const { promptSqlParameters, parameterModal } = useSqlParameterPrompt();
+  const handleExecuteSQLRef = useRef<(params: IConsoleReturnExecuteSql | SQLExecutionInvocation) => Promise<any>>();
   const { executing, canExecuteSQL, executeSQL, stopExecuteSQL } = useSqlExecutor({
     onExecutionRequestStart: handleSqlExecutionRequestStart,
     onExecutionRequestStartError: handleSqlExecutionRequestStartError,
@@ -867,6 +872,34 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       return Promise.resolve();
     }
 
+    // Parameter detection is opt-in. Scan only the SQL being run; a request that
+    // already carries values was prompted for and is never prompted again.
+    const sqlParametersEnabled = useGlobalStore.getState().editorSettings.sqlParameters === true;
+    const carriesParameterValues =
+      requestParams.parameters !== undefined || requestParams.positionalParameters !== undefined;
+    if (sqlParametersEnabled && !carriesParameterValues) {
+      const detection = detectSqlParameters(requestParams.sql, executionTarget.databaseType);
+      if (detection.style === 'mixed') {
+        staticMessage.error(i18n('sqlEditor.parameter.mixedStyles'));
+        return Promise.resolve();
+      }
+      if (detection.parameters.length) {
+        return promptSqlParameters(detection.parameters).then((parameterValues) => {
+          if (!parameterValues) {
+            return;
+          }
+          // Run through the latest handler: state may have changed while the dialog was open.
+          return handleExecuteSQLRef.current?.({
+            ...requestParams,
+            ...parameterValues,
+            sqlParameters: true,
+            executionTarget,
+            dataSourceState: invocationDataSourceState,
+          } as SQLExecutionInvocation);
+        });
+      }
+    }
+
     if (!boxRightConsoleHeight) {
       setBoxRightConsoleHeight('50%');
     }
@@ -896,6 +929,8 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
 
     const executeSqlParams = {
       ...requestParams,
+      // The snapshot keeps the switch state so paging and refresh behave like the original run.
+      sqlParameters: requestParams.sqlParameters ?? (sqlParametersEnabled || undefined),
       databaseType: executionSnapshot.databaseType,
       dataSourceId: executionSnapshot.dataSourceId,
       dataSourceName: executionSnapshot.dataSourceName,
@@ -1055,6 +1090,8 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       });
   };
 
+  handleExecuteSQLRef.current = handleExecuteSQL;
+
   const stopExecuteSql = () => {
     stopExecuteSQL();
   };
@@ -1104,6 +1141,7 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
           dataSourceState={dataSourceState}
           onChange={onEditorChange}
         />
+        {parameterModal}
       </div>
       <SplitPaneUnpack onUnfold={handleUnfold} onPackUp={handlePackUp} className={styles.boxRightResult}>
         {isSplitPane && (

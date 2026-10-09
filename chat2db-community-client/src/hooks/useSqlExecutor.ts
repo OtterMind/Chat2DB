@@ -119,6 +119,9 @@ const useSqlExecutor = (props?: IUseSqlExecutorProps) => {
       resultSetId: params.resultSetId,
       errorContinue: params.errorContinue,
       explain: params.explain,
+      sqlParameters: params.sqlParameters,
+      parameters: params.parameters,
+      positionalParameters: params.positionalParameters,
     };
     const executionRequestTracker = executionRequestTrackerRef.current!;
     const requestSequence = beginSqlExecutionRequest(executionRequestTracker);

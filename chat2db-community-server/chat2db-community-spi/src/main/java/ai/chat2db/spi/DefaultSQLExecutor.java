@@ -32,6 +32,8 @@ import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.ResultSetUtils;
+import ai.chat2db.spi.util.SqlParameterParser;
+import ai.chat2db.spi.util.SqlParameterSyntax;
 import ai.chat2db.spi.util.SqlUtils;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
@@ -40,6 +42,7 @@ import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
 
@@ -304,11 +307,13 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         ExecuteResponse executeResult = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         checkTaskCancellation(cancellationChecker);
         PreparedStatement statementToNotify = null;
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        SqlParameterParser.BoundSql boundSql = compileParameters(sql, request.getParameters());
+        try (PreparedStatement stmt = connection.prepareStatement(boundSql == null ? sql : boundSql.sql())) {
             statementToNotify = stmt;
             notifyStatementCreated(statementListener, stmt);
             try {
                 checkTaskCancellation(cancellationChecker);
+                bindParameterValues(stmt, boundSql);
                 stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
                 if (sql.toLowerCase().startsWith("select")) {
                     if (offset != null && count != null) {
@@ -348,8 +353,16 @@ public class DefaultSQLExecutor implements ICommandExecutor {
 
     @Override
     public Long count(String sql, Connection connection) throws SQLException {
+        return count(sql, connection, null);
+    }
+
+    @Override
+    public Long count(String sql, Connection connection, Map<String, SqlParameterValue> parameters)
+            throws SQLException {
         Assert.notNull(sql, "SQL must not be null");
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        SqlParameterParser.BoundSql boundSql = compileParameters(sql, parameters);
+        try (PreparedStatement stmt = connection.prepareStatement(boundSql == null ? sql : boundSql.sql())) {
+            bindParameterValues(stmt, boundSql);
             boolean query = stmt.execute();
             if (query) {
                 long n = 0;
@@ -652,6 +665,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         if (CollectionUtils.isEmpty(simpleSqlStatements)) {
             throw new BusinessException("dataSource.sqlAnalysisError");
         }
+        simpleSqlStatements = bindSqlParameters(command, simpleSqlStatements, dbType, type);
         List<ExecuteResponse> result = new ArrayList<>();
         Boolean errorContinue = command.getErrorContinue();
         String defaultDatabaseName = metaData.getDefaultDatabaseName(connection, command.getDatabaseName());
@@ -737,6 +751,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         if (CollectionUtils.isEmpty(simpleSqlStatements)) {
             throw new BusinessException("dataSource.sqlAnalysisError");
         }
+        simpleSqlStatements = bindSqlParameters(command, simpleSqlStatements, dbType, type);
         Boolean errorContinue = command.getErrorContinue();
         String defaultDatabaseName = metaData.getDefaultDatabaseName(connection, command.getDatabaseName());
         String defaultSchemaName = metaData.getDefaultSchemaName(connection, command.getSchemaName());
@@ -900,6 +915,135 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
+    /**
+     * Prepares a parameterised command: exactly one statement, which keeps its
+     * named placeholders through paging and is compiled to JDBC {@code ?} markers
+     * just before execution. Commands without parameters are returned unchanged.
+     */
+    protected List<SimpleSqlStatement> bindSqlParameters(SqlExecuteRequest command,
+                                                         List<SimpleSqlStatement> simpleSqlStatements,
+                                                         DbType dbType, String type) {
+        if (MapUtils.isEmpty(command.getParameters())) {
+            return simpleSqlStatements;
+        }
+        SqlParameterSyntax syntax = sqlParameterSyntax(type);
+        if (syntax == null) {
+            throw new BusinessException("sqlParameter.unsupportedDatabase");
+        }
+        if (simpleSqlStatements.size() != 1 || isPreservedCompositeStatement(simpleSqlStatements.get(0))
+                || (command.isSingle() && CollectionUtils.size(
+                SqlUtils.parseStatements(command.getScript().trim(), dbType, type)) > 1)) {
+            throw new BusinessException("sqlParameter.multipleStatements");
+        }
+        SimpleSqlStatement statement = simpleSqlStatements.get(0);
+        // Fail before anything runs when the statement does not match the values.
+        SqlParameterParser.compile(statement.getSql(), command.getParameters(), syntax);
+        return List.of(new BoundSqlStatement(statement, command.getParameters(), syntax,
+                command.isPositionalParameterStyle()));
+    }
+
+    /**
+     * Returns the lexical rules used to find parameter placeholders, or
+     * {@code null} when the database cannot bind SQL parameters.
+     */
+    protected SqlParameterSyntax sqlParameterSyntax(String type) {
+        return SqlParameterSyntax.forDatabaseType(type);
+    }
+
+    /**
+     * Binds one typed parameter value. Each type maps to exactly one bind call;
+     * plugins override this only to choose a different target type.
+     */
+    protected void bindParameterValue(PreparedStatement stmt, int parameterIndex, SqlParameterValue value)
+            throws SQLException {
+        switch (value.getType()) {
+            case STRING -> stmt.setString(parameterIndex, value.getValue());
+            case NUMBER -> stmt.setBigDecimal(parameterIndex, SqlParameterParser.parseNumber(value.getValue()));
+            case BOOLEAN -> stmt.setBoolean(parameterIndex, Boolean.parseBoolean(value.getValue()));
+            case NULL -> stmt.setNull(parameterIndex, Types.VARCHAR);
+            default -> throw new BusinessException("sqlParameter.invalidType", new Object[]{parameterIndex});
+        }
+    }
+
+    private void bindParameterValues(PreparedStatement stmt, SqlParameterParser.BoundSql boundSql)
+            throws SQLException {
+        if (boundSql == null) {
+            return;
+        }
+        List<SqlParameterValue> values = boundSql.values();
+        for (int i = 0; i < values.size(); i++) {
+            bindParameterValue(stmt, i + 1, values.get(i));
+        }
+    }
+
+    /**
+     * Compiles the final SQL of a parameterised statement, after paging or
+     * EXPLAIN rewrote it, into JDBC markers and that SQL's own value order.
+     * Returns {@code null} for a statement without parameters.
+     */
+    private static SqlParameterParser.BoundSql compileStatementParameters(SimpleSqlStatement statement,
+                                                                          String sql) {
+        if (!(statement instanceof BoundSqlStatement boundStatement)) {
+            return null;
+        }
+        return SqlParameterParser.compile(sql, boundStatement.parameters, boundStatement.syntax);
+    }
+
+    private SqlParameterParser.BoundSql compileParameters(String sql, Map<String, SqlParameterValue> parameters) {
+        if (MapUtils.isEmpty(parameters)) {
+            return null;
+        }
+        SqlParameterSyntax syntax = sqlParameterSyntax(Chat2DBContext.getConnectInfo().getDbType());
+        if (syntax == null) {
+            throw new BusinessException("sqlParameter.unsupportedDatabase");
+        }
+        return SqlParameterParser.compile(sql, parameters, syntax);
+    }
+
+    /**
+     * Returns {@code true} when the statement carries parameter values that
+     * {@link #executeMulti} binds before execution. Overrides that execute a
+     * statement without calling the default {@code executeMulti} must reject such
+     * statements instead of running them unbound.
+     */
+    protected static boolean hasBoundParameters(SimpleSqlStatement statement) {
+        return statement instanceof BoundSqlStatement;
+    }
+
+    /**
+     * Returns the SQL to report for a statement: positional parameters are shown
+     * as the {@code ?} the user wrote instead of their synthetic names.
+     */
+    private static String reportSql(SimpleSqlStatement statement, String sql) {
+        if (sql != null && statement instanceof BoundSqlStatement boundStatement && boundStatement.positional) {
+            return SqlParameterParser.restorePositional(sql, boundStatement.syntax);
+        }
+        return sql;
+    }
+
+    /**
+     * A statement whose named placeholders are bound through JDBC. It keeps the
+     * parameterised SQL, so results report the SQL as written and paging can run
+     * it again with the same parameters.
+     */
+    private static final class BoundSqlStatement extends SimpleSqlStatement {
+
+        private final Map<String, SqlParameterValue> parameters;
+
+        private final SqlParameterSyntax syntax;
+
+        private final boolean positional;
+
+        private BoundSqlStatement(SimpleSqlStatement source, Map<String, SqlParameterValue> parameters,
+                                  SqlParameterSyntax syntax, boolean positional) {
+            super(source.getSql(), source.getSqlType(), source.getComment(), source.getRefreshTargets(),
+                    source.getTables());
+            this.parameters = parameters;
+            this.syntax = syntax;
+            this.positional = positional;
+        }
+    }
+
     private void setExplain(List<SimpleSqlStatement> simpleSqlStatements) {
         for (SimpleSqlStatement simpleSqlStatement : simpleSqlStatements) {
             String sql = simpleSqlStatement.getSql();
@@ -914,6 +1058,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                                               SqlExecuteRequest param, Connection connection,
                                               ExecutionContext executionContext) {
         String originalSql = simpleSqlStatement.getSql();
+        String reportedSql = reportSql(simpleSqlStatement, originalSql);
         long startedAtEpochMs = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
         PageBounds pageBounds = normalizePageBounds(param.getPageNo(), param.getPageSize());
@@ -942,8 +1087,8 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     if (CollectionUtils.isNotEmpty(executeResults)) {
                         for (ExecuteResponse executeResult : executeResults) {
                             executeResult.setSqlType(sqlType.getCode());
-                            executeResult.setOriginalSql(originalSql);
-                            executeResult.setSql(buildPageLimit);
+                            executeResult.setOriginalSql(reportedSql);
+                            executeResult.setSql(reportSql(simpleSqlStatement, buildPageLimit));
                         }
                     }
                 } catch (Exception e) {
@@ -963,17 +1108,17 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 executeResults = executeMulti(simpleSqlStatement, connection, true, offset, count,
                         param.getResultSetId(), executionContext);
                 for (ExecuteResponse executeResult : executeResults) {
-                    executeResult.setSql(originalSql);
+                    executeResult.setSql(reportedSql);
                 }
             } catch (Exception ee) {
                 ExecuteResponse executeResult = failedExecuteResponse(
-                        originalSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
+                        reportedSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
                 executeResults.add(executeResult);
             }
         }
         for (ExecuteResponse executeResult : executeResults) {
             executeResult.setSqlType(sqlType.getCode());
-            executeResult.setOriginalSql(originalSql);
+            executeResult.setOriginalSql(reportedSql);
 
             SqlUtils.buildCanEditResult(originalSql, dbType, executeResult);
             addRowNumber(executeResult, pageNo, pageSize);
@@ -992,6 +1137,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                                                     int statementSequence,
                                                     ExecutionContext executionContext) {
         String originalSql = simpleSqlStatement.getSql();
+        String reportedSql = reportSql(simpleSqlStatement, originalSql);
         long startedAtEpochMs = System.currentTimeMillis();
         long startedAtNanos = System.nanoTime();
         PageBounds pageBounds = normalizePageBounds(param.getPageNo(), param.getPageSize());
@@ -1002,7 +1148,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         SqlTypeEnum sqlType = getSqlType(dbType, originalSql);
         List<ExecuteResponse> executeResults = new ArrayList<>();
         String type = simpleSqlStatement.getSqlType();
-        consumer.statementStarted(simpleSqlStatement.getSql(), originalSql, simpleSqlStatement.getComment());
+        consumer.statementStarted(reportedSql, reportedSql, simpleSqlStatement.getComment());
         if (SqlTypeEnum.SELECT.equals(sqlType) && !SqlUtils.hasPageLimit(originalSql, dbType)) {
             String pagingBaseSql = SqlUtils.stripTrailingSemicolon(originalSql);
             String buildPageLimit = Chat2DBContext.getSqlBuilder().dql().buildPageLimit(PageLimitRequest.builder()
@@ -1018,13 +1164,13 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                     }
                     executeResults = executeMultiStreaming(simpleSqlStatement, connection, true,
                             0, count, param.getResultSetId(), consumer, statementListener, cancellation,
-                            sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence,
+                            sqlType, reportedSql, pageNo, pageSize, streamResultSequence, statementSequence,
                             executionContext);
                     if (CollectionUtils.isNotEmpty(executeResults)) {
                         for (ExecuteResponse executeResult : executeResults) {
                             executeResult.setSqlType(sqlType.getCode());
-                            executeResult.setOriginalSql(originalSql);
-                            executeResult.setSql(buildPageLimit);
+                            executeResult.setOriginalSql(reportedSql);
+                            executeResult.setSql(reportSql(simpleSqlStatement, buildPageLimit));
                         }
                     }
                 } catch (Exception e) {
@@ -1043,23 +1189,23 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                 }
                 executeResults = executeMultiStreaming(simpleSqlStatement, connection, true,
                         offset, count, param.getResultSetId(), consumer, statementListener, cancellation,
-                        sqlType, originalSql, pageNo, pageSize, streamResultSequence, statementSequence,
+                        sqlType, reportedSql, pageNo, pageSize, streamResultSequence, statementSequence,
                         executionContext);
                 for (ExecuteResponse executeResult : executeResults) {
-                    executeResult.setSql(originalSql);
+                    executeResult.setSql(reportedSql);
                 }
             } catch (Exception ee) {
                 ExecuteResponse executeResult = failedExecuteResponse(
-                        originalSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
+                        reportedSql, ee, startedAtEpochMs, startedAtNanos, executionContext);
                 executeResults.add(executeResult);
             }
         }
         for (ExecuteResponse executeResult : executeResults) {
             executeResult.setStatementSequence(statementSequence);
             executeResult.setSqlType(sqlType.getCode());
-            executeResult.setOriginalSql(originalSql);
+            executeResult.setOriginalSql(reportedSql);
         }
-        consumer.statementFinished(originalSql,
+        consumer.statementFinished(reportedSql,
                 totalStatementDuration(executeResults));
         return executeResults;
     }
@@ -1109,8 +1255,10 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String type = simpleSqlStatement.getSqlType();
         Assert.notNull(sql, "SQL must not be null");
         ArrayList<ExecuteResponse> executeResults = new ArrayList<>();
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        SqlParameterParser.BoundSql boundSql = compileStatementParameters(simpleSqlStatement, sql);
+        try (PreparedStatement stmt = connection.prepareStatement(boundSql == null ? sql : boundSql.sql())) {
             clearWarnings(stmt, connection);
+            bindParameterValues(stmt, boundSql);
             stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             if (sql.toLowerCase().startsWith("select")) {
                 if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {
@@ -1187,10 +1335,12 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         String type = simpleSqlStatement.getSqlType();
         Assert.notNull(sql, "SQL must not be null");
         ArrayList<ExecuteResponse> executeResults = new ArrayList<>();
-        PreparedStatement stmt = connection.prepareStatement(sql);
+        SqlParameterParser.BoundSql boundSql = compileStatementParameters(simpleSqlStatement, sql);
+        PreparedStatement stmt = connection.prepareStatement(boundSql == null ? sql : boundSql.sql());
         statementListener.onStatementCreated(stmt);
         try (stmt) {
             clearWarnings(stmt, connection);
+            bindParameterValues(stmt, boundSql);
             stmt.setFetchSize(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
             if (sql.toLowerCase().startsWith("select")) {
                 if (type == null || !StringUtils.equals(type, ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.SELECT_INTO.name())) {

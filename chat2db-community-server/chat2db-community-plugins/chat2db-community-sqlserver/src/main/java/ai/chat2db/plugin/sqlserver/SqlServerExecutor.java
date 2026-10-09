@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionCancellation;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
@@ -151,6 +152,10 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
             simpleSqlStatement.setSql(removeSpecialGO(simpleSqlStatement.getSql()));
             return super.executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
                     executionContext);
+        }
+        if (hasBoundParameters(simpleSqlStatement)) {
+            // GO batches run as separate unbound statements; parameters apply to one statement only.
+            throw new BusinessException("sqlParameter.multipleStatements");
         }
         return executeSqlServerBatch(simpleSqlStatement.getSql(), sqlList, connection, limitRowSize, offset, count,
                 resultSetId);
