@@ -203,7 +203,12 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
                     .orElse("0");
             return sqlExecutionPolicyManager.limitCount(executionPlan, Long.parseLong(count));
         } catch (Exception e) {
-            log.warn("Failed to execute SQL: {}", sql, e);
+            if (parameters == null) {
+                log.warn("Failed to execute SQL: {}", sql, e);
+            } else {
+                // Driver messages can quote a bound value; keep it out of the log.
+                log.warn("Failed to execute SQL: {} ({})", sql, e.getClass().getName());
+            }
             try {
                 Long count = executor.count(sql, Chat2DBContext.getConnection(), parameters);
                 return sqlExecutionPolicyManager.limitCount(executionPlan, count);

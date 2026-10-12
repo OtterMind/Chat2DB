@@ -1083,6 +1083,20 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     /**
+     * Logs a failed paged attempt. Driver messages can quote a bound value, such as
+     * {@code Incorrect integer value: 'xyz'}, so for a parameterised statement only
+     * the exception type is logged; the full message still reaches the user in the
+     * result of the unpaged retry.
+     */
+    private static void logPagedExecutionFailure(SimpleSqlStatement statement, String sql, Exception e) {
+        if (hasBoundParameters(statement)) {
+            log.error("Execute sql: {} failed with {}", sql, e.getClass().getName());
+        } else {
+            log.error("Execute sql: {} exception", sql, e);
+        }
+    }
+
+    /**
      * Returns the SQL to report for a statement: positional parameters are shown
      * as the {@code ?} the user wrote instead of their synthetic names.
      */
@@ -1164,7 +1178,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         }
                     }
                 } catch (Exception e) {
-                    log.error("Execute sql: {} exception", buildPageLimit, e);
+                    logPagedExecutionFailure(simpleSqlStatement, buildPageLimit, e);
                 }
             }
         }
@@ -1246,7 +1260,7 @@ public class DefaultSQLExecutor implements ICommandExecutor {
                         }
                     }
                 } catch (Exception e) {
-                    log.error("Execute sql: {} exception", buildPageLimit, e);
+                    logPagedExecutionFailure(simpleSqlStatement, buildPageLimit, e);
                 }
             }
         }
