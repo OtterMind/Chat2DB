@@ -183,6 +183,24 @@ class SqlParameterParserTest {
     }
 
     @Test
+    void ddlAfterAnyClientWhitespaceIsStillDdl() {
+        // The client treats every one of these as whitespace; the backend must agree.
+        for (String space : List.of("\u00a0", "\ufeff", "\u2007", "\u202f", "\u001c")) {
+            assertNoPlaceholders(space + "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN :NEW.id := 1; END;",
+                    SqlParameterSyntax.ORACLE);
+        }
+    }
+
+    @Test
+    void valuesForDdlAreRejectedAsDdlRatherThanAsMissingPlaceholders() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
+                "CREATE TABLE copy AS SELECT * FROM t WHERE x = :p", Map.of("p", SqlParameterValue.number("1")),
+                null, ANSI));
+
+        assertEquals("sqlParameter.ddlUnsupported", exception.getCode());
+    }
+
+    @Test
     void mixedStylesAreRejected() {
         BusinessException exception = assertThrows(BusinessException.class, () -> SqlParameterParser.normalize(
                 "SELECT *\nFROM users\nWHERE id = :id AND status = ?;",

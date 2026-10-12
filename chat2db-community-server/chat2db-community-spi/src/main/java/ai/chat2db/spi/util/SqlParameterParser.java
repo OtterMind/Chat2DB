@@ -212,7 +212,9 @@ public final class SqlParameterParser {
         }
         List<Placeholder> placeholders = findPlaceholders(sql, syntax);
         if (placeholders.isEmpty()) {
-            throw new BusinessException("sqlParameter.notFound");
+            // CREATE, ALTER and DROP never carry parameters; say so rather than "no placeholders".
+            throw new BusinessException(startsWithDdlKeyword(sql, syntax) ? "sqlParameter.ddlUnsupported"
+                    : "sqlParameter.notFound");
         }
         boolean namedPlaceholders = placeholders.stream().anyMatch(placeholder -> placeholder.style() == Style.NAMED);
         boolean positionalPlaceholders = placeholders.stream()
@@ -356,7 +358,7 @@ public final class SqlParameterParser {
         int length = sql.length();
         while (i < length) {
             char c = sql.charAt(i);
-            if (Character.isWhitespace(c) || c == '(' || c == ';') {
+            if (isSqlWhitespace(c) || c == '(' || c == ';') {
                 i++;
                 continue;
             }
@@ -552,6 +554,16 @@ public final class SqlParameterParser {
 
     private static char charAt(String sql, int index) {
         return index >= 0 && index < sql.length() ? sql.charAt(index) : '\0';
+    }
+
+    /**
+     * Whitespace as the client scanner sees it: JavaScript's {@code \s} (which
+     * includes no-break spaces and U+FEFF) plus U+001C to U+001F, which
+     * {@link Character#isWhitespace} adds. Both scanners must agree, or a statement
+     * that one side treats as DDL is scanned for parameters by the other.
+     */
+    private static boolean isSqlWhitespace(char c) {
+        return Character.isWhitespace(c) || Character.isSpaceChar(c) || c == '\uFEFF';
     }
 
     private static boolean isNameStart(char c) {

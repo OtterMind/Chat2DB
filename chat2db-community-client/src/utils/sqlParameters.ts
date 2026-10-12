@@ -247,11 +247,18 @@ function skipNonCode(sql: string, i: number, syntax: SqlParameterSyntax) {
   return i;
 }
 
+/**
+ * Whitespace as the backend scanner sees it: `\s` plus U+001C to U+001F, which
+ * Java's `Character.isWhitespace` adds. Both scanners must agree, or a statement
+ * that one side treats as DDL is scanned for parameters by the other.
+ */
+export const isSqlWhitespace = (c: string) => /\s/.test(c) || (c >= '\u001c' && c <= '\u001f');
+
 function startsWithDdlKeyword(sql: string, syntax: SqlParameterSyntax) {
   let i = 0;
   while (i < sql.length) {
     const c = sql[i];
-    if (/\s/.test(c) || c === '(' || c === ';') {
+    if (isSqlWhitespace(c) || c === '(' || c === ';') {
       i++;
       continue;
     }

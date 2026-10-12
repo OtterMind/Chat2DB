@@ -2,6 +2,7 @@ import {
   buildSqlParameterValues,
   detectSqlParameters,
   findSqlPlaceholders,
+  isSqlWhitespace,
   isValidSqlParameterValue,
   sqlParameterSyntaxFor,
   type SqlParameterDetection,
@@ -112,6 +113,17 @@ assertEqual(
   logicalParameters(detect('CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN :NEW.id := 1; END;', 'ORACLE')),
   [],
   'leaves trigger bodies as plain SQL',
+);
+
+assertEqual(
+  logicalParameters(detect('\u00a0CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW BEGIN :NEW.id := 1; END;', 'ORACLE')),
+  [],
+  'skips a no-break space before DDL exactly like the backend',
+);
+assertEqual(
+  ['\u00a0', '\ufeff', '\u001c', '\u2028', ' ', 'a', '\u0085'].map((c) => isSqlWhitespace(c)),
+  [true, true, true, true, true, false, false],
+  'uses the same whitespace as the backend scanner',
 );
 
 // Mixed styles, plain SQL and unsupported databases.
