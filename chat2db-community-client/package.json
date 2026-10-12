@@ -45,7 +45,7 @@
     "test:database-object-sorting": "tsx src/blocks/NewTree/utils/sortTreeNodes.test.ts",
     "test:data-source-authorization": "tsx src/utils/dataSourceAuthorization.test.ts",
     "test:data-source-mutation-refresh": "tsx src/store/tree/dataSourceMutationRefresh.test.ts && tsx src/components/ConnectionEdit/submissionGuard.test.ts && tsx src/blocks/NewTree/treePositionMutation.test.ts",
-    "test:dashboard-store": "tsx src/store/dashboard/slices/common/refreshCurrentDashboard.test.ts && tsx src/store/dashboard/slices/common/dashboardList.test.ts",
+    "test:dashboard-store": "tsx src/store/dashboard/slices/common/refreshCurrentDashboard.test.ts && tsx src/store/dashboard/slices/common/dashboardList.test.ts && node scripts/run-dashboard-store-tests.cjs",
     "test:dynamic-database-registry": "tsx src/utils/dynamicDatabaseRegistry.test.ts",
     "test:execution-console": "tsx src/blocks/SearchResult/components/ExecutionConsole/executionConsolePreferences.test.ts",
     "test:editor-close": "tsx src/utils/editorCloseGuard.test.ts && tsx src/pages/main/workspace/components/SQLExecute/liveEditorHandle.test.ts && tsx src/pages/main/workspace/components/SQLExecute/liveEditorBoundInfo.test.ts",
