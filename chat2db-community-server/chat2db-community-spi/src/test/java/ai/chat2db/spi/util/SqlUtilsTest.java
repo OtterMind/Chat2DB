@@ -1,16 +1,21 @@
 package ai.chat2db.spi.util;
 
+import ai.chat2db.community.domain.api.model.parser.result.SqlParserResponse;
 import ai.chat2db.community.domain.api.model.parser.statement.Statement;
+import ai.chat2db.spi.ISQLParser;
 import com.alibaba.druid.DbType;
 import org.antlr.v4.runtime.CommonToken;
 import org.antlr.v4.runtime.Token;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqlUtilsTest {
@@ -110,6 +115,47 @@ class SqlUtilsTest {
         Statement statement = statement(masked, 0, script.indexOf(":id") + 1);
 
         assertFalse(SqlUtils.restoreStatementSql(List.of(statement), script, masked, SqlParameterSyntax.MYSQL));
+    }
+
+    @Test
+    void parserThatRejectsPlaceholdersStillFindsTheStatementAsWritten() {
+        String script = "select name from books where id = :id and slug = ?";
+        List<String> parsed = new ArrayList<>();
+
+        List<Statement> statements = SqlUtils.simpleParserStatementsAllowingParameters(
+                grammarWithoutPlaceholders(parsed), script, "MYSQL");
+
+        assertEquals(1, statements.size());
+        assertEquals(script, statements.get(0).getSql());
+        assertEquals(0, statements.get(0).getFirstToken().getStartIndex(), "positions are those of the original text");
+        assertEquals(List.of(script, "select name from books where id = 000 and slug = 0"), parsed);
+    }
+
+    @Test
+    void parserFailuresWithoutPlaceholdersAreRethrown() {
+        ISQLParser failing = grammarWithoutPlaceholders(new ArrayList<>());
+
+        assertThrows(IllegalStateException.class,
+                () -> SqlUtils.simpleParserStatementsAllowingParameters(failing, "select ':id' from", "MYSQL"));
+    }
+
+    /**
+     * A grammar that fails on {@code :} and {@code ?} outside literals and returns
+     * the whole text as one statement otherwise.
+     */
+    private static ISQLParser grammarWithoutPlaceholders(List<String> parsed) {
+        return (ISQLParser) Proxy.newProxyInstance(ISQLParser.class.getClassLoader(), new Class<?>[]{ISQLParser.class},
+                (proxy, method, args) -> {
+                    if (!"simpleParserStatements".equals(method.getName())) {
+                        throw new UnsupportedOperationException(method.getName());
+                    }
+                    String sql = (String) args[0];
+                    parsed.add(sql);
+                    if (sql.replaceAll("'[^']*'", "").matches("(?s).*[:?].*") || sql.endsWith("from")) {
+                        throw new IllegalStateException("syntax error");
+                    }
+                    return SqlParserResponse.builder().statements(List.of(statement(sql, 0, sql.length()))).build();
+                });
     }
 
     private static Statement statement(String maskedScript, int start, int end) {

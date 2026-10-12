@@ -3,6 +3,7 @@ package ai.chat2db.spi.util;
 
 import ai.chat2db.spi.constant.SqlValueConstants;
 import ai.chat2db.spi.DefaultSqlSyntaxHandler;
+import ai.chat2db.spi.ISQLParser;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.enums.parser.IdentifierTypeEnum;
 import ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum;
@@ -569,33 +570,59 @@ public class SqlUtils {
         return sqls.stream().map(SimpleSqlStatement::new).toList();
     }
 
-    /**
-     * The grammars do not know {@code :name} or {@code ?} parameters. When the
-     * script fails to parse and contains placeholders, it is parsed again with each
-     * placeholder replaced by a literal of the same length, and every statement's
-     * text is copied back from the original script.
-     */
     private static List<ai.chat2db.community.domain.api.model.parser.statement.Statement>
     simpleParserStatementsAllowingParameters(String script, String type) {
+        ISQLParser sqlParser = DefaultSqlSyntaxHandler.getSQLParser(type.toUpperCase());
+        if (sqlParser == null) {
+            return null;
+        }
+        return simpleParserStatementsAllowingParameters(sqlParser, script, type);
+    }
+
+    /**
+     * Splits a script into statements with the given parser. The grammars do not
+     * know {@code :name} or {@code ?} parameters: when the script fails to parse, or
+     * yields no statement, and contains placeholders, it is parsed again with each
+     * placeholder replaced by a literal of the same length, and every statement's
+     * text is copied back from the original script. Token positions are unchanged
+     * because masking keeps every character in place.
+     */
+    public static List<ai.chat2db.community.domain.api.model.parser.statement.Statement>
+    simpleParserStatementsAllowingParameters(ISQLParser sqlParser, String script, String type) {
+        List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements;
+        RuntimeException failure = null;
         try {
-            return DefaultSqlSyntaxHandler.simpleParserStatements(script, type);
+            statements = sqlParser.simpleParserStatements(script).getStatements();
         } catch (RuntimeException e) {
-            SqlParameterSyntax syntax = SqlParameterSyntax.forDatabaseType(type);
-            String maskedScript = syntax == null ? script : SqlParameterParser.maskPlaceholdersAsLiterals(script, syntax);
-            if (maskedScript.equals(script)) {
-                throw e;
-            }
-            List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements;
-            try {
-                statements = DefaultSqlSyntaxHandler.simpleParserStatements(maskedScript, type);
-            } catch (RuntimeException maskedError) {
-                throw e;
-            }
-            if (statements != null && !restoreStatementSql(statements, script, maskedScript, syntax)) {
-                throw e;
-            }
+            statements = null;
+            failure = e;
+        }
+        if (CollectionUtils.isNotEmpty(statements)) {
             return statements;
         }
+        SqlParameterSyntax syntax = SqlParameterSyntax.forDatabaseType(type);
+        String maskedScript = syntax == null ? script : SqlParameterParser.maskPlaceholdersAsLiterals(script, syntax);
+        if (maskedScript.equals(script)) {
+            return rethrowOr(failure, statements);
+        }
+        List<ai.chat2db.community.domain.api.model.parser.statement.Statement> maskedStatements;
+        try {
+            maskedStatements = sqlParser.simpleParserStatements(maskedScript).getStatements();
+        } catch (RuntimeException maskedError) {
+            return rethrowOr(failure, statements);
+        }
+        if (CollectionUtils.isEmpty(maskedStatements)
+                || !restoreStatementSql(maskedStatements, script, maskedScript, syntax)) {
+            return rethrowOr(failure, statements);
+        }
+        return maskedStatements;
+    }
+
+    private static <T> T rethrowOr(RuntimeException failure, T result) {
+        if (failure != null) {
+            throw failure;
+        }
+        return result;
     }
 
     /**

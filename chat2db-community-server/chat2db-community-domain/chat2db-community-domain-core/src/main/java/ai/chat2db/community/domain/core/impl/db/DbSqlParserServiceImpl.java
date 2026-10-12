@@ -46,6 +46,7 @@ import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import ai.chat2db.spi.util.SqlParameterParser;
 import ai.chat2db.spi.util.SqlParameterSyntax;
+import ai.chat2db.spi.util.SqlUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.ColumnMetadataRequest;
 import ai.chat2db.spi.model.request.FunctionMetadataRequest;
@@ -803,8 +804,8 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
             if (Objects.isNull(sqlParser)) {
                 return null;
             }
-            SqlParserResponse sqlParserResult = sqlParser.simpleParserStatements(sql);
-            List<Statement> statements = sqlParserResult.getStatements();
+            // Statement ranges must survive :name and ? parameters, or "execute current SQL" finds nothing.
+            List<Statement> statements = SqlUtils.simpleParserStatementsAllowingParameters(sqlParser, sql, dbType);
 
             if (CollectionUtils.isEmpty(statements)) {
                 return null;
