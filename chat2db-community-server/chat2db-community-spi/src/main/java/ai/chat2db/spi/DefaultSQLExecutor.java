@@ -1068,6 +1068,21 @@ public class DefaultSQLExecutor implements ICommandExecutor {
     }
 
     /**
+     * Marks a statement that a plugin explains through its own explain client.
+     * Such clients run the statement text without JDBC binding, so a statement
+     * with bound parameters is rejected here instead of being explained unbound.
+     * Every plugin explain path must call this before using its client.
+     */
+    protected static void markStatementAsExplain(SimpleSqlStatement statement) {
+        if (hasBoundParameters(statement)) {
+            throw new BusinessException("sqlParameter.explainUnsupported");
+        }
+        // Outer execute/executeStreaming overwrite response.sqlType from statement.sqlType
+        // after setExplain() rewrote the SQL text without updating the type.
+        statement.setSqlType(ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.EXPLAIN.name());
+    }
+
+    /**
      * Returns the SQL to report for a statement: positional parameters are shown
      * as the {@code ?} the user wrote instead of their synthetic names.
      */

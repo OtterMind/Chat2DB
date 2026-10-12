@@ -325,6 +325,20 @@ class DefaultSQLExecutorParameterBindingTest {
         }
     }
 
+    @Test
+    void pluginExplainPathsRejectBoundStatements() {
+        ExplainingExecutor explaining = new ExplainingExecutor();
+        SimpleSqlStatement bound = explaining.bind(named("SELECT name FROM users WHERE id = :id",
+                Map.of("id", SqlParameterValue.number("1"))));
+        SimpleSqlStatement plain = new SimpleSqlStatement("SELECT 1");
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> explaining.explain(bound));
+        explaining.explain(plain);
+
+        assertEquals("sqlParameter.explainUnsupported", exception.getCode());
+        assertEquals("EXPLAIN", plain.getSqlType());
+    }
+
     private static void assertPreparedWithoutValue(RecordingConnection recording, String value) {
         assertFalse(recording.preparedSql.isEmpty());
         for (String sql : recording.preparedSql) {
@@ -528,6 +542,21 @@ class DefaultSQLExecutorParameterBindingTest {
                     .filter(sql -> !sql.isEmpty())
                     .map(SimpleSqlStatement::new)
                     .toList();
+        }
+    }
+
+    /**
+     * Stands in for a plugin that explains statements through its own client.
+     */
+    private static final class ExplainingExecutor extends DefaultSQLExecutor {
+
+        private SimpleSqlStatement bind(SqlExecuteRequest command) {
+            return bindSqlParameters(command, List.of(new SimpleSqlStatement(command.getScript())), DbType.h2,
+                    TEST_DB_TYPE).get(0);
+        }
+
+        private void explain(SimpleSqlStatement statement) {
+            markStatementAsExplain(statement);
         }
     }
 
