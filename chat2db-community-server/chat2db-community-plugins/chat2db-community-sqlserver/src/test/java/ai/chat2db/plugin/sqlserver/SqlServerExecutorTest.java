@@ -239,6 +239,43 @@ class SqlServerExecutorTest {
     }
 
     @Test
+    void countStatementKeepsItsParameters() throws Exception {
+        List<String> preparedSql = new ArrayList<>();
+        List<String> bindings = new ArrayList<>();
+        Connection connection = bindingConnection(preparedSql, bindings);
+        putContext(connection);
+
+        new SqlServerExecutor().execute(SqlStatementExecuteRequest.builder()
+                .sql("SELECT COUNT(*) FROM sample WHERE id = :id\nGO")
+                .connection(connection)
+                .limitRowSize(true)
+                .parameters(Map.of("id", SqlParameterValue.number("7")))
+                .build());
+
+        assertEquals(1, preparedSql.size());
+        // removeSpecialGO leaves the line break before GO in place.
+        assertEquals("SELECT COUNT(*) FROM sample WHERE id = ?", preparedSql.get(0).strip());
+        assertEquals(List.of("setBigDecimal(1, 7)"), bindings);
+    }
+
+    @Test
+    void parameterisedStatementGoBatchesAreRejectedBeforeReachingTheDatabase() {
+        List<String> preparedSql = new ArrayList<>();
+        Connection connection = bindingConnection(preparedSql, new ArrayList<>());
+        putContext(connection);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> new SqlServerExecutor().execute(SqlStatementExecuteRequest.builder()
+                        .sql("SELECT COUNT(*) FROM sample WHERE id = :id\nGO\nSELECT 1")
+                        .connection(connection)
+                        .parameters(Map.of("id", SqlParameterValue.number("7")))
+                        .build()));
+
+        assertEquals("sqlParameter.multipleStatements", exception.getCode());
+        assertEquals(List.of(), preparedSql);
+    }
+
+    @Test
     void singleTrailingGoStillBindsParameters() {
         List<String> preparedSql = new ArrayList<>();
         List<String> bindings = new ArrayList<>();

@@ -123,6 +123,10 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         String sql = request.getSql();
         List<String> sqlList = splitByGO(sql);
         if (sqlList.size() > 1) {
+            if (request.getParameters() != null && !request.getParameters().isEmpty()) {
+                // GO batches run as separate unbound statements; parameters apply to one statement only.
+                throw new BusinessException("sqlParameter.multipleStatements");
+            }
             return executeSqlServerBatch(sql, sqlList, request.getConnection(), request.isLimitRowSize(),
                     request.getOffset(), request.getCount());
         }
@@ -132,6 +136,7 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
                 .limitRowSize(request.isLimitRowSize())
                 .offset(request.getOffset())
                 .count(request.getCount())
+                .parameters(request.getParameters())
                 .build());
     }
 
