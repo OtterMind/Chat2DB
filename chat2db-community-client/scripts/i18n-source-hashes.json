@@ -19,7 +19,7 @@
       "redis.ts": "cacf9cf685bf3bf6d019f18eead0f63713d4727be741a87d8dc1d22807ebd9ad",
       "setting.ts": "f9797cc58ae743cb7a25d5de3f911121e031ea2ec63791335405d5ee4bd20d63",
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
-      "sqlEditor.ts": "92af90a42fb715be1d03ef62e5f56cb0545177de8e7bca3d632558500425389f",
+      "sqlEditor.ts": "48dea0e81f2e1c010add1e85cea3391147637c1e4f3fdd66b36deabd2fb16032",
       "stream.ts": "2e2fca0b1ba1ecd5a1501b767be8857cf0b72d800d69a4acf9cd62a61d5ceaf5",
       "workspace.ts": "af5e40384291930e99d63a41eac92bb56c5a08606ebee247c946802ae64fc675"
     },
@@ -40,7 +40,7 @@
       "redis.ts": "cacf9cf685bf3bf6d019f18eead0f63713d4727be741a87d8dc1d22807ebd9ad",
       "setting.ts": "f9797cc58ae743cb7a25d5de3f911121e031ea2ec63791335405d5ee4bd20d63",
       "spaceSetting.ts": "defdf3138e5e1782f0282760bcef4ce1b8550cc80b03052fea468d97165cb980",
-      "sqlEditor.ts": "92af90a42fb715be1d03ef62e5f56cb0545177de8e7bca3d632558500425389f",
+      "sqlEditor.ts": "48dea0e81f2e1c010add1e85cea3391147637c1e4f3fdd66b36deabd2fb16032",
       "stream.ts": "2e2fca0b1ba1ecd5a1501b767be8857cf0b72d800d69a4acf9cd62a61d5ceaf5",
       "workspace.ts": "af5e40384291930e99d63a41eac92bb56c5a08606ebee247c946802ae64fc675"
     }

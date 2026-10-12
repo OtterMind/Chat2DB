@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Form, Input, Modal, Select, type FormInstance } from 'antd';
+import { Button, Form, Input, Modal, Select, Tooltip, type FormInstance } from 'antd';
+import { staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import type { ISqlParameterValue, ISqlParameterValues, SqlParameterType } from '@/service/dmlRequest';
 import {
@@ -18,10 +19,19 @@ interface ParameterFieldValue {
 
 type ParameterFormValues = Record<string, ParameterFieldValue | undefined>;
 
+/**
+ * What the dialog resolves with: the entered values, `RUN_AS_WRITTEN` to run the
+ * SQL without binding (for example when `?` is PostgreSQL's jsonb operator), or
+ * `undefined` when the user cancels.
+ */
+export const RUN_AS_WRITTEN = 'runAsWritten' as const;
+export type SqlParameterPromptResult = ISqlParameterValues | typeof RUN_AS_WRITTEN | undefined;
+
 interface SqlParameterModalProps {
   open: boolean;
   parameters: SqlParameterDescriptor[];
   onRun: (values: ISqlParameterValues) => void;
+  onRunAsWritten: () => void;
   onCancel: () => void;
 }
 
@@ -37,9 +47,8 @@ function toParameterValue(field: ParameterFieldValue | undefined): ISqlParameter
   if (type === 'NULL') {
     return { type, value: null };
   }
-  const value = field?.value ?? '';
-  // Only numbers drop surrounding spaces; text keeps exactly what was typed.
-  return { type, value: type === 'NUMBER' ? value.trim() : value };
+  // Send exactly what is shown; a number with spaces is reported, not silently trimmed.
+  return { type, value: field?.value ?? '' };
 }
 
 const ParameterField = ({
@@ -135,7 +144,7 @@ const ParameterField = ({
 /**
  * Collects a type and a value for each `:name` or `?` parameter of the SQL about to run.
  */
-const SqlParameterModal = ({ open, parameters, onRun, onCancel }: SqlParameterModalProps) => {
+const SqlParameterModal = ({ open, parameters, onRun, onRunAsWritten, onCancel }: SqlParameterModalProps) => {
   const { styles } = useStyles();
   const [form] = Form.useForm<ParameterFormValues>();
 
@@ -144,7 +153,15 @@ const SqlParameterModal = ({ open, parameters, onRun, onCancel }: SqlParameterMo
     parameters.forEach((parameter) => {
       inputs[parameter.key] = toParameterValue(formValues[parameter.key]);
     });
-    onRun(buildSqlParameterValues(parameters, inputs));
+    let values: ISqlParameterValues;
+    try {
+      values = buildSqlParameterValues(parameters, inputs);
+    } catch {
+      // The field validators run first, so this only guards against them drifting apart.
+      staticMessage.error(i18n('sqlEditor.parameter.invalidValues'));
+      return;
+    }
+    onRun(values);
   };
 
   return (
@@ -152,12 +169,20 @@ const SqlParameterModal = ({ open, parameters, onRun, onCancel }: SqlParameterMo
       open={open}
       title={i18n('sqlEditor.parameter.title')}
       width={520}
-      okText={i18n('common.button.execute')}
-      cancelText={i18n('common.button.cancel')}
       maskClosable={false}
       destroyOnClose
-      onOk={() => form.submit()}
       onCancel={onCancel}
+      footer={[
+        <Button key="cancel" onClick={onCancel}>
+          {i18n('common.button.cancel')}
+        </Button>,
+        <Tooltip key="asWritten" title={i18n('sqlEditor.parameter.runAsWrittenHint')}>
+          <Button onClick={onRunAsWritten}>{i18n('sqlEditor.parameter.runAsWritten')}</Button>
+        </Tooltip>,
+        <Button key="run" type="primary" onClick={() => form.submit()}>
+          {i18n('common.button.execute')}
+        </Button>,
+      ]}
     >
       <Form
         form={form}
@@ -183,27 +208,27 @@ const SqlParameterModal = ({ open, parameters, onRun, onCancel }: SqlParameterMo
 
 interface PendingPrompt {
   parameters: SqlParameterDescriptor[];
-  resolve: (values: ISqlParameterValues | undefined) => void;
+  resolve: (result: SqlParameterPromptResult) => void;
 }
 
 /**
- * Opens the parameter dialog and resolves with the entered values, or with
- * `undefined` when the user cancels.
+ * Opens the parameter dialog and resolves with the entered values,
+ * `RUN_AS_WRITTEN`, or `undefined` when the user cancels.
  */
 export function useSqlParameterPrompt() {
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt>();
   const pendingPromptRef = useRef<PendingPrompt>();
 
-  const settle = useCallback((values: ISqlParameterValues | undefined) => {
+  const settle = useCallback((result: SqlParameterPromptResult) => {
     const prompt = pendingPromptRef.current;
     pendingPromptRef.current = undefined;
     setPendingPrompt(undefined);
-    prompt?.resolve(values);
+    prompt?.resolve(result);
   }, []);
 
   const promptSqlParameters = useCallback(
     (parameters: SqlParameterDescriptor[]) =>
-      new Promise<ISqlParameterValues | undefined>((resolve) => {
+      new Promise<SqlParameterPromptResult>((resolve) => {
         // A newer run request replaces a prompt that is still open.
         pendingPromptRef.current?.resolve(undefined);
         const prompt = { parameters, resolve };
@@ -220,6 +245,7 @@ export function useSqlParameterPrompt() {
       open={!!pendingPrompt}
       parameters={pendingPrompt?.parameters ?? []}
       onRun={(values) => settle(values)}
+      onRunAsWritten={() => settle(RUN_AS_WRITTEN)}
       onCancel={() => settle(undefined)}
     />
   );

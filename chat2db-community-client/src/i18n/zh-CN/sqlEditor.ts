@@ -20,5 +20,8 @@ export default {
   'sqlEditor.parameter.emptyStringPlaceholder': '文本（留空表示空字符串）',
   'sqlEditor.parameter.invalidNumber': '请为 {1} 输入数字',
   'sqlEditor.parameter.invalidBoolean': '请为 {1} 选择 true 或 false',
-  'sqlEditor.parameter.mixedStyles': '同一条语句中不能混用命名参数（:name）和位置参数（?）',
+  'sqlEditor.parameter.runAsWritten': '不使用参数执行',
+  'sqlEditor.parameter.runAsWrittenHint': '按原样执行 SQL，例如 ? 是 PostgreSQL 的 jsonb 运算符时',
+  'sqlEditor.parameter.invalidValues': '请检查参数值后重试',
+  'sqlEditor.parameter.mixedStyles': '执行的 SQL 中不能混用命名参数（:name）和位置参数（?）',
 };

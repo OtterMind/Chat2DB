@@ -110,7 +110,7 @@ import { isDesktop } from '@/utils/env';
 import { v4 as uuidv4 } from 'uuid';
 import { buildStreamResultExecuteSqlParams } from './streamResultExecutionParams';
 import { detectSqlParameters } from '@/utils/sqlParameters';
-import { useSqlParameterPrompt } from '@/components/SqlParameterModal';
+import { RUN_AS_WRITTEN, useSqlParameterPrompt } from '@/components/SqlParameterModal';
 
 const SplitPaneAny = SplitPane as any;
 const HISTORY_BATCH_LIMIT = 30;
@@ -873,26 +873,29 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
     }
 
     // Parameter detection is opt-in. Scan only the SQL being run; a request that
-    // already carries values was prompted for and is never prompted again.
+    // already carries values, or was chosen to run as written, is never prompted again.
     const sqlParametersEnabled = useGlobalStore.getState().editorSettings.sqlParameters === true;
     const carriesParameterValues =
       requestParams.parameters !== undefined || requestParams.positionalParameters !== undefined;
-    if (sqlParametersEnabled && !carriesParameterValues) {
+    if (sqlParametersEnabled && requestParams.sqlParameters !== false && !carriesParameterValues) {
       const detection = detectSqlParameters(requestParams.sql, executionTarget.databaseType);
       if (detection.style === 'mixed') {
         staticMessage.error(i18n('sqlEditor.parameter.mixedStyles'));
         return Promise.resolve();
       }
       if (detection.parameters.length) {
-        return promptSqlParameters(detection.parameters).then((parameterValues) => {
-          if (!parameterValues) {
+        return promptSqlParameters(detection.parameters).then((result) => {
+          if (!result) {
             return;
           }
+          // Running as written turns detection off for this run and its paging, so the
+          // backend sends the SQL untouched (PostgreSQL's jsonb ? operator, for example).
+          const parameterRequest =
+            result === RUN_AS_WRITTEN ? { sqlParameters: false } : { ...result, sqlParameters: true };
           // Run through the latest handler: state may have changed while the dialog was open.
           return handleExecuteSQLRef.current?.({
             ...requestParams,
-            ...parameterValues,
-            sqlParameters: true,
+            ...parameterRequest,
             executionTarget,
             dataSourceState: invocationDataSourceState,
           } as SQLExecutionInvocation);
@@ -1090,7 +1093,9 @@ const SQLExecute = forwardRef((props: IProps, ref: ForwardedRef<SQLExecuteRef>) 
       });
   };
 
-  handleExecuteSQLRef.current = handleExecuteSQL;
+  useEffect(() => {
+    handleExecuteSQLRef.current = handleExecuteSQL;
+  });
 
   const stopExecuteSql = () => {
     stopExecuteSQL();

@@ -20,5 +20,8 @@ export default {
   'sqlEditor.parameter.emptyStringPlaceholder': '텍스트(비워 두면 빈 문자열)',
   'sqlEditor.parameter.invalidNumber': '{1}에 숫자를 입력하세요',
   'sqlEditor.parameter.invalidBoolean': '{1}에 true 또는 false를 선택하세요',
-  'sqlEditor.parameter.mixedStyles': '하나의 문에서 이름 있는 매개변수(:name)와 위치 매개변수(?)를 함께 사용할 수 없습니다',
+  'sqlEditor.parameter.runAsWritten': '매개변수 없이 실행',
+  'sqlEditor.parameter.runAsWrittenHint': 'SQL을 작성한 그대로 실행합니다(예: ?가 PostgreSQL jsonb 연산자인 경우)',
+  'sqlEditor.parameter.invalidValues': '매개변수 값을 확인한 뒤 다시 시도하세요',
+  'sqlEditor.parameter.mixedStyles': '실행하는 SQL에서 이름 있는 매개변수(:name)와 위치 매개변수(?)를 함께 사용할 수 없습니다',
 };

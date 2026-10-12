@@ -20,5 +20,8 @@ export default {
   'sqlEditor.parameter.emptyStringPlaceholder': 'テキスト（空欄は空文字列）',
   'sqlEditor.parameter.invalidNumber': '{1} に数値を入力してください',
   'sqlEditor.parameter.invalidBoolean': '{1} には true または false を選択してください',
-  'sqlEditor.parameter.mixedStyles': '1 つのステートメントで名前付きパラメーター（:name）と位置パラメーター（?）を混在させることはできません',
+  'sqlEditor.parameter.runAsWritten': 'パラメーターなしで実行',
+  'sqlEditor.parameter.runAsWrittenHint': 'SQL をそのまま実行します（? が PostgreSQL の jsonb 演算子の場合など）',
+  'sqlEditor.parameter.invalidValues': 'パラメーターの値を確認してから再試行してください',
+  'sqlEditor.parameter.mixedStyles': '実行する SQL で名前付きパラメーター（:name）と位置パラメーター（?）を混在させることはできません',
 };

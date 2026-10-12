@@ -20,5 +20,8 @@ export default {
   'sqlEditor.parameter.emptyStringPlaceholder': 'Text (leave empty for an empty string)',
   'sqlEditor.parameter.invalidNumber': 'Enter a number for {1}',
   'sqlEditor.parameter.invalidBoolean': 'Choose true or false for {1}',
-  'sqlEditor.parameter.mixedStyles': 'Named (:name) and positional (?) parameters cannot be mixed in one statement',
+  'sqlEditor.parameter.runAsWritten': 'Run without parameters',
+  'sqlEditor.parameter.runAsWrittenHint': 'Run the SQL exactly as written, for example when ? is the PostgreSQL jsonb operator',
+  'sqlEditor.parameter.invalidValues': 'Check the parameter values and try again',
+  'sqlEditor.parameter.mixedStyles': 'Named (:name) and positional (?) parameters cannot be mixed in the SQL you run',
 };
