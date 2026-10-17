@@ -1,5 +1,6 @@
 package ai.chat2db.spi.parser.error.strategy;
 
+import ai.chat2db.community.tools.util.I18nUtils;
 import org.antlr.v4.runtime.*;
 import org.apache.commons.lang3.StringUtils;
 
@@ -11,7 +12,7 @@ public class BaseErrorStrategy extends BailErrorStrategy {
     @Override
     protected void reportNoViableAlternative(Parser recognizer, NoViableAltException e) {
         TokenStream tokens = recognizer.getInputStream();
-        String msg = "应为<expression> ";
+        String msg = I18nUtils.getMessage("sqlSyntax.expectedExpression");
         if (Objects.nonNull(tokens)) {
             Token offendingToken = e.getOffendingToken();
             if (Objects.nonNull(offendingToken)) {
@@ -30,7 +31,8 @@ public class BaseErrorStrategy extends BailErrorStrategy {
             if (Objects.nonNull(offendingToken)
                     && offendingToken.getType() != Token.EOF
                     && StringUtils.isNotBlank(offendingToken.getText())) {
-                msg += " 得到 " + escapeWSAndQuote(offendingToken.getText());
+                msg = I18nUtils.getMessage("sqlSyntax.expectedExpressionGot",
+                        new Object[]{escapeWSAndQuote(offendingToken.getText())});
             }
         }
 
@@ -41,11 +43,10 @@ public class BaseErrorStrategy extends BailErrorStrategy {
     protected void reportInputMismatch(Parser recognizer, InputMismatchException e) {
         Token offendingToken = e.getOffendingToken();
         int tokenIndex = offendingToken.getTokenIndex();
-        String msg = "应为<Expression> 得到: " + getTokenErrorDisplay(offendingToken);
-        if (tokenIndex == 1) {
-            msg += " 期望: " + e.getExpectedTokens().toString(recognizer.getVocabulary());
-
-        }
+        String msg = tokenIndex == 1
+                ? I18nUtils.getMessage("sqlSyntax.expectedExpressionGotExpecting", new Object[]{
+                getTokenErrorDisplay(offendingToken), e.getExpectedTokens().toString(recognizer.getVocabulary())})
+                : I18nUtils.getMessage("sqlSyntax.expectedExpressionGot", new Object[]{getTokenErrorDisplay(offendingToken)});
         recognizer.notifyErrorListeners(offendingToken, msg, e);
     }
 
@@ -53,14 +54,14 @@ public class BaseErrorStrategy extends BailErrorStrategy {
     protected void reportUnwantedToken(Parser recognizer) {
         Token t = recognizer.getCurrentToken();
         String tokenName = getTokenErrorDisplay(t);
-        String msg = "错误的输入: " + tokenName;
+        String msg = I18nUtils.getMessage("sqlSyntax.invalidInput", new Object[]{tokenName});
         recognizer.notifyErrorListeners(t, msg, null);
     }
 
     @Override
     protected void reportMissingToken(Parser recognizer) {
         Token t = recognizer.getCurrentToken();
-        String msg = "应为<Expression>";
+        String msg = I18nUtils.getMessage("sqlSyntax.expectedExpression");
         recognizer.notifyErrorListeners(t, msg, null);
     }
 

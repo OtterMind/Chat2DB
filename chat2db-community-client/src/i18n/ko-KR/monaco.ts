@@ -78,6 +78,9 @@ export default {
     'SQL 쿼리에 페이지 크기가 지정되지 않았을 때 반환할 최대 행 수입니다. 이후 쿼리에 적용됩니다.',
   'monaco.errorContinue': '오류 발생 후 계속',
   'monaco.errorContinue.tooltip': '여러 SQL 문을 실행할 때 한 문장이 실패해도 나머지 문장을 계속 실행합니다.',
+  'monaco.sqlParameters': 'SQL 매개변수',
+  'monaco.sqlParameters.tooltip':
+    'SQL을 실행하기 전에 :name 및 ? 자리 표시자의 값을 입력받습니다. 값은 데이터베이스 드라이버가 바인딩하며 SQL 텍스트에 삽입되지 않습니다. PostgreSQL에서는 jsonb ? 연산자를 jsonb_exists()로 쓰거나 :name 매개변수를 사용하세요.',
   'monaco.errorContinue.true': '예',
   'monaco.errorContinue.false': '아니요',
   'monaco.confirmBeforeClose': '닫기 전에 확인',

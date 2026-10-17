@@ -23,6 +23,11 @@ import java.util.Locale;
 public class TaskWebConverter {
 
     public ExportTaskSpec exportRequest2spec(TaskExportRequest request) {
+        // The export task re-runs the SQL on its own path, which cannot bind
+        // parameters; reject before a task exists instead of creating one that fails.
+        if (request.hasSqlParameters()) {
+            throw new BusinessException("sqlParameter.exportUnsupported");
+        }
         String taskType = resolveExportTaskType(request);
         String format = normalize(request.getFormat());
         String exportSize = normalize(request.getExportSize());

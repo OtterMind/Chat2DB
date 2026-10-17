@@ -24,7 +24,8 @@ class DmlExecutionRequestValidationTest {
     void executionEndpointsExposeIndependentRequestContracts() {
         assertRequestFields(SqlEditorExecuteRequest.class,
                 "dataSourceId", "databaseName", "schemaName", "sql", "consoleId", "applyId", "pageNo",
-                "pageSize", "single", "resultSetId", "errorContinue", "explain");
+                "pageSize", "single", "resultSetId", "errorContinue", "explain", "sqlParameters", "parameters",
+                "positionalParameters");
         assertRequestFields(TableBrowseRequest.class,
                 "dataSourceId", "databaseName", "schemaName", "tableName", "pageNo", "pageSize");
         assertRequestFields(TableEditExecuteRequest.class,

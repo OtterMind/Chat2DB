@@ -3,6 +3,7 @@ package ai.chat2db.spi.util;
 
 import ai.chat2db.spi.constant.SqlValueConstants;
 import ai.chat2db.spi.DefaultSqlSyntaxHandler;
+import ai.chat2db.spi.ISQLParser;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.enums.parser.IdentifierTypeEnum;
 import ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum;
@@ -537,7 +538,8 @@ public class SqlUtils {
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         Long dataSourceId = connectInfo.getDataSourceId();
         try {
-            List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements = DefaultSqlSyntaxHandler.simpleParserStatements(script, type);
+            List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements =
+                    simpleParserStatementsAllowingParameters(script, type);
             if (CollectionUtils.isNotEmpty(statements)) {
                 return statements.stream().map(statement -> {
                     SimpleSqlStatement simpleSqlStatement = new SimpleSqlStatement();
@@ -566,6 +568,88 @@ public class SqlUtils {
         }
         List<String> sqls = parse(script, dbType, true);
         return sqls.stream().map(SimpleSqlStatement::new).toList();
+    }
+
+    private static List<ai.chat2db.community.domain.api.model.parser.statement.Statement>
+    simpleParserStatementsAllowingParameters(String script, String type) {
+        ISQLParser sqlParser = DefaultSqlSyntaxHandler.getSQLParser(type.toUpperCase());
+        if (sqlParser == null) {
+            return null;
+        }
+        return simpleParserStatementsAllowingParameters(sqlParser, script, type);
+    }
+
+    /**
+     * Splits a script into statements with the given parser. The grammars do not
+     * know {@code :name} or {@code ?} parameters: when the script fails to parse, or
+     * yields no statement, and contains placeholders, it is parsed again with each
+     * placeholder replaced by a literal of the same length, and every statement's
+     * text is copied back from the original script. Token positions are unchanged
+     * because masking keeps every character in place.
+     */
+    public static List<ai.chat2db.community.domain.api.model.parser.statement.Statement>
+    simpleParserStatementsAllowingParameters(ISQLParser sqlParser, String script, String type) {
+        List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements;
+        RuntimeException failure = null;
+        try {
+            statements = sqlParser.simpleParserStatements(script).getStatements();
+        } catch (RuntimeException e) {
+            statements = null;
+            failure = e;
+        }
+        if (CollectionUtils.isNotEmpty(statements)) {
+            return statements;
+        }
+        SqlParameterSyntax syntax = SqlParameterSyntax.forDatabaseType(type);
+        String maskedScript = syntax == null ? script : SqlParameterParser.maskPlaceholdersAsLiterals(script, syntax);
+        if (maskedScript.equals(script)) {
+            return rethrowOr(failure, statements);
+        }
+        List<ai.chat2db.community.domain.api.model.parser.statement.Statement> maskedStatements;
+        try {
+            maskedStatements = sqlParser.simpleParserStatements(maskedScript).getStatements();
+        } catch (RuntimeException maskedError) {
+            return rethrowOr(failure, statements);
+        }
+        if (CollectionUtils.isEmpty(maskedStatements)
+                || !restoreStatementSql(maskedStatements, script, maskedScript, syntax)) {
+            return rethrowOr(failure, statements);
+        }
+        return maskedStatements;
+    }
+
+    private static <T> T rethrowOr(RuntimeException failure, T result) {
+        if (failure != null) {
+            throw failure;
+        }
+        return result;
+    }
+
+    /**
+     * Replaces each statement's SQL with the same character range of the original
+     * script. Returns {@code false} when a statement cannot be located exactly or
+     * its range would cut a placeholder short.
+     */
+    static boolean restoreStatementSql(List<ai.chat2db.community.domain.api.model.parser.statement.Statement> statements,
+                                       String script, String maskedScript, SqlParameterSyntax syntax) {
+        for (ai.chat2db.community.domain.api.model.parser.statement.Statement statement : statements) {
+            if (statement.getFirstToken() == null || statement.getLastToken() == null) {
+                return false;
+            }
+            int start = statement.getFirstToken().getStartIndex();
+            int end = statement.getLastToken().getStopIndex() + 1;
+            if (start < 0 || end < start || end > maskedScript.length()
+                    || !maskedScript.substring(start, end).equals(statement.getSql())) {
+                return false;
+            }
+            String sql = script.substring(start, end);
+            // Masking the restored SQL again must give back exactly what was parsed.
+            if (!SqlParameterParser.maskPlaceholdersAsLiterals(sql, syntax).equals(statement.getSql())) {
+                return false;
+            }
+            statement.setSql(sql);
+        }
+        return true;
     }
 
     public static List<SimpleSqlStatement> parseAndValidTableStatements(String script, String type) {

@@ -13,6 +13,7 @@ import ai.chat2db.community.web.api.model.request.task.TaskImportRequest;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import ai.chat2db.community.domain.api.model.task.ExcelOptions;
 import ai.chat2db.community.domain.api.model.task.JsonOptions;
@@ -83,6 +84,34 @@ class TaskWebConverterTest {
     }
 
     private final TaskWebConverter converter = new TaskWebConverter();
+
+    @Test
+    void parameterisedResultExportIsRejectedBeforeATaskExists() {
+        TaskExportRequest named = new TaskExportRequest();
+        named.setTaskType(TaskType.QUERY_RESULT_EXPORT.name());
+        named.setSql("SELECT * FROM users WHERE id = :id");
+        named.setParameters(Map.of("id", Map.of("type", "NUMBER", "value", "1")));
+        TaskExportRequest positional = new TaskExportRequest();
+        positional.setTaskType(TaskType.QUERY_RESULT_EXPORT.name());
+        positional.setSql("SELECT * FROM users WHERE id = ?");
+        positional.setPositionalParameters(List.of(Map.of("type", "BOGUS")));
+
+        assertEquals("sqlParameter.exportUnsupported",
+                assertThrows(BusinessException.class, () -> converter.exportRequest2spec(named)).getCode());
+        assertEquals("sqlParameter.exportUnsupported",
+                assertThrows(BusinessException.class, () -> converter.exportRequest2spec(positional)).getCode());
+    }
+
+    @Test
+    void exportWithoutParametersIsUnchanged() {
+        TaskExportRequest request = new TaskExportRequest();
+        request.setTaskType(TaskType.QUERY_RESULT_EXPORT.name());
+        request.setSql("SELECT * FROM users");
+        request.setParameters(Map.of());
+        request.setPositionalParameters(List.of());
+
+        assertEquals("SELECT * FROM users", converter.exportRequest2spec(request).getSql());
+    }
 
     @Test
     void namesAllQueryResultsExportWithItsFormatAndTable() {

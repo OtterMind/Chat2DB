@@ -66,7 +66,10 @@ public abstract class DbWebConverter {
             @Mapping(target = "single", ignore = true),
             @Mapping(target = "resultSetId", ignore = true),
             @Mapping(target = "errorContinue", ignore = true),
-            @Mapping(target = "explain", ignore = true)
+            @Mapping(target = "explain", ignore = true),
+            @Mapping(target = "sqlParameters", ignore = true),
+            @Mapping(target = "parameters", ignore = true),
+            @Mapping(target = "positionalParameters", ignore = true)
     })
     public abstract DbDlExecuteRequest request2param(TableBrowseRequest request);
 
@@ -80,7 +83,10 @@ public abstract class DbWebConverter {
             @Mapping(target = "single", ignore = true),
             @Mapping(target = "resultSetId", ignore = true),
             @Mapping(target = "errorContinue", ignore = true),
-            @Mapping(target = "explain", ignore = true)
+            @Mapping(target = "explain", ignore = true),
+            @Mapping(target = "sqlParameters", ignore = true),
+            @Mapping(target = "parameters", ignore = true),
+            @Mapping(target = "positionalParameters", ignore = true)
     })
     public abstract DbDlExecuteRequest request2param(TableEditExecuteRequest request);
 
@@ -92,7 +98,10 @@ public abstract class DbWebConverter {
             @Mapping(target = "pageSizeAll", ignore = true),
             @Mapping(target = "single", ignore = true),
             @Mapping(target = "resultSetId", ignore = true),
-            @Mapping(target = "explain", ignore = true)
+            @Mapping(target = "explain", ignore = true),
+            @Mapping(target = "sqlParameters", ignore = true),
+            @Mapping(target = "parameters", ignore = true),
+            @Mapping(target = "positionalParameters", ignore = true)
     })
     public abstract DbDlExecuteRequest request2param(DdlExecuteRequest request);
 

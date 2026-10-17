@@ -67,6 +67,65 @@ class DbSqlServiceImplTest {
         assertEquals(SqlFormatter.of(Dialect.PostgreSql).format(sql), formatted);
     }
 
+    @Test
+    void mariadbFormatKeepsNamedPlaceholdersIntact() {
+        String formatted = sqlService.format(request("mariadb", "select name,slug from books where id=:id;"));
+
+        assertEquals("""
+                select
+                  name,
+                  slug
+                from
+                  books
+                where
+                  id = :id;""", formatted);
+    }
+
+    @Test
+    void formatKeepsRepeatedNamedPlaceholdersAndIgnoresLiterals() {
+        String formatted = sqlService.format(request(
+                "mysql",
+                "select * from t where a=:a and b=:b_1 or a=:a and c=':not_param';"
+        ));
+
+        assertEquals("""
+                select
+                  *
+                from
+                  t
+                where
+                  a = :a
+                  and b = :b_1
+                  or a = :a
+                  and c = ':not_param';""", formatted);
+    }
+
+    @Test
+    void formatKeepsPositionalPlaceholders() {
+        String formatted = sqlService.format(request("mariadb", "select name from books where name=?;"));
+
+        assertEquals("""
+                select
+                  name
+                from
+                  books
+                where
+                  name = ?;""", formatted);
+    }
+
+    @Test
+    void defaultFormatKeepsNamedPlaceholdersIntact() {
+        String formatted = sqlService.format(request("sqlite", "select a from t where id=:id"));
+
+        assertEquals("""
+                select
+                  a
+                from
+                  t
+                where
+                  id = :id""", formatted);
+    }
+
     private static DbSqlFormatRequest request(String dbType, String sql) {
         return DbSqlFormatRequest.builder()
                 .dbType(dbType)

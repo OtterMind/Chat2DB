@@ -84,12 +84,6 @@ public final class InformixCommandExecutor extends DefaultSQLExecutor {
         return List.of(response);
     }
 
-    private void markStatementAsExplain(SimpleSqlStatement statement) {
-        // Outer execute/executeStreaming overwrite response.sqlType from statement.sqlType
-        // after setExplain() rewrote the SQL text without updating the type.
-        statement.setSqlType(ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.EXPLAIN.name());
-    }
-
     private ExecuteResponse buildExplainResponse(String sql, String plan,
                                                  ExecutionContext executionContext,
                                                  long startedAtEpochMs, long executeDurationNanos) {

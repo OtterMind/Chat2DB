@@ -87,12 +87,6 @@ public final class DMCommandExecutor extends DefaultSQLExecutor {
         return List.of(response);
     }
 
-    private void markStatementAsExplain(SimpleSqlStatement statement) {
-        // Outer execute/executeStreaming overwrite response.sqlType from statement.sqlType
-        // after setExplain() rewrote the SQL text without updating the type.
-        statement.setSqlType(ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.EXPLAIN.name());
-    }
-
     private DMExecutableSql parseExecutableSql(String sql) throws SQLException {
         try {
             return parser.parseExecutableSql(sql);

@@ -8,6 +8,7 @@ import ai.chat2db.community.domain.api.model.sql.SimpleSqlStatement;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionCancellation;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
+import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.spi.model.ExecutionTiming;
 import ai.chat2db.spi.model.JdbcExecutionContext;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
@@ -122,6 +123,10 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
         String sql = request.getSql();
         List<String> sqlList = splitByGO(sql);
         if (sqlList.size() > 1) {
+            if (request.getParameters() != null && !request.getParameters().isEmpty()) {
+                // GO batches run as separate unbound statements; parameters apply to one statement only.
+                throw new BusinessException("sqlParameter.multipleStatements");
+            }
             return executeSqlServerBatch(sql, sqlList, request.getConnection(), request.isLimitRowSize(),
                     request.getOffset(), request.getCount());
         }
@@ -131,6 +136,7 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
                 .limitRowSize(request.isLimitRowSize())
                 .offset(request.getOffset())
                 .count(request.getCount())
+                .parameters(request.getParameters())
                 .build());
     }
 
@@ -151,6 +157,10 @@ public class SqlServerExecutor extends DefaultSQLExecutor {
             simpleSqlStatement.setSql(removeSpecialGO(simpleSqlStatement.getSql()));
             return super.executeMulti(simpleSqlStatement, connection, limitRowSize, offset, count, resultSetId,
                     executionContext);
+        }
+        if (hasBoundParameters(simpleSqlStatement)) {
+            // GO batches run as separate unbound statements; parameters apply to one statement only.
+            throw new BusinessException("sqlParameter.multipleStatements");
         }
         return executeSqlServerBatch(simpleSqlStatement.getSql(), sqlList, connection, limitRowSize, offset, count,
                 resultSetId);
