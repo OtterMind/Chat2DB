@@ -356,4 +356,9 @@ class Db2IdentifierProcessorTest {
         assertTrue(options.contains("-td \"o'brien\""), options);
         assertTrue(options.contains("-t \"t'; DROP TABLE t; --\""), options);
     }
+
+    @Test
+    void courseDoesNotResolveAsDb2ColumnType() {
+        assertNull(DB2ColumnTypeEnum.getByType("COURSE"));
+    }
 }
