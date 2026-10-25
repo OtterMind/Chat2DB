@@ -42,6 +42,11 @@ import ai.chat2db.community.domain.api.model.metadata.Table;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.metadata.TableIndex;
 import ai.chat2db.community.domain.api.model.metadata.TableIndexColumn;
+import ai.chat2db.spi.util.JdbcUtils;
+import com.alibaba.druid.DbType;
+import com.alibaba.druid.sql.parser.Lexer;
+import com.alibaba.druid.sql.parser.SQLParserUtils;
+import com.alibaba.druid.sql.parser.Token;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,11 +56,14 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -82,6 +90,8 @@ public class AiToolServiceImpl implements IAiToolService {
     private static final int MAX_SQL_PAGE_SIZE = 500;
     private static final int MAX_SQL_RESULT_ROWS = 50;
     private static final int MAX_GLOBAL_DATASOURCES = 200;
+    private static final Pattern SQL_SERVER_GO_BATCH_PATTERN = Pattern.compile(
+            "(?mi)(?:^[ \\t]*|(?<=;)[ \\t]*)(go)(?:[ \\t]+[0-9]+)?[ \\t]*;?[ \\t]*(?:--.*)?(?=\\r?\\n|$)");
     public String listAllDataSources(AiToolContextRequest toolContext) {
         DbDataSourcePageQueryRequest queryRequest = new DbDataSourcePageQueryRequest();
         queryRequest.setPageNo(1);
@@ -651,8 +661,76 @@ public class AiToolServiceImpl implements IAiToolService {
         } catch (Exception e) { // impl-contract: fallback - keyword matching is used when parser cannot classify SQL.
             log.debug("resolve sql type failed, fallback to keyword match", e);
         }
-        String fallbackType = fallbackSqlType(sql);
+        String fallbackType = isSingleFallbackStatement(sql, profile.getDbType())
+                ? fallbackSqlType(sql) : SqlTypeEnum.OTHER.name();
         return StringUtils.isBlank(fallbackType) ? Collections.emptyList() : List.of(fallbackType);
+    }
+
+    private boolean isSingleFallbackStatement(String sql, String dbType) {
+        try {
+            DbType druidDbType = JdbcUtils.parse2DruidDbType(dbType);
+            if (druidDbType == null) {
+                return false;
+            }
+            String statementSql = sql;
+            if (DbType.sqlserver.equals(druidDbType)) {
+                statementSql = normalizeSingleSqlServerBatch(sql);
+                if (statementSql == null) {
+                    return false;
+                }
+            }
+            return SQLParserUtils.split(statementSql, druidDbType).stream()
+                    .filter(StringUtils::isNotBlank)
+                    .limit(2)
+                    .count() == 1;
+        } catch (Exception e) {
+            log.debug("fallback sql splitting failed", e);
+            return false;
+        }
+    }
+
+    private String normalizeSingleSqlServerBatch(String sql) {
+        Set<Integer> goTokenStarts = sqlServerGoTokenStarts(sql);
+        StringBuilder normalized = new StringBuilder(sql);
+        int batchStart = 0;
+        int batchCount = 0;
+        var matcher = SQL_SERVER_GO_BATCH_PATTERN.matcher(sql);
+        while (matcher.find()) {
+            if (!goTokenStarts.contains(matcher.start(1))) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(sql.substring(batchStart, matcher.start()))) {
+                batchCount++;
+                if (batchCount > 1) {
+                    return null;
+                }
+            }
+            for (int index = matcher.start(); index < matcher.end(); index++) {
+                char character = normalized.charAt(index);
+                if (character != '\r' && character != '\n') {
+                    normalized.setCharAt(index, ' ');
+                }
+            }
+            batchStart = matcher.end();
+        }
+        if (StringUtils.isNotBlank(sql.substring(batchStart)) && ++batchCount > 1) {
+            return null;
+        }
+        return normalized.toString();
+    }
+
+    private Set<Integer> sqlServerGoTokenStarts(String sql) {
+        Set<Integer> starts = new HashSet<>();
+        Lexer lexer = SQLParserUtils.createLexer(sql, DbType.sqlserver);
+        while (true) {
+            lexer.nextToken();
+            if (lexer.token() == Token.EOF) {
+                return starts;
+            }
+            if (lexer.token() == Token.IDENTIFIER && StringUtils.equalsIgnoreCase(lexer.stringVal(), "GO")) {
+                starts.add(lexer.pos() - 2);
+            }
+        }
     }
 
     private String normalizeSqlType(String sqlType, String sql) {
@@ -668,7 +746,9 @@ public class AiToolServiceImpl implements IAiToolService {
         }
         String normalized = sql.stripLeading().toUpperCase(Locale.ROOT);
         if (normalized.startsWith("WITH")) {
-            return SqlTypeEnum.SELECT.name();
+            // A CTE can prefix SELECT, INSERT, UPDATE, or DELETE. Without parser
+            // confirmation, classify it conservatively so DML is never auto-executed.
+            return SqlTypeEnum.OTHER.name();
         }
         if (normalized.startsWith("SELECT")) {
             return SqlTypeEnum.SELECT.name();
