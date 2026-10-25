@@ -5,11 +5,10 @@ import * as VTable from '@visactor/vtable';
 
 import i18n from '@/i18n';
 import { QuestionType } from '@/constants/chat';
+import { sendAgentEntry } from '@/blocks/AI/agentEntrySend';
 import { LangType } from '@/constants/settings';
 import CanvasTable, { ICustomOptions, CanvasTableRef } from '@/blocks/CanvasTable';
-import { useAIStore } from '@/store/ai';
 import { useGlobalStore } from '@/store/global';
-import { useWorkspaceStore } from '@/store/workspace';
 import SQLPreview from '@/components/SQLPreview';
 import { useStyles } from './style';
 
@@ -26,7 +25,6 @@ export default memo<IProps>((props) => {
   const { className, data, customOptions } = props;
   const { styles, cx, theme } = useStyles();
   const tableRef = useRef<CanvasTableRef>(null);
-  const setCurrentWorkspaceExtend = useWorkspaceStore((s) => s.setCurrentWorkspaceExtend);
   const currentLang = useGlobalStore((s) => s.baseSetting.language);
   const customFontSize = useGlobalStore((s) => s.baseSetting.customFontSize);
   const [errorDetailInfo, setErrorDetailInfo] = useState<{
@@ -92,25 +90,20 @@ export default memo<IProps>((props) => {
   const handleAIDiagnose = (row: number) => {
     const rowData = data[row - 1];
     const executeSqlParams = rowData.executeSqlParams || {};
-    const page = useGlobalStore.getState().mainPageActiveTab as 'workspace' | 'dashboard' | 'chat' | 'stream';
 
-    setCurrentWorkspaceExtend(null);
-    useAIStore.getState().setCascaderData(page, {
-      dataSourceId: executeSqlParams.dataSourceId,
-      databaseName: executeSqlParams.databaseName,
-      schemaName: executeSqlParams.schemaName,
-    });
-    useAIStore.getState().setShowPanel(true);
-    window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent('stream:prefillMessage', {
-          detail: {
-            input: buildDiagnosticPrompt(rowData),
-            questionType: QuestionType.SQL_DEBUG,
-          },
-        }),
-      );
-    }, 100);
+    sendAgentEntry(
+      {
+        intent: QuestionType.SQL_DEBUG,
+        input: buildDiagnosticPrompt(rowData),
+        scope: {
+          dataSourceId: executeSqlParams.dataSourceId,
+          databaseName: executeSqlParams.databaseName,
+          schemaName: executeSqlParams.schemaName,
+        },
+        payload: { sql: rowData.originalSql, errorMessage: rowData.message },
+      },
+      'prefill',
+    );
   };
 
   const handleOpenErrorDetail = (row: number) => {
