@@ -94,10 +94,10 @@ class OceanbaseOracleIdentifierProcessorTest {
 
     @Test
     void commentDdlPreservesBackslashesAndEscapesQuotes() {
-        assertEquals("\nCOMMENT ON TABLE \"T\"\"1\" IS 'C:\\tmp\\O''Brien';",
-                OceanbaseOracleMetaData.buildTableCommentDdl("T\"1", "C:\\tmp\\O'Brien"));
-        assertEquals("\nCOMMENT ON COLUMN \"T\"\"1\".\"C\"\"1\" IS 'path\\to\\owner''s file';",
-                OceanbaseOracleMetaData.buildColumnCommentDdl("T\"1", "C\"1", "path\\to\\owner's file"));
+        assertEquals("\nCOMMENT ON TABLE \"SCHEMA\".\"T\"\"1\" IS 'C:\\tmp\\O''Brien';",
+                OceanbaseOracleMetaData.buildTableCommentDdl("SCHEMA", "T\"1", "C:\\tmp\\O'Brien"));
+        assertEquals("\nCOMMENT ON COLUMN \"SCHEMA\".\"T\"\"1\".\"C\"\"1\" IS 'path\\to\\owner''s file';",
+                OceanbaseOracleMetaData.buildColumnCommentDdl("SCHEMA", "T\"1", "C\"1", "path\\to\\owner's file"));
     }
 
     @Test
