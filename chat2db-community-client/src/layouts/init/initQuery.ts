@@ -2,7 +2,8 @@ import { useGlobalStore } from '@/store/global';
 import { useOrgStore } from '@/store/workspaceContext';
 import { useUserStore } from '@/store/session';
 import { removeOpenScreenAnimation } from '@/utils/dom';
-import { useLayoutEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { runInitialWorkspaceQuery, useRunOnceWhenReady } from './initQueryLifecycle';
 import useGlobalData from './useGlobalData';
 
 const useInitQuery = () => {
@@ -12,16 +13,13 @@ const useInitQuery = () => {
   const queryCurUser = useUserStore((state) => state.queryCurUser);
   const queryOrgList = useOrgStore((state) => state.queryOrgList);
 
-  useLayoutEffect(() => {
-    if (!isReady) {
-      return;
-    }
+  const initialize = useCallback(() => {
     removeOpenScreenAnimation();
-    Promise.all([queryCurUser(), queryOrgList()])
-      .then(() => getGlobalData())
-      .catch(() => undefined)
+    void runInitialWorkspaceQuery({ queryCurUser, queryOrgList, getGlobalData })
       .finally(() => setInitQueryLoaded(true));
-  }, [getGlobalData, isReady, queryCurUser, queryOrgList]);
+  }, [getGlobalData, queryCurUser, queryOrgList]);
+
+  useRunOnceWhenReady(isReady, initialize);
 
   return { initQueryLoaded };
 };
