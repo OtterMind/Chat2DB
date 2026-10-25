@@ -36,19 +36,72 @@ public class JdbcUtils {
         if (StringUtils.isBlank(url)) {
             return url;
         }
-        String rewrittenUrl = url;
         String bareHost = stripJdbcHostBrackets(host);
-        if (StringUtils.isNotBlank(bareHost)) {
-            String bracketedHost = bracketJdbcIpv6Host(bareHost);
-            if (!StringUtils.equals(bracketedHost, bareHost)) {
-                rewrittenUrl = rewrittenUrl.replace(bracketedHost, "127.0.0.1");
+        if (StringUtils.isBlank(bareHost)) {
+            return url;
+        }
+        int authorityStart = url.indexOf("//");
+        if (authorityStart < 0) {
+            return url;
+        }
+        authorityStart += 2;
+        int authorityEnd = findJdbcAuthorityEnd(url, authorityStart);
+        String authority = url.substring(authorityStart, authorityEnd);
+        String rewrittenAuthority = rewriteJdbcAuthorityForSsh(authority, bareHost, port, localPort);
+        if (rewrittenAuthority == null) {
+            return url;
+        }
+        return url.substring(0, authorityStart) + rewrittenAuthority + url.substring(authorityEnd);
+    }
+
+    private static int findJdbcAuthorityEnd(String url, int authorityStart) {
+        for (int index = authorityStart; index < url.length(); index++) {
+            char current = url.charAt(index);
+            if (current == '/' || current == '?' || current == ';' || current == '#') {
+                return index;
             }
-            rewrittenUrl = rewrittenUrl.replace(bareHost, "127.0.0.1");
         }
-        if (StringUtils.isNotBlank(port) && StringUtils.isNotBlank(localPort)) {
-            rewrittenUrl = rewrittenUrl.replace(port, localPort);
+        return url.length();
+    }
+
+    private static String rewriteJdbcAuthorityForSsh(String authority, String bareHost, String port,
+                                                     String localPort) {
+        int hostStart = authority.lastIndexOf('@') + 1;
+        String prefix = authority.substring(0, hostStart);
+        String hostAndPort = authority.substring(hostStart);
+
+        for (String hostCandidate : jdbcHostCandidates(bareHost)) {
+            if (!hostAndPort.startsWith(hostCandidate)) {
+                continue;
+            }
+            int hostEnd = hostCandidate.length();
+            if (hostEnd < hostAndPort.length() && hostAndPort.charAt(hostEnd) != ':') {
+                continue;
+            }
+
+            String currentPort = hostEnd < hostAndPort.length() ? hostAndPort.substring(hostEnd + 1) : null;
+            String replacementPort = resolveSshReplacementPort(currentPort, port, localPort);
+            return prefix + "127.0.0.1" + (StringUtils.isBlank(replacementPort) ? "" : ":" + replacementPort);
         }
-        return rewrittenUrl;
+        return null;
+    }
+
+    private static List<String> jdbcHostCandidates(String bareHost) {
+        String bracketedHost = bracketJdbcIpv6Host(bareHost);
+        if (StringUtils.equals(bracketedHost, bareHost)) {
+            return Collections.singletonList(bareHost);
+        }
+        return Lists.newArrayList(bracketedHost, bareHost);
+    }
+
+    private static String resolveSshReplacementPort(String currentPort, String port, String localPort) {
+        if (StringUtils.isBlank(localPort)) {
+            return currentPort;
+        }
+        if (StringUtils.isBlank(currentPort) || StringUtils.isBlank(port) || StringUtils.equals(currentPort, port)) {
+            return localPort;
+        }
+        return currentPort;
     }
 
     private static String stripJdbcHostBrackets(String host) {
