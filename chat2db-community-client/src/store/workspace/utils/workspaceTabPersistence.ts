@@ -56,6 +56,12 @@ export function getPersistableWorkspaceLayout(layout: ConfigState['layout']): Co
       ? Math.max(0, layout.panelLeftWidth)
       : initConfigState.layout.panelLeftWidth;
   const panelLeftWidth = layout.panelLeft === false ? 0 : normalizedPanelLeftWidth;
+  const rememberedPanelLeftWidth =
+    typeof layout.lastPanelLeftWidth === 'number' && Number.isFinite(layout.lastPanelLeftWidth) && layout.lastPanelLeftWidth > 0
+      ? layout.lastPanelLeftWidth
+      : normalizedPanelLeftWidth > 0
+        ? normalizedPanelLeftWidth
+        : initConfigState.layout.panelLeftWidth;
   const panelRightWidth =
     typeof layout.panelRightWidth === 'number' && Number.isFinite(layout.panelRightWidth)
       ? Math.max(0, layout.panelRightWidth)
@@ -64,6 +70,7 @@ export function getPersistableWorkspaceLayout(layout: ConfigState['layout']): Co
   return {
     panelLeft: panelLeftWidth > 0,
     panelLeftWidth,
+    lastPanelLeftWidth: rememberedPanelLeftWidth,
     panelRight: typeof layout.panelRight === 'boolean' ? layout.panelRight : false,
     panelRightWidth,
   };
