@@ -24,6 +24,7 @@ import ai.chat2db.community.tools.exception.ParamBusinessException;
 import ai.chat2db.community.tools.util.EasyCollectionUtils;
 import ai.chat2db.community.tools.util.EasyEnumUtils;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.DefaultSqlSyntaxHandler;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
@@ -119,11 +120,13 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         SqlExecutionPlan plan = authorizeExport(param);
         ExportTypeEnum exportType = ExportTypeEnum.from(param.getExportType());
         if (ExportTypeEnum.CSV == exportType) {
+            requireSelectSql(plan.getSql());
             exportCsv(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
                     rowListener, finalizationListener);
             return;
         }
         if (ExportTypeEnum.EXCEL == exportType) {
+            requireSelectSql(plan.getSql());
             exportExcel(plan, outputStream, param.getResultSetId(), statementListener, cancellationChecker,
                     rowListener, finalizationListener);
             return;
@@ -145,6 +148,26 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
         SqlExecutionPlan plan = sqlExecutionPolicyManager.plan(context);
         sqlExecutionPolicyManager.beforeExecute(plan);
         return plan;
+    }
+
+    private void requireSelectSql(String sql) {
+        DbType dbType = currentDruidDbType();
+        if (dbType == null) {
+            boolean selectSql;
+            try {
+                selectSql = DefaultSqlSyntaxHandler.isSelect(sql, Chat2DBContext.getConnectInfo().getDbType());
+            } catch (RuntimeException ignored) {
+                selectSql = false;
+            }
+            if (!selectSql) {
+                throw new BusinessException("dataSource.sqlAnalysisError");
+            }
+            return;
+        }
+        SQLStatement sqlStatement = SQLUtils.parseSingleStatement(sql, dbType);
+        if (!(sqlStatement instanceof SQLSelectStatement)) {
+            throw new BusinessException("dataSource.sqlAnalysisError");
+        }
     }
 
     private DbType currentDruidDbType() {
