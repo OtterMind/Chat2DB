@@ -3,6 +3,8 @@ package ai.chat2db.community.domain.core.impl.ai;
 import ai.chat2db.community.domain.api.enums.ai.AiProviderEnum;
 import ai.chat2db.community.domain.api.model.ai.AiModelCatalogItem;
 import ai.chat2db.community.domain.api.model.ai.AiModelOptionItem;
+import ai.chat2db.community.domain.api.model.request.ai.AiModelConfigSaveRequest;
+import ai.chat2db.community.domain.api.model.request.ai.AiChatRuntimeResolveRequest;
 import ai.chat2db.community.domain.core.converter.AiModelConfigConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -31,7 +33,7 @@ class AiModelConfigServiceImplPresetCatalogTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertEquals(List.of("MiniMax-M3", "MiniMax-M2.7"), minimax.getModels());
+        assertEquals(List.of("MiniMax-M3.1-Flash", "MiniMax-M3"), minimax.getModels());
     }
 
     @Test
@@ -40,12 +42,31 @@ class AiModelConfigServiceImplPresetCatalogTest {
 
         List<AiModelOptionItem> options = service.listModelOptions();
 
-        assertTrue(options.stream().anyMatch(option ->
-                AiProviderEnum.MINIMAX.name().equals(option.getProvider())
-                        && "MiniMax-M3".equals(option.getModel())));
-        assertTrue(options.stream().anyMatch(option ->
-                AiProviderEnum.MINIMAX.name().equals(option.getProvider())
-                        && "MiniMax-M2.7".equals(option.getModel())));
+        assertEquals(List.of("MiniMax-M3.1-Flash", "MiniMax-M3"), options.stream()
+                .filter(option -> AiProviderEnum.MINIMAX.name().equals(option.getProvider()))
+                .map(AiModelOptionItem::getModel).toList());
+    }
+
+    @Test
+    void savedLegacyAndCustomDefaultsSurviveCatalogRefresh() {
+        for (String model : List.of("MiniMax-M2.7", "custom-minimax")) {
+            AiModelConfigServiceImpl service = service();
+            AiModelConfigSaveRequest save = new AiModelConfigSaveRequest();
+            save.setProvider("MINIMAX");
+            save.setName(model);
+            save.setModel(model);
+            save.setApiKey("test-key");
+            save.setDefaultConfig(true);
+            service.saveCurrentUserConfig(save);
+
+            AiModelConfigServiceImpl reloaded = service();
+            reloaded.init();
+            AiModelOptionItem preferred = reloaded.listModelOptions().get(0);
+            assertEquals(model, preferred.getModel());
+            assertTrue(preferred.getDefaultOption());
+            assertTrue(preferred.getCustomOption());
+            assertEquals(model, reloaded.resolveRuntimeModel(new AiChatRuntimeResolveRequest()).getModel());
+        }
     }
 
     private AiModelConfigServiceImpl service() {

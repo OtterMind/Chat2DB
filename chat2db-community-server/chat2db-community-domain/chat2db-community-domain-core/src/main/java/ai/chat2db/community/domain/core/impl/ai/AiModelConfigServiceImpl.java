@@ -499,7 +499,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
         presets.put(AiProviderEnum.OPENAI, List.of("gpt-5.2"));
         presets.put(AiProviderEnum.CLAUDE, List.of("claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"));
         presets.put(AiProviderEnum.GEMINI, List.of("gemini-2.5-pro", "gemini-2.5-flash"));
-        presets.put(AiProviderEnum.MINIMAX, List.of("MiniMax-M3", "MiniMax-M2.7"));
+        presets.put(AiProviderEnum.MINIMAX, List.of("MiniMax-M3.1-Flash", "MiniMax-M3"));
         return presets;
     }
 

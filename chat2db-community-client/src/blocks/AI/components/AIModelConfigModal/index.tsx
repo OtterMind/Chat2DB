@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Tag } from 'antd';
+import { AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Tag } from 'antd';
 import i18n from '@/i18n';
 import feedback from '@/utils/feedback';
 import {
@@ -11,7 +11,13 @@ import {
   saveAIModelConfig,
   testAIModelConfig,
 } from '@/service/aiModelConfig';
-import { resolveBaseUrlOnProviderChange, resolveProviderBaseUrl } from './modelConfigDefaults';
+import {
+  MINIMAX_BASE_URL_PRESETS,
+  MINIMAX_MODEL_PRESETS,
+  resolveBaseUrlOnProviderChange,
+  resolveProviderBaseUrl,
+  resolveProviderModel,
+} from './modelConfigDefaults';
 import { useStyles } from './style';
 import { usePermission } from '@/hooks/usePermission';
 import { clientRuntime } from '@client-runtime';
@@ -52,6 +58,7 @@ const toFormValues = (config?: Partial<IAIModelConfigSaveRequest>): IAIModelConf
   return {
     ...values,
     baseUrl: resolveProviderBaseUrl(values.provider, values.baseUrl),
+    model: resolveProviderModel(values.provider, values.model),
   };
 };
 
@@ -113,6 +120,7 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
 
   const handleProviderChange = (provider: AIProvider) => {
     form.setFieldValue('baseUrl', resolveBaseUrlOnProviderChange(provider, form.getFieldValue('baseUrl')));
+    form.setFieldValue('model', resolveProviderModel(provider, form.getFieldValue('model')));
   };
 
   const handleSave = async () => {
@@ -299,7 +307,14 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               label={i18n('setting.modelConfig.model')}
               rules={[{ required: true, message: i18n('setting.modelConfig.validation.model') }]}
             >
-              <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.model')} />
+              {currentProvider === 'MINIMAX' ? (
+                <AutoComplete
+                  options={MINIMAX_MODEL_PRESETS}
+                  placeholder={i18n('setting.modelConfig.placeholder.model')}
+                />
+              ) : (
+                <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.model')} />
+              )}
             </Form.Item>
             <Form.Item
               name="apiKey"
@@ -323,7 +338,14 @@ export default function AIModelConfigModal({ open, onClose, onChanged }: AIModel
               />
             </Form.Item>
             <Form.Item name="baseUrl" label={i18n('setting.modelConfig.baseUrl')}>
-              <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.baseUrl')} />
+              {currentProvider === 'MINIMAX' ? (
+                <AutoComplete
+                  options={MINIMAX_BASE_URL_PRESETS}
+                  placeholder={i18n('setting.modelConfig.placeholder.baseUrl')}
+                />
+              ) : (
+                <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.baseUrl')} />
+              )}
             </Form.Item>
             <Form.Item name="projectId" label={i18n('setting.modelConfig.projectId')}>
               <Input autoComplete="off" placeholder={i18n('setting.modelConfig.placeholder.projectId')} />
