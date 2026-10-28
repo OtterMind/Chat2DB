@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -105,10 +106,9 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
     }
 
     public List<ExecuteResponse> execute(SqlExecuteRequest command) {
-        int pageNo = Optional.ofNullable(command.getPageNo()).orElse(1);
-        command.setPageNo(pageNo);
-        int pageSize = Optional.ofNullable(command.getPageSize()).orElse(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
-        command.setPageSize(pageSize);
+        PageBounds pageBounds = normalizePageBounds(command.getPageNo(), command.getPageSize());
+        command.setPageNo(pageBounds.pageNo());
+        command.setPageSize(pageBounds.pageSize());
         List<ExecuteResponse> resultList = Lists.newArrayList();
         List<String> sqlList = parseSql(command.getScript());
         for (String originalSql : sqlList) {
@@ -156,15 +156,15 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         List<List<ResultCell>> dataList = Lists.newArrayList();
         Map<String, Header> headerListMap = Maps.newLinkedHashMap();
         List<TreeMap<String, String>> dataListMap = Lists.newArrayList();
-        int fromIndex = Math.max(command.getPageNo() - 1, 0) * command.getPageSize();
-        int toIndex = fromIndex + command.getPageSize();
+        PageBounds pageBounds = normalizePageBounds(command.getPageNo(), command.getPageSize());
         ExecuteResponse result = ExecuteResponse.builder().sql(sql).success(Boolean.TRUE).build();
         ResultSet rs = null;
         try {
             rs = stmt.getResultSet();
             int index = 1;
-            int columnCount = rs.getMetaData().getColumnCount();
+            long rowCount = 0L;
             while (rs.next()) {
+                rowCount++;
                 Object o = rs.getObject(1);
                 if (Objects.nonNull(o)) {
                     LinkedHashMap<String, Object> map = DocumentConverter.object2map(o);
@@ -172,20 +172,31 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
                     documentList.add(map);
                 } else {
                     String value = rs.getString(1);
-                    if (StringUtils.isEmpty(value)) {
-                        continue;
-                    }
-                    valueList.add(ResultCell.of(value));
-                    if (Objects.nonNull(rs.getMetaData())) {
-                        headerList.add(Header.builder().name(rs.getMetaData().getColumnName(1)).build());
-                        headerList.add(Header.builder().name(I18nUtils.getMessage("sqlResult.rowNumber"))
-                            .dataType(DataTypeEnum.CHAT2DB_ROW_NUMBER.getCode()).build());
+                    if (StringUtils.isNotEmpty(value)) {
+                        valueList.add(ResultCell.of(value));
+                        if (Objects.nonNull(rs.getMetaData())) {
+                            headerList.add(Header.builder().name(rs.getMetaData().getColumnName(1)).build());
+                            headerList.add(Header.builder().name(I18nUtils.getMessage("sqlResult.rowNumber"))
+                                .dataType(DataTypeEnum.CHAT2DB_ROW_NUMBER.getCode()).build());
+                        }
                     }
                 }
 
-                if (columnCount++ >= toIndex) {
+                if (rowCount >= pageBounds.toIndex()) {
                     break;
                 }
+            }
+
+            if (rowCount == 0L) {
+                result.setDataList(Collections.emptyList());
+                result.setHeaderList(headerList);
+                result.setOriginalSql(command.getScript());
+                result.setFuzzyTotal("0");
+                result.setDescription(I18nUtils.getMessage("sqlResult.success"));
+                result.setCanEdit(canEdit(command.getScript()));
+                result.setTableName(getTableName(command.getTableName(), command.getScript()));
+                result.setHasNextPage(false);
+                return result;
             }
 
             if (CollectionUtils.isEmpty(documentList)) {
@@ -229,8 +240,9 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
                     header.setDataType(DataTypeEnum.CHAT2DB_ROW_NUMBER.getCode());
                 });
             result.setHeaderList(headerList);
-            result.setDataList(dataList.subList(fromIndex, Math.min(dataList.size(), toIndex)));
-            String fuzzyTotal = calculateFuzzyTotal(command, result);
+            int fetchedDataSize = dataList.size();
+            result.setDataList(pageBounds.page(dataList));
+            String fuzzyTotal = calculateFuzzyTotal(pageBounds, result, fetchedDataSize);
             result.setFuzzyTotal(fuzzyTotal);
             result.setCanEdit(canEdit(command.getScript()));
             result.setOriginalSql(command.getScript());
@@ -255,16 +267,55 @@ public class MongodbScriptExecutor extends DefaultSQLExecutor {
         return resultMap;
     }
 
-    private String calculateFuzzyTotal(SqlExecuteRequest command, ExecuteResponse executeResult) {
+    private String calculateFuzzyTotal(PageBounds pageBounds, ExecuteResponse executeResult, int fetchedDataSize) {
         int dataSize = CollectionUtils.size(executeResult.getDataList());
-        if (command.getPageSize() <= 0) {
-            return Integer.toString(dataSize);
+        long fuzzyTotal = saturatedAdd(Math.min(pageBounds.fromIndex(), fetchedDataSize), dataSize);
+        if (dataSize < pageBounds.pageSize()) {
+            return Long.toString(fuzzyTotal);
         }
-        int fuzzyTotal = Math.max(command.getPageNo() - 1, 0) * command.getPageSize() + dataSize;
-        if (dataSize < command.getPageSize()) {
-            return Integer.toString(fuzzyTotal);
+        return Integer.toString(pageBounds.pageSize()) + "+";
+    }
+
+    static PageBounds normalizePageBounds(Integer requestedPageNo, Integer requestedPageSize) {
+        int pageNo = Optional.ofNullable(requestedPageNo).orElse(1);
+        int pageSize = Optional.ofNullable(requestedPageSize).orElse(IEasyToolsConstant.DEFAULT_PAGE_SIZE);
+        if (pageNo < 1) {
+            pageNo = 1;
         }
-        return Integer.toString(command.getPageSize()) + "+";
+        if (pageSize < 1) {
+            pageSize = IEasyToolsConstant.DEFAULT_PAGE_SIZE;
+        }
+
+        long fromIndex = saturatedMultiply((long) pageNo - 1L, pageSize);
+        long toIndex = saturatedAdd(fromIndex, pageSize);
+        return new PageBounds(pageNo, pageSize, fromIndex, toIndex);
+    }
+
+    private static long saturatedMultiply(long left, long right) {
+        if (left == 0L || right == 0L) {
+            return 0L;
+        }
+        if (left > Long.MAX_VALUE / right) {
+            return Long.MAX_VALUE;
+        }
+        return left * right;
+    }
+
+    private static long saturatedAdd(long left, long right) {
+        if (left > Long.MAX_VALUE - right) {
+            return Long.MAX_VALUE;
+        }
+        return left + right;
+    }
+
+    record PageBounds(int pageNo, int pageSize, long fromIndex, long toIndex) {
+
+        <T> List<T> page(List<T> data) {
+            int size = data.size();
+            int from = (int) Math.min(fromIndex, size);
+            int to = (int) Math.min(toIndex, size);
+            return new ArrayList<>(data.subList(from, to));
+        }
     }
 
     boolean canEdit(String sql) {
