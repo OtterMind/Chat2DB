@@ -10,6 +10,7 @@ import redisServices from '@/service/nonRelationalDatabase/redis';
 import { RedisDataItem } from '@/typings/redis';
 import { useUpdateEffect } from 'ahooks';
 import { cloneDeep } from 'lodash';
+import feedback from '@/utils/feedback';
 
 interface IProps {
   className?: string;
@@ -69,7 +70,7 @@ export default memo<IProps>((props) => {
       ttl: values.ttl,
       type: values.type,
     };
-    if (baseData.type === RedisFieldType.STRING) {
+    if (baseData.type === RedisFieldType.STRING || baseData.type === RedisFieldType.JSON) {
       baseData.value = values.value;
     } else if (baseData.type === RedisFieldType.STREAM) {
       baseData.streamValues = createStreamRef?.current?.getStreamList() || [];
@@ -91,6 +92,9 @@ export default memo<IProps>((props) => {
         .then((_redisDataItem) => {
           submitSuccess && submitSuccess(_redisDataItem);
         })
+        .catch((error) => {
+          feedback.error(error instanceof Error ? error.message : String(error));
+        })
         .finally(() => {
           setTimeout(() => {
             setButtonLoading(false);
@@ -106,6 +110,9 @@ export default memo<IProps>((props) => {
         })
         .then((_redisDataItem) => {
           submitSuccess && submitSuccess(_redisDataItem);
+        })
+        .catch((error) => {
+          feedback.error(error instanceof Error ? error.message : String(error));
         })
         .finally(() => {
           setTimeout(() => {
@@ -142,13 +149,13 @@ export default memo<IProps>((props) => {
         </div>
         <div className={styles.fullFormItemBox}>
           {/* string */}
-          {formValue.type === RedisFieldType.STRING && (
+          {(formValue.type === RedisFieldType.STRING || formValue.type === RedisFieldType.JSON) && (
             <Form.Item label={i18n('redis.value')} name="value" className={styles.textAreaFormItem}>
               <TextArea style={{ resize: 'none' }} />
             </Form.Item>
           )}
 
-          {formValue.type !== RedisFieldType.STRING && formValue.type !== RedisFieldType.STREAM && (
+          {formValue.type !== RedisFieldType.STRING && formValue.type !== RedisFieldType.JSON && formValue.type !== RedisFieldType.STREAM && (
             <div className={styles.createList}>
               <Form.Item label={i18n('redis.value')}>
                 <CreateList

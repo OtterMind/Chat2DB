@@ -204,6 +204,8 @@ public class RedisSqlBuilder implements ISqlBuilder, IDqlSqlBuilder, IDmlSqlBuil
             case STRING:
                 appendStringOperation(script, keyName, operationType, newRow);
                 break;
+            case JSON:
+                throw unsupported(RedisConstants.METHOD_BUILD_JSON_OPERATION);
             default:
                 break;
         }

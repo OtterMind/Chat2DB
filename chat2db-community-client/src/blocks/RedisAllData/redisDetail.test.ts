@@ -24,6 +24,11 @@ assert.equal(
 );
 assert.equal(isRedisDataItemLoaded(item({ detailLoaded: true, value: '' })), true, 'empty strings are values');
 assert.equal(
+  isRedisDataItemLoaded(item({ type: RedisFieldType.JSON, detailLoaded: true, value: '{"name":"alice"}' })),
+  true,
+  'RedisJSON documents are loaded as JSON text',
+);
+assert.equal(
   isRedisDataItemLoaded(item({ type: RedisFieldType.LIST, detailLoaded: true, listValues: [] })),
   true,
   'empty arrays are loaded payloads',
