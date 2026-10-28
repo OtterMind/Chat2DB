@@ -944,6 +944,10 @@ export const dataSourceFormConfigs: IConnectionConfig[] = [
         key: 'Trusted_Connection',
         value: 'yes',
       },
+      {
+        key: 'sslProtocol',
+        value: 'TLSv1',
+      },
     ],
     baseInfo: {
       items: [
