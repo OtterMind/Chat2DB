@@ -12,36 +12,50 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static ai.chat2db.plugin.snowflake.constant.SnowflakeDBManagerConstants.*;
 public class SnowflakeDBManager extends DefaultDBManager implements IDbManager {
 
+    private static final String DATABASE_PROPERTY = "db";
+    private static final String SCHEMA_PROPERTY = "schema";
+    private static final String QUERY_RESULT_FORMAT_PROPERTY = "JDBC_QUERY_RESULT_FORMAT";
+    private static final String QUERY_RESULT_FORMAT_JSON = "JSON";
 
 
 
 
     @Override
     public Connection getConnection(ConnectInfo connectInfo) {
-        List<KeyValue> extendInfo = connectInfo.getExtendInfo();
-        if (StringUtils.isNotBlank(connectInfo.getDatabaseName())) {
-            KeyValue keyValue = new KeyValue();
-            keyValue.setKey("db");
-            keyValue.setValue(connectInfo.getDatabaseName());
-            extendInfo.add(keyValue);
+        connectInfo.setExtendInfo(prepareExtendInfo(connectInfo));
+        return super.getConnection(connectInfo);
+    }
+
+    static List<KeyValue> prepareExtendInfo(ConnectInfo connectInfo) {
+        List<KeyValue> configuredExtendInfo = connectInfo.getExtendInfo();
+        if ((configuredExtendInfo == null || configuredExtendInfo.isEmpty()) && connectInfo.getDriverConfig() != null) {
+            configuredExtendInfo = connectInfo.getDriverConfig().getExtendInfo();
         }
-        if (StringUtils.isNotBlank(connectInfo.getSchemaName())) {
-            KeyValue keyValue = new KeyValue();
-            keyValue.setKey("schema");
-            keyValue.setValue(connectInfo.getSchemaName());
-            extendInfo.add(keyValue);
+        List<KeyValue> extendInfo = configuredExtendInfo == null
+                ? new ArrayList<>()
+                : new ArrayList<>(configuredExtendInfo);
+        replaceProperty(extendInfo, DATABASE_PROPERTY, connectInfo.getDatabaseName());
+        replaceProperty(extendInfo, SCHEMA_PROPERTY, connectInfo.getSchemaName());
+        replaceProperty(extendInfo, QUERY_RESULT_FORMAT_PROPERTY, QUERY_RESULT_FORMAT_JSON);
+        return extendInfo;
+    }
+
+    private static void replaceProperty(List<KeyValue> extendInfo, String propertyName, String propertyValue) {
+        extendInfo.removeIf(keyValue -> keyValue != null
+                && StringUtils.equalsIgnoreCase(propertyName, keyValue.getKey()));
+        if (StringUtils.isBlank(propertyValue)) {
+            return;
         }
         KeyValue keyValue = new KeyValue();
-        keyValue.setKey("JDBC_QUERY_RESULT_FORMAT");
-        keyValue.setValue("JSON");
+        keyValue.setKey(propertyName);
+        keyValue.setValue(propertyValue);
         extendInfo.add(keyValue);
-        connectInfo.setExtendInfo(extendInfo);
-        return super.getConnection(connectInfo);
     }
 
 
