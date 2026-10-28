@@ -8,7 +8,9 @@ import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -112,6 +114,31 @@ class TerminalSessionManagerTest {
         assertTrue(((java.util.List<?>) capabilities.get("shells")).stream()
                 .map(option -> (Map<?, ?>) option)
                 .anyMatch(option -> "system".equals(option.get("id")) && Boolean.TRUE.equals(option.get("available"))));
+    }
+
+    @Test
+    void findsCommandInQuotedPathEntries() throws Exception {
+        Path executable = Files.createFile(directory.resolve("bash.exe"));
+
+        assertEquals(
+                executable.toString(),
+                TerminalSessionManager.findCommandOnPath("windows", '"' + directory.toString() + '"', "bash.exe")
+        );
+        assertEquals(
+                executable.toString(),
+                TerminalSessionManager.findCommandOnPath("windows", '"' + directory.toString(), "bash.exe")
+        );
+    }
+
+    @Test
+    void skipsInvalidPathEntriesWhenFindingCommand() throws Exception {
+        Path executable = Files.createFile(directory.resolve("powershell.exe"));
+        String pathValue = "\0invalid" + File.pathSeparator + directory;
+
+        assertEquals(
+                executable.toString(),
+                TerminalSessionManager.findCommandOnPath("windows", pathValue, "powershell.exe")
+        );
     }
 
     @Test
