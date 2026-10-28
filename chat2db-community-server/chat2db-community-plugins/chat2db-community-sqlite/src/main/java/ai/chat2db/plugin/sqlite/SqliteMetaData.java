@@ -39,10 +39,12 @@ public class SqliteMetaData extends DefaultMetaService implements IDbMetaData {
     @Override
     public Table view(Connection connection, String databaseName, String schemaName, String viewName) {
         Table view = new Table();
+        view.setDatabaseName(databaseName);
+        view.setSchemaName(schemaName);
+        view.setName(viewName);
         String sql = String.format(VIEW_DDL_SQL, getSQLIdentifierProcessor().escapeString(viewName));
         DefaultSQLExecutor.getInstance().execute(connection, sql, resultSet -> {
             if (resultSet.next()) {
-                view.setDatabaseName(databaseName);
                 view.setDdl(resultSet.getString("sql"));
             }
         });
