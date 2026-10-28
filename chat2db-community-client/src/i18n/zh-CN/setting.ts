@@ -280,7 +280,7 @@ export default {
   'setting.modelConfig.placeholder.apiKey': '编辑时留空则保留原值',
   'setting.modelConfig.placeholder.baseUrl': '例如：https://api.openai.com/v1',
   'setting.modelConfig.baseUrlTip':
-    'OpenAI 兼容模型会请求 Base URL + /v1/chat/completions，Base URL 结尾的 /v1 可省略、填写了也不会重复拼接，例如 https://api.openai.com/v1 或 https://your-domain.com 均可。',
+    'OpenAI 兼容模型会请求 Base URL + /chat/completions，Base URL 结尾的 /v1、/v4 等版本号会自动识别、不会重复拼接，例如 https://api.openai.com/v1、https://open.bigmodel.cn/api/paas/v4 或 https://your-domain.com 均可。',
   'setting.modelConfig.placeholder.projectId': 'Gemini 可填写 GCP Project ID',
   'setting.modelConfig.placeholder.location': '例如：us-central1',
   'setting.modelConfig.placeholder.temperature': '例如：0.7',

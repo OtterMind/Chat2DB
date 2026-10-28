@@ -285,7 +285,7 @@ export default {
   'setting.modelConfig.placeholder.apiKey': 'Déjelo en blanco para conservar el valor actual al editar',
   'setting.modelConfig.placeholder.baseUrl': 'p. ej., https://api.openai.com/v1',
   'setting.modelConfig.baseUrlTip':
-    'Los modelos compatibles con OpenAI llaman a Base URL + /v1/chat/completions. El /v1 final de la Base URL es opcional y no se duplicará, por ejemplo, https://api.openai.com/v1 o https://your-domain.com.',
+    'Los modelos compatibles con OpenAI llaman a Base URL + /chat/completions. Un sufijo de versión en la Base URL, como /v1 o /v4, se detecta automáticamente y no se duplica, por ejemplo, https://api.openai.com/v1, https://open.bigmodel.cn/api/paas/v4 o https://your-domain.com.',
   'setting.modelConfig.placeholder.projectId': 'Para Gemini, introduzca el ID de su proyecto de GCP',
   'setting.modelConfig.placeholder.location': 'p. ej., us-central1',
   'setting.modelConfig.placeholder.temperature': 'p. ej., 0.7',
