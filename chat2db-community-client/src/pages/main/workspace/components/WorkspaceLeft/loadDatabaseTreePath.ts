@@ -5,6 +5,7 @@ import type { Key } from 'react';
 interface DatabaseTreePathStore {
   treeData: TreeNodeData[] | null;
   expandedKeys: Key[];
+  invalidatedTreeNodeKeys?: Key[];
   handleLoadData: (node: TreeNodeData, options?: ILoadDataOptions) => Promise<ILoadDataResult>;
   setExpandedKeys: (keys: Key[]) => void;
 }
@@ -42,7 +43,10 @@ export async function loadDatabaseTreePath(
       break;
     }
 
-    if (node.children === undefined && !node.isLeaf) {
+    if (
+      !node.isLeaf &&
+      (node.children === undefined || treeStore.invalidatedTreeNodeKeys?.includes(node.key))
+    ) {
       try {
         const loadResult = await treeStore.handleLoadData(node, {
           closeExpandTreeNode: true,
