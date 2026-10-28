@@ -1,5 +1,7 @@
 package ai.chat2db.community.web.api.controller;
 
+import jakarta.validation.Valid;
+
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.operation.Operation;
 import ai.chat2db.community.domain.api.service.ops.IOpsOperationSavedService;
@@ -104,7 +106,7 @@ public class OpsOperationSavedController {
      * @return operation result for the request.
      */
     @RequestMapping(value = "/batch_tab_close", method = {RequestMethod.POST, RequestMethod.PUT})
-    public ActionResult batchTabClose(@RequestBody BatchTabCloseRequest request) {
+    public ActionResult batchTabClose(@Valid @RequestBody BatchTabCloseRequest request) {
         operationSavedService.closeTabs();
         return ActionResult.isSuccess();
     }
