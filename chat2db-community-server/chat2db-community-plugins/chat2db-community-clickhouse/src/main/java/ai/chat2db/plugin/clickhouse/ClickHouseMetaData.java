@@ -126,7 +126,8 @@ public class ClickHouseMetaData extends DefaultMetaService implements IDbMetaDat
     @Override
     public Function function(Connection connection, @NotEmpty String databaseName, String schemaName,
                              String functionName) {
-        return DefaultSQLExecutor.getInstance().execute(connection, FUNCTION_SQL, resultSet -> {
+        return DefaultSQLExecutor.getInstance().preExecute(connection, FUNCTION_DETAIL_SQL,
+                new String[]{functionName}, resultSet -> {
             Function function = new Function();
             function.setDatabaseName(databaseName);
             function.setSchemaName(schemaName);
