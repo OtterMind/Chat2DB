@@ -244,6 +244,7 @@ class CompletionProviderManager {
 
   public onParserChange = (sqlStatementList: SqlStatement[], curStatement?: SqlStatement) => {
     this.sqlStatementList = sqlStatementList;
+    this.originColumnList = [];
     if (curStatement) {
       const { tableColumns } = curStatement;
       const columns = (tableColumns || []).reduce((acc: ISimpleColumnVO[], cur) => {
@@ -254,10 +255,7 @@ class CompletionProviderManager {
         return;
       }
 
-      setTimeout(() => {
-        // this.registerParserColumnProvider(columns);
-        this.originColumnList = columns ?? [];
-      }, 1000);
+      this.originColumnList = columns;
     }
   };
 
