@@ -247,7 +247,7 @@ public class HiveMetaData extends DefaultMetaService implements IDbMetaData {
                     tableColumn.setPrimaryKey(true);
                 }
                 if (constraints.get("notnull") !=null && constraints.get("notnull").keySet().contains(columnMap.get("col_name"))) {
-                    tableColumn.setNullable(1);
+                    tableColumn.setNullable(0);
                 }
                 tableColumns.add(tableColumn);
 
