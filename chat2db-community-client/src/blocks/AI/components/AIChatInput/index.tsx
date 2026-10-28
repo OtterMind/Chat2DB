@@ -43,6 +43,22 @@ import {
   type MentionTrigger,
   type SelectedMention,
 } from './mentionSelection';
+import {
+  MentionTableRequestCoordinator,
+  type MentionTableRequestContext,
+  type MentionTableRequestOwner,
+} from './mentionTableRequestCoordinator';
+
+function toMentionTableRequestContext(contextInfo: IAICascaderData): MentionTableRequestContext {
+  if (!contextInfo) {
+    return {};
+  }
+  return {
+    dataSourceId: contextInfo.dataSourceId,
+    databaseName: contextInfo.databaseName,
+    schemaName: contextInfo.schemaName,
+  };
+}
 
 export interface SendParams {
   input: string;
@@ -129,7 +145,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   const textareaRef = useRef<TextAreaRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef<boolean>(false); // IME input method combination status
-  const tableRequestSequenceRef = useRef(0);
+  const mentionTableRequestCoordinatorRef = useRef(new MentionTableRequestCoordinator<PageType>());
 
   // caches tables without search conditions
   const tableListWithoutSearchKey = useRef<ITable[]>([]);
@@ -199,20 +215,32 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
 
   useEffect(() => {
     tableListWithoutSearchKey.current = [];
-    tableRequestSequenceRef.current += 1;
     setSelectedMentions([]);
     setMentionTrigger(null);
     setTableList([]);
-    if (cascaderDataMap[mainPageActiveTab]) {
-      fetchTableList(cascaderDataMap[mainPageActiveTab], '');
+    const contextInfo = cascaderDataMap[mainPageActiveTab];
+    if (contextInfo) {
+      const requestOwner = mentionTableRequestCoordinatorRef.current.beginRequest(
+        mainPageActiveTab as PageType,
+        toMentionTableRequestContext(contextInfo),
+        '',
+      );
+      fetchTableList(contextInfo, '', requestOwner);
+    } else {
+      mentionTableRequestCoordinatorRef.current.invalidate();
     }
-  }, [cascaderDataMap[mainPageActiveTab]]);
+  }, [mainPageActiveTab, cascaderDataMap[mainPageActiveTab]]);
 
   const fetchTableList = useRef(
-    debounce(async (_contextInfo: IAICascaderData, searchKey: string, requestSequence?: number) => {
-      if (!_contextInfo) return;
-      if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
-      if ('dataSourceId' in _contextInfo && _contextInfo?.dataSourceId) {
+    debounce(
+      async (
+        _contextInfo: IAICascaderData,
+        searchKey: string,
+        requestOwner: MentionTableRequestOwner<PageType>,
+      ) => {
+        if (!_contextInfo?.dataSourceId || !mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+          return;
+        }
         if (!searchKey && tableListWithoutSearchKey.current.length) {
           setTableList(tableListWithoutSearchKey.current);
           return;
@@ -228,6 +256,9 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             pageSize: 1000,
             searchKey,
           });
+          if (!mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+            return;
+          }
           viewRes = await sqlService.getViewList({
             dataSourceId: _contextInfo.dataSourceId,
             databaseName: _contextInfo.databaseName,
@@ -236,21 +267,23 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
             pageSize: 1000,
             searchKey,
           });
+          if (!mentionTableRequestCoordinatorRef.current.isCurrent(requestOwner)) {
+            return;
+          }
         } catch (error) {
-          if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
           const requestError = error as { errorCode?: string };
+          const ownedPage = mentionTableRequestCoordinatorRef.current.getOwnedErrorPage(requestOwner);
           if (
-            requestError.errorCode === 'QUERY_DATASOURCE_ERROR' ||
-            requestError.errorCode === ErrorCode.NeedLoggedIn
+            ownedPage &&
+            (requestError.errorCode === 'QUERY_DATASOURCE_ERROR' ||
+              requestError.errorCode === ErrorCode.NeedLoggedIn)
           ) {
             tableListWithoutSearchKey.current = [];
             setTableList([]);
-            clearCascaderData(mainPageActiveTab as PageType);
+            clearCascaderData(ownedPage);
           }
           return;
         }
-
-        if (requestSequence !== undefined && requestSequence !== tableRequestSequenceRef.current) return;
 
         const atTableList =
           res.data?.map((s) => ({
@@ -271,12 +304,16 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
         }
 
         setTableList(list);
-      }
-    }, 300),
+      },
+      300,
+    ),
   ).current;
 
   useEffect(() => {
-    return () => fetchTableList.cancel();
+    return () => {
+      mentionTableRequestCoordinatorRef.current.invalidate();
+      fetchTableList.cancel();
+    };
   }, []);
 
   const handleSend = async (params?: SendParams) => {
@@ -525,18 +562,25 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
   ) => {
     const nextTrigger = detectMentionTrigger(value, cursor);
     if (!nextTrigger) {
-      tableRequestSequenceRef.current += 1;
+      mentionTableRequestCoordinatorRef.current.invalidate();
       setMentionTrigger(null);
       onTrigger(false);
       return;
     }
 
-    const requestSequence = tableRequestSequenceRef.current + 1;
-    tableRequestSequenceRef.current = requestSequence;
     setTableList([]);
     setMentionTrigger(nextTrigger);
     const contextInfo = cascaderDataMap[mainPageActiveTab];
-    fetchTableList(contextInfo, nextTrigger.query, requestSequence);
+    if (contextInfo) {
+      const requestOwner = mentionTableRequestCoordinatorRef.current.beginRequest(
+        mainPageActiveTab as PageType,
+        toMentionTableRequestContext(contextInfo),
+        nextTrigger.query,
+      );
+      fetchTableList(contextInfo, nextTrigger.query, requestOwner);
+    } else {
+      mentionTableRequestCoordinatorRef.current.invalidate();
+    }
     onTrigger(nextTrigger);
   };
 
@@ -578,7 +622,7 @@ const AIChatInput = forwardRef((props: ChatInputProps, ref: ForwardedRef<ChatInp
           };
           return upsertSelectedMention(previous, nextMention);
         });
-        tableRequestSequenceRef.current += 1;
+        mentionTableRequestCoordinatorRef.current.invalidate();
         setMentionTrigger(null);
         window.setTimeout(() => {
           textarea?.focus();
