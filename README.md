@@ -25,6 +25,8 @@ Chat2DB Community is a free, cross-platform database client for Windows, macOS, 
 - **Database management** — browse metadata, manage tables and objects (DDL/DML), and edit data in place.
 - **Data import and export**, **dashboards and charts**, and an **[open-source CLI with MCP support](https://github.com/OtterMind/Chat2DB-CLI)**.
 
+See the [MCP guide](docs/guides/mcp.md) for desktop setup, client configuration, available tools, and curl examples.
+
 <div align="center">
 
 [![Chat2DB workspace with SQL editor and AI assistant — click to watch the intro video](https://cdn.chat2db-ai.com/website/img/first_video_cover.webp)](https://cdn.chat2db-ai.com/website/video/first_sceen_en.mp4)
