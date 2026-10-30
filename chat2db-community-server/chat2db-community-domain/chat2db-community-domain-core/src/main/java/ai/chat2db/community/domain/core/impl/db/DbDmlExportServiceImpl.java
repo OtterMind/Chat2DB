@@ -18,6 +18,7 @@ import ai.chat2db.community.domain.api.service.db.IDbDmlExportService;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
+import ai.chat2db.community.domain.core.impl.task.export.csv.CsvWriter;
 import ai.chat2db.community.domain.core.impl.task.export.excel.MultiSheetExcelWriter;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.exception.ParamBusinessException;
@@ -52,6 +53,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Array;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -170,31 +172,40 @@ public class DbDmlExportServiceImpl implements IDbDmlExportService {
 
     private void exportCsv(SqlExecutionPlan plan, OutputStream outputStream, Integer resultSetId,
             ISqlExecutionStatementListener statementListener, Runnable cancellationChecker,
-            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) {
-        ExcelWrapper excelWrapper = new ExcelWrapper();
+            LongConsumer exportedRowsListener, Runnable fileFinalizationListener) throws IOException {
         IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-        try {
-            ExcelWriterBuilder excelWriterBuilder = EasyExcel.write(outputStream)
-                    .charset(StandardCharsets.UTF_8)
-                    .excelType(ExcelTypeEnum.CSV);
-            List<Integer> includedIndexes = new ArrayList<>();
-            DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
-                includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
-                excelWriterBuilder.head(EasyCollectionUtils.toList(select(headerList, includedIndexes),
-                        header -> Lists.newArrayList(header.getName())));
-                excelWrapper.setExcelWriter(excelWriterBuilder.build());
-                excelWrapper.setWriteSheet(EasyExcel.writerSheet(0).build());
-            }, dataList -> {
-                excelWrapper.getExcelWriter().write(List.of(select(dataList, includedIndexes)),
-                        excelWrapper.getWriteSheet());
-                exportedRowsListener.accept(1L);
-            }, exportValueFormatter(plan, valueProcessor, false), false, resultSetId, statementListener,
-                    cancellationChecker, plan.getMaxRows());
-            fileFinalizationListener.run();
-        } finally {
-            if (excelWrapper.getExcelWriter() != null) {
-                excelWrapper.getExcelWriter().finish();
+        List<Integer> includedIndexes = new ArrayList<>();
+        try (CsvWriter csvWriter = new CsvWriter(outputStream)) {
+            try {
+                DefaultSQLExecutor.getInstance().execute(Chat2DBContext.getConnection(), plan.getSql(), headerList -> {
+                    includedIndexes.addAll(sqlExecutionPolicyManager.includedColumnIndexes(plan, headerList));
+                    // The query result export always writes the header row, like the Excel head did.
+                    writeCsvHeader(csvWriter, select(headerList, includedIndexes));
+                }, dataList -> {
+                    writeCsvRow(csvWriter, select(dataList, includedIndexes));
+                    exportedRowsListener.accept(1L);
+                }, exportValueFormatter(plan, valueProcessor, false), false, resultSetId, statementListener,
+                        cancellationChecker, plan.getMaxRows());
+            } catch (UncheckedIOException e) {
+                throw e.getCause();
             }
+            fileFinalizationListener.run();
+        }
+    }
+
+    private static void writeCsvHeader(CsvWriter csvWriter, List<Header> headers) {
+        try {
+            csvWriter.writeHeader(headers.stream().map(Header::getName).toList(), true);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static void writeCsvRow(CsvWriter csvWriter, List<String> values) {
+        try {
+            csvWriter.writeRow(values);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

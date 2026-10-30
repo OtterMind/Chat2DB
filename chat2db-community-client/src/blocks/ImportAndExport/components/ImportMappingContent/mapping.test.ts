@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { ImportPreviewErrorCode, SKIP_IMPORT_SOURCE_FIELD } from '@/constants/importExport';
+import { ImportPreviewErrorCode, ImportUnmappedTarget, SKIP_IMPORT_SOURCE_FIELD } from '@/constants/importExport';
 import {
   buildImportMappingRows,
   buildInitialImportMapping,
   getDuplicateImportMappings,
+  getRequiredUnmappedImportColumns,
   getImportPreviewErrorMessage,
 } from './mapping';
 
@@ -71,3 +72,17 @@ assert.equal(
     errorMessage: 'import.preview.parseFailed : no message.' }, '请检查文件内容和格式设置'),
   '请检查文件内容和格式设置',
 );
+
+// Desktop IPC omits null properties; both transports must mark a missing default as required.
+const required = { name: 'name', nullable: false, autoIncrement: false };
+const withDefault = { name: 'amount', nullable: false, autoIncrement: false, defaultValue: '99.00' };
+const emptyDefault = { name: 'label', nullable: false, autoIncrement: false, defaultValue: '' };
+const columns = [required, withDefault, emptyDefault,
+  { name: 'id', nullable: false, autoIncrement: true }, { name: 'note', nullable: true, autoIncrement: false }];
+assert.deepEqual(getRequiredUnmappedImportColumns(columns, {}, ImportUnmappedTarget.DEFAULT), [required]);
+assert.deepEqual(getRequiredUnmappedImportColumns([{ ...required, defaultValue: null }], {},
+  ImportUnmappedTarget.DEFAULT).map(c => c.name), ['name']);
+assert.deepEqual(getRequiredUnmappedImportColumns(columns, { source: 'name' }, ImportUnmappedTarget.DEFAULT), []);
+assert.deepEqual(getRequiredUnmappedImportColumns(columns, {}, ImportUnmappedTarget.NULL),
+  [required, withDefault, emptyDefault]);
+assert.deepEqual(getDuplicateImportMappings({ a: '', b: '', c: SKIP_IMPORT_SOURCE_FIELD }), {});

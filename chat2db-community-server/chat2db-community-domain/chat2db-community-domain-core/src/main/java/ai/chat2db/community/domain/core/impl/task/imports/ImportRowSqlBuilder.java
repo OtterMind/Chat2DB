@@ -1,13 +1,19 @@
 package ai.chat2db.community.domain.core.impl.task.imports;
 
+import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
 import ai.chat2db.community.domain.api.model.metadata.DataType;
 import ai.chat2db.community.domain.api.model.metadata.TableColumn;
 import ai.chat2db.community.domain.api.model.value.SQLDataValue;
+import ai.chat2db.community.domain.api.model.task.ImportDuplicatePolicy;
 import ai.chat2db.community.domain.api.model.task.ImportValueFormat;
 import ai.chat2db.community.domain.core.impl.task.imports.reader.ImportCell;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
+import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.UnmappedTargetStrategy;
+import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CsvImportValueNormalizer;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
@@ -30,6 +36,12 @@ public final class ImportRowSqlBuilder {
     private Map<String, Integer> mappedHeadMap;
     private List<TableColumn> tableColumns;
     private List<String> tableColumnList;
+    /** Source column index per target column, aligned with {@link #tableColumns}; -1 when unmapped. */
+    private int[] sourceColumnIndexes = new int[0];
+    /** Column metadata is immutable during an import, so the value type is built once per column. */
+    private final Map<TableColumn, DataType> columnDataTypes = new IdentityHashMap<>();
+    /** INSERT ... VALUES (?,?,?) with a fixed column list, built once and reused for every row. */
+    private String insertTemplate;
 
     public ImportRowSqlBuilder(ImportTaskSpec spec, List<TableColumn> columns) {
         this.spec = spec;
@@ -51,6 +63,11 @@ public final class ImportRowSqlBuilder {
         this.headMap = invertMap(headers);
         this.mappedHeadMap = mappedHeadMap();
         this.tableColumns = getTableColumns(columns, headMap);
+        this.sourceColumnIndexes = new int[tableColumns.size()];
+        for (int columnIndex = 0; columnIndex < tableColumns.size(); columnIndex++) {
+            Integer sourceIndex = sourceIndex(tableColumns.get(columnIndex).getName());
+            this.sourceColumnIndexes[columnIndex] = sourceIndex == null ? -1 : sourceIndex;
+        }
     }
 
     public String build(Map<Integer, String> row, long sourceRowNumber) {
@@ -61,6 +78,125 @@ public final class ImportRowSqlBuilder {
 
     public String buildCells(Map<Integer, ImportCell> row, long sourceRowNumber) {
         return getInsertSql(getValueList(row, sourceRowNumber));
+    }
+
+    /**
+     * Prepared-statement shape for this import: fixed column list with placeholders. Pair it with
+     * {@link #parametersCells(Map, long)} so the driver can rewrite a whole batch into one multi-row
+     * INSERT instead of sending one statement per row.
+     */
+    public String insertTemplate() {
+        if (insertTemplate == null) {
+            // The base shape always comes from the dialect SQL builder, so identifiers keep the
+            // dialect's own quoting (reserved words, mixed case on PostgreSQL); the duplicate policy
+            // only adds its prefix/suffix to that quoted statement.
+            String base = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
+                    .databaseName(connectInfo.getDatabaseName())
+                    .schemaName(connectInfo.getSchemaName())
+                    .tableName(spec.getTarget().getTableName())
+                    .columnList(tableColumnList)
+                    .valueList(placeholders())
+                    .build());
+            insertTemplate = switch (ImportResumability.duplicatePolicy(spec)) {
+                case INSERT -> base;
+                case IGNORE -> ignoreVariant(base, DatabaseTypeEnum.from(connectInfo.getDbType()));
+            };
+        }
+        return insertTemplate;
+    }
+
+    private List<String> placeholders() {
+        List<String> placeholders = new ArrayList<>(tableColumnList.size());
+        for (int index = 0; index < tableColumnList.size(); index++) {
+            placeholders.add("?");
+        }
+        return placeholders;
+    }
+
+    private String qualifiedTableName() {
+        StringBuilder name = new StringBuilder();
+        if (StringUtils.isNotBlank(connectInfo.getDatabaseName())) {
+            name.append(connectInfo.getDatabaseName()).append('.');
+        }
+        if (StringUtils.isNotBlank(connectInfo.getSchemaName())) {
+            name.append(connectInfo.getSchemaName()).append('.');
+        }
+        return name.append(spec.getTarget().getTableName()).toString();
+    }
+
+    /**
+     * Builds the parameterized INSERT shape that skips rows the target table already contains.
+     *
+     * <p>The dialect decides the syntax, and an unsupported dialect is rejected instead of silently
+     * degrading to a plain INSERT that would fail the task on the first duplicate key.
+     *
+     * @throws TaskExecutionException when the dialect cannot express "skip existing rows"
+     */
+    static String ignoreVariant(String insertSql, DatabaseTypeEnum databaseType) {
+        if (databaseType != null && databaseType.isMysqlProtocolFamily()) {
+            return insertSql.replaceFirst("(?i)^INSERT\\s+", "INSERT IGNORE ");
+        }
+        if (databaseType == DatabaseTypeEnum.POSTGRESQL) {
+            return insertSql + " ON CONFLICT DO NOTHING";
+        }
+        throw new TaskExecutionException(TaskErrorCode.IMPORT_FAILED.name(),
+                I18nUtils.getMessage("import.duplicate.policyUnsupported",
+                        new Object[]{ImportDuplicatePolicy.IGNORE.name(),
+                                databaseType == null ? "" : databaseType.name()}));
+    }
+
+    /** Parameter values for {@link #insertTemplate()}, in column order. */
+    public List<Object> parameters(Map<Integer, String> row, long sourceRowNumber) {
+        Map<Integer, ImportCell> cells = new LinkedHashMap<>();
+        row.forEach((index, value) -> cells.put(index, new ImportCell(value, true)));
+        return parametersCells(cells, sourceRowNumber);
+    }
+
+    /** Parameter values for {@link #insertTemplate()}, in column order. */
+    public List<Object> parametersCells(Map<Integer, ImportCell> row, long sourceRowNumber) {
+        List<Object> parameters = new ArrayList<>(tableColumns.size());
+        for (int columnIndex = 0; columnIndex < tableColumns.size(); columnIndex++) {
+            TableColumn column = tableColumns.get(columnIndex);
+            int index = sourceColumnIndexes[columnIndex];
+            String value = index < 0 ? null : resolvedValue(row.get(index), column, sourceRowNumber);
+            parameters.add(value == null ? null : jdbcParameter(value, column, sourceRowNumber));
+        }
+        return parameters;
+    }
+
+    /**
+     * Raw cell values in parameter order. Used for the error artifact when a row is rejected before
+     * it could be converted, so the file still shows the original content.
+     */
+    public List<Object> displayValuesCells(Map<Integer, ImportCell> row) {
+        List<Object> values = new ArrayList<>(tableColumns.size());
+        for (int columnIndex = 0; columnIndex < tableColumns.size(); columnIndex++) {
+            int index = sourceColumnIndexes[columnIndex];
+            ImportCell cell = index < 0 ? null : row.get(index);
+            values.add(cell == null ? null : cell.display());
+        }
+        return values;
+    }
+
+    /** Raw cell values in parameter order for a plain string row. */
+    public List<Object> displayValues(Map<Integer, String> row) {
+        Map<Integer, ImportCell> cells = new LinkedHashMap<>();
+        row.forEach((index, value) -> cells.put(index, new ImportCell(value, true)));
+        return displayValuesCells(cells);
+    }
+
+    private static Object jdbcParameter(String value, TableColumn column, long sourceRowNumber) {
+        try {
+            return CsvImportValueNormalizer.jdbcParameter(value, column);
+        } catch (RuntimeException e) {
+            if (e instanceof BusinessException) {
+                // normalize() already reported row, column and value with the right message key.
+                throw e;
+            }
+            String displayValue = value.length() > 80 ? value.substring(0, 80) + "..." : value;
+            throw new BusinessException("import.value.invalidValue",
+                    new Object[]{sourceRowNumber, column.getName(), displayValue}, e);
+        }
     }
 
     private List<TableColumn> getTableColumns(List<TableColumn> columns, Map<String, Integer> headMap) {
@@ -89,25 +225,19 @@ public final class ImportRowSqlBuilder {
 
 
     private List<String> getValueList(Map<Integer, ImportCell> data, long sourceRowNumber) {
-        List<String> values = new ArrayList<>();
-        for (TableColumn column : tableColumns) {
-            Integer index = sourceIndex(column.getName());
-            if (index == null) {
+        List<String> values = new ArrayList<>(tableColumns.size());
+        for (int columnIndex = 0; columnIndex < tableColumns.size(); columnIndex++) {
+            TableColumn column = tableColumns.get(columnIndex);
+            int index = sourceColumnIndexes[columnIndex];
+            if (index < 0) {
                 values.add(null);
                 continue;
             }
-            ImportCell cell = data.get(index);
-            String value = cell == null ? null : cell.display();
+            String value = resolvedValue(data.get(index), column, sourceRowNumber);
             if (value == null) {
                 values.add(null);
             } else {
-                if (cell != null && !cell.text()) {
-                    value = CsvImportValueNormalizer.nativeValue(cell.value(), column);
-                } else if (valueOptions != null) {
-                    value = CsvImportValueNormalizer.normalize(value, column, valueOptions, sourceRowNumber);
-                }
-                String stringValue = valueProcessor.getSqlValueString(getSQLDataValue(value, column));
-                values.add(stringValue);
+                values.add(valueProcessor.getSqlValueString(getSQLDataValue(value, column)));
             }
         }
         return values;
@@ -158,11 +288,27 @@ public final class ImportRowSqlBuilder {
                 .build());
     }
 
+    /** Applies the format conversion and native-value rules shared by both output shapes. */
+    private String resolvedValue(ImportCell cell, TableColumn column, long sourceRowNumber) {
+        String value = cell == null ? null : cell.display();
+        if (value == null) {
+            return null;
+        }
+        if (!cell.text()) {
+            return CsvImportValueNormalizer.nativeValue(cell.value(), column);
+        }
+        return valueOptions == null ? value
+                : CsvImportValueNormalizer.normalize(value, column, valueOptions, sourceRowNumber);
+    }
+
     private SQLDataValue getSQLDataValue(String value, TableColumn column) {
-        DataType dataType = new DataType();
-        dataType.setDataTypeName(column.getColumnType());
-        dataType.setScale(column.getDecimalDigits());
-        dataType.setPrecision(column.getColumnSize());
+        DataType dataType = columnDataTypes.computeIfAbsent(column, key -> {
+            DataType cached = new DataType();
+            cached.setDataTypeName(key.getColumnType());
+            cached.setScale(key.getDecimalDigits());
+            cached.setPrecision(key.getColumnSize());
+            return cached;
+        });
         SQLDataValue sqlDataValue = new SQLDataValue();
         sqlDataValue.setDataType(dataType);
         sqlDataValue.setValue(value);

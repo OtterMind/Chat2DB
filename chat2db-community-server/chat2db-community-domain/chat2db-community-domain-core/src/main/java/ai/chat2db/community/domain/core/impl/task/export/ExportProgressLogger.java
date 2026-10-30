@@ -16,27 +16,33 @@ public final class ExportProgressLogger {
 
     private final String tableName;
 
+    private final ExportProgressReporter progressReporter;
+
     private final long logIntervalRows;
 
     private long exportedRows;
 
     private long lastLoggedRows;
 
-    public ExportProgressLogger(TaskExecutionContext context, String format) {
-        this(context, format, null, TaskConstants.EXPORT_LOG_ROW_INTERVAL);
+    public ExportProgressLogger(TaskExecutionContext context, String format,
+            ExportProgressReporter progressReporter) {
+        this(context, format, null, progressReporter, TaskConstants.EXPORT_LOG_ROW_INTERVAL);
     }
 
-    public ExportProgressLogger(TaskExecutionContext context, String format, String tableName) {
-        this(context, format, tableName, TaskConstants.EXPORT_LOG_ROW_INTERVAL);
+    public ExportProgressLogger(TaskExecutionContext context, String format, String tableName,
+            ExportProgressReporter progressReporter) {
+        this(context, format, tableName, progressReporter, TaskConstants.EXPORT_LOG_ROW_INTERVAL);
     }
 
-    ExportProgressLogger(TaskExecutionContext context, String format, String tableName, long logIntervalRows) {
+    ExportProgressLogger(TaskExecutionContext context, String format, String tableName,
+            ExportProgressReporter progressReporter, long logIntervalRows) {
         if (logIntervalRows <= 0) {
             throw new IllegalArgumentException("logIntervalRows must be positive");
         }
         this.context = context;
         this.format = format;
         this.tableName = tableName;
+        this.progressReporter = progressReporter;
         this.logIntervalRows = logIntervalRows;
     }
 
@@ -53,6 +59,7 @@ public final class ExportProgressLogger {
             return;
         }
         exportedRows += rowCount;
+        progressReporter.addRows(rowCount);
         if (exportedRows - lastLoggedRows < logIntervalRows) {
             return;
         }
@@ -61,6 +68,7 @@ public final class ExportProgressLogger {
     }
 
     public void queryCompleted(String message) {
+        progressReporter.flush();
         context.logInfo(TaskEventCode.QUERY_COMPLETED.name(),
                 message + ": " + exportedRows + " rows" + tableSuffix(), details());
     }

@@ -8,9 +8,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -130,9 +133,60 @@ class ArtifactServiceTest {
     }
 
     @Test
+    void publicationMovesTheCompletedDraftInsteadOfCopyingIt() throws IOException {
+        ArtifactService service = new ArtifactServiceImpl() {
+            @Override
+            void copyArtifact(Path source, OutputStream output) {
+                throw new AssertionError("publish must not copy the draft when the filesystem can move it");
+            }
+        };
+        var draft = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
+        Files.writeString(draft.getTemporaryFile().toPath(), "complete draft");
+
+        Path published = Path.of(service.publish(draft));
+
+        assertEquals("export.csv", published.getFileName().toString());
+        assertEquals("complete draft", Files.readString(published));
+        assertFalse(Files.exists(draft.getTemporaryFile().toPath()));
+    }
+
+    @Test
+    void publicationFallsBackToCopyWhenTheFilesystemCannotMove() throws IOException {
+        List<String> copied = new ArrayList<>();
+        ArtifactService service = new ArtifactServiceImpl() {
+            @Override
+            void moveArtifact(Path source, Path target) throws IOException {
+                throw new AtomicMoveNotSupportedException(source.toString(), target.toString(),
+                        "target is on another device");
+            }
+
+            @Override
+            void copyArtifact(Path source, OutputStream output) throws IOException {
+                copied.add(source.getFileName().toString());
+                super.copyArtifact(source, output);
+            }
+        };
+        var draft = service.createDraft(1L, tempDirectory.toString(), "export.csv", "text/csv");
+        Files.writeString(draft.getTemporaryFile().toPath(), "complete draft");
+
+        Path published = Path.of(service.publish(draft));
+
+        assertEquals(1, copied.size());
+        assertEquals("export.csv", published.getFileName().toString());
+        assertEquals("complete draft", Files.readString(published));
+        assertFalse(Files.exists(draft.getTemporaryFile().toPath()));
+    }
+
+    @Test
     void copyFailureRemovesOnlyTheCreatedTargetAndDoesNotRetry() throws IOException {
         IOException failure = new FileAlreadyExistsException("copy failure, not a name collision");
         ArtifactService service = new ArtifactServiceImpl() {
+            @Override
+            void moveArtifact(Path source, Path target) throws IOException {
+                throw new AtomicMoveNotSupportedException(source.toString(), target.toString(),
+                        "fall back to the copy path");
+            }
+
             @Override
             void copyArtifact(Path source, OutputStream output) throws IOException {
                 output.write('x');

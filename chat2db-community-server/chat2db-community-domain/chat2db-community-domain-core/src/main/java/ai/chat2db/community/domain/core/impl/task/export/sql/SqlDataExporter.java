@@ -13,6 +13,7 @@ import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyMana
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.task.export.ExportProgressReporter;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISqlBuilder;
 import ai.chat2db.spi.IValueProcessor;
@@ -61,10 +62,11 @@ public class SqlDataExporter extends BaseExporter {
 
 
     @Override
-    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
+    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file,
+            ExportProgressReporter progressReporter) {
         Connection connection = Chat2DBContext.getConnection();
         SqlExecutionPlan executionPlan = getQueryPlan(spec, tableName);
-        ExportProgressLogger progressLogger = new ExportProgressLogger(context, "SQL", tableName);
+        ExportProgressLogger progressLogger = new ExportProgressLogger(context, "SQL", tableName, progressReporter);
         progressLogger.queryStarted("Reading table data from " + tableName);
         try (BufferedWriter writer = createWriter(file)) {
             exportSql(connection, spec, executionPlan, context, tableName, writer, progressLogger);

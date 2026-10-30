@@ -5,10 +5,11 @@ import { useStyles } from './ImportMappingContent/style';
 
 interface Props {
   value: ISqlImportOptions;
+  disabled?: boolean;
   onChange: (value: ISqlImportOptions) => void;
 }
 
-export default function SqlImportOptionsFields({ value, onChange }: Props) {
+export default function SqlImportOptionsFields({ value, disabled, onChange }: Props) {
   const { styles } = useStyles();
   return (
     <div className={styles.sourceRowOptions}>
@@ -17,6 +18,7 @@ export default function SqlImportOptionsFields({ value, onChange }: Props) {
         <LocalFileEncodingSelect
           className={styles.fullWidthControl}
           charset={value.encoding === 'AUTO' ? undefined : value.encoding}
+          disabled={disabled}
           size="middle"
           variant="outlined"
           onEncodingChange={async (encoding) => onChange({ ...value, encoding: encoding || 'AUTO' })}

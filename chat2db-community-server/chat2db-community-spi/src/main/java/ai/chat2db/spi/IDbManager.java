@@ -2,6 +2,7 @@ package ai.chat2db.spi;
 
 import ai.chat2db.community.domain.api.model.metadata.Procedure;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.tools.constant.IEasyToolsConstant;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 
 import java.sql.Connection;
@@ -67,6 +68,16 @@ public interface IDbManager {
 
     void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
             TaskExecutionContext context) throws SQLException;
+
+    /**
+     * JDBC fetch size that makes the dialect stream a large result set instead of buffering it in
+     * the driver. Dialects whose driver streams with an ordinary batch size keep the default;
+     * MySQL overrides it because Connector/J only streams row by row for
+     * {@link Integer#MIN_VALUE} (or with {@code useCursorFetch=true}).
+     */
+    default int streamingFetchSize() {
+        return IEasyToolsConstant.DEFAULT_PAGE_SIZE;
+    }
 
     void dropView(Connection connection, String databaseName, String schemaName, String viewName);
 }

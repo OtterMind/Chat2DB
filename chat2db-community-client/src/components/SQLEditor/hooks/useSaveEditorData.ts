@@ -251,7 +251,6 @@ export const useSaveEditorData = (props: IProps) => {
 
   useEffect(() => {
     if (type === WorkspaceTabType.LocalSQLFile) {
-      editorRef?.current?.setValue(defaultValue || '', 'reset');
       return;
     }
     if (saveStatus === ConsoleStatus.RELEASE) {

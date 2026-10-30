@@ -31,6 +31,11 @@ class MysqlDBManagerTest {
     }
 
     @Test
+    void streamsResultSetsWithTheConnectorJStreamingFetchSize() {
+        assertEquals(Integer.MIN_VALUE, new MysqlDBManager().streamingFetchSize());
+    }
+
+    @Test
     void singleTableStatementFailurePropagatesToTaskCaller() {
         MysqlDBManager manager = new MysqlDBManager();
         SQLException failure = new SQLException("Could not read table DDL");

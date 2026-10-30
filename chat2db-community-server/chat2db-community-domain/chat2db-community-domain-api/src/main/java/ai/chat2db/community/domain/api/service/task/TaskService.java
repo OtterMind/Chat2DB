@@ -16,6 +16,13 @@ public interface TaskService {
 
     Long submitImport(ImportTaskSpec spec);
 
+    /**
+     * Creates a new import task that continues an owned task after the rows its checkpoint already
+     * processed. The original task is left untouched. Fails when the source task carries no import
+     * spec or no checkpoint, or when its format cannot be resumed.
+     */
+    Long resumeImport(Long taskId);
+
     PageResponse<Task> list(TaskQuery query);
 
     Task get(Long taskId);
@@ -26,6 +33,12 @@ public interface TaskService {
 
     void delete(Long taskId);
 
+    /**
+     * Requests cancellation of an owned task. Returns false when the task already reached a terminal
+     * status, so repeated requests are safe.
+     */
+    boolean cancel(Long taskId);
+
     int activeTaskCount();
 
     void prepareForUserExit();
@@ -33,4 +46,11 @@ public interface TaskService {
     void abortUserExit();
 
     TaskDownload resolveArtifact(Long taskId);
+
+    /**
+     * Resolves the error artifact of an owned task, the CSV listing the rows an import could not
+     * store. Unlike {@link #resolveArtifact(Long)} it also serves failed and cancelled tasks,
+     * because that is exactly when the error file matters.
+     */
+    TaskDownload resolveErrorArtifact(Long taskId);
 }

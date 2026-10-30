@@ -3,6 +3,7 @@ package ai.chat2db.community.domain.core.impl.task;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
+import ai.chat2db.community.domain.api.model.task.ArtifactDraft;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
@@ -14,6 +15,7 @@ import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.core.impl.task.imports.excel.CSVImporter;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportCheckpoint;
 import ai.chat2db.community.domain.core.impl.task.imports.ImportRowBatcher;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.tools.constant.JdbcDriverConstants;
@@ -43,6 +45,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -197,6 +200,9 @@ class ImportRowBatcherParallelTest {
         assertEquals(rows, ids.size(), "parallel import must not lose or duplicate rows");
         assertEquals(1, ids.get(0));
         assertEquals(rows, ids.get(rows - 1));
+        String checkpointJson = storage.get(1L).orElseThrow().getCheckpointJson();
+        assertEquals(rows, ImportCheckpoint.fromJson(checkpointJson).processedRows(),
+                "the final checkpoint must cover the whole contiguous prefix");
         ImportRowBatcher.ImportTuningSnapshot tuning = ImportRowBatcher.lastTuningSnapshot();
         assertTrue(tuning.batches() > 1, "the import must be split into several batches");
         assertTrue(tuning.peakInFlightBatches() > 1,
@@ -222,7 +228,7 @@ class ImportRowBatcherParallelTest {
     }
 
     @Test
-    void excelPreservesSequentialFailureEvenWithAFastModeField() throws Exception {
+    void excelFailsTheTaskAndKeepsTheAppliedBatchRowsEvenWithAFastModeField() throws Exception {
         Path workbook = tempDirectory.resolve("bulk.xlsx");
         com.alibaba.excel.EasyExcel.write(workbook.toFile())
                 .head(List.of(List.of("ID"), List.of("NAME")))
@@ -233,7 +239,8 @@ class ImportRowBatcherParallelTest {
         assertThrows(TaskExecutionException.class,
                 () -> new ai.chat2db.community.domain.core.impl.task.imports.excel.XLSXImporter().run(spec, contextFor(spec)));
 
-        assertEquals(List.of(1), importedIds());
+        // Batch-granular partial success, see CsvImportPipelineTest for the same expectation.
+        assertEquals(List.of(1, 2), importedIds());
     }
 
     @Test
@@ -262,6 +269,27 @@ class ImportRowBatcherParallelTest {
 
         assertEquals(List.of(0, 1), importedIds());
         assertFalse(storage.events.stream().anyMatch(event -> "IMPORT_SUMMARY".equals(event.getCode())));
+    }
+
+    @Test
+    void fastSkipErrorRowsRetriesTheRejectedBatchAndRecordsTheRejectedRows() throws Exception {
+        String tooLong = "x".repeat(60);
+        ImportTaskSpec spec = csvSpec(writeCsv("1,ok", "2," + tooLong, "3,fine"));
+        spec.setFailurePolicy("SKIP_ERROR_ROWS");
+        TaskExecutionContextImpl context = contextFor(spec);
+
+        new CSVImporter().run(spec, context);
+
+        assertEquals(List.of(1, 3), importedIds(),
+                "the storable rows of the rejected batch are stored exactly once");
+        ArtifactDraft errorDraft = context.errorArtifactDraft();
+        assertNotNull(errorDraft, "the fast path must stage the rejected rows");
+        String errorRows = Files.readString(errorDraft.getTemporaryFile().toPath(), StandardCharsets.UTF_8);
+        assertTrue(errorRows.contains(tooLong), errorRows);
+        assertTrue(storage.events.stream().anyMatch(event -> "IMPORT_ROWS_SKIPPED".equals(event.getCode())));
+        assertEquals(3L, ImportCheckpoint.fromJson(storage.get(1L).orElseThrow().getCheckpointJson())
+                        .processedRows(),
+                "the checkpoint counts the rejected row too");
     }
 
     /**
@@ -332,6 +360,27 @@ class ImportRowBatcherParallelTest {
         @Override
         public boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             return false;
+        }
+
+        @Override
+        public boolean saveCheckpoint(Long taskId, String checkpointJson) {
+            Task task = get(taskId).orElse(null);
+            if (task == null || checkpointJson == null) {
+                return false;
+            }
+            // Terminal tasks are accepted: cancellation persists the status before the workers drain.
+            task.setCheckpointJson(checkpointJson);
+            return true;
+        }
+
+        @Override
+        public boolean attachErrorArtifact(Long taskId, String errorArtifactId) {
+            Task task = get(taskId).orElse(null);
+            if (task == null) {
+                return false;
+            }
+            task.setErrorArtifactId(errorArtifactId);
+            return true;
         }
 
     }

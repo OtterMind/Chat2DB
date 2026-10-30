@@ -47,7 +47,7 @@ public class SQLImporter implements IImportStrategy {
                 importConfiguredFile(spec, context, sourceFile);
                 return;
             }
-            ImportSqlExecutor sqlExecutor = new ImportSqlExecutor(context);
+            SqlScriptExecutor sqlExecutor = new SqlScriptExecutor(context);
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             String databaseType = connectInfo.getDbType();
             context.logInfo(TaskEventCode.FILE_READ_STARTED.name(), "Reading SQL import file");
@@ -108,6 +108,7 @@ public class SQLImporter implements IImportStrategy {
                 sqlExecutor.executeBatch(sqls);
                 context.logInfo(TaskEventCode.FILE_READ_COMPLETED.name(), "SQL file parsed");
             }
+            sqlExecutor.reportSummary();
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
         } catch (Exception e) {

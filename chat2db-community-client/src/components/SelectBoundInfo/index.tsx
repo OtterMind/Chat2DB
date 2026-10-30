@@ -20,7 +20,7 @@ import {
   invalidateCascadeRequest,
   isCascadeRequestCurrent,
 } from './cascadeRequestGuard';
-import { createCachedDataSourceSelection } from './dataSourceSelection';
+import { createCachedDataSourceSelection, filterBoundInfoChildren } from './dataSourceSelection';
 
 export interface EachOption {
   value?: string; // Currently selected value.
@@ -178,8 +178,12 @@ const SelectBoundInfo = memo(
     boundInfoRef.current = boundInfo;
 
     const getOptions = (treeNodeType: TreeNodeType, _boundInfo?) => {
-      return treeConfig[treeNodeType]?.getChildren?.(_boundInfo || boundInfo)
-        .then((result) => normalizeTreeNodeLoadResult(result).children);
+      const context = _boundInfo || boundInfo;
+      const childType = treeNodeType === TreeNodeType.DATA_SOURCE &&
+          getDatabaseSupport(context.databaseType).supportDatabase
+        ? TreeNodeType.DATABASE : TreeNodeType.SCHEMA;
+      return treeConfig[treeNodeType]?.getChildren?.(context)
+        .then((result) => filterBoundInfoChildren(normalizeTreeNodeLoadResult(result).children, childType));
     };
 
     // Check whether the current data source is accessible.

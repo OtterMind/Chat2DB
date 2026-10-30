@@ -12,6 +12,7 @@ import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyMana
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.task.export.ExportProgressReporter;
 import ai.chat2db.spi.IValueProcessor;
 import ai.chat2db.spi.model.value.JDBCDataValue;
 import ai.chat2db.spi.sql.Chat2DBContext;
@@ -47,11 +48,12 @@ public class JsonDataExporter extends BaseExporter {
 
 
     @Override
-    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
+    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file,
+            ExportProgressReporter progressReporter) {
         SqlExecutionPlan executionPlan = getQueryPlan(spec, tableName);
         log.info("Start exporting table data as JSON: {}", tableName);
         Connection connection = Chat2DBContext.getConnection();
-        ExportProgressLogger progressLogger = new ExportProgressLogger(context, "JSON", tableName);
+        ExportProgressLogger progressLogger = new ExportProgressLogger(context, "JSON", tableName, progressReporter);
         progressLogger.queryStarted("Reading table data from " + tableName);
         try (PrintWriter writer = new PrintWriter(file, StandardCharsets.UTF_8)) {
             writeJsonData(connection, executionPlan, writer, tableName, spec, context, progressLogger);

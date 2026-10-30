@@ -4,7 +4,7 @@ import { Upload, type UploadProps, GetProp } from 'antd';
 import { IconfontSvg, IconButton, staticMessage } from '@chat2db/ui';
 import i18n from '@/i18n';
 import { useUpdateEffect } from 'ahooks';
-import { customRequestOSS } from '@/utils/file';
+import { customRequestOSS, formatFileSize } from '@/utils/file';
 import { UploadTypeEnum } from '@/typings/upload';
 import { isDesktop } from '@/utils/env';
 import jcefApi from '@/jcef';
@@ -26,6 +26,7 @@ interface IProps extends UploadProps {
   // Whether OSS upload is enabled on the web.
   webOssUpload?: boolean;
   fileSize?: number;
+  fillHeight?: boolean;
 }
 
 export interface UploadLocalFileRef {
@@ -42,6 +43,7 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
     webOssUpload,
     descriptionSlot,
     fileSize,
+    fillHeight = false,
     ...rest
   } = props;
   const { styles, cx } = useStyles();
@@ -56,9 +58,10 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
   };
 
   const renderFileItem = (filePath: FileUrl, index: number) => {
+    const size = filePath.file?.size;
     return (
       <div key={index} className={styles.fileItem}>
-        <span>{filePath.fileName}</span>
+        <span>{size ? `${filePath.fileName} · ${formatFileSize(size)}` : filePath.fileName}</span>
         <div className={styles.deleteIconBox}>
           <IconButton
             className={styles.deleteIcon}
@@ -137,9 +140,9 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
   };
 
   return (
-    <div className={cx(className)}>
+    <div className={cx(className, fillHeight && styles.fillHeight)}>
       {fileList.length ? (
-        <div className={styles.uploadLocalFile}>
+        <div className={cx(styles.uploadLocalFile, fillHeight && styles.grow)}>
           <div className={styles.uploadLocalFileHeader}>
             <span>{i18n('common.text.selectedFile')}</span>
             {/* {multiple && (
@@ -155,7 +158,11 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
           </div>
         </div>
       ) : null}
-      <div className={cx({ [styles.hiddenUploadDraggerBox]: !!fileList.length })}>
+      <div
+        className={cx(styles.draggerFrame, fillHeight && !fileList.length && styles.grow, {
+          [styles.hiddenUploadDraggerBox]: !!fileList.length,
+        })}
+      >
         {!isDesktop ? (
           <Upload.Dragger
             onChange={fileUploadOnChange}
@@ -175,7 +182,7 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
             }
             {...rest}
           >
-            <div className={styles.uploadDragger}>
+            <div className={cx(styles.uploadDragger, fillHeight && styles.fillDragger)}>
               <IconfontSvg className={styles.uploadDraggerIcon} size={36} code="icon-upload" />
               <div className={styles.description}>
                 <p className={styles.description1}>{description[0] || i18n('workspace.importExport.clickOrDrag')}</p>
@@ -190,7 +197,7 @@ const UploadLocalFile = forwardRef((props: IProps, ref: ForwardedRef<UploadLocal
             </div>
           </Upload.Dragger>
         ) : (
-          <div className={styles.uploadDragger} onClick={handleUpdate}>
+          <div className={cx(styles.uploadDragger, fillHeight && styles.fillDragger)} onClick={handleUpdate}>
             <IconfontSvg className={styles.uploadDraggerIcon} size={36} code="icon-upload" />
             <div className={styles.description}>
               <p className={styles.description1}>{description[0] || i18n('workspace.importExport.clickOrDrag')}</p>

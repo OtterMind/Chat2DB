@@ -2,6 +2,7 @@ package ai.chat2db.community.domain.core.impl.task;
 
 import ai.chat2db.community.domain.api.model.task.Task;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
+import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskDeletionService;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
@@ -26,16 +27,21 @@ public class TaskDeletionServiceImpl implements TaskDeletionService {
 
     private final TaskStorage storage;
     private final ArtifactService artifacts;
+    private final IImportFileStagingService importFileStagingService;
     private final File queueFile;
 
     @Autowired
-    public TaskDeletionServiceImpl(TaskStorage storage, ArtifactService artifacts) {
-        this(storage, artifacts, new File(ConfigUtils.getEnvBasePath(), "task-artifact-deletions.json"));
+    public TaskDeletionServiceImpl(TaskStorage storage, ArtifactService artifacts,
+            IImportFileStagingService importFileStagingService) {
+        this(storage, artifacts, importFileStagingService,
+                new File(ConfigUtils.getEnvBasePath(), "task-artifact-deletions.json"));
     }
 
-    TaskDeletionServiceImpl(TaskStorage storage, ArtifactService artifacts, File queueFile) {
+    TaskDeletionServiceImpl(TaskStorage storage, ArtifactService artifacts,
+            IImportFileStagingService importFileStagingService, File queueFile) {
         this.storage = storage;
         this.artifacts = artifacts;
+        this.importFileStagingService = importFileStagingService;
         this.queueFile = queueFile;
     }
 
@@ -103,6 +109,11 @@ public class TaskDeletionServiceImpl implements TaskDeletionService {
             if (deletion.hasArtifact()) {
                 artifacts.stageForDeletion(deletion.originalFile(), deletion.stagedFile());
             }
+            // The rejected-rows file is owned by the task just like the primary artifact; deleting
+            // the task is the cleanup entry point for both.
+            if (deletion.hasErrorArtifact()) {
+                artifacts.stageForDeletion(deletion.errorArtifactFile(), deletion.stagedErrorArtifactFile());
+            }
             if (!storage.deleteTerminalTask(deletion.getTaskId(), null)) {
                 throw new IOException("Task is not terminal: " + deletion.getTaskId());
             }
@@ -111,11 +122,20 @@ public class TaskDeletionServiceImpl implements TaskDeletionService {
         if (deletion.hasArtifact()) {
             Files.deleteIfExists(deletion.stagedFile());
         }
+        if (deletion.hasErrorArtifact()) {
+            Files.deleteIfExists(deletion.stagedErrorArtifactFile());
+        }
+        // A deleted task can no longer be resumed, so its staged upload is free again and no
+        // longer kept alive by the claim that protected it during the import.
+        if (deletion.getImportFileId() != null && importFileStagingService != null) {
+            importFileStagingService.release(deletion.getImportFileId());
+        }
     }
 
     private boolean isComplete(PendingTaskDeletion deletion) {
         return storage.get(deletion.getTaskId()).isEmpty()
-                && (!deletion.hasArtifact() || Files.notExists(deletion.stagedFile()));
+                && (!deletion.hasArtifact() || Files.notExists(deletion.stagedFile()))
+                && (!deletion.hasErrorArtifact() || Files.notExists(deletion.stagedErrorArtifactFile()));
     }
 
     @Override

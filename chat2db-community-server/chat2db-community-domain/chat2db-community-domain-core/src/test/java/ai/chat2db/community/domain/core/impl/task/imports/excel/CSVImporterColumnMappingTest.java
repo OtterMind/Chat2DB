@@ -272,13 +272,13 @@ class CSVImporterColumnMappingTest {
     void fastModeDoesNotFlushBufferedRowsAfterConversionError(@TempDir Path directory) throws Exception {
         Path input = Files.writeString(directory.resolve("conversion-error.csv"), "name\nAlice\nBob\n");
         OutOfMemoryError failure = new OutOfMemoryError("simulated row conversion error");
+        // The parameterized path reads the column type while converting the first row into JDBC
+        // parameters, so the failure surfaces there; the point of the test is that nothing buffered
+        // reaches the table.
         TableColumn nameColumn = new TableColumn() {
-            private int conversions;
-
             @Override
-            public Integer getColumnSize() {
-                if (++conversions == 2) throw failure;
-                return 64;
+            public String getColumnType() {
+                throw failure;
             }
         };
         nameColumn.setName("name");

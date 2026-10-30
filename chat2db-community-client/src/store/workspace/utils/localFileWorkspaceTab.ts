@@ -14,6 +14,7 @@ export function getRestoredLocalFileReadRequest(tab: IWorkspaceTab) {
       relativePath: file.fileRelativePath,
       charset: file.fileCharset,
       workspaceTabId: tab.id,
+      activate: false,
     },
   };
 }

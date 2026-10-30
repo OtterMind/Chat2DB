@@ -2,16 +2,19 @@ import assert from 'node:assert/strict';
 import { ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 import {
+  canCancelTask,
   FAILED_TASK_POLL_INTERVAL,
   getTaskPollingDelay,
   listAllTasksByStatus,
   loadMissingTrackedTasks,
+  markTaskCancelled,
   mergeTaskEvents,
   mergeTasks,
   reconcileCompletedTaskNotifications,
   shouldKeepTaskPolling,
   shouldRefreshImportTargetTable,
   shouldRetryTaskPolling,
+  shouldScanActiveTasks,
 } from './taskCenterUtils';
 import { ErrorCode } from '@/constants/request';
 
@@ -138,6 +141,12 @@ function testPollingDelay() {
   assert.equal(shouldKeepTaskPolling(false, 0), false);
 }
 
+function testActiveTaskScanIsOnlyNeededWithoutTrackedTasks() {
+  assert.equal(shouldScanActiveTasks([]), true, 'the first round must discover active tasks outside the recent page');
+  assert.equal(shouldScanActiveTasks([1]), false, 'tracked active tasks are refreshed without a status sweep');
+  assert.equal(shouldScanActiveTasks([1, 2]), false);
+}
+
 function testPollingRetryPolicy() {
   assert.equal(shouldRetryTaskPolling(new Error('temporary failure')), true);
   assert.equal(shouldRetryTaskPolling({ errorCode: ErrorCode.NetworkError }), true);
@@ -223,12 +232,43 @@ function testImportTargetRefreshWaitsForTerminalImportResult() {
   assert.equal(shouldRefreshImportTargetTable(successfulImport, successfulImport), false);
 }
 
+function testCancelActionVisibility() {
+  assert.equal(canCancelTask(ImportExportTaskStatus.PENDING), true);
+  assert.equal(canCancelTask(ImportExportTaskStatus.RUNNING), true);
+  assert.equal(canCancelTask(ImportExportTaskStatus.SUCCESS), false);
+  assert.equal(canCancelTask(ImportExportTaskStatus.FAILED), false);
+  assert.equal(canCancelTask(ImportExportTaskStatus.CANCELLED), false);
+}
+
+function testTaskCancellationMarksTheRowTerminal() {
+  const running = { ...task(1, ImportExportTaskStatus.RUNNING, '2026-08-06T10:00:00Z', 40), updatedAt: 4000 };
+  const finished = { ...task(2, ImportExportTaskStatus.SUCCESS, '2026-08-06T09:00:00Z', 100), finishedAt: 5000 };
+  const cancelledAt = 1700000000000;
+  const updated = markTaskCancelled([running, finished], 1, cancelledAt);
+  const cancelled = updated.find((item) => item.id === 1);
+
+  assert.equal(cancelled?.status, ImportExportTaskStatus.CANCELLED);
+  assert.equal(cancelled?.finishedAt, cancelledAt);
+  assert.equal(cancelled?.updatedAt, running.updatedAt, 'the client clock must not outrank the server record');
+  assert.equal(cancelled?.progress, 40, 'cancelling keeps the rest of the row payload intact');
+  assert.equal(updated.find((item) => item.id === 2), finished, 'untouched rows keep their identity');
+  assert.equal(
+    markTaskCancelled([finished], 2, cancelledAt).find((item) => item.id === 2)?.finishedAt,
+    finished.finishedAt,
+    'an existing finish time is authoritative',
+  );
+  assert.equal(markTaskCancelled([running], 99, cancelledAt)[0], running, 'an unknown task id changes nothing');
+}
+
 void testActiveTaskPagination().then(async () => {
   await testCompletedTrackedTaskOutsideRecentPage();
   testTaskMerge();
   testTaskMergePreservesLatestRevision();
   testEventMerge();
   testPollingDelay();
+  testActiveTaskScanIsOnlyNeededWithoutTrackedTasks();
+  testCancelActionVisibility();
+  testTaskCancellationMarksTheRowTerminal();
   testPollingRetryPolicy();
   testCompletedTaskNotifications();
   testImportTargetRefreshWaitsForTerminalImportResult();

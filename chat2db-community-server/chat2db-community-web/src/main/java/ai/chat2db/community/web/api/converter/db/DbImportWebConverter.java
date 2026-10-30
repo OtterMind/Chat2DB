@@ -20,6 +20,8 @@ public class DbImportWebConverter {
                 .mappings(request.getMappings())
                 .unmappedTarget(request.getUnmappedTarget())
                 .mode(request.getMode())
+                .duplicatePolicy(request.getDuplicatePolicy())
+                .failurePolicy(request.getFailurePolicy())
                 .build();
     }
 }

@@ -22,5 +22,40 @@ export const useStyles = createStyles(({ css }) => {
     form: css`
       padding-top: 20px;
     `,
+    fileSettings: css`
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 180px;
+      gap: 16px;
+      flex: none;
+
+      @media (max-width: 600px) { grid-template-columns: minmax(0, 1fr) 120px; }
+    `,
+    fillHeight: css`
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      flex-direction: column;
+    `,
+    fileField: css`
+      flex: 1;
+      min-height: 226px;
+      margin-bottom: 0;
+
+      .ant-form-item-row,
+      .ant-form-item-control,
+      .ant-form-item-control-input,
+      .ant-form-item-control-input-content {
+        height: 100%;
+      }
+    `,
+    exportCsvField: css`
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 4px;
+    `,
+    customCharacterInput: css`
+      padding: 4px 8px;
+    `,
   };
 });

@@ -53,10 +53,11 @@ export const useStyles = createStyles(({ css, token }) => ({
     margin-bottom: 12px;
   `,
   csvOptionField: css`
-    display: flex;
+    display: grid;
     min-width: 0;
-    flex-direction: column;
-    gap: 4px;
+    grid-template-columns: var(--import-field-columns, minmax(0, 1fr));
+    gap: var(--import-field-gap, 4px);
+    align-items: center;
 
     > span:first-child {
       display: flex;
@@ -74,32 +75,70 @@ export const useStyles = createStyles(({ css, token }) => ({
     padding: 4px 8px;
   `,
   sections: css`
+    display: flex;
     padding-top: 4px;
+    flex-direction: column;
+    gap: 14px;
+  `,
+  fillSections: css`
+    --import-format-columns: minmax(0, 1fr);
+    --import-source-columns: minmax(0, 1fr);
+    --import-value-columns: minmax(0, 1fr);
+    --import-field-columns: 132px minmax(0, 420px);
+    --import-field-gap: 16px;
+    --import-options-gap: 16px;
+    --import-checkbox-offset: 148px;
+    flex: 1;
+    gap: 22px;
 
-    .ant-collapse-header {
-      min-height: 40px;
-      align-items: center !important;
-      padding: 6px 0 !important;
-      font-weight: 600;
+    > section {
+      display: grid;
+      grid-template-columns: 100px minmax(0, 1fr);
+      align-items: start;
+      gap: 20px;
     }
 
-    .ant-collapse-content-box {
-      padding: 4px 0 10px !important;
+    > section + section {
+      padding-top: 20px;
+      border-top: 1px solid ${token.colorBorderSecondary};
     }
+
+    @media (max-width: 700px) {
+      --import-field-columns: minmax(0, 1fr);
+      --import-field-gap: 6px;
+      --import-checkbox-offset: 0;
+      > section { grid-template-columns: 1fr; gap: 10px; }
+    }
+  `,
+  sectionBlock: css`
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+  `,
+  sectionHeading: css`
+    font-size: 14px;
+    font-weight: 600;
+  `,
+  sectionBody: css`
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 16px;
   `,
   csvFormatOptions: css`
     display: grid;
-    grid-template-columns: 130px 150px 160px 170px;
-    gap: 8px;
+    grid-template-columns: var(--import-format-columns, 130px 150px 160px 170px);
+    gap: var(--import-options-gap, 8px);
 
     @media (max-width: 900px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: var(--import-format-columns, repeat(2, minmax(0, 1fr)));
     }
   `,
   sourceRowOptions: css`
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 160px));
-    gap: 8px;
+    grid-template-columns: var(--import-source-columns, repeat(3, minmax(0, 160px)));
+    gap: var(--import-options-gap, 8px);
 
     .ant-input-number {
       width: 100%;
@@ -108,21 +147,22 @@ export const useStyles = createStyles(({ css, token }) => ({
   sourceRowHasHeader: css`
     grid-column: 1 / -1;
     width: fit-content;
+    margin-inline-start: var(--import-checkbox-offset, 0);
     font-size: 12px;
   `,
   formatOptions: css`
     display: grid;
-    grid-template-columns: 1fr 1.15fr 1fr 1.3fr 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: var(--import-value-columns, 1fr 1.15fr 1fr 1.3fr 1fr 1fr);
+    gap: var(--import-options-gap, 8px);
 
     @media (max-width: 900px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: var(--import-value-columns, repeat(2, minmax(0, 1fr)));
     }
   `,
   dateExamples: css`
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: 1fr repeat(4, auto);
+    grid-template-columns: var(--import-field-columns, 1fr auto);
     gap: 18px;
     align-items: center;
     color: ${token.colorTextSecondary};
@@ -140,12 +180,6 @@ export const useStyles = createStyles(({ css, token }) => ({
     }
 
     @media (max-width: 900px) {
-      grid-template-columns: 1fr 1fr;
-
-      > span:first-child {
-        grid-column: 1 / -1;
-      }
-
       code:not(:first-of-type) {
         padding-left: 0;
         border-left: 0;
@@ -156,22 +190,96 @@ export const useStyles = createStyles(({ css, token }) => ({
     grid-column: 1 / -1;
     font-size: 14px;
   `,
+  dataPanels: css`
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  `,
+  dataPane: css`
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  `,
+  paneTitle: css`
+    flex: none;
+    padding-bottom: 12px;
+    font-weight: 500;
+  `,
+  columnType: css`
+    color: ${token.colorTextSecondary};
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  `,
+  dataTable: css`
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: ${token.borderRadius}px;
+
+    .ant-spin-nested-loading, .ant-spin-container, .ant-table, .ant-table-container {
+      height: 100%;
+      min-height: 0;
+    }
+
+    .ant-table-container { display: flex; flex-direction: column; }
+    .ant-table-container::before, .ant-table-container::after { box-shadow: none !important; }
+    .ant-table-header { flex: none; }
+    .ant-table-body { flex: 1; min-height: 0; max-height: none !important; overflow: auto !important; }
+    .ant-table-cell { white-space: nowrap; }
+    .ant-table-body::-webkit-scrollbar { width: 10px; height: 10px; }
+    .ant-table-body::-webkit-scrollbar-thumb { border-radius: 6px; background: ${token.colorTextQuaternary}; }
+    .ant-table-body::-webkit-scrollbar-corner { background: ${token.colorBgContainer}; }
+  `,
   mappingControls: css`
     display: flex;
+    flex: none;
+    flex-wrap: wrap;
     gap: 12px;
     align-items: center;
-    justify-content: flex-end;
-    margin-bottom: 8px;
-
-    .ant-checkbox-wrapper {
-      white-space: nowrap;
-    }
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid ${token.colorBorderSecondary};
+  `,
+  mappingTargetPolicy: css`
+    display: flex;
+    align-items: center;
+    gap: 12px;
   `,
   unmappedTargetSelect: css`
     width: 220px;
   `,
   unmappedSource: css`
     color: ${token.colorTextSecondary};
+  `,
+  mappingControlLabel: css`
+    color: ${token.colorTextSecondary};
+    font-size: 12px;
+    white-space: nowrap;
+  `,
+  mappingOrigin: css`
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  `,
+  mappingOriginTag: css`
+    margin-inline-end: 0;
+    color: ${token.colorTextSecondary};
+    font-size: 11px;
+    line-height: 16px;
+  `,
+  unmappedStatus: css`
+    color: ${token.colorWarning};
+  `,
+  mappingRowUnmapped: css`
+    > td:first-child {
+      box-shadow: inset 3px 0 0 ${token.colorWarningBorder};
+    }
   `,
   requiredStatus: css`
     color: ${token.colorError};

@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,6 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DbDmlExportServicePolicyTest {
 
     private static final String DB_TYPE = "MYSQL";
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+
     private static final String ORIGINAL_SQL = "SELECT id, email, secret FROM orders";
     private static final String AUTHORIZED_SQL = ORIGINAL_SQL + " WHERE tenant_id = 100";
 
@@ -127,6 +130,13 @@ class DbDmlExportServicePolicyTest {
     }
 
     @Test
+    void csvExportWritesTheExactExportBytes() throws Exception {
+        ByteArrayOutputStream output = export("CSV");
+
+        assertArrayEquals(expectedCsv("id,email\r\n1,MASKED\r\n2,MASKED\r\n"), output.toByteArray());
+    }
+
+    @Test
     void xlsxExportEnforcesColumnsRowsAndCellProcessors() throws Exception {
         ByteArrayOutputStream output = export("EXCEL");
 
@@ -153,6 +163,14 @@ class DbDmlExportServicePolicyTest {
         assertFalse(sql.contains("TOP_SECRET"), sql);
         assertFalse(sql.contains("third@example.com"), sql);
         assertEquals(2, sql.lines().filter(line -> !line.isBlank()).count(), sql);
+    }
+
+    private static byte[] expectedCsv(String content) {
+        byte[] text = content.getBytes(StandardCharsets.UTF_8);
+        byte[] csv = new byte[UTF8_BOM.length + text.length];
+        System.arraycopy(UTF8_BOM, 0, csv, 0, UTF8_BOM.length);
+        System.arraycopy(text, 0, csv, UTF8_BOM.length, text.length);
+        return csv;
     }
 
     private ByteArrayOutputStream export(String exportType) throws Exception {

@@ -32,4 +32,10 @@ public class ImportExecuteRequest extends DataSourceBaseRequest {
 
     private String mode;
 
+    /** Duplicate handling: INSERT (default when absent) or IGNORE. */
+    private String duplicatePolicy;
+
+    /** Rejected-row handling: ABORT (default when absent) or SKIP_ERROR_ROWS. */
+    private String failurePolicy;
+
 }

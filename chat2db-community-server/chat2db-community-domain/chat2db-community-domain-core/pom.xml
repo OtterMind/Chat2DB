@@ -73,9 +73,24 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
         </dependency>
+        <!-- Test-scope only: ImportTemplateServiceImplTest drives the real file store of the
+             storage module against a temporary directory instead of a stand-in. -->
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-storage</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Test-scope only: the P0 import/export baseline (ImportExportBenchmarkTest) drives the
+             real MySQL executor paths against C2DB_BENCH_JDBC_URL. Version is managed by the
+             Spring Boot BOM imported in chat2db-community-bom. -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

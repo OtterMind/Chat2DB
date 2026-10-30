@@ -87,6 +87,7 @@ assert.deepEqual(
       relativePath: 'nested/restored.sql',
       charset: 'GB18030',
       workspaceTabId: 'restored-sql',
+      activate: false,
     },
   },
   'restored local files must preserve directory access and encoding context',

@@ -86,7 +86,7 @@ class ImportRowBatcherStartupTest {
         OutOfMemoryError failure = new OutOfMemoryError("simulated worker expansion failure");
         ImportRowBatcher batcher = new ImportRowBatcher(context, 6, failingFactory(5, failure, false));
         try {
-            batcher.accept(1, "INSERT INTO unused VALUES (1)");
+            batcher.accept(1, "INSERT INTO unused VALUES (?)", List.of(1));
             // Drive the existing tuning input deterministically, without timing real database writes.
             var gateField = ImportRowBatcher.class.getDeclaredField("gate");
             gateField.setAccessible(true);
@@ -97,8 +97,8 @@ class ImportRowBatcherStartupTest {
 
             assertSame(failure, assertThrows(OutOfMemoryError.class, () -> {
                 if (duringAccept) {
-                    // The text limit flushes the pending batch before adding this row.
-                    batcher.accept(2, "x".repeat(2 * 1024 * 1024));
+                    // The payload limit flushes the pending batch before adding this row.
+                    batcher.accept(2, "INSERT INTO unused VALUES (?)", List.of("x".repeat(2 * 1024 * 1024)));
                 } else {
                     batcher.flush();
                 }

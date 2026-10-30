@@ -34,6 +34,7 @@ import CustomTabs, { ITabContextActions, ITabItem } from '@/components/Tabs';
 import ViewTable from '@/components/ViewTable';
 import DatabaseTableEditor from '@/blocks/DatabaseTableEditor';
 import SQLExecute from '../SQLExecute';
+import LazyMount from '@/components/LazyMount';
 import NewViewAllTable from '../NewViewAllTable';
 import WorkspaceRightEmpty from '../WorkspaceRightEmpty';
 import RedisAllData from '@/blocks/RedisAllData';
@@ -44,12 +45,12 @@ import ActiveTransactionsContent from '@/blocks/NewTree/components/ActiveTransac
 import ContentDiffTab from './ContentDiffTab';
 import FilePreviewTab from './FilePreviewTab';
 import TerminalTab from './TerminalTab';
+import LocalFileTabContent from './LocalFileTabContent';
 
 // ---- store -----
 import { useWorkspaceStore } from '@/store/workspace';
 import { useGlobalStore } from '@/store/global';
 import { getPersistableActiveConsoleId } from '@/store/workspace/utils/workspaceTabPersistence';
-import { getRestoredLocalFileReadRequest } from '@/store/workspace/utils/localFileWorkspaceTab';
 import { isWorkspaceResultInspectorCode } from '@/store/workspace/utils/resultInspector';
 import { isConsoleTabNameCustomized } from '@/store/workspace/utils/consoleTabName';
 import { useTreeStore } from '@/store/tree';
@@ -275,22 +276,6 @@ function rebuildSqlExecuteTabData(item: IWorkspaceTab) {
 
   if (uniqueData.loadSQL) {
     return uniqueData;
-  }
-
-  const localFileReadRequest = getRestoredLocalFileReadRequest(item);
-  if (localFileReadRequest) {
-    return {
-      ...uniqueData,
-      loadSQL: () =>
-        useWorkspaceStore
-          .getState()
-          .readFile(
-            localFileReadRequest.filePath,
-            localFileReadRequest.fileExtension,
-            localFileReadRequest.context,
-          )
-          .then((file) => file?.content || ''),
-    };
   }
 
   const { dataSourceId, databaseName, schemaName } = uniqueData;
@@ -1770,7 +1755,7 @@ const WorkspaceTabs = memo(() => {
       );
     }
 
-    return (
+    const editor = (
       <SQLExecute
         workspaceTabsTitle={item.title}
         boundInfo={boundInfo}
@@ -1781,6 +1766,9 @@ const WorkspaceTabs = memo(() => {
         dataSourceState={dataSourceState}
       />
     );
+    return item.type === WorkspaceTabType.LocalSQLFile
+      ? <LocalFileTabContent tab={item}>{editor}</LocalFileTabContent>
+      : editor;
   };
 
   // Render the table editor.
@@ -1993,6 +1981,7 @@ const WorkspaceTabs = memo(() => {
         pinned: item.pinned,
         accentColor: dataSourceId ? dataSourceIdentityColor : undefined,
         destroyOnHide: !!item.uniqueData?.filePreviewMimeType,
+        lazyMount: item.type === WorkspaceTabType.LocalSQLFile,
         styles: {
           width: WORKSPACE_TAB_WIDTH,
           maxWidth: WORKSPACE_TAB_WIDTH,
@@ -2245,7 +2234,7 @@ const WorkspaceTabs = memo(() => {
                   : undefined
               }
             >
-              {item.children}
+              <LazyMount active={isActive || !item.lazyMount}>{item.children}</LazyMount>
             </div>
           );
         })}

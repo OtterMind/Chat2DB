@@ -361,7 +361,8 @@ class ExportExtensionTest {
         }
 
         @Override
-        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
+        protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file,
+                ExportProgressReporter progressReporter) {
         }
     }
 

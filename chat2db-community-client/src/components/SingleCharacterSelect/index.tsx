@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Divider, Input, Select } from 'antd';
 
 export interface SingleCharacterSelectProps {
-  label: string;
+  /** Omitted when the owner renders the label itself (for example inside a form item). */
+  label?: string;
   value: string;
   options: { value: string; label: string }[];
   className: string;
@@ -47,7 +48,7 @@ const SingleCharacterSelect = ({
 
   return (
     <div className={className}>
-      <span>{label}</span>
+      {label ? <span>{label}</span> : null}
       <Select
         value={value}
         options={selectOptions}

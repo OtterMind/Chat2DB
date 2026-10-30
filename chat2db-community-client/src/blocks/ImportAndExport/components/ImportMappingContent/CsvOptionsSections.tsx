@@ -10,21 +10,13 @@ import { useStyles } from './style';
 
 interface Props {
   value: ICsvOptions;
-  activeKeys: string[];
   disabled?: boolean;
+  fillHeight?: boolean;
   dataItems: CollapseProps['items'];
   onChange: (value: ICsvOptions) => void;
-  onActiveKeysChange: (keys: string[]) => void;
 }
 
-const CsvOptionsSections = ({
-  value,
-  activeKeys,
-  disabled,
-  dataItems,
-  onChange,
-  onActiveKeysChange,
-}: Props) => {
+const CsvOptionsSections = ({ value, disabled, fillHeight, dataItems, onChange }: Props) => {
   const { styles } = useStyles();
   const update = (patch: Partial<ICsvOptions>) => onChange({ ...value, ...patch });
   const characterProps = {
@@ -37,8 +29,7 @@ const CsvOptionsSections = ({
 
   return (
     <OptionsSections
-      activeKeys={activeKeys}
-      onActiveKeysChange={onActiveKeysChange}
+      fillHeight={fillHeight}
       items={[
         {
           key: 'csvFormat',

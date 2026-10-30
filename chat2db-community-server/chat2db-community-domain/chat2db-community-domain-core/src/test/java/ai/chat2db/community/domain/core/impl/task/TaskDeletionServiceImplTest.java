@@ -7,6 +7,7 @@ import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
+import ai.chat2db.community.domain.api.service.file.IImportFileStagingService;
 import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskDeletionService;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
@@ -50,6 +51,27 @@ class TaskDeletionServiceImplTest {
         RecordingTaskStorage storage = storage(1L, artifact);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean(TaskStorage.class, () -> storage);
+            // Deleting a task also releases its staged import file; this test only needs the
+            // dependency to exist, so the stub answers nothing and claims nothing.
+            context.registerBean(IImportFileStagingService.class, () -> new IImportFileStagingService() {
+                @Override
+                public String stage(File file, String originalFileName) {
+                    return null;
+                }
+
+                @Override
+                public File resolve(String fileId) {
+                    return null;
+                }
+
+                @Override
+                public void claimForTask(String fileId) {
+                }
+
+                @Override
+                public void release(String fileId) {
+                }
+            });
             context.register(ArtifactServiceImpl.class, TaskDeletionServiceImpl.class);
             context.refresh();
             ArtifactService files = context.getBean(ArtifactService.class);
@@ -393,7 +415,8 @@ class TaskDeletionServiceImplTest {
     }
 
     private TaskServiceImpl tasks(RecordingTaskStorage storage) {
-        return new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), journalFile()));
+        return new TaskServiceImpl(storage, null,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), null, journalFile()), null, null);
     }
 
     private Task task(Long id, Path artifact) {
@@ -409,7 +432,8 @@ class TaskDeletionServiceImplTest {
 
     private PendingTaskDeletion intent(Long id, Path artifact, int attempts) {
         return new PendingTaskDeletion(id, artifact.toString(),
-                artifact.resolveSibling("." + artifact.getFileName() + ".task-delete-" + id).toString(), attempts, null);
+                artifact.resolveSibling("." + artifact.getFileName() + ".task-delete-" + id).toString(),
+                null, null, null, attempts, null);
     }
 
     private void writeQueue(PendingTaskDeletion... pending) throws IOException {
@@ -430,6 +454,26 @@ class TaskDeletionServiceImplTest {
         @Override
         public synchronized Optional<Task> get(Long id) {
             return Optional.ofNullable(tasks.get(id));
+        }
+
+        @Override
+        public synchronized boolean saveCheckpoint(Long id, String checkpointJson) {
+            Task task = tasks.get(id);
+            if (task == null || checkpointJson == null || TaskStatus.isTerminal(task.getStatus())) {
+                return false;
+            }
+            task.setCheckpointJson(checkpointJson);
+            return true;
+        }
+
+        @Override
+        public synchronized boolean attachErrorArtifact(Long id, String errorArtifactId) {
+            Task task = tasks.get(id);
+            if (task == null) {
+                return false;
+            }
+            task.setErrorArtifactId(errorArtifactId);
+            return true;
         }
 
         @Override

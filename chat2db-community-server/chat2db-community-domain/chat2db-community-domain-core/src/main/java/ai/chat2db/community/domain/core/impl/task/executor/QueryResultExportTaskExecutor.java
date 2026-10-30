@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.service.db.IDbDmlExportService;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.task.export.ExportProgressReporter;
 import org.springframework.stereotype.Component;
 
 import java.io.OutputStream;
@@ -47,20 +48,21 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
         try {
             String format = TaskExecutorSupport.requireFormat(spec.getFormat());
             DbDmlExportRequest request = request(spec, format);
-            context.reportProgress(5, TaskStage.QUERYING.name(), "Preparing query export");
+            ExportProgressReporter progressReporter = new ExportProgressReporter(context, 5);
+            progressReporter.stage(5, TaskStage.QUERYING.name(), "Preparing query export");
             DbDmlExportPlan plan = dbDmlExportService.prepareExport(request);
             String fileName = TaskExecutorSupport.artifactFileName(spec,
                     spec.getSuggestedFileName() == null ? plan.getFileName() : spec.getSuggestedFileName(), format);
             ArtifactDraft draft = context.createArtifact(spec.getExportPath(), fileName,
                     TaskExecutorSupport.mediaType(format));
-            ExportProgressLogger progressLogger = new ExportProgressLogger(context, format);
+            ExportProgressLogger progressLogger = new ExportProgressLogger(context, format, progressReporter);
             context.logInfo(TaskEventCode.EXPORT_STARTED.name(), "Query result export started",
                     Map.of(TaskConstants.FILE_FORMAT_DETAIL_KEY, format));
             progressLogger.queryStarted("Reading query result");
             try (OutputStream outputStream = Files.newOutputStream(draft.getTemporaryFile().toPath())) {
                 dbDmlExportService.export(plan.getExportRequest(), outputStream, context, context::checkCancelled,
                         progressLogger::recordExportedRows,
-                        () -> beginFileFinalization(context, progressLogger, format));
+                        () -> beginFileFinalization(context, progressLogger, progressReporter, format));
             }
             context.checkCancelled();
         } catch (TaskCancelledException | TaskExecutionException e) {
@@ -72,9 +74,9 @@ public class QueryResultExportTaskExecutor implements TaskExecutor<ExportTaskSpe
     }
 
     private void beginFileFinalization(TaskExecutionContext context, ExportProgressLogger progressLogger,
-            String format) {
+            ExportProgressReporter progressReporter, String format) {
         progressLogger.queryCompleted("Query result read completed");
-        context.reportProgress(90, TaskStage.FINALIZING.name(), "Finalizing " + format + " export file");
+        progressReporter.stage(90, TaskStage.FINALIZING.name(), "Finalizing " + format + " export file");
         progressLogger.fileFinalizing();
     }
 

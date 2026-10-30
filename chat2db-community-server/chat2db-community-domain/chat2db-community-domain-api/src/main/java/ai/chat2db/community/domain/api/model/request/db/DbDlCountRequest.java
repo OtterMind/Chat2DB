@@ -17,7 +17,6 @@ public class DbDlCountRequest {
     private String sql;
 
 
-    @NotNull
     private Long consoleId;
 
 
@@ -29,7 +28,6 @@ public class DbDlCountRequest {
     private String databaseName;
 
 
-    @NotNull
     private String tableName;
 
     /**

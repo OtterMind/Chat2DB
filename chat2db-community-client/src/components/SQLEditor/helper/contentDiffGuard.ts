@@ -58,12 +58,9 @@ export interface ContentDiffEligibility {
   reason?: ContentDiffDenyReason;
 }
 
-export interface ContentDiffTextGuard {
-  enabled: boolean;
-  baselineHash: string;
-  currentHash: string;
-  reason?: ContentDiffDenyReason;
-}
+export type ContentDiffTextGuard =
+  | { enabled: true; baselineHash: string; currentHash: string; reason?: never }
+  | { enabled: false; reason: ContentDiffDenyReason };
 
 const CONTENT_DIFF_DDL_SOURCE_KEYS = [
   'dataSourceId',
@@ -114,14 +111,9 @@ export const isContentDiffSurfaceEnabled = (surface: ContentDiffSurface) =>
   !getContentDiffDisabledSurfaces().has(surface);
 
 export const guardContentDiffTexts = (baselineText: string, currentText: string): ContentDiffTextGuard => {
-  const baselineHash = hashContentDiffText(baselineText);
-  const currentHash = hashContentDiffText(currentText);
-
-  if (baselineHash === currentHash && baselineText === currentText) {
+  if (baselineText === currentText) {
     return {
       enabled: false,
-      baselineHash,
-      currentHash,
       reason: ContentDiffDenyReason.Unchanged,
     };
   }
@@ -129,16 +121,14 @@ export const guardContentDiffTexts = (baselineText: string, currentText: string)
   if (baselineText.length > CONTENT_DIFF_MAX_TEXT_LENGTH || currentText.length > CONTENT_DIFF_MAX_TEXT_LENGTH) {
     return {
       enabled: false,
-      baselineHash,
-      currentHash,
       reason: ContentDiffDenyReason.TextTooLarge,
     };
   }
 
   return {
     enabled: true,
-    baselineHash,
-    currentHash,
+    baselineHash: hashContentDiffText(baselineText),
+    currentHash: hashContentDiffText(currentText),
   };
 };
 

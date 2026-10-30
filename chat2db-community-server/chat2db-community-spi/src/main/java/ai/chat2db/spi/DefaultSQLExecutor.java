@@ -47,7 +47,11 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
 
+import java.math.BigDecimal;
 import java.sql.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -196,11 +200,14 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         checkTaskCancellation(cancellationChecker);
         PreparedStatement stmt = null;
         try {
-            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            PreparedStatement preparedStatement = connection.prepareStatement(
+                    sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
             stmt = preparedStatement;
             notifyStatementCreated(statementListener, preparedStatement);
             try (preparedStatement) {
                 checkTaskCancellation(cancellationChecker);
+                // Stream the export instead of letting the driver buffer the whole result set.
+                preparedStatement.setFetchSize(streamingFetchSize());
                 if (maxRows != null && maxRows > 0) {
                     preparedStatement.setMaxRows(maxRows);
                 }
@@ -1998,6 +2005,19 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
+    /**
+     * Resolves the dialect streaming fetch size for the export read path. A missing or unknown
+     * plugin context keeps the dialect neutral default instead of failing the export.
+     */
+    private static int streamingFetchSize() {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        if (connectInfo == null || StringUtils.isBlank(connectInfo.getDbType())) {
+            return IEasyToolsConstant.DEFAULT_PAGE_SIZE;
+        }
+        IPlugin plugin = Chat2DBContext.PLUGIN_MAP.get(connectInfo.getDbType());
+        return plugin == null ? IEasyToolsConstant.DEFAULT_PAGE_SIZE : plugin.getDbManager().streamingFetchSize();
+    }
+
     private void checkTaskCancellation(Runnable cancellationChecker) {
         if (cancellationChecker != null) {
             cancellationChecker.run();
@@ -2056,32 +2076,270 @@ public class DefaultSQLExecutor implements ICommandExecutor {
         }
     }
 
+    /**
+     * Default number of statements handed to a single {@code executeBatch()} call.
+     * Bounds driver-side buffering and, on drivers that rewrite batches into multi-row statements,
+     * keeps the generated statement below the server packet limit.
+     */
+    public static final int DEFAULT_BATCH_CHUNK_SIZE = 500;
+
     /** Executes a JDBC batch using the connection's existing transaction settings. */
     public void executeJdbcBatchInsert(Connection connection, List<String> sqls,
                                       ISqlExecutionStatementListener statementListener,
                                       Runnable cancellationChecker) {
+        executeJdbcBatchInsert(connection, sqls, statementListener, cancellationChecker,
+                DEFAULT_BATCH_CHUNK_SIZE);
+    }
+
+    /**
+     * Executes the statements as chunked JDBC batches: one {@code Statement} per chunk, each chunk
+     * flushed with a single {@code executeBatch()}. Chunking keeps a failed batch small enough to
+     * report on and avoids building one unbounded statement.
+     */
+    public void executeJdbcBatchInsert(Connection connection, List<String> sqls,
+                                      ISqlExecutionStatementListener statementListener,
+                                      Runnable cancellationChecker, int chunkSize) {
+        executeJdbcBatchInsertWithReport(connection, sqls, statementListener, cancellationChecker, chunkSize, null);
+    }
+
+    /** Reports every actual JDBC chunk without changing transaction ownership or cancellation. */
+    public void executeJdbcBatchInsertWithReport(Connection connection, List<String> sqls,
+            ISqlExecutionStatementListener statementListener, Runnable cancellationChecker, int chunkSize,
+            JdbcBatchObserver observer) {
         if (sqls == null || sqls.isEmpty()) {
             return;
         }
+        if (chunkSize < 1) {
+            throw new IllegalArgumentException("chunkSize must be positive");
+        }
         checkTaskCancellation(cancellationChecker);
         try {
-            Statement statement = connection.createStatement();
-            try {
-                try (statement) {
-                    notifyStatementCreated(statementListener, statement);
-                    checkTaskCancellation(cancellationChecker);
-                    for (String sql : sqls) {
-                        statement.addBatch(sql);
+            for (int start = 0; start < sqls.size(); start += chunkSize) {
+                checkTaskCancellation(cancellationChecker);
+                int end = Math.min(start + chunkSize, sqls.size());
+                Statement statement = connection.createStatement();
+                try {
+                    try (statement) {
+                        notifyStatementCreated(statementListener, statement);
+                        for (int index = start; index < end; index++) {
+                            statement.addBatch(sqls.get(index));
+                        }
+                        List<String> chunk = List.copyOf(sqls.subList(start, end));
+                        if (observer != null) observer.started(chunk);
+                        long started = System.nanoTime();
+                        int[] counts;
+                        try {
+                            counts = statement.executeBatch();
+                        } catch (SQLException failure) {
+                            int[] partial = failure instanceof java.sql.BatchUpdateException batchFailure
+                                    ? batchFailure.getUpdateCounts() : new int[0];
+                            if (observer != null) observer.completed(chunk, partial, false,
+                                    (System.nanoTime() - started) / 1_000_000);
+                            throw failure;
+                        }
+                        if (observer != null) observer.completed(chunk, counts, true,
+                                (System.nanoTime() - started) / 1_000_000);
                     }
-                    statement.executeBatch();
-                    checkTaskCancellation(cancellationChecker);
+                } finally {
+                    notifyStatementClosed(statementListener, statement);
                 }
-            } finally {
-                notifyStatementClosed(statementListener, statement);
+                checkTaskCancellation(cancellationChecker);
             }
         } catch (SQLException e) {
             checkTaskCancellation(cancellationChecker);
             throw new RuntimeException(e);
+        }
+    }
+
+    public interface JdbcBatchObserver {
+        void started(List<String> statements);
+        void completed(List<String> statements, int[] updateCounts, boolean successful, long elapsedMillis);
+    }
+
+    /**
+     * Executes one prepared statement shape with many parameter rows, chunked into JDBC batches.
+     * <p>
+     * The caller keeps ownership of the connection's transaction and auto-commit settings: this
+     * method never calls {@code setAutoCommit}, {@code commit} or {@code rollback}.
+     */
+    public void executeParameterizedBatch(Connection connection, String sql, List<List<Object>> parameterRows,
+                                          ISqlExecutionStatementListener statementListener,
+                                          Runnable cancellationChecker) {
+        executeParameterizedBatch(connection, sql, parameterRows, statementListener, cancellationChecker,
+                DEFAULT_BATCH_CHUNK_SIZE);
+    }
+
+    /**
+     * Same as {@link #executeParameterizedBatch(Connection, String, List, ISqlExecutionStatementListener, Runnable)}
+     * but returns the number of rows the driver reports as stored.
+     */
+    public long executeParameterizedBatchWithCounts(Connection connection, String sql,
+                                          List<List<Object>> parameterRows,
+                                          ISqlExecutionStatementListener statementListener,
+                                          Runnable cancellationChecker) {
+        return executeParameterizedBatchWithCounts(connection, sql, parameterRows, statementListener,
+                cancellationChecker, DEFAULT_BATCH_CHUNK_SIZE);
+    }
+
+    /**
+     * Executes one prepared statement shape with many parameter rows, chunked into JDBC batches:
+     * one {@code PreparedStatement} per chunk, each chunk filled with {@code addBatch()} and flushed
+     * with a single {@code executeBatch()}. Chunking bounds both the driver-side batch buffer and the
+     * size of the statement a driver may rewrite the batch into.
+     * <p>
+     * Parameters are bound by their runtime type so values keep their type on the way to the driver.
+     * The number of bound parameters is exactly {@code parameterRows.get(i).size()}; a mismatch with
+     * the statement's placeholders is reported by the driver instead of being truncated silently.
+     */
+    public void executeParameterizedBatch(Connection connection, String sql, List<List<Object>> parameterRows,
+                                          ISqlExecutionStatementListener statementListener,
+                                          Runnable cancellationChecker, int chunkSize) {
+        executeParameterizedBatchWithCounts(connection, sql, parameterRows, statementListener, cancellationChecker,
+                chunkSize);
+    }
+
+    /**
+     * Same as the void overload but returns the number of rows the driver reports as stored. A
+     * batch statement executed without an update count ({@link Statement#SUCCESS_NO_INFO}) counts
+     * as one row; zero means the driver skipped the statement, e.g. {@code INSERT IGNORE} on an
+     * existing key. This is what lets import summaries distinguish processed from stored rows.
+     */
+    public long executeParameterizedBatchWithCounts(Connection connection, String sql,
+                                          List<List<Object>> parameterRows,
+                                          ISqlExecutionStatementListener statementListener,
+                                          Runnable cancellationChecker, int chunkSize) {
+        if (parameterRows == null || parameterRows.isEmpty()) {
+            return 0L;
+        }
+        if (chunkSize < 1) {
+            throw new IllegalArgumentException("chunkSize must be positive");
+        }
+        checkTaskCancellation(cancellationChecker);
+        long stored = 0L;
+        boolean rowCountAvailable = supportsRowCount(connection);
+        try {
+            for (int start = 0; start < parameterRows.size(); start += chunkSize) {
+                checkTaskCancellation(cancellationChecker);
+                int end = Math.min(start + chunkSize, parameterRows.size());
+                PreparedStatement statement = connection.prepareStatement(sql);
+                try {
+                    try (statement) {
+                        notifyStatementCreated(statementListener, statement);
+                        for (int index = start; index < end; index++) {
+                            bindParameters(statement, parameterRows.get(index));
+                            statement.addBatch();
+                        }
+                        stored += storedRows(statement.executeBatch(), connection, rowCountAvailable);
+                    }
+                } finally {
+                    notifyStatementClosed(statementListener, statement);
+                }
+                checkTaskCancellation(cancellationChecker);
+            }
+        } catch (SQLException e) {
+            checkTaskCancellation(cancellationChecker);
+            throw new RuntimeException(e);
+        }
+        return stored;
+    }
+
+    /**
+     * MySQL rewrites a batch into one multi-row statement when {@code rewriteBatchedStatements} is
+     * on, and then reports {@link Statement#SUCCESS_NO_INFO} for every row. The batch's real
+     * affected-row count is still available from {@code ROW_COUNT()} on the same connection, which
+     * is what tells an {@code INSERT IGNORE} batch how many rows it actually stored.
+     */
+    private static boolean supportsRowCount(Connection connection) {
+        try {
+            String product = connection.getMetaData().getDatabaseProductName();
+            return product != null
+                    && (product.toLowerCase().contains("mysql") || product.toLowerCase().contains("mariadb"));
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    private static long storedRows(int[] updateCounts, Connection connection, boolean rowCountAvailable) {
+        if (updateCounts == null) {
+            return 0L;
+        }
+        long stored = 0L;
+        boolean unknownCountPresent = false;
+        for (int updateCount : updateCounts) {
+            if (updateCount > 0) {
+                stored += updateCount;
+            } else if (updateCount == Statement.SUCCESS_NO_INFO) {
+                unknownCountPresent = true;
+            }
+        }
+        if (!unknownCountPresent) {
+            return stored;
+        }
+        if (rowCountAvailable) {
+            long reported = readRowCount(connection);
+            if (reported >= 0L) {
+                return reported;
+            }
+        }
+        // Best effort for drivers that neither report counts nor expose ROW_COUNT().
+        for (int updateCount : updateCounts) {
+            if (updateCount == Statement.SUCCESS_NO_INFO) {
+                stored += 1L;
+            }
+        }
+        return stored;
+    }
+
+    private static long readRowCount(Connection connection) {
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT ROW_COUNT()")) {
+            return resultSet.next() ? Math.max(0L, resultSet.getLong(1)) : -1L;
+        } catch (SQLException e) {
+            return -1L;
+        }
+    }
+
+    private static void bindParameters(PreparedStatement statement, List<Object> parameters) throws SQLException {
+        for (int index = 0; index < parameters.size(); index++) {
+            bindParameter(statement, index + 1, parameters.get(index));
+        }
+    }
+
+    private static void bindParameter(PreparedStatement statement, int index, Object value) throws SQLException {
+        if (value == null) {
+            statement.setObject(index, null);
+        } else if (value instanceof BigDecimal decimal) {
+            statement.setBigDecimal(index, decimal);
+        } else if (value instanceof Long longValue) {
+            statement.setLong(index, longValue);
+        } else if (value instanceof Integer intValue) {
+            statement.setInt(index, intValue);
+        } else if (value instanceof Short shortValue) {
+            statement.setShort(index, shortValue);
+        } else if (value instanceof Byte byteValue) {
+            statement.setByte(index, byteValue);
+        } else if (value instanceof Boolean booleanValue) {
+            statement.setBoolean(index, booleanValue);
+        } else if (value instanceof Double doubleValue) {
+            statement.setDouble(index, doubleValue);
+        } else if (value instanceof Float floatValue) {
+            statement.setFloat(index, floatValue);
+        } else if (value instanceof LocalDate localDate) {
+            statement.setObject(index, localDate);
+        } else if (value instanceof LocalTime localTime) {
+            statement.setObject(index, localTime);
+        } else if (value instanceof LocalDateTime localDateTime) {
+            statement.setObject(index, localDateTime);
+        } else if (value instanceof java.sql.Date date) {
+            statement.setDate(index, date);
+        } else if (value instanceof Time time) {
+            statement.setTime(index, time);
+        } else if (value instanceof Timestamp timestamp) {
+            statement.setTimestamp(index, timestamp);
+        } else if (value instanceof byte[] bytes) {
+            statement.setBytes(index, bytes);
+        } else {
+            statement.setString(index, String.valueOf(value));
         }
     }
 }

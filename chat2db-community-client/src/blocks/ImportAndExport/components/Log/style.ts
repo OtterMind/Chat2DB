@@ -44,6 +44,12 @@ export const useStyles = createStyles(({ css, token }) => {
       border-top: 1px solid ${token.colorBorderSecondary};
       background: ${token.colorBgElevated};
     `,
+    progressSummary: css`
+      margin-top: 4px;
+      color: ${token.colorTextSecondary};
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    `,
     progressHeader: css`
       display: flex;
       width: 100%;

@@ -3,7 +3,6 @@ package ai.chat2db.community.domain.core.impl.task.imports;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
-import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
@@ -46,8 +45,11 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     private static final int QUEUE_CAPACITY = 4;
 
-    // About 4 MiB of UTF-16 SQL text per batch. A single larger row is sent alone.
+    // About 4 MiB of estimated bound payload per batch. A single larger row is sent alone.
     private static final long MAX_BATCH_CHARS = 2L * 1024 * 1024;
+
+    /** Per-value overhead of the payload estimate for values that are not text or bytes. */
+    private static final long ESTIMATED_VALUE_CHARS = 16L;
 
     /** Contract baseline fan-out of the fast mode; the adaptive gate grows it further on demand. */
     private static final int BASE_WORKERS = 4;
@@ -64,13 +66,30 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     private long bufferedChars;
 
-    private long reportedRows;
+    private final ImportProgressReporter progressReporter;
 
     private final AdaptiveBatchSizer batchSizer;
 
     private final LongAdder importedCount = new LongAdder();
 
-    private final List<String> bufferedSqls = new ArrayList<>(FAST_MODE_BATCH_ROWS);
+    /** Every source row of a completed batch, including the ones a rejected batch could not store. */
+    private final LongAdder consumedRows = new LongAdder();
+
+    /** Contiguous prefix of {@link #consumedRows}; only this position is safe to resume from. */
+    private final ImportCheckpointWatermark checkpointWatermark = new ImportCheckpointWatermark();
+
+    /** Null keeps the historical fail-fast behavior; set by the importers that track the resume point. */
+    private final ImportCheckpointWriter checkpoints;
+
+    private final ImportErrorRecorder errors;
+
+    private final List<List<Object>> bufferedParameterRows = new ArrayList<>(FAST_MODE_BATCH_ROWS);
+
+    /** Source row number per buffered parameter row, for the error artifact. */
+    private final List<Long> bufferedRowNumbers = new ArrayList<>(FAST_MODE_BATCH_ROWS);
+
+    /** Prepared statement shape shared by every row of the buffered batch. */
+    private String bufferedSqlTemplate;
 
     private long firstBufferedRow;
 
@@ -104,15 +123,38 @@ public final class ImportRowBatcher implements AutoCloseable {
     private volatile long totalImportNanos;
 
     public ImportRowBatcher(TaskExecutionContext context) {
+        this(context, null, null);
+    }
+
+    public ImportRowBatcher(TaskExecutionContext context, ImportCheckpointWriter checkpoints,
+            ImportErrorRecorder errors) {
+        this(context, checkpoints, errors, 0L);
+    }
+
+    public ImportRowBatcher(TaskExecutionContext context, ImportCheckpointWriter checkpoints,
+            ImportErrorRecorder errors, long resumeOffset) {
         this(context, machineThreadCeiling(), runnable -> {
             Thread thread = new Thread(runnable, "chat2db-import-" + context.taskId());
             thread.setDaemon(true);
             return thread;
-        });
+        }, checkpoints, errors, resumeOffset);
     }
 
     ImportRowBatcher(TaskExecutionContext context, int maxWorkers, ThreadFactory threadFactory) {
+        this(context, maxWorkers, threadFactory, null, null, 0L);
+    }
+
+    ImportRowBatcher(TaskExecutionContext context, int maxWorkers, ThreadFactory threadFactory,
+            ImportCheckpointWriter checkpoints, ImportErrorRecorder errors) {
+        this(context, maxWorkers, threadFactory, checkpoints, errors, 0L);
+    }
+
+    ImportRowBatcher(TaskExecutionContext context, int maxWorkers, ThreadFactory threadFactory,
+            ImportCheckpointWriter checkpoints, ImportErrorRecorder errors, long resumeOffset) {
+        this.checkpoints = checkpoints;
+        this.errors = errors;
         this.context = context;
+        this.progressReporter = new ImportProgressReporter(context, null, resumeOffset);
         this.connectInfo = Chat2DBContext.getConnectInfo();
         this.requestContext = ContextUtils.queryContext();
         this.statementGuard = Chat2DBContext.captureStatementGuard();
@@ -172,29 +214,50 @@ public final class ImportRowBatcher implements AutoCloseable {
         }
     }
 
-    public void accept(long fileRowNumber, String sql) {
+    public void accept(long fileRowNumber, String sqlTemplate, List<Object> parameters) {
         try {
-            acceptRow(fileRowNumber, sql);
+            acceptRow(fileRowNumber, sqlTemplate, parameters);
         } catch (RuntimeException | Error taskFailure) {
             recordFailure(taskFailure);
             throw taskFailure;
         }
     }
 
-    private void acceptRow(long fileRowNumber, String sql) {
+    private void acceptRow(long fileRowNumber, String sqlTemplate, List<Object> parameters) {
         context.checkCancelled();
         throwIfFailed();
-        if (!bufferedSqls.isEmpty() && bufferedChars + sql.length() > MAX_BATCH_CHARS) {
+        long rowChars = estimatedChars(parameters);
+        if (!bufferedParameterRows.isEmpty() && bufferedChars + rowChars > MAX_BATCH_CHARS) {
             flushBufferedBatch();
         }
-        if (bufferedSqls.isEmpty()) {
+        if (bufferedParameterRows.isEmpty()) {
             firstBufferedRow = fileRowNumber;
+            bufferedSqlTemplate = sqlTemplate;
         }
-        bufferedSqls.add(sql);
-        bufferedChars += sql.length();
-        if (bufferedSqls.size() >= batchSizer.batchSize() || bufferedChars >= MAX_BATCH_CHARS) {
+        bufferedParameterRows.add(parameters == null ? List.of() : parameters);
+        bufferedRowNumbers.add(fileRowNumber);
+        bufferedChars += rowChars;
+        if (bufferedParameterRows.size() >= batchSizer.batchSize() || bufferedChars >= MAX_BATCH_CHARS) {
             flushBufferedBatch();
         }
+    }
+
+    /** Payload estimate of one parameter row, so the byte budget still bounds the batch. */
+    private static long estimatedChars(List<Object> parameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            return 0L;
+        }
+        long chars = 0L;
+        for (Object parameter : parameters) {
+            if (parameter instanceof CharSequence text) {
+                chars += text.length();
+            } else if (parameter instanceof byte[] bytes) {
+                chars += bytes.length;
+            } else {
+                chars += ESTIMATED_VALUE_CHARS;
+            }
+        }
+        return chars;
     }
 
     public long importedRows() {
@@ -250,13 +313,16 @@ public final class ImportRowBatcher implements AutoCloseable {
 
     /** Submits the current buffer without turning normal producer flow into a global barrier. */
     private void flushBufferedBatch() {
-        if (bufferedSqls.isEmpty()) {
+        if (bufferedParameterRows.isEmpty()) {
             return;
         }
-        PendingBatch batch = new PendingBatch(List.copyOf(bufferedSqls), submittedBatches, firstBufferedRow);
+        PendingBatch batch = new PendingBatch(bufferedSqlTemplate, List.copyOf(bufferedParameterRows),
+                List.copyOf(bufferedRowNumbers), submittedBatches, firstBufferedRow);
         submittedBatches++;
-        bufferedSqls.clear();
+        bufferedParameterRows.clear();
+        bufferedRowNumbers.clear();
         bufferedChars = 0;
+        bufferedSqlTemplate = null;
         executeBatch(batch);
     }
 
@@ -274,17 +340,22 @@ public final class ImportRowBatcher implements AutoCloseable {
      */
     private void executePendingBatch(PendingBatch batch) {
         long started = System.nanoTime();
-        int rows = batch.sqls().size();
+        int rows = batch.parameterRows().size();
         try {
-            DefaultSQLExecutor.getInstance().executeJdbcBatchInsert(
-                    Chat2DBContext.getConnection(), batch.sqls(), context, this::checkActive);
-            long elapsed = System.nanoTime() - started;
-            if (gate != null) {
-                gate.record(rows, elapsed);
-            }
-            batchSizer.record(rows, elapsed);
-            reportBatchSuccess(batch);
+            long stored = ImportBatchTransactions.executeParameterizedBatch(retriesRejectedRows(),
+                    Chat2DBContext.getConnection(), batch.sqlTemplate(), batch.parameterRows(), context,
+                    this::checkActive);
+            recordTuning(rows, System.nanoTime() - started);
+            reportBatchSuccess(batch, stored);
         } catch (RuntimeException | Error batchFailure) {
+            if (retriesRejectedRows() && !(batchFailure instanceof TaskCancelledException)) {
+                // The rejected batch was rolled back as a whole, so retrying its rows one by one
+                // stores every storable row exactly once and records only the rows that really fail.
+                int stored = retryRejectedRows(batch, batchFailure);
+                recordTuning(rows, System.nanoTime() - started);
+                reportPartialSuccess(batch, stored);
+                return;
+            }
             if (!(batchFailure instanceof TaskCancelledException)) {
                 context.logError("IMPORT_BATCH_FAILED", "Could not import batch", Map.of(
                         "statementCount", rows,
@@ -302,16 +373,83 @@ public final class ImportRowBatcher implements AutoCloseable {
         }
     }
 
-    private synchronized void reportBatchSuccess(PendingBatch batch) {
-        importedCount.add(batch.sqls().size());
-        long rows = importedCount.sum();
-        if (rows > reportedRows) {
-            context.reportProgress((int) (20 + Math.min(70L, rows / 100)), TaskStage.IMPORTING.name(),
-                    "Imported " + rows + " rows");
-            reportedRows = rows;
+    private boolean retriesRejectedRows() {
+        return errors != null && errors.toleratesRowFailures();
+    }
+
+    /** Retries every row of a rejected batch on its own; returns the rows that could be stored. */
+    private int retryRejectedRows(PendingBatch batch, Throwable batchFailure) {
+        // Nothing is recorded for the batch as a whole: each row is retried below, so the error
+        // artifact lists the rows that really fail, with their own reason, and only those.
+        context.logWarn("IMPORT_BATCH_RETRY", "Retrying a rejected batch row by row",
+                Map.of("statementCount", batch.parameterRows().size(),
+                        "message", reason(batchFailure)));
+        int stored = 0;
+        for (int index = 0; index < batch.parameterRows().size(); index++) {
+            checkActive();
+            List<Object> row = batch.parameterRows().get(index);
+            try {
+                stored += (int) ImportBatchTransactions.executeParameterizedBatch(false,
+                        Chat2DBContext.getConnection(), batch.sqlTemplate(), List.of(row), context,
+                        this::checkActive);
+            } catch (TaskCancelledException e) {
+                throw e;
+            } catch (RuntimeException | Error rowFailure) {
+                Long rowNumber = index < batch.rowNumbers().size() ? batch.rowNumbers().get(index) : null;
+                errors.recordRejectedRow(rowNumber == null ? -1L : rowNumber, row, reason(rowFailure));
+            }
         }
+        return stored;
+    }
+
+    private static String reason(Throwable failure) {
+        return failure instanceof TaskExecutionException taskFailure
+                ? StringUtils.defaultIfBlank(taskFailure.publicMessage(), taskFailure.getCode())
+                : StringUtils.defaultString(failure.getMessage());
+    }
+
+    private void recordTuning(int rows, long elapsed) {
+        if (gate != null) {
+            gate.record(rows, elapsed);
+        }
+        batchSizer.record(rows, elapsed);
+    }
+
+    private synchronized void reportBatchSuccess(PendingBatch batch, long stored) {
+        importedCount.add(stored);
+        consumedRows.add(batch.parameterRows().size());
+        reportCommit(batch, importedCount.sum(), batch.parameterRows().size(), stored);
+    }
+
+    /** Reports a batch the failure policy kept running: only some of its rows reached the table. */
+    private synchronized void reportPartialSuccess(PendingBatch batch, int stored) {
+        importedCount.add(stored);
+        consumedRows.add(batch.parameterRows().size());
+        reportCommit(batch, importedCount.sum(), batch.parameterRows().size(), stored);
+        context.logInfo("IMPORT_ROWS_SKIPPED", "Batch completed with rejected rows", Map.of(
+                "batch", batch.seq() + 1,
+                "statementCount", batch.parameterRows().size(),
+                "importedRows", stored,
+                "rejectedRows", batch.parameterRows().size() - stored));
+    }
+
+    private void reportCommit(PendingBatch batch, long imported, int consumedInBatch, long batchImported) {
+        long processed = consumedRows.sum();
+        if (checkpoints != null) {
+            // Workers finish batches out of order, so the resume point may advance only across the
+            // contiguous prefix. The checkpoint counts source rows, including the rows a rejected
+            // batch could not store. It is written before the batch event, because a task cancelled
+            // right after the commit may already be terminal but still accepts its final position.
+            long committedPrefix = checkpointWatermark.onBatchCommitted(batch.seq(), consumedInBatch);
+            if (committedPrefix >= 0L) {
+                checkpoints.batchCommitted(committedPrefix);
+            }
+        }
+        progressReporter.report(processed);
         context.logInfo("BATCH_EXECUTED", "SQL batch executed",
-                Map.of("batch", batch.seq() + 1, "statementCount", batch.sqls().size(), "importedRows", rows));
+                Map.of("batch", batch.seq() + 1, "statementCount", batch.parameterRows().size(),
+                        "batchImportedRows", batchImported, "importedRows", imported,
+                        "processedRows", processed));
     }
 
     private static int machineThreadCeiling() {
@@ -470,9 +608,10 @@ public final class ImportRowBatcher implements AutoCloseable {
     }
 
     private static final PendingBatch END_OF_QUEUE =
-            new PendingBatch(List.of(), -1L, Long.MAX_VALUE);
+            new PendingBatch(null, List.of(), List.of(), -1L, Long.MAX_VALUE);
 
-    private record PendingBatch(List<String> sqls, long seq, long firstRowNumber) {
+    private record PendingBatch(String sqlTemplate, List<List<Object>> parameterRows,
+            List<Long> rowNumbers, long seq, long firstRowNumber) {
     }
 
     /** Stops pending writes when the source parser fails outside the batch executor. */

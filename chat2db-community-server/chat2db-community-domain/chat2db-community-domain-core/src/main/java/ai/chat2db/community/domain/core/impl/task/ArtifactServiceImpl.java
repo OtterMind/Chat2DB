@@ -9,10 +9,12 @@ import org.springframework.stereotype.Component;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
 import java.util.UUID;
@@ -61,14 +63,16 @@ public class ArtifactServiceImpl implements ArtifactService {
             if (!Files.isRegularFile(source) || !Files.isReadable(source)) {
                 throw new IllegalStateException("Artifact draft is not readable");
             }
-            OutputStream output = createTarget(draft);
+            // Reserve the target name by creating the empty file first; the completed draft then
+            // replaces it, so the name cannot be taken by another writer in between.
+            try (OutputStream ignored = createTarget(draft)) {
+                // The reserved target stays empty until the draft is published.
+            }
             Path target = draft.getTargetFile().toPath();
             try {
-                try (output) {
-                    onTargetCreated.accept(target.toAbsolutePath().toString());
-                    copyArtifact(source, output);
-                }
-                Files.delete(source);
+                onTargetCreated.accept(target.toAbsolutePath().toString());
+                publishArtifact(source, target);
+                Files.deleteIfExists(source);
                 return target.toAbsolutePath().toString();
             } catch (IOException | RuntimeException | Error e) {
                 try {
@@ -82,6 +86,29 @@ public class ArtifactServiceImpl implements ArtifactService {
             throw new IllegalStateException("Could not publish artifact", e);
         } finally {
             releaseTarget(draft);
+        }
+    }
+
+    /**
+     * Publishes the completed draft with an atomic rename, which avoids copying the whole artifact
+     * again. Filesystems that cannot rename (for example across devices) fall back to the copy path.
+     */
+    void publishArtifact(Path source, Path target) throws IOException {
+        try {
+            moveArtifact(source, target);
+        } catch (AtomicMoveNotSupportedException | FileAlreadyExistsException e) {
+            copyToTarget(source, target);
+        }
+    }
+
+    void moveArtifact(Path source, Path target) throws IOException {
+        Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void copyToTarget(Path source, Path target) throws IOException {
+        try (OutputStream output = Files.newOutputStream(target, StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING)) {
+            copyArtifact(source, output);
         }
     }
 

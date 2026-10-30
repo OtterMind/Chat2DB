@@ -40,4 +40,8 @@ public class MappedImportExecution {
 
     private String mode;
 
+    private String duplicatePolicy;
+
+    private String failurePolicy;
+
 }

@@ -24,10 +24,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskServiceImplTest {
 
@@ -49,7 +51,8 @@ class TaskServiceImplTest {
                 task(1L, 10L, 100L, ownedArtifact),
                 task(2L, 20L, 100L, otherUserArtifact),
                 task(3L, 10L, 200L, otherOrganizationArtifact)));
-        TaskServiceImpl service = new TaskServiceImpl(storage, null, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
+        TaskServiceImpl service = new TaskServiceImpl(storage, null,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), null), null, null);
         ContextUtils.setContext(Context.builder()
                 .loginUser(LoginUser.builder().id(10L).build())
                 .organizationId(100L)
@@ -73,8 +76,36 @@ class TaskServiceImplTest {
         assertThrows(DataNotFoundException.class, () -> service.delete(3L));
         assertThrows(DataNotFoundException.class, () -> service.resolveArtifact(2L));
         assertThrows(DataNotFoundException.class, () -> service.resolveArtifact(3L));
+        assertThrows(DataNotFoundException.class, () -> service.cancel(2L));
+        assertThrows(DataNotFoundException.class, () -> service.cancel(3L));
+        assertThrows(DataNotFoundException.class, () -> service.cancel(99L));
         TaskDownload download = service.resolveArtifact(1L);
         assertEquals("owned.csv", download.getFileName());
+    }
+
+    @Test
+    void cancelRequiresOwnershipAndDelegatesToTheTaskManager() throws Exception {
+        Path artifact = Files.writeString(tempDirectory.resolve("cancel.csv"), "owned");
+        AtomicInteger cancellations = new AtomicInteger();
+        LocalTaskManager manager = new LocalTaskManager(null, null, null, null, null, 1, 1) {
+            @Override
+            boolean cancelTask(Long taskId) {
+                cancellations.incrementAndGet();
+                return true;
+            }
+        };
+        OwnershipTaskStorage storage = new OwnershipTaskStorage(List.of(task(1L, 10L, 100L, artifact)));
+        TaskServiceImpl service = new TaskServiceImpl(storage, manager,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), null), null, null);
+        ContextUtils.setContext(Context.builder()
+                .loginUser(LoginUser.builder().id(10L).build())
+                .organizationId(100L)
+                .build());
+
+        assertTrue(service.cancel(1L));
+        assertEquals(1, cancellations.get());
+        assertThrows(DataNotFoundException.class, () -> service.cancel(2L));
+        assertEquals(1, cancellations.get(), "a foreign task must never be cancelled");
     }
 
     private Task task(Long id, Long userId, Long organizationId, Path artifact) {

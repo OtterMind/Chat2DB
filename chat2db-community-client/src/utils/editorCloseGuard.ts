@@ -1,6 +1,7 @@
 import type { EditorSettings } from '@/components/SQLEditor';
 import type { IWorkspaceTab } from '@/typings';
 import { WorkspaceTabType } from '@/constants/workspace';
+import { getRestoredLocalFileReadRequest } from '@/store/workspace/utils/localFileWorkspaceTab';
 
 export type EditorCloseDecision = 'save' | 'saved' | 'discard' | 'cancel';
 
@@ -16,7 +17,9 @@ export type EditorCloseGuardMap = Record<string | number, EditorCloseGuardRef | 
 function requiresEditorCloseGuard(tab: IWorkspaceTab) {
   return (
     tab.type === WorkspaceTabType.CONSOLE ||
-    (tab.type === WorkspaceTabType.LocalSQLFile && !tab.uniqueData?.filePreviewMimeType)
+    (tab.type === WorkspaceTabType.LocalSQLFile &&
+      !tab.uniqueData?.filePreviewMimeType &&
+      !getRestoredLocalFileReadRequest(tab))
   );
 }
 

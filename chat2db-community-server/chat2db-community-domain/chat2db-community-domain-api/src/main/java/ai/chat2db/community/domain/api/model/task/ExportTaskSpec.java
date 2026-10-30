@@ -37,6 +37,12 @@ public class ExportTaskSpec implements TaskSpec {
 
     private Boolean containsHeader;
 
+    /** CSV character set; absent keeps the {@code UTF-8} default of {@link ExportCsvOptions}. */
+    private String encoding;
+
+    /** CSV field delimiter; absent keeps the {@code ,} default of {@link ExportCsvOptions}. */
+    private String delimiter;
+
     private String exportPath;
 
     private String suggestedFileName;

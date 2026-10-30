@@ -76,6 +76,29 @@ class DbMappedImportServiceImplTest {
     }
 
     @Test
+    void forwardsImportPoliciesAndRejectsUnknownValues(@TempDir Path directory) throws Exception {
+        RecordingStagingService stagingService = stagingService(directory);
+        AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();
+        DbMappedImportServiceImpl service = service(stagingService, preview("Orders", target("name")), submitted);
+        MappedImportExecution execution = execution(mapping("Name", "name"));
+        execution.setDuplicatePolicy("ignore");
+        execution.setFailurePolicy("skip_error_rows");
+
+        assertEquals(42L, service.submit(execution));
+        assertEquals("IGNORE", submitted.get().getDuplicatePolicy());
+        assertEquals("SKIP_ERROR_ROWS", submitted.get().getFailurePolicy());
+
+        MappedImportExecution defaults = execution(mapping("Name", "name"));
+        service.submit(defaults);
+        assertEquals("INSERT", submitted.get().getDuplicatePolicy());
+        assertEquals("ABORT", submitted.get().getFailurePolicy());
+
+        MappedImportExecution invalid = execution(mapping("Name", "name"));
+        invalid.setDuplicatePolicy("UPSERT");
+        assertThrows(BusinessException.class, () -> service.submit(invalid));
+    }
+
+    @Test
     void forwardsFastModeAlongsideExistingMappingAndCsvOptions(@TempDir Path directory) throws Exception {
         RecordingStagingService stagingService = stagingService(directory);
         AtomicReference<ImportTaskSpec> submitted = new AtomicReference<>();

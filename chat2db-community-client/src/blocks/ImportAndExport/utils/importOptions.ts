@@ -1,10 +1,43 @@
 import type {
+  ICsvOptions,
   IExcelOptions,
   IJsonOptions,
   ISqlImportOptions,
   IImportValueOptions,
   ISourceRowOptions,
 } from '@/typings/importExport';
+
+interface ImportPreviewKeyParams {
+  dataSourceId?: number;
+  databaseName?: string;
+  schemaName?: string;
+  tableName: string;
+  fileId?: string;
+  csvOptions?: ICsvOptions;
+  excelOptions?: IExcelOptions;
+  jsonOptions?: IJsonOptions;
+}
+
+const previewOptions = <T extends { emptyAsNull: boolean }>(options?: T) => {
+  if (!options) return undefined;
+  const readingOptions: Partial<T> = { ...options };
+  delete readingOptions.emptyAsNull;
+  return readingOptions;
+};
+
+/**
+ * The preview displays source text (both null and empty cells display as an empty string).
+ * Changing the write-time empty-cell policy must preserve the loaded preview and edited mapping;
+ * all file, target and reading options still invalidate it.
+ */
+export const buildImportPreviewKey = ({
+  csvOptions, excelOptions, jsonOptions, ...source
+}: ImportPreviewKeyParams): string => JSON.stringify({
+  ...source,
+  csvOptions: previewOptions(csvOptions),
+  excelOptions: previewOptions(excelOptions),
+  jsonOptions: previewOptions(jsonOptions),
+});
 
 const DEFAULT_VALUE_OPTIONS: IImportValueOptions = {
   dateOrder: 'YMD',

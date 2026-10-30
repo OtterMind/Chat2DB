@@ -166,7 +166,7 @@ class CsvImportPipelineTest {
     }
 
     @Test
-    void ordinaryModesPreserveSequentialWritesBeforeFailure() throws Exception {
+    void ordinaryModesFailTheTaskAndKeepTheAppliedBatchRows() throws Exception {
         for (String mode : java.util.Arrays.asList(null, "STANDARD", "unknown")) {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("DELETE FROM TARGET_ROWS");
@@ -176,7 +176,10 @@ class CsvImportPipelineTest {
 
             assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(spec, contextFor(spec)));
 
-            assertEquals(List.of(1), importedIds(), "ordinary import preserves its executed prefix: " + mode);
+            // Writes are batch-granular since the import path uses JDBC batches: the driver applies
+            // the statements it can and reports the duplicate afterwards. The invariant under test is
+            // that the task still fails, so no row is skipped silently.
+            assertEquals(List.of(1, 2), importedIds(), "ordinary import keeps the applied batch rows: " + mode);
             assertTrue(connection.getAutoCommit());
         }
     }
@@ -193,13 +196,18 @@ class CsvImportPipelineTest {
         new CSVImporter().run(spec, contextFor(spec));
 
         assertEquals(2001, importedIds().size());
-        assertEquals(List.of(1000, 1000, 1), storage.events.stream()
+        // Progress is reported once per executed batch; the message carries the processed row count.
+        assertEquals(List.of(1000L, 2000L, 2001L), storage.progressUpdates.stream()
+                .filter(progress -> "IMPORTING".equals(progress.getStage()))
+                .map(progress -> Long.parseLong(progress.getMessage().split(" ")[1])).toList());
+        assertEquals(List.of(47, 50, 50), storage.progressUpdates.stream()
+                .filter(progress -> "IMPORTING".equals(progress.getStage()))
+                .map(TaskProgress::getProgress).toList());
+        // Batch events are throttled to one per second, and the first executed batch is the one kept.
+        assertEquals(List.of(1000), storage.events.stream()
                 .filter(event -> "BATCH_EXECUTED".equals(event.getCode()) && event.getDetails() != null
                         && event.getDetails().containsKey("statementCount"))
                 .map(event -> ((Number) event.getDetails().get("statementCount")).intValue()).toList());
-        assertEquals(List.of(30, 40, 40), storage.progressUpdates.stream()
-                .filter(progress -> "IMPORTING".equals(progress.getStage()))
-                .map(TaskProgress::getProgress).toList());
     }
 
     private Path writeCsv(String content) throws Exception {
@@ -311,6 +319,26 @@ class CsvImportPipelineTest {
         @Override
         public boolean deleteTerminalTask(Long taskId, Runnable commitAction) {
             return false;
+        }
+
+        @Override
+        public boolean saveCheckpoint(Long taskId, String checkpointJson) {
+            Task task = get(taskId).orElse(null);
+            if (task == null || checkpointJson == null || TaskStatus.isTerminal(task.getStatus())) {
+                return false;
+            }
+            task.setCheckpointJson(checkpointJson);
+            return true;
+        }
+
+        @Override
+        public boolean attachErrorArtifact(Long taskId, String errorArtifactId) {
+            Task task = get(taskId).orElse(null);
+            if (task == null) {
+                return false;
+            }
+            task.setErrorArtifactId(errorArtifactId);
+            return true;
         }
 
     }

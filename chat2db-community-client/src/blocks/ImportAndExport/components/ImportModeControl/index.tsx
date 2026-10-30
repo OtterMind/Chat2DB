@@ -1,4 +1,5 @@
-import { Modal, Space, Switch, Tag, Tooltip } from 'antd';
+import { Modal, Space, Switch, Tag } from 'antd';
+import HelpTooltip from '@/components/HelpTooltip';
 import i18n from '@/i18n';
 import type { ImportExecutionMode } from '@/typings/importExport';
 
@@ -28,14 +29,17 @@ export default function ImportModeControl({ value, onChange, disabled }: Props) 
   return (
     <Space>
       {contextHolder}
-      <Tooltip title={i18n('workspace.importExport.ultraModeHint')}>
-        <Space size={4}><span>{i18n('workspace.importExport.ultraMode')}</span><Tag color="gold">{i18n('workspace.importExport.beta')}</Tag></Space>
-      </Tooltip>
       <Switch
         aria-label={i18n('workspace.importExport.ultraMode')}
         checked={value === 'FAST'}
         disabled={disabled}
         onChange={toggle}
+      />
+      <span>{i18n('workspace.importExport.ultraMode')}</span>
+      <Tag color="gold">{i18n('workspace.importExport.beta')}</Tag>
+      <HelpTooltip
+        label={i18n('workspace.importExport.ultraMode')}
+        title={i18n('workspace.importExport.ultraModeHint')}
       />
     </Space>
   );

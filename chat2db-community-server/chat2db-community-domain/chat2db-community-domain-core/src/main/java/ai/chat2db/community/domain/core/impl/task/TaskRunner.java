@@ -16,6 +16,7 @@ import ai.chat2db.community.domain.api.service.task.ArtifactService;
 import ai.chat2db.community.domain.api.service.task.TaskExecutor;
 import ai.chat2db.community.domain.api.service.task.TaskStorage;
 import ai.chat2db.community.domain.core.impl.task.extension.TaskExtensionManager;
+import ai.chat2db.community.domain.core.impl.task.imports.ImportResumability;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.spi.sql.Chat2DBContext;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,15 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
 
     private final TaskExtensionManager taskExtensionManager;
 
+    /**
+     * The run's context, kept so every terminal path can reach the error artifact a failed or
+     * cancelled import staged. One runner serves one run, so the field is assigned once.
+     */
+    private TaskExecutionContextImpl executionContext;
+
+    /** Set once the rejected-rows file is published, so a re-entered terminal path cannot retry it. */
+    private boolean errorArtifactPublished;
+
     TaskRunner(TaskSubmission<S> submission, RunningTask runningTask, RunningTaskRegistry runningTaskRegistry,
             TaskStorage taskStorage, TaskExecutor<S> taskExecutor, ArtifactService artifactService,
             TaskExtensionManager taskExtensionManager) {
@@ -58,7 +68,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
 
     @Override
     public void run() {
-        TaskExecutionContextImpl executionContext = new TaskExecutionContextImpl(
+        executionContext = new TaskExecutionContextImpl(
                 submission.taskId(), runningTask, taskStorage, artifactService);
         try {
             if (!startTask()) {
@@ -74,6 +84,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
             ArtifactDraft draft = executionContext.artifactDraft();
             executionContext.finishArtifactWrites();
             logArtifactWritten(executionContext, draft);
+            publishErrorArtifact();
             completeSuccessfully(draft);
         } catch (TaskCancelledException | CancellationException e) {
             if (isCancellationRequested()) {
@@ -218,6 +229,7 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
 
     private void completeFailedLocked(String code, String message, String safeReason, Throwable cause,
             ArtifactDraft draft) {
+        publishErrorArtifact();
         artifactService.deleteDraft(draft);
         log.error("Task {} failed", submission.taskId(), cause);
         Date now = new Date();
@@ -260,7 +272,61 @@ final class TaskRunner<S extends TaskSpec> implements Runnable {
     }
 
     private void completeCancelledLocked(ArtifactDraft draft) {
+        publishErrorArtifact();
         artifactService.deleteDraft(draft);
+        // A cancelled task must not stay RUNNING. The compare-and-set is intentionally best effort:
+        // when the cancellation already moved the task to CANCELLED, or an application-exit path
+        // recorded FAILED first, the expected status no longer matches and the terminal status wins.
+        Date now = new Date();
+        taskStorage.compareAndSetStatus(submission.taskId(), TaskStatus.RUNNING.name(),
+                TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                lifecycleEvent(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(), "Task cancelled"));
+    }
+
+    /**
+     * Publishes the rejected-rows file of the run and attaches it to the task.
+     *
+     * <p>A resumable import keeps the file on failure and cancellation: it is the evidence of what
+     * the run did not store, and the follow-up resume relies on the same task record. A task that
+     * cannot be continued keeps the historical cleanup instead. The file is registered under its own
+     * event code, so the interrupted-artifact cleanup - which only follows the primary artifact's
+     * events - never deletes it.
+     *
+     * <p>Publishing is best effort: the terminal status and the error code of the task are worth
+     * more than the file, so a failure here is logged instead of replacing the task result.
+     */
+    private void publishErrorArtifact() {
+        ArtifactDraft errorDraft = executionContext == null ? null : executionContext.errorArtifactDraft();
+        if (errorDraft == null || errorArtifactPublished) {
+            return;
+        }
+        if (!ImportResumability.isResumable(submission.spec())) {
+            artifactService.deleteDraft(errorDraft);
+            return;
+        }
+        try {
+            String errorArtifactId = artifactService.publish(errorDraft);
+            errorArtifactPublished = true;
+            taskStorage.attachErrorArtifact(submission.taskId(), errorArtifactId);
+            taskStorage.appendEvent(TaskEvent.builder()
+                    .taskId(submission.taskId())
+                    .level(TaskEventLevel.INFO.name())
+                    .code(TaskEventCode.ERROR_ARTIFACT_PUBLISHED.name())
+                    .stage(TaskStage.FINALIZING.name())
+                    .message("Error artifact published")
+                    .details(Map.of(TaskConstants.ARTIFACT_ID_DETAIL_KEY, errorArtifactId,
+                            TaskConstants.FILE_NAME_DETAIL_KEY, errorDraft.getTargetFile().getName()))
+                    .build());
+        } catch (Throwable publicationFailure) {
+            log.warn("Could not publish the error artifact of task {}", submission.taskId(), publicationFailure);
+            artifactService.deleteDraft(errorDraft);
+        }
     }
 
     private TaskEvent lifecycleEvent(String code, String level, String message) {

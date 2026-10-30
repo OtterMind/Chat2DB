@@ -1,4 +1,4 @@
-import { SKIP_IMPORT_SOURCE_FIELD } from '@/constants/importExport';
+import { ImportUnmappedTarget, SKIP_IMPORT_SOURCE_FIELD } from '@/constants/importExport';
 
 interface ISuggestedMapping {
   sourceColumn: string;
@@ -83,7 +83,7 @@ export const getDuplicateImportMappings = (
   const firstSourceByTarget = new Map<string, string>();
   const duplicates: Record<string, IDuplicateImportMapping> = {};
   Object.entries(mapping).forEach(([sourceColumn, targetColumn]) => {
-    if (targetColumn === SKIP_IMPORT_SOURCE_FIELD) {
+    if (!targetColumn || targetColumn === SKIP_IMPORT_SOURCE_FIELD) {
       return;
     }
     const mappedSource = firstSourceByTarget.get(targetColumn);
@@ -94,4 +94,12 @@ export const getDuplicateImportMappings = (
     firstSourceByTarget.set(targetColumn, sourceColumn);
   });
   return duplicates;
+};
+
+export const getRequiredUnmappedImportColumns = <T extends {
+  name: string; nullable: boolean; autoIncrement: boolean; defaultValue?: string | null;
+}>(columns: T[], mapping: Record<string, string>, policy: ImportUnmappedTarget): T[] => {
+  const mapped = new Set(Object.values(mapping));
+  return columns.filter((column) => !column.nullable && !column.autoIncrement && !mapped.has(column.name) &&
+    (policy === ImportUnmappedTarget.NULL || column.defaultValue === null || column.defaultValue === undefined));
 };

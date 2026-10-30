@@ -27,6 +27,18 @@ public class Task {
 
     private String progressMessage;
 
+    /** Source rows processed so far; null for tasks that do not report row counts. */
+    private Long processedRows;
+
+    /** Source rows expected in total; null when the task cannot know the total. */
+    private Long totalRows;
+
+    /** Measured throughput of the current run. */
+    private Double rowsPerSecond;
+
+    /** Estimated seconds remaining; null when the total or rate is unknown. */
+    private Long etaSeconds;
+
     private TaskTargetSnapshot target;
 
     private String errorCode;
@@ -34,6 +46,25 @@ public class Task {
     private String errorMessage;
 
     private String artifactId;
+
+    /**
+     * Raw import/export parameter snapshot, kept so a finished task can seed a new task with the same
+     * configuration. Optional: legacy records and tasks created without a spec leave it {@code null}.
+     */
+    private String specJson;
+
+    /**
+     * Import resume checkpoint ({@code processedRows}, {@code targetTable}, {@code conflictPolicy}).
+     * Import tasks only; export tasks and legacy records leave it {@code null}.
+     */
+    private String checkpointJson;
+
+    /**
+     * Absolute path of the secondary error artifact listing rejected rows, as returned by
+     * {@code ArtifactService#publish}. The primary artifact stays in {@link #artifactId}; {@code null}
+     * when the task produced no error file.
+     */
+    private String errorArtifactId;
 
     private Long userId;
 
