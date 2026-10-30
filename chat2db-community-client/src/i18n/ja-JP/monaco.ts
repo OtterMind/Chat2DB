@@ -78,6 +78,9 @@ export default {
     'SQL クエリでページサイズを指定しない場合に返す最大行数です。以降のクエリに適用されます。',
   'monaco.errorContinue': 'エラー継続実行',
   'monaco.errorContinue.tooltip': '複数の SQL 文を実行するとき、1 つが失敗しても残りの文を続けて実行します。',
+  'monaco.sqlParameters': 'SQL パラメーター',
+  'monaco.sqlParameters.tooltip':
+    'SQL を実行する前に :name と ? プレースホルダーの値を入力します。値はデータベースドライバーでバインドされ、SQL テキストには埋め込まれません。PostgreSQL では jsonb の ? 演算子を jsonb_exists() に書き換えるか、:name パラメーターを使用してください。',
   'monaco.errorContinue.true': 'はい',
   'monaco.errorContinue.false': 'いいえ',
   'monaco.confirmBeforeClose': '閉じる前に確認',

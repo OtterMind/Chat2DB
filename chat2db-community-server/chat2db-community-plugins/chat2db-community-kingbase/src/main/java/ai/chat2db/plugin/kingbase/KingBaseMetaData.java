@@ -5,6 +5,8 @@ import ai.chat2db.plugin.kingbase.identifier.KingBaseSQLIdentifierProcessor;
 import ai.chat2db.plugin.kingbase.enums.type.KingBaseColumnTypeEnum;
 import ai.chat2db.plugin.kingbase.enums.type.KingBaseDefaultValueEnum;
 import ai.chat2db.plugin.kingbase.enums.type.KingBaseIndexTypeEnum;
+import ai.chat2db.plugin.postgresql.PostgreSQLCommandExecutor;
+import ai.chat2db.spi.ICommandExecutor;
 import ai.chat2db.spi.IDbMetaData;
 import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.spi.ISqlBuilder;
@@ -600,5 +602,14 @@ public class KingBaseMetaData extends DefaultMetaService implements IDbMetaData 
     @Override
     public ISQLIdentifierProcessor getSQLIdentifierProcessor() {
         return KingBaseSQLIdentifierProcessor.INSTANCE;
+    }
+
+    /**
+     * Kingbase speaks the PostgreSQL protocol and shares its implicit-cast rules,
+     * so SQL parameters are bound the same way as PostgreSQL's.
+     */
+    @Override
+    public ICommandExecutor getCommandExecutor() {
+        return PostgreSQLCommandExecutor.INSTANCE;
     }
 }

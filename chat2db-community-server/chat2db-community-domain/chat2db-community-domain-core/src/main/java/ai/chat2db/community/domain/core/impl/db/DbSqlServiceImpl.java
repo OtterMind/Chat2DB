@@ -8,6 +8,8 @@ import ai.chat2db.community.domain.api.model.request.sql.DbSqlValidSelectRequest
 import ai.chat2db.community.domain.api.service.db.IDbSqlService;
 import ai.chat2db.spi.model.request.SqlStatementExecuteRequest;
 import ai.chat2db.spi.util.JdbcUtils;
+import ai.chat2db.spi.util.SqlParameterParser;
+import ai.chat2db.spi.util.SqlParameterSyntax;
 import ai.chat2db.spi.util.SqlUtils;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import com.alibaba.druid.DbType;
@@ -24,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -34,10 +37,16 @@ public class DbSqlServiceImpl implements IDbSqlService {
             .maxColumnLength(1)
             .build();
 
+    private static final String PLACEHOLDER_MASK_PREFIX = "__c2db_param_";
+
     @Override
     public String format(DbSqlFormatRequest sqlFormatRequest) {
-        String sql = sqlFormatRequest.getSql();
+        String originalSql = sqlFormatRequest.getSql();
         String dbType = StringUtils.defaultString(sqlFormatRequest.getDbType()).toLowerCase();
+        // The formatter splits named placeholders (`id=:id` becomes `id =: id`), so they are
+        // swapped for plain identifiers while formatting and restored afterwards.
+        List<String> namedPlaceholders = new ArrayList<>();
+        String sql = maskNamedPlaceholders(originalSql, sqlFormatRequest.getDbType(), namedPlaceholders);
         try {
             switch (dbType) {
                 case "mysql":
@@ -66,8 +75,43 @@ public class DbSqlServiceImpl implements IDbSqlService {
             }
         } catch (Exception e) { // impl-contract: fallback - SQL formatter failure returns the original SQL.
             log.debug("sql format failed", e);
+            return originalSql;
         }
-        return sql;
+        return unmaskNamedPlaceholders(sql, namedPlaceholders, originalSql);
+    }
+
+    private static String maskNamedPlaceholders(String sql, String dbType, List<String> namedPlaceholders) {
+        SqlParameterSyntax syntax = SqlParameterSyntax.forDatabaseType(dbType);
+        if (syntax == null || StringUtils.isEmpty(sql) || sql.contains(PLACEHOLDER_MASK_PREFIX)) {
+            return sql;
+        }
+        StringBuilder masked = new StringBuilder(sql.length());
+        int copiedUntil = 0;
+        for (SqlParameterParser.Placeholder placeholder : SqlParameterParser.findPlaceholders(sql, syntax)) {
+            if (placeholder.style() != SqlParameterParser.Style.NAMED) {
+                continue;
+            }
+            masked.append(sql, copiedUntil, placeholder.start()).append(maskFor(namedPlaceholders.size()));
+            namedPlaceholders.add(sql.substring(placeholder.start(), placeholder.end()));
+            copiedUntil = placeholder.end();
+        }
+        return masked.append(sql, copiedUntil, sql.length()).toString();
+    }
+
+    private static String unmaskNamedPlaceholders(String formatted, List<String> namedPlaceholders, String originalSql) {
+        for (int index = 0; index < namedPlaceholders.size(); index++) {
+            String mask = maskFor(index);
+            if (!formatted.contains(mask)) {
+                // The formatter rewrote a mask; keep the user's SQL rather than lose a placeholder.
+                return originalSql;
+            }
+            formatted = formatted.replace(mask, namedPlaceholders.get(index));
+        }
+        return formatted;
+    }
+
+    private static String maskFor(int index) {
+        return PLACEHOLDER_MASK_PREFIX + index + "__";
     }
 
     private boolean isPostgreSqlInsertScript(String sql) {
