@@ -25,6 +25,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.Charset;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -40,6 +42,7 @@ public class SQLImporter implements IImportStrategy {
 
     @Override
     public void run(ImportTaskSpec spec, TaskExecutionContext context) {
+        Connection borrowedScriptConnection = null;
         try {
             context.checkCancelled();
             File sourceFile = new File(spec.getSourceFile());
@@ -47,6 +50,10 @@ public class SQLImporter implements IImportStrategy {
                 importConfiguredFile(spec, context, sourceFile);
                 return;
             }
+            Connection connection = Chat2DBContext.getConnection();
+            // Failed task-owned scripts cannot return an open server transaction to the pool.
+            // Caller-owned transactions retain their caller's commit/rollback decision.
+            if (connection.getAutoCommit()) borrowedScriptConnection = connection;
             SqlScriptExecutor sqlExecutor = new SqlScriptExecutor(context);
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             String databaseType = connectInfo.getDbType();
@@ -108,12 +115,34 @@ public class SQLImporter implements IImportStrategy {
                 sqlExecutor.executeBatch(sqls);
                 context.logInfo(TaskEventCode.FILE_READ_COMPLETED.name(), "SQL file parsed");
             }
+            if (borrowedScriptConnection != null && context.taskId() != null) {
+                sqlExecutor.assertScriptCompleted();
+            }
             sqlExecutor.reportSummary();
         } catch (TaskCancelledException | TaskExecutionException e) {
+            if (borrowedScriptConnection != null) discardConnection(borrowedScriptConnection, e);
             throw e;
         } catch (Exception e) {
+            if (borrowedScriptConnection != null) discardConnection(borrowedScriptConnection, e);
             log.error("Could not import SQL file", e);
             throw ImportTaskErrors.from(e, "import.sql.parseFailed");
+        } catch (Error e) {
+            if (borrowedScriptConnection != null) discardConnection(borrowedScriptConnection, e);
+            throw e;
+        }
+    }
+
+    private void discardConnection(Connection fallback, Throwable failure) {
+        ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
+        Connection connection = connectInfo == null || connectInfo.getConnection() == null
+                ? fallback : connectInfo.getConnection();
+        if (connectInfo != null) {
+            connectInfo.setConnection(null);
+        }
+        try {
+            connection.close();
+        } catch (SQLException | RuntimeException closeFailure) {
+            failure.addSuppressed(closeFailure);
         }
     }
 

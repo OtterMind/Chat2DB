@@ -342,13 +342,16 @@ public final class ImportRowBatcher implements AutoCloseable {
         long started = System.nanoTime();
         int rows = batch.parameterRows().size();
         try {
-            long stored = ImportBatchTransactions.executeParameterizedBatch(retriesRejectedRows(),
-                    Chat2DBContext.getConnection(), batch.sqlTemplate(), batch.parameterRows(), context,
-                    this::checkActive);
+            long stored = workerPool == null && !retriesRejectedRows()
+                    ? ImportBatchTransactions.executeSequentialParameterizedBatch(Chat2DBContext.getConnection(),
+                            batch.sqlTemplate(), batch.parameterRows(), context, this::checkActive)
+                    : ImportBatchTransactions.executeParameterizedBatch(retriesRejectedRows(),
+                            Chat2DBContext.getConnection(), batch.sqlTemplate(), batch.parameterRows(), context,
+                            this::checkActive);
             recordTuning(rows, System.nanoTime() - started);
             reportBatchSuccess(batch, stored);
         } catch (RuntimeException | Error batchFailure) {
-            if (retriesRejectedRows() && !(batchFailure instanceof TaskCancelledException)) {
+            if (retriesRejectedRows() && ImportBatchTransactions.canRetry(batchFailure)) {
                 // The rejected batch was rolled back as a whole, so retrying its rows one by one
                 // stores every storable row exactly once and records only the rows that really fail.
                 int stored = retryRejectedRows(batch, batchFailure);
@@ -389,12 +392,13 @@ public final class ImportRowBatcher implements AutoCloseable {
             checkActive();
             List<Object> row = batch.parameterRows().get(index);
             try {
-                stored += (int) ImportBatchTransactions.executeParameterizedBatch(false,
+                stored += (int) ImportBatchTransactions.executeParameterizedBatch(true,
                         Chat2DBContext.getConnection(), batch.sqlTemplate(), List.of(row), context,
                         this::checkActive);
             } catch (TaskCancelledException e) {
                 throw e;
             } catch (RuntimeException | Error rowFailure) {
+                if (!ImportBatchTransactions.canRetry(rowFailure)) throw rowFailure;
                 Long rowNumber = index < batch.rowNumbers().size() ? batch.rowNumbers().get(index) : null;
                 errors.recordRejectedRow(rowNumber == null ? -1L : rowNumber, row, reason(rowFailure));
             }

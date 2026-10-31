@@ -85,6 +85,27 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.5.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-sqlserver</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ai.chat2db</groupId>
+            <artifactId>chat2db-community-oracle</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Test-scope only: the P0 import/export baseline (ImportExportBenchmarkTest) drives the
              real MySQL executor paths against C2DB_BENCH_JDBC_URL. Version is managed by the
              Spring Boot BOM imported in chat2db-community-bom. -->

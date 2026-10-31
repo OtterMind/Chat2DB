@@ -90,6 +90,10 @@ public class TaskServiceImpl implements TaskService {
         if (!isOwnedBy(source, currentOwner())) {
             throw new DataNotFoundException();
         }
+        if (ai.chat2db.community.domain.core.impl.task.imports.ImportBatchTransactions.UNSAFE_REPLAY_CODE
+                .equals(source.getErrorCode())) {
+            throw new BusinessException("task.resume.invalidCheckpoint");
+        }
         ImportTaskSpec spec = resumedSpec(source.getSpecJson(), source.getCheckpointJson());
         spec.setResumeRootTaskId(spec.getResumeRootTaskId() == null ? source.getId() : spec.getResumeRootTaskId());
         spec.setResumeParentTaskId(source.getId());

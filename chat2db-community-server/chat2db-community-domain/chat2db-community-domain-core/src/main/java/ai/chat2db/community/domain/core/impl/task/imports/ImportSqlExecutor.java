@@ -121,8 +121,11 @@ public final class ImportSqlExecutor {
         boolean retryRows = retriesRejectedRows();
         try {
             context.checkCancelled();
-            long stored = ImportBatchTransactions.executeParameterizedBatch(retryRows, Chat2DBContext.getConnection(),
-                    sqlTemplate, parameterRows, context, context::checkCancelled);
+            long stored = retryRows
+                    ? ImportBatchTransactions.executeParameterizedBatch(true, Chat2DBContext.getConnection(),
+                            sqlTemplate, parameterRows, context, context::checkCancelled)
+                    : ImportBatchTransactions.executeSequentialParameterizedBatch(Chat2DBContext.getConnection(),
+                            sqlTemplate, parameterRows, context, context::checkCancelled);
             importedCount.add(stored);
             // The commit position counts consumed source rows, including rows INSERT IGNORE skipped.
             commit(onCommitted, statementCount);
@@ -131,12 +134,14 @@ public final class ImportSqlExecutor {
         } catch (TaskCancelledException e) {
             throw e;
         } catch (TaskExecutionException e) {
+            if (!ImportBatchTransactions.canRetry(e)) throw e;
             if (!retryRows) {
                 recordRejectedBatch(rowNumbers, parameterRows, e);
                 throw e;
             }
             return commitRetriedRows(batch, sqlTemplate, rowNumbers, parameterRows, e, onCommitted);
         } catch (Exception e) {
+            if (!ImportBatchTransactions.canRetry(e)) throw importFailure(e);
             TaskExecutionException failure = importFailure(e);
             if (!retryRows) {
                 recordRejectedBatch(rowNumbers, parameterRows, failure);
@@ -188,12 +193,12 @@ public final class ImportSqlExecutor {
             context.checkCancelled();
             List<Object> row = parameterRows.get(index);
             try {
-                ImportBatchTransactions.executeParameterizedBatch(false, Chat2DBContext.getConnection(),
+                stored += (int) ImportBatchTransactions.executeParameterizedBatch(true, Chat2DBContext.getConnection(),
                         sqlTemplate, List.of(row), context, context::checkCancelled);
-                stored++;
             } catch (TaskCancelledException e) {
                 throw e;
             } catch (Exception rowFailure) {
+                if (!ImportBatchTransactions.canRetry(rowFailure)) throw importFailure(rowFailure);
                 errorRecorder.recordRejectedRow(rowNumber(rowNumbers, index), row, reason(rowFailure));
             }
         }

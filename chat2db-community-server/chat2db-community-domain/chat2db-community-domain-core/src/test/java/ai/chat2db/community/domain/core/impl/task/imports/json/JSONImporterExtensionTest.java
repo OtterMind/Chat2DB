@@ -94,6 +94,23 @@ class JSONImporterExtensionTest {
     }
 
     @Test
+    void failingJsonRowPreservesThePreviouslyExecutedPrefix(@TempDir Path directory) throws Exception {
+        Path input = directory.resolve("duplicate.json");
+        Files.writeString(input, "[{\"id\":1},{\"id\":1},{\"id\":2}]");
+        ImportTaskSpec spec = ImportTaskSpec.builder().sourceFile(input.toString())
+                .target(TaskTargetSnapshot.builder().tableName("orders").build()).build();
+        TableColumn id = TableColumn.builder().name("id").columnType("INTEGER").build();
+        assertThrows(ai.chat2db.community.domain.api.model.task.TaskExecutionException.class,
+                () -> new JSONImporter().doImportData(spec, new NoOpTaskExecutionContext(), List.of(id)));
+        try (Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery("SELECT id FROM shop.orders ORDER BY id")) {
+            java.util.ArrayList<Integer> ids = new java.util.ArrayList<>();
+            while (rows.next()) ids.add(rows.getInt(1));
+            assertEquals(List.of(1), ids);
+        }
+    }
+
+    @Test
     void explicitJsonNullIsImportedAsSqlNull(@TempDir Path directory) throws Exception {
         Path input = directory.resolve("orders.json");
         Files.writeString(input, "[{\"id\":1,\"note\":null}]");

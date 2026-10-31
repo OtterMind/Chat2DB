@@ -29,12 +29,21 @@ import ai.chat2db.spi.model.response.TablesPageResponse;
 import jakarta.validation.constraints.NotEmpty;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Provides dialect-specific database metadata and helper components.
  */
 public interface IDbMetaData {
+
+    /** Authoritative server transaction state when available; empty keeps the generic script guard.
+     * Implementations must not commit or change connection modes, and must expose any probe statement. */
+    default Optional<Boolean> hasOpenTransaction(Connection connection,
+            ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener listener) throws SQLException {
+        return Optional.empty();
+    }
 
     default IKeyOperations keyOperations() {
         return UnsupportedKeyOperationsEnum.INSTANCE;

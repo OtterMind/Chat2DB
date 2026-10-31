@@ -3,9 +3,12 @@ package ai.chat2db.community.domain.core.impl.task.imports;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.service.task.TaskExecutionContext;
+import ai.chat2db.community.tools.util.I18nUtils;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.sql.Chat2DBContext;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,6 +19,7 @@ import java.util.Map;
 /** SQL-script reporting is deliberately independent of data-file import event throttling. */
 public final class SqlScriptExecutor implements DefaultSQLExecutor.JdbcBatchObserver {
     private final TaskExecutionContext context;
+    private final SqlTransactionScope transactionScope = new SqlTransactionScope();
     private final long startedAt = System.nanoTime();
     private int batches;
     private long statements;
@@ -24,6 +28,29 @@ public final class SqlScriptExecutor implements DefaultSQLExecutor.JdbcBatchObse
 
     public SqlScriptExecutor(TaskExecutionContext context) {
         this.context = context;
+    }
+
+    boolean managesOwnTransaction() {
+        return !transactionScope.isOpen();
+    }
+
+    void observeExecutedStatement(String sql) {
+        transactionScope.observe(sql);
+    }
+
+    /** A task-owned script cannot hand an unfinished transaction to the next pool borrower. */
+    public void assertScriptCompleted() {
+        context.checkCancelled();
+        try {
+            Connection connection = Chat2DBContext.getConnection();
+            boolean open = !connection.getAutoCommit() || Chat2DBContext.getDbMetaData()
+                    .hasOpenTransaction(connection, context).orElse(transactionScope.isOpen());
+            context.checkCancelled();
+            if (open) throw new TaskExecutionException("IMPORT_SQL_TRANSACTION_OPEN",
+                    I18nUtils.getMessage("import.sql.unfinishedTransaction"));
+        } catch (SQLException failure) {
+            throw ImportSqlExecutor.importFailure(failure);
+        }
     }
 
     public void executeBatch(List<String> sqls) {
@@ -43,8 +70,27 @@ public final class SqlScriptExecutor implements DefaultSQLExecutor.JdbcBatchObse
     private void flush(List<String> inserts) {
         if (inserts.isEmpty()) return;
         try {
-            DefaultSQLExecutor.getInstance().executeJdbcBatchInsertWithReport(Chat2DBContext.getConnection(),
-                    List.copyOf(inserts), context, context::checkCancelled, 500, this);
+            context.checkCancelled();
+            Connection connection = Chat2DBContext.getConnection();
+            boolean ownsTransaction = false;
+            if (connection.getAutoCommit()) {
+                try {
+                    ownsTransaction = !Chat2DBContext.getDbMetaData().hasOpenTransaction(connection, context)
+                            .orElse(transactionScope.isOpen());
+                } catch (SQLException failure) {
+                    context.checkCancelled();
+                    throw failure;
+                }
+                context.checkCancelled();
+            }
+            if (ownsTransaction) {
+                DefaultSQLExecutor.getInstance().executeBatchInsertWithReport(connection,
+                        List.copyOf(inserts), context, context::checkCancelled, this);
+            } else {
+                DefaultSQLExecutor.getInstance().executeJdbcBatchInsertWithReport(connection,
+                        List.copyOf(inserts), context, context::checkCancelled,
+                        DefaultSQLExecutor.BATCH_INSERT_CHUNK_SIZE, this);
+            }
             inserts.clear();
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
@@ -75,6 +121,7 @@ public final class SqlScriptExecutor implements DefaultSQLExecutor.JdbcBatchObse
         completed(batch, new int[]{count == null ? Statement.SUCCESS_NO_INFO : Math.max(-2, count)},
                 true, (System.nanoTime() - started) / 1_000_000);
         context.checkCancelled();
+        observeExecutedStatement(sql);
     }
 
     @Override
