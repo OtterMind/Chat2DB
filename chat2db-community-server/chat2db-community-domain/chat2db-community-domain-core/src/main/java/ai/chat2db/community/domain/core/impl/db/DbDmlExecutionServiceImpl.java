@@ -16,12 +16,14 @@ import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.model.LoginUser;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.community.tools.exception.BusinessException;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j
 @Service
 public class DbDmlExecutionServiceImpl implements IDbDmlExecutionService {
 
@@ -137,17 +139,29 @@ public class DbDmlExecutionServiceImpl implements IDbDmlExecutionService {
         for (ExecuteResponse executeResult : results) {
             DbLargeValueTokensAttachRequest attachRequest = largeValueTokensAttachRequest(executeRequest,
                     executeResult);
-            // Capture the complete values into a snapshot so later reads never touch the database again. A snapshot is
-            // only registered when the result really carries a large value, so a plain page costs nothing.
+            // Register the complete values so later reads never touch the database again. Registering only takes a
+            // reference to the value the driver already produced: nothing is encoded or written here, so the response
+            // is not held up by the size of the result. A snapshot is only created when the result really carries a
+            // large value, so a plain page costs nothing.
             if (containsLargeValue(executeResult.getDataList())) {
-                String snapshotId = resultSnapshotStore.register()
-                        .getSnapshotId();
-                attachRequest.setSnapshotId(snapshotId);
-                largeValueTokenService.attachTokens(attachRequest);
-                // The result is about to leave this method, so move the captured content to disk and release the
-                // heap it held while keeping it readable for the lifetime of the read tokens.
-                resultSnapshotStore.flushToDisk(snapshotId);
-                continue;
+                String snapshotId = null;
+                try {
+                    snapshotId = resultSnapshotStore.register()
+                            .getSnapshotId();
+                    attachRequest.setSnapshotId(snapshotId);
+                    largeValueTokenService.attachTokens(attachRequest);
+                    continue;
+                } catch (RuntimeException e) {
+                    // A snapshot that cannot be registered must not fail the statement: the large values stay
+                    // unreadable instead. attachTokens below then marks every one of them as unsupported, so one line
+                    // with the cause is enough here.
+                    log.error("Failed to register a result snapshot, every large value of this result set stays "
+                            + "unreadable: reason=largeCellValue.unsupportedNoSnapshot", e);
+                    attachRequest.setSnapshotId(null);
+                    if (snapshotId != null) {
+                        resultSnapshotStore.release(snapshotId);
+                    }
+                }
             }
             largeValueTokenService.attachTokens(attachRequest);
         }

@@ -35,7 +35,7 @@ class BaseExporterTest {
 
             @Override
             protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
-                    File file) throws Exception {
+                    File file, ExportProgressReporter progressReporter) throws Exception {
                 Files.write(file.toPath(), new byte[32 * 1024]);
             }
 

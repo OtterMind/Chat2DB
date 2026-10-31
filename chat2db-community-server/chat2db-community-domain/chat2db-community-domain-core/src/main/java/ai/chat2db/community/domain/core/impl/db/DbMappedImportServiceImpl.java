@@ -4,6 +4,8 @@ import ai.chat2db.community.domain.api.model.db.ImportPreview;
 import ai.chat2db.community.domain.api.model.db.ImportTargetColumn;
 import ai.chat2db.community.domain.api.model.db.MappedImportExecution;
 import ai.chat2db.community.domain.api.model.task.ImportColumnMapping;
+import ai.chat2db.community.domain.api.model.task.ImportDuplicatePolicy;
+import ai.chat2db.community.domain.api.model.task.ImportFailurePolicy;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
 import ai.chat2db.community.domain.api.model.task.TaskType;
@@ -75,6 +77,8 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
                 .columnMappings(mappings)
                 .unmappedTarget(strategy)
                 .mode(execution.getMode())
+                .duplicatePolicy(duplicatePolicy(execution.getDuplicatePolicy()))
+                .failurePolicy(failurePolicy(execution.getFailurePolicy()))
                 .build();
         return importTaskSubmissionService.submit(spec, execution.getFileId());
     }
@@ -126,6 +130,24 @@ public class DbMappedImportServiceImpl implements IDbMappedImportService {
             throw new BusinessException("import.preview.invalidMapping");
         }
         return columnName.toUpperCase(Locale.ROOT);
+    }
+
+    /** Resolves the duplicate policy; an unknown value is rejected instead of silently defaulting. */
+    private static String duplicatePolicy(String requested) {
+        try {
+            return ImportDuplicatePolicy.from(requested).name();
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("task.import.duplicatePolicy.invalid", null, e);
+        }
+    }
+
+    /** Resolves the failure policy with the same rules as the duplicate policy. */
+    private static String failurePolicy(String requested) {
+        try {
+            return ImportFailurePolicy.from(requested).name();
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("task.import.failurePolicy.invalid", null, e);
+        }
     }
 
     private static String extension(String fileName) {

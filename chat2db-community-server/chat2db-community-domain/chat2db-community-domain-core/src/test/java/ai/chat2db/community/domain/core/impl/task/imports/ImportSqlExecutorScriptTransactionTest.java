@@ -83,7 +83,7 @@ class ImportSqlExecutorScriptTransactionTest {
     @Test
     void aScriptTransactionStopsTheExecutorFromCommittingItsInsertBatch() throws Exception {
         assertAutoCommitBeforeBatch();
-        new ImportSqlExecutor(new StubContext()).executeBatch(List.of(
+        new SqlScriptExecutor(new StubContext()).executeBatch(List.of(
                 "BEGIN",
                 "INSERT INTO TARGET_ROWS (ID) VALUES (1)",
                 "INSERT INTO TARGET_ROWS (ID) VALUES (2)",
@@ -98,7 +98,7 @@ class ImportSqlExecutorScriptTransactionTest {
     @Test
     void aScriptCommitAlsoLeavesCommittingToTheScript() throws Exception {
         assertAutoCommitBeforeBatch();
-        new ImportSqlExecutor(new StubContext()).executeBatch(List.of(
+        new SqlScriptExecutor(new StubContext()).executeBatch(List.of(
                 "BEGIN",
                 "INSERT INTO TARGET_ROWS (ID) VALUES (7)",
                 "COMMIT"));
@@ -110,7 +110,7 @@ class ImportSqlExecutorScriptTransactionTest {
     @Test
     void aBatchWithoutAScriptTransactionStillCommitsOnItsOwn() throws Exception {
         assertAutoCommitBeforeBatch();
-        new ImportSqlExecutor(new StubContext()).executeBatch(List.of(
+        new SqlScriptExecutor(new StubContext()).executeBatch(List.of(
                 "INSERT INTO TARGET_ROWS (ID) VALUES (3)"));
 
         assertTrue(recording.calls().contains("commit"),

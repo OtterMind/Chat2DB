@@ -172,6 +172,7 @@ public class JdbcUtils {
                 session = SSHManager.getSSHSession(ssh);
                 url = replaceUrlHostAndPortForSsh(url, host, port, ssh.getLocalPort());
             }
+            url = JdbcUrlRewriter.withBatchRewrite(url);
             connection = JdbcDriverManager.getConnection(url, userName, password,
                     driverConfig, properties);
 

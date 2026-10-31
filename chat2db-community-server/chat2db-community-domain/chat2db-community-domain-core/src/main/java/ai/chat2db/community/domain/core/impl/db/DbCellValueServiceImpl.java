@@ -51,7 +51,7 @@ public class DbCellValueServiceImpl implements IDbCellValueService {
     }
 
     private static final int DEFAULT_CHUNK_SIZE = 64 * 1024;
-    private static final int MAX_CHUNK_SIZE = 256 * 1024;
+    private static final int MAX_CHUNK_SIZE = 1024 * 1024;
     private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     private static final int BASE64_BYTE_GROUP = 3;
     private static final int BINARY_TYPE_SAMPLE_SIZE = 64 * 1024;

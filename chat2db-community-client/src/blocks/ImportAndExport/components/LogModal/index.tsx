@@ -6,15 +6,13 @@ import { Button } from 'antd';
 import { ImportExportTaskDetails } from '@/typings/importExport';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
-import jcefApi from '@/jcef';
-import { isDesktop } from '@/utils/env';
-import { ImportExportTaskStatus } from '@/constants/importExport';
-import { Download, FolderOpen } from 'lucide-react';
+import TaskLogActions from '@/blocks/ImportAndExport/components/TaskLogActions';
 
 interface IProps {
   className?: string;
 }
 
+/** Log dialog of the task center: the same events and actions the progress dialog of a task shows. */
 const LogModal = (_props: IProps) => {
   const [taskDetails, setTaskDetails] = useState<ImportExportTaskDetails>();
   const { logModalTaskId, openLogModal } = useImportExportStore((state) => {
@@ -28,15 +26,6 @@ const LogModal = (_props: IProps) => {
     setTaskDetails(undefined);
   }, [logModalTaskId]);
 
-  const handleOpenFile = () => {
-    if (!taskDetails) return;
-    if (isDesktop && taskDetails.artifactId) {
-      jcefApi?.revealInExplorer(taskDetails.artifactId);
-      return;
-    }
-    window.open(`/api/tasks/artifact?taskId=${taskDetails.id}`, '_blank');
-  };
-
   const renderFooter = (
     <ModalFooterButton
       footerRight={
@@ -48,23 +37,11 @@ const LogModal = (_props: IProps) => {
           >
             {i18n('common.button.close')}
           </Button>
-          {taskDetails?.status === ImportExportTaskStatus.SUCCESS && taskDetails.artifactId && (
-            <Button
-              type="primary"
-              icon={isDesktop ? <FolderOpen aria-hidden size={15} /> : <Download aria-hidden size={15} />}
-              onClick={handleOpenFile}
-            >
-              {i18n('workspace.text.openFile')}
-            </Button>
-          )}
+          <TaskLogActions taskDetails={taskDetails} />
         </>
       }
     />
   );
-
-  const handleTaskChange = (details: ImportExportTaskDetails) => {
-    setTaskDetails(details);
-  };
 
   return (
     <Modal
@@ -84,7 +61,7 @@ const LogModal = (_props: IProps) => {
         openLogModal(null);
       }}
     >
-      {logModalTaskId && <Log taskId={logModalTaskId} onTaskChange={handleTaskChange} />}
+      {logModalTaskId && <Log taskId={logModalTaskId} onTaskChange={setTaskDetails} />}
     </Modal>
   );
 };

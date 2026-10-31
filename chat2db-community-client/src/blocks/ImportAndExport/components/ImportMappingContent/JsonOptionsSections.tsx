@@ -10,20 +10,12 @@ import { useStyles } from './style';
 interface Props {
   value: IJsonOptions;
   disabled: boolean;
-  activeKeys: string[];
-  onActiveKeysChange: (keys: string[]) => void;
+  fillHeight?: boolean;
   dataItems: CollapseProps['items'];
   onChange: (value: IJsonOptions) => void;
 }
 
-export default function JsonOptionsSections({
-  value,
-  disabled,
-  activeKeys,
-  onActiveKeysChange,
-  dataItems,
-  onChange,
-}: Props) {
+export default function JsonOptionsSections({ value, disabled, fillHeight, dataItems, onChange }: Props) {
   const { styles } = useStyles();
   const update = (patch: Partial<IJsonOptions>) => onChange({ ...value, ...patch });
   const [dataPath, setDataPath] = useState(value.dataPath);
@@ -41,8 +33,7 @@ export default function JsonOptionsSections({
   };
   return (
     <OptionsSections
-      activeKeys={activeKeys}
-      onActiveKeysChange={onActiveKeysChange}
+      fillHeight={fillHeight}
       items={[
         {
           key: 'jsonFormat',

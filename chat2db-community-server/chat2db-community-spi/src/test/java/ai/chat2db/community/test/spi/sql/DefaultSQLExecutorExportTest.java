@@ -2,7 +2,10 @@ package ai.chat2db.community.test.spi.sql;
 
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.model.result.Header;
+import ai.chat2db.community.tools.constant.IEasyToolsConstant;
+import ai.chat2db.spi.DefaultDBManager;
 import ai.chat2db.spi.DefaultSQLExecutor;
+import ai.chat2db.spi.IDbManager;
 import ai.chat2db.spi.IPlugin;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.value.JDBCDataValue;
@@ -70,6 +73,64 @@ class DefaultSQLExecutorExportTest {
 
         assertEquals(List.of(List.of("id", "name")), headers);
         assertEquals(List.of(List.of("1", "alpha"), List.of("2", "beta")), rows);
+    }
+
+    @Test
+    void exportStreamsWithForwardOnlyReadOnlyStatementAndBoundedFetchSize() {
+        List<List<String>> rows = new ArrayList<>();
+        StatementHandler statementHandler = new StatementHandler(List.of(
+                JdbcResult.resultSet(columns("name"), row("alpha"))));
+        int[] statementType = new int[2];
+        Connection connection = proxy(Connection.class, (target, method, args) -> {
+            if ("prepareStatement".equals(method.getName())) {
+                if (args.length == 3) {
+                    statementType[0] = (Integer) args[1];
+                    statementType[1] = (Integer) args[2];
+                }
+                return proxy(PreparedStatement.class, statementHandler);
+            }
+            return defaultValue(method.getReturnType());
+        });
+
+        new DefaultSQLExecutor().execute(connection, "select name from test", ignored -> {
+        }, row -> rows.add(new ArrayList<>(row)), JDBCDataValue::getString, false);
+
+        assertEquals(ResultSet.TYPE_FORWARD_ONLY, statementType[0]);
+        assertEquals(ResultSet.CONCUR_READ_ONLY, statementType[1]);
+        assertEquals(IEasyToolsConstant.DEFAULT_PAGE_SIZE, statementHandler.fetchSize);
+        assertEquals(List.of(List.of("alpha")), rows);
+    }
+
+    @Test
+    void exportUsesTheDialectStreamingFetchSize() {
+        List<List<String>> rows = new ArrayList<>();
+        StatementHandler statementHandler = new StatementHandler(List.of(
+                JdbcResult.resultSet(columns("name"), row("alpha"))));
+        Chat2DBContext.PLUGIN_MAP.put(TEST_DB_TYPE, new IPlugin() {
+            @Override
+            public DBConfig getDBConfig() {
+                DBConfig config = new DBConfig();
+                config.setDbType(TEST_DB_TYPE);
+                return config;
+            }
+
+            @Override
+            public IDbManager getDbManager() {
+                return new DefaultDBManager() {
+                    @Override
+                    public int streamingFetchSize() {
+                        return Integer.MIN_VALUE;
+                    }
+                };
+            }
+        });
+        Connection connection = connection(proxy(PreparedStatement.class, statementHandler));
+
+        new DefaultSQLExecutor().execute(connection, "select name from test", ignored -> {
+        }, row -> rows.add(new ArrayList<>(row)), JDBCDataValue::getString, false);
+
+        assertEquals(Integer.MIN_VALUE, statementHandler.fetchSize);
+        assertEquals(List.of(List.of("alpha")), rows);
     }
 
     @Test
@@ -296,6 +357,7 @@ class DefaultSQLExecutorExportTest {
         private final List<JdbcResult> results;
         private int index = -1;
         private int maxRows;
+        private int fetchSize;
 
         private StatementHandler(List<JdbcResult> results) {
             this.results = results;
@@ -306,6 +368,10 @@ class DefaultSQLExecutorExportTest {
             return switch (method.getName()) {
                 case "setMaxRows" -> {
                     maxRows = (Integer) args[0];
+                    yield null;
+                }
+                case "setFetchSize" -> {
+                    fetchSize = (Integer) args[0];
                     yield null;
                 }
                 case "execute" -> {

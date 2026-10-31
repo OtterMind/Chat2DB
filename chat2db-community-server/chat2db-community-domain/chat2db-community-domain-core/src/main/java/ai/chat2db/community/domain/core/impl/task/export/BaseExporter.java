@@ -65,11 +65,14 @@ public abstract class BaseExporter implements IExportStrategy {
             throw new IllegalArgumentException("tableNames should not be null or empty");
         }
         try {
+            // The executor already moved the task to 10; the reporter carries that value until the
+            // first stage boundary so counter-only updates never regress the task.
+            ExportProgressReporter progressReporter = new ExportProgressReporter(context, 10);
             if (tableNames.size() == 1) {
-                context.reportProgress(20, TaskStage.EXPORTING.name(), "Exporting table data");
-                single(spec, context, outputFile, 0, 1);
+                progressReporter.stage(20, TaskStage.EXPORTING.name(), "Exporting table data");
+                single(spec, context, outputFile, 0, 1, progressReporter);
             } else {
-                multi(spec, context, outputFile);
+                multi(spec, context, outputFile, progressReporter);
             }
         } catch (TaskCancelledException | TaskExecutionException e) {
             throw e;
@@ -80,18 +83,19 @@ public abstract class BaseExporter implements IExportStrategy {
     }
 
     private void single(ExportTaskSpec spec, TaskExecutionContext context, File outputFile, int tableIndex,
-            int totalTables) throws Exception {
+            int totalTables, ExportProgressReporter progressReporter) throws Exception {
         String tableName = spec.getTableNames().get(0);
         logTableEvent(context, TaskEventCode.TABLE_EXPORT_STARTED.name(),
                 tableProgressMessage("Exporting table", tableName, tableIndex, totalTables), tableName,
                 tableIndex, totalTables);
-        singleExport(spec, context, tableName, outputFile);
+        singleExport(spec, context, tableName, outputFile, progressReporter);
         logTableEvent(context, TaskEventCode.TABLE_EXPORT_COMPLETED.name(),
                 tableProgressMessage("Table export completed", tableName, tableIndex, totalTables), tableName,
                 tableIndex, totalTables);
     }
 
-    private void multi(ExportTaskSpec spec, TaskExecutionContext context, File outputFile) throws Exception {
+    private void multi(ExportTaskSpec spec, TaskExecutionContext context, File outputFile,
+            ExportProgressReporter progressReporter) throws Exception {
         File parent = outputFile.getAbsoluteFile().getParentFile();
         FileUtil.mkdir(parent);
         File temporaryDirectory = Files.createTempDirectory(parent.toPath(), ".task-export-").toFile();
@@ -109,14 +113,14 @@ public abstract class BaseExporter implements IExportStrategy {
                 intermediateFiles.add(file);
                 logTableEvent(context, TaskEventCode.TABLE_EXPORT_STARTED.name(),
                         tableProgressMessage("Exporting table", tableName, i, n), tableName, i, n);
-                singleExport(spec, context, tableName, file);
+                singleExport(spec, context, tableName, file, progressReporter);
                 logTableEvent(context, TaskEventCode.TABLE_EXPORT_COMPLETED.name(),
                         tableProgressMessage("Table export completed", tableName, i, n), tableName, i, n);
-                context.reportProgress(Math.min(90, 10 + ((i + 1) * 80 / n)), TaskStage.EXPORTING.name(),
+                progressReporter.stage(Math.min(90, 10 + ((i + 1) * 80 / n)), TaskStage.EXPORTING.name(),
                         "Exported " + (i + 1) + " of " + n + " tables");
             }
             context.checkCancelled();
-            context.reportProgress(92, TaskStage.FINALIZING.name(), "Finalizing ZIP export archive");
+            progressReporter.stage(92, TaskStage.FINALIZING.name(), "Finalizing ZIP export archive");
             context.logInfo(TaskEventCode.FILE_FINALIZING.name(), "Finalizing ZIP export archive",
                     Map.of(TaskConstants.FILE_FORMAT_DETAIL_KEY, "ZIP",
                             TaskConstants.TOTAL_TABLES_DETAIL_KEY, n));
@@ -252,6 +256,6 @@ public abstract class BaseExporter implements IExportStrategy {
     }
 
     protected abstract void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName,
-            File file) throws Exception;
+            File file, ExportProgressReporter progressReporter) throws Exception;
 
 }

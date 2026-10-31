@@ -16,10 +16,17 @@ public class DdlCountRequest extends DataSourceBaseRequest implements IDataSourc
     private String sql;
 
 
-    @NotNull
+    /**
+     * Optional: table-data pages opened from the tree have no SQL console.
+     * The count implementation resolves its execution context from
+     * {@code dataSourceId}/{@code databaseName} and does not read this field.
+     */
     private Long consoleId;
 
 
-    @NotNull
+    /**
+     * Optional: console results carry only {@code sql}. Only the MongoDB
+     * branch of the count implementation needs the collection name.
+     */
     private String tableName;
 }

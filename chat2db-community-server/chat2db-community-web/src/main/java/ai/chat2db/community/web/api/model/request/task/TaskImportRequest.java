@@ -37,4 +37,10 @@ public class TaskImportRequest extends DataSourceBaseRequest {
     /** Execution mode: FAST or STANDARD (default when absent). */
     private String mode;
 
+    /** Duplicate handling: INSERT (default when absent) or IGNORE. */
+    private String duplicatePolicy;
+
+    /** Rejected-batch handling: ABORT (default when absent) or SKIP_ERROR_ROWS. */
+    private String failurePolicy;
+
 }

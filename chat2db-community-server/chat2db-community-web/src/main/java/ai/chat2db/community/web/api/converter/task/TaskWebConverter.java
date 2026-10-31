@@ -3,7 +3,10 @@ package ai.chat2db.community.web.api.converter.task;
 import ai.chat2db.community.domain.api.enums.ExportSizeEnum;
 import ai.chat2db.community.domain.api.enums.ExportScopeTypeEnum;
 import ai.chat2db.community.domain.api.model.task.CsvOptions;
+import ai.chat2db.community.domain.api.model.task.ExportCsvOptions;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
+import ai.chat2db.community.domain.api.model.task.ImportDuplicatePolicy;
+import ai.chat2db.community.domain.api.model.task.ImportFailurePolicy;
 import ai.chat2db.community.domain.api.model.task.ImportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.TaskFileFormat;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -29,6 +32,10 @@ public class TaskWebConverter {
         if (TaskType.SQL_EXPORT.name().equals(taskType)) {
             format = TaskFileFormat.SQL.name();
         }
+        // CSV output options only exist for a CSV export; other formats keep them null so their spec
+        // cannot claim a character set the writer never uses.
+        ExportCsvOptions csvOptions = TaskFileFormat.CSV.name().equals(format)
+                ? ExportCsvOptions.of(request.getEncoding(), request.getDelimiter()) : null;
         return ExportTaskSpec.builder()
                 .taskType(taskType)
                 .taskName(StringUtils.defaultIfBlank(request.getTaskName(),
@@ -44,6 +51,8 @@ public class TaskWebConverter {
                 .scope(normalize(request.getScope()))
                 .containData(request.getContainData())
                 .containsHeader(request.getContainsHeader())
+                .encoding(csvOptions == null ? null : csvOptions.getEncoding())
+                .delimiter(csvOptions == null ? null : csvOptions.getDelimiter())
                 .exportPath(request.getExportPath())
                 .suggestedFileName(request.getSuggestedFileName())
                 .build();
@@ -72,7 +81,30 @@ public class TaskWebConverter {
                 .sqlImportOptions("SQL".equals(format) && request.getSqlImportOptions() != null
                         ? request.getSqlImportOptions().validate() : null)
                 .mode(request.getMode())
+                .duplicatePolicy(duplicatePolicy(request.getDuplicatePolicy()))
+                .failurePolicy(failurePolicy(request.getFailurePolicy()))
                 .build();
+    }
+
+    /**
+     * Resolves the duplicate policy of a request; an absent value keeps the documented default and
+     * an unknown value is rejected instead of silently falling back to it.
+     */
+    private String duplicatePolicy(String requested) {
+        try {
+            return ImportDuplicatePolicy.from(requested).name();
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("task.import.duplicatePolicy.invalid", null, e);
+        }
+    }
+
+    /** Resolves the failure policy of a request with the same rules as the duplicate policy. */
+    private String failurePolicy(String requested) {
+        try {
+            return ImportFailurePolicy.from(requested).name();
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("task.import.failurePolicy.invalid", null, e);
+        }
     }
 
     private CsvOptions csvOptions(String format, CsvOptions csvOptions) {

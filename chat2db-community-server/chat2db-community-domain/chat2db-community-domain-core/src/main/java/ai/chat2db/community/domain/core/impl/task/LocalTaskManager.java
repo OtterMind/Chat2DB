@@ -134,6 +134,58 @@ public class LocalTaskManager {
                 .count();
     }
 
+    /**
+     * Moves an owned task to the CANCELLED terminal status and interrupts its execution: the task's
+     * future is cancelled and every registered resource (running JDBC statements) is cancelled.
+     * Returns false when the task already reached a terminal status or does not exist.
+     */
+    boolean cancelTask(Long taskId) {
+        if (taskId == null) {
+            return false;
+        }
+        RunningTask runningTask = runningTaskRegistry.get(taskId);
+        if (runningTask == null) {
+            Task task = taskStorage.get(taskId).orElse(null);
+            return task != null && cancelPersistedTask(task);
+        }
+        runningTask.completionLock().lock();
+        try {
+            Task task = taskStorage.get(taskId).orElse(null);
+            if (task == null || TaskStatus.isTerminal(task.getStatus())) {
+                return false;
+            }
+            boolean wasRunning = TaskStatus.RUNNING.name().equals(task.getStatus());
+            // Persist the terminal status first: once the task is CANCELLED, the runner can no
+            // longer publish a SUCCESS result for it.
+            if (!cancelPersistedTask(task)) {
+                return false;
+            }
+            runningTask.requestCancellation(wasRunning);
+            if (!wasRunning) {
+                // A queued task never enters TaskRunner.run(), so its runner registration is released
+                // here; a task that does start sees the closed token and finishes without work.
+                runningTask.close();
+                runningTask.markFinished();
+                runningTaskRegistry.remove(taskId, runningTask);
+            }
+            return true;
+        } finally {
+            runningTask.completionLock().unlock();
+        }
+    }
+
+    private boolean cancelPersistedTask(Task task) {
+        Date now = new Date();
+        return taskStorage.compareAndSetStatus(task.getId(), task.getStatus(), TaskStatus.CANCELLED.name(),
+                TaskStatusPatch.builder()
+                        .stage(TaskStage.CANCELLED.name())
+                        .progressMessage("Task cancelled")
+                        .finishedAt(now)
+                        .updatedAt(now)
+                        .build(),
+                event(TaskEventCode.TASK_CANCELLED.name(), TaskEventLevel.INFO.name(), "Task cancelled"));
+    }
+
     void prepareForUserExit(Long userId, Long organizationId) {
         terminateActiveTasks(TaskErrorCode.USER_EXITED.name(), TaskEventCode.USER_EXITED.name(),
                 "The user exited the application while the task was running",

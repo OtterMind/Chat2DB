@@ -6,6 +6,7 @@ import {
   confirmDirtyEditorTabs,
   isEditorCloseConfirmationEnabled,
   prepareEditorsForApplicationExit,
+  waitForPendingEditorTabs,
   type EditorCloseGuardMap,
 } from './editorCloseGuard';
 
@@ -72,6 +73,25 @@ async function run() {
     false,
     'editable tabs without a close guard fail closed',
   );
+  const unloadedFile: IWorkspaceTab = {
+    ...editorTwo,
+    uniqueData: { filePath: '/test/unvisited.sql', fileExtension: 'sql' },
+  };
+  const unexpectedDecision = async () => {
+    throw new Error('An unloaded local file cannot have unsaved editor changes');
+  };
+  assert.equal(await confirmDirtyEditorTabs([unloadedFile], {}, unexpectedDecision), true,
+    'restored files can close before first activation, during loading, or after a read failure');
+  assert.equal(await waitForPendingEditorTabs([unloadedFile], {}), true,
+    'unloaded files do not block batch close or file operations');
+  assert.equal(await prepareEditorsForApplicationExit([unloadedFile], {}, unexpectedDecision, true), true,
+    'unvisited local files do not block application exit');
+  assert.equal(await confirmDirtyEditorTabs([
+    { ...unloadedFile, uniqueData: { ...unloadedFile.uniqueData, ddl: '' } },
+  ], {}, unexpectedDecision), false, 'loaded files still require an editor close guard');
+  assert.equal(await confirmDirtyEditorTabs([unloadedFile], {
+    [unloadedFile.id]: { hasUnsavedChangesBeforeClose: () => true },
+  }, async () => 'cancel'), false, 'a registered editor always retains its dirty-state protection');
   assert.equal(
     await confirmDirtyEditorTabs(
       [{ id: 'preview', type: WorkspaceTabType.LocalSQLFile, title: 'Preview', uniqueData: { filePreviewMimeType: 'image/png' } }],

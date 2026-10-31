@@ -21,6 +21,7 @@ export interface CommonAction {
       previewFile?: boolean;
       charset?: string;
       workspaceTabId?: string | number;
+      activate?: boolean;
     },
   ) => Promise<LocalFileReadResult | undefined>;
 }
@@ -89,8 +90,10 @@ export const createCommonAction: StateCreator<WorkspaceStore, [['zustand/devtool
       context?.workspaceTabId,
     );
     if (refreshedTab) {
-      useGlobalStore.getState().setMainPageActiveTab({ page: 'workspace' });
-      get().setActiveConsoleId(refreshedTab.activeTabId);
+      if (context?.activate !== false) {
+        useGlobalStore.getState().setMainPageActiveTab({ page: 'workspace' });
+        get().setActiveConsoleId(refreshedTab.activeTabId);
+      }
       get().setWorkspaceTabList(refreshedTab.workspaceTabList);
     } else if (context?.workspaceTabId === undefined) {
       useGlobalStore.getState().setMainPageActiveTab({ page: 'workspace' });

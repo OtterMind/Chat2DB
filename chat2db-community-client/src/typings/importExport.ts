@@ -14,6 +14,11 @@ export interface ImportExportTaskDetails {
   progress: number;
   stage?: string;
   progressMessage?: string;
+  /** Structured counters reported by the backend; absent on legacy tasks. */
+  processedRows?: number | null;
+  totalRows?: number | null;
+  rowsPerSecond?: number | null;
+  etaSeconds?: number | null;
   target?: {
     dataSourceId?: number;
     databaseName?: string;
@@ -23,6 +28,12 @@ export interface ImportExportTaskDetails {
   errorCode?: string;
   errorMessage?: string;
   artifactId?: string;
+  /** Rejected-rows file published next to the main artifact; null when the task produced none. */
+  errorArtifactId?: string | null;
+  /** Raw import/export parameter snapshot; absent or null for legacy tasks created without one. */
+  specJson?: string | null;
+  /** Import resume checkpoint (`processedRows`, target table, conflict policy); import tasks only. */
+  checkpointJson?: string | null;
   createdAt: number | string;
   startedAt?: number | string;
   finishedAt?: number | string;
@@ -31,6 +42,12 @@ export interface ImportExportTaskDetails {
 
 /** CSV import execution mode; absent resolves to STANDARD on the backend. */
 export type ImportExecutionMode = 'FAST' | 'STANDARD';
+
+/** Duplicate-key handling of the parameterized insert; absent resolves to INSERT on the backend. */
+export type ImportDuplicatePolicy = 'INSERT' | 'IGNORE';
+
+/** Rejected-batch handling; absent resolves to ABORT on the backend. */
+export type ImportFailurePolicy = 'ABORT' | 'SKIP_ERROR_ROWS';
 
 export interface ImportExportTaskEvent {
   eventId: number;

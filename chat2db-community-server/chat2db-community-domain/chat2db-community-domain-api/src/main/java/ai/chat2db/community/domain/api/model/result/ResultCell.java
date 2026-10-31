@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.beans.Transient;
+import java.sql.Blob;
+import java.sql.Clob;
 
 @Data
 @Builder
@@ -43,6 +45,15 @@ public class ResultCell {
     @Transient
     public Object getRawValue() {
         return rawValue;
+    }
+
+    /**
+     * @return {@code true} when the driver handed the value over as a handle instead of transferring its content, so
+     *         the value is only read when it is asked for and its cursor has to stay open until then
+     */
+    @Transient
+    public boolean carriesHandle() {
+        return rawValue instanceof Clob || rawValue instanceof Blob;
     }
 
     public static ResultCell of(String value) {

@@ -1,3 +1,4 @@
+import type { TreeNodeType } from '@/constants/tree';
 import type { DatabaseTypeCode } from '@/constants';
 import type { IConnectionEnv } from '@/typings';
 
@@ -26,3 +27,8 @@ export function createCachedDataSourceSelection(boundInfo: CachedDataSourceSelec
     databaseType: boundInfo.databaseType,
   };
 }
+
+/** Object-tree utility entries are not executable databases or schemas. */
+export const filterBoundInfoChildren = <T extends { treeNodeType: TreeNodeType }>(
+  nodes: T[], childType: TreeNodeType,
+): T[] => nodes.filter((node) => node.treeNodeType === childType);

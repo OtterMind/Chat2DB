@@ -100,7 +100,8 @@ export default function ValueFormatFields({
       )}
       <div className={styles.dateExamples}>
         <span>{i18n('workspace.importExport.dateTimeExample')}</span>
-        {getCsvDateTimeExamples(value).map((example) => (
+        {getCsvDateTimeExamples(value).slice(0, 1)
+          .map((example) => (
           <code key={example}>{example}</code>
         ))}
       </div>

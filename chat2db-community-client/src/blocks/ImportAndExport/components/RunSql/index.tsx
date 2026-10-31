@@ -2,7 +2,7 @@ import SqlImportOptionsFields from '../SqlImportOptionsFields';
 import { DEFAULT_SQL_IMPORT_OPTIONS } from '../../utils/importOptions';
 import { memo, useState, forwardRef, ForwardedRef, useImperativeHandle, useEffect } from 'react';
 import { useStyles } from './style';
-import UploadLocalFile from '@/components/UploadLocalFile';
+import UploadLocalFile, { type FileUrl } from '@/components/UploadLocalFile';
 import { Form, Input } from 'antd';
 import i18n from '@/i18n';
 import { useImportExportStore } from '@/store/importExport';
@@ -17,6 +17,8 @@ interface IProps {
 
 export interface RunSqlRef {
   getValues: () => ImportTaskParams | null;
+  /** Web picks stay in memory until submit; the desktop bridge only returns a path. */
+  getSelectedFile: () => File | undefined;
 }
 
 // const codeOptions = [
@@ -35,7 +37,7 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
   const { styles } = useStyles();
   const [form] = Form.useForm();
   const [sqlImportOptions, setSqlImportOptions] = useState(DEFAULT_SQL_IMPORT_OPTIONS);
-  const [fileUrlList, setFileUrlList] = useState<string[]>([]);
+  const [fileUrlList, setFileUrlList] = useState<FileUrl[]>([]);
   const [formValues, setFormValues] = useState<any>({});
 
   useEffect(() => {
@@ -73,15 +75,16 @@ const RunSql = forwardRef((props: IProps, ref: ForwardedRef<RunSqlRef>) => {
         databaseName,
         schemaName,
         taskType: ImportExportTaskType.SQL_FILE_IMPORT,
-        sourceFile: fileUrlList[0] || formValues.fileUrl,
+        sourceFile: fileUrlList[0]?.filePath || formValues.fileUrl,
         format: ImportExportFileType.SQL,
         sqlImportOptions,
       };
     },
+    getSelectedFile: () => fileUrlList[0]?.file,
   }));
 
-  const handleFileUrlListChange = (_fileUrlList) => {
-    setFileUrlList(_fileUrlList.map((item) => item.filePath));
+  const handleFileUrlListChange = (nextFileUrlList: FileUrl[]) => {
+    setFileUrlList(nextFileUrlList);
   };
 
   return (

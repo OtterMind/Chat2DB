@@ -1,5 +1,6 @@
 package ai.chat2db.community.domain.api.service.result;
 
+import ai.chat2db.community.domain.api.model.result.snapshot.ResultCursorHold;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshot;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshotCell;
 import ai.chat2db.community.domain.api.model.result.snapshot.SnapshotReadChunk;
@@ -22,6 +23,35 @@ public interface IResultSnapshotStore {
      * large-value read path never has to look at who is asking.
      */
     ResultSnapshot register();
+
+    /**
+     * Registers a new snapshot that owns a live cursor.
+     * <p>
+     * A snapshot that leases values instead of capturing their content only works while that cursor is open, so the
+     * store closes the hold as soon as the snapshot is released or expires.
+     *
+     * @param cursorHold keeps the cursor of the execution that produced the leased values open, or {@code null} when
+     *                   the snapshot holds no cursor backed value
+     */
+    ResultSnapshot register(ResultCursorHold cursorHold);
+
+    /**
+     * Keeps the driver handle of one cell instead of its content.
+     * <p>
+     * The value stays in the database and is read from the live cursor when the client asks for it, so nothing is
+     * transferred while the query runs. Only a snapshot registered with a {@link ResultCursorHold} can lease values.
+     *
+     * @param handle the {@code Clob} or {@code Blob} the driver produced for this cell
+     */
+    ResultSnapshotCell lease(String snapshotId, int rowIndex, int columnIndex, Object handle);
+
+    /**
+     * Adds a cursor this snapshot may lease values from.
+     * <p>
+     * The execution that owns the cursor takes the hold, the store keeps it and closes it with the snapshot, so the
+     * connection is given back as soon as the content is gone.
+     */
+    void addCursorHold(String snapshotId, ResultCursorHold cursorHold);
 
     /**
      * Captures the complete content of one cell.

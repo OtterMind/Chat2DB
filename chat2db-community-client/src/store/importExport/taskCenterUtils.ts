@@ -1,4 +1,4 @@
-import { ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
+import { ACTIVE_TASK_STATUSES, ImportExportTaskStatus, ImportExportTaskType } from '@/constants/importExport';
 import { ErrorCode } from '@/constants/request';
 import { ImportExportTaskDetails, ImportExportTaskEvent } from '@/typings/importExport';
 
@@ -91,6 +91,34 @@ export const listAllTasksByStatus = async (
   }
   return tasks;
 };
+
+/**
+ * A status sweep discovers active tasks that are not on the first page. Once the active tasks are
+ * tracked, the recent page refreshes the ones still on it and the rest are recovered by id, so the
+ * sweep only runs when nothing is tracked yet (first load or an explicit refresh). Steady-state
+ * polling therefore costs a single request per round instead of three.
+ */
+export const shouldScanActiveTasks = (trackedActiveTaskIds: number[]) => trackedActiveTaskIds.length === 0;
+
+/** Only a pending or running task can still be cancelled; the backend answers false for terminal ones. */
+export const canCancelTask = (status: ImportExportTaskStatus) => ACTIVE_TASK_STATUSES.includes(status);
+
+/**
+ * Applies the terminal state the backend already persisted before answering a successful cancel, so
+ * the row leaves the active set immediately instead of waiting for the next scheduled poll. The
+ * client clock is deliberately not stamped onto `updatedAt`: a locally newer timestamp would win
+ * the comparison in `mergeTasks` and hide the authoritative record of the follow-up refresh.
+ */
+export const markTaskCancelled = (
+  taskList: ImportExportTaskDetails[],
+  taskId: number,
+  cancelledAt: number,
+): ImportExportTaskDetails[] =>
+  taskList.map((task) =>
+    task.id === taskId
+      ? { ...task, status: ImportExportTaskStatus.CANCELLED, finishedAt: task.finishedAt ?? cancelledAt }
+      : task,
+  );
 
 export const mergeTasks = (...taskGroups: ImportExportTaskDetails[][]) => {
   const tasksById = new Map<number, ImportExportTaskDetails>();

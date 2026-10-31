@@ -118,6 +118,7 @@ const createConsole = createRequest<ICreateConsole, number>('/api/operation/save
 
 const getSavedConsole = createRequest<{ id: number }, IConsole | null>('/api/operation/saved', {
   method: 'get',
+  errorLevel: false,
 });
 
 const updateSavedConsole = createRequest<Partial<IConsole> & { id: number }, number>('/api/operation/saved/update', {

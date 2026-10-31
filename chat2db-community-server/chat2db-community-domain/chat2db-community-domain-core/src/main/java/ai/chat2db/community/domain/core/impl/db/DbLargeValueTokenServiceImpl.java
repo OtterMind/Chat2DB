@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.model.db.LargeValueToken;
+import ai.chat2db.community.domain.api.model.result.snapshot.ResultCursorHold;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshotCell;
 import ai.chat2db.community.domain.api.service.result.IResultSnapshotStore;
 import ai.chat2db.community.domain.api.model.result.Header;
@@ -8,6 +9,7 @@ import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.model.request.db.DbLargeValueTokensAttachRequest;
 import ai.chat2db.community.domain.api.service.db.IDbLargeValueTokenService;
 import ai.chat2db.community.tools.exception.BusinessException;
+import ai.chat2db.spi.sql.ResultCursorLeaseRegistry;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +39,21 @@ public class DbLargeValueTokenServiceImpl implements IDbLargeValueTokenService {
      */
     private static final long MAX_CAPTURED_CELL_BYTES = 256L * 1024 * 1024;
 
-    private static final String UNSUPPORTED_REASON_KEY = "largeCellValue.fullValueUnsupported";
+    /**
+     * From this size on, a value the driver only handed over as a {@code Clob}/{@code Blob} is kept on its live cursor
+     * instead of being copied, so a page of multi megabyte values costs nothing while the query runs.
+     */
+    private static final long LEASE_MIN_BYTES = 1024 * 1024L;
+
+    /**
+     * Reasons a large value stays unreadable, as the key the client turns into the message the user sees. Every log
+     * line about such a value carries its key, so a reported message can be matched to its cause in the log.
+     */
+    private static final String TOO_LARGE_REASON_KEY = "largeCellValue.unsupportedTooLarge";
+
+    private static final String UNSTORED_REASON_KEY = "largeCellValue.unsupportedUnstored";
+
+    private static final String NO_SNAPSHOT_REASON_KEY = "largeCellValue.unsupportedNoSnapshot";
 
     private final Map<String, LargeValueToken> tokenCache = new ConcurrentHashMap<>();
 
@@ -72,15 +88,41 @@ public class DbLargeValueTokenServiceImpl implements IDbLargeValueTokenService {
             return;
         }
         // Without a snapshot there is no content to serve, so every large value stays unresolved.
+        int unresolved = 0;
         for (List<ResultCell> row : dataList) {
             if (row == null) {
                 continue;
             }
             for (ResultCell cell : row) {
                 if (cell != null && cell.isLargeValue()) {
-                    cell.setUnsupportedReason(UNSUPPORTED_REASON_KEY);
+                    cell.setUnsupportedReason(NO_SNAPSHOT_REASON_KEY);
+                    unresolved++;
                 }
             }
+        }
+        if (unresolved > 0) {
+            // One line per result set: the failure that left the snapshot unavailable is recorded where it happened
+            log.error("Result snapshot is unavailable, {} large value(s) cannot be read: reason={} table={}",
+                    unresolved, NO_SNAPSHOT_REASON_KEY, tableName);
+        }
+    }
+
+    /**
+     * Marks a large value as unreadable and records why. The reason key is the one the client shows to the user, so a
+     * report of that message can be found in the log; the value's content is never logged.
+     */
+    private void markUnsupported(ResultCell cell, String reasonKey, DbLargeValueTokensAttachRequest attachRequest,
+                                 List<Header> headers, int row, int colIndex, String detail, RuntimeException cause) {
+        cell.setUnsupportedReason(reasonKey);
+        String message = String.format(
+                "Large value cannot be read: reason=%s table=%s column=%s row=%d columnIndex=%d sizeBytes=%s "
+                        + "valueType=%s (%s)",
+                reasonKey, attachRequest.getTableName(), columnName(headers, colIndex), row, colIndex,
+                cell.getSizeBytes(), cell.getValueType(), detail);
+        if (cause == null) {
+            log.warn(message);
+        } else {
+            log.warn(message, cause);
         }
     }
 
@@ -105,26 +147,25 @@ public class DbLargeValueTokenServiceImpl implements IDbLargeValueTokenService {
                 if (cell.getRawValue() == null) {
                     // The value was never materialized, so there is nothing to capture. Keeping the cell unresolved is
                     // safer than capturing the truncated preview as if it were the complete value.
-                    cell.setUnsupportedReason(UNSUPPORTED_REASON_KEY);
+                    markUnsupported(cell, UNSTORED_REASON_KEY, attachRequest, headers, absoluteRow, colIndex,
+                            "the driver returned neither a value nor a handle", null);
                     continue;
                 }
                 if (cell.getSizeBytes() != null && cell.getSizeBytes() > MAX_CAPTURED_CELL_BYTES) {
                     // Copying a value this large into the snapshot would need several times its size on the heap before
                     // any limit applies, so the cell is reported as not captured instead of risking the process.
-                    log.warn("Skipping capture of a {} byte large value at row {} column {}: above the per cell limit",
-                            cell.getSizeBytes(), absoluteRow, colIndex);
-                    cell.setUnsupportedReason(UNSUPPORTED_REASON_KEY);
+                    markUnsupported(cell, TOO_LARGE_REASON_KEY, attachRequest, headers, absoluteRow, colIndex,
+                            "above the per cell limit of " + MAX_CAPTURED_CELL_BYTES + " bytes", null);
                     continue;
                 }
                 int absoluteColumn = colIndex;
                 ResultSnapshotCell captured;
                 try {
-                    captured = snapshotStore.capture(snapshotId, absoluteRow, absoluteColumn, cell.getRawValue());
+                    captured = captureOrLease(snapshotStore, snapshotId, absoluteRow, absoluteColumn, cell);
                 } catch (RuntimeException e) {
                     // One uncapturable value must not fail the whole statement: mark that cell and keep going.
-                    log.warn("Failed to capture a large value at row {} column {}: {}", absoluteRow, absoluteColumn,
-                            e.getMessage());
-                    cell.setUnsupportedReason(UNSUPPORTED_REASON_KEY);
+                    markUnsupported(cell, UNSTORED_REASON_KEY, attachRequest, headers, absoluteRow, absoluteColumn,
+                            "storing the value failed", e);
                     continue;
                 }
                 // The snapshot reports the real byte and character counts, which the driver metadata may not match
@@ -138,6 +179,25 @@ public class DbLargeValueTokenServiceImpl implements IDbLargeValueTokenService {
                 cell.setRawValue(null);
             }
         }
+    }
+
+    /**
+     * Captures one value, or keeps it on the cursor that handed it over when it is big enough to be worth it. A lease
+     * only exists while the cursor of the execution that produced the value is still announced, so a driver that
+     * transfers the content instead of handing over a handle captures as before.
+     */
+    private ResultSnapshotCell captureOrLease(IResultSnapshotStore snapshotStore, String snapshotId, int rowIndex,
+                                              int columnIndex, ResultCell cell) {
+        Object rawValue = cell.getRawValue();
+        boolean handedOver = cell.carriesHandle();
+        if (handedOver && cell.getSizeBytes() != null && cell.getSizeBytes() >= LEASE_MIN_BYTES) {
+            ResultCursorHold hold = ResultCursorLeaseRegistry.holdForCurrentExecution();
+            if (hold != null) {
+                snapshotStore.addCursorHold(snapshotId, hold);
+                return snapshotStore.lease(snapshotId, rowIndex, columnIndex, rawValue);
+            }
+        }
+        return snapshotStore.capture(snapshotId, rowIndex, columnIndex, rawValue);
     }
 
     @Override

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import ai.chat2db.community.domain.api.model.task.CsvOptions;
@@ -28,6 +29,12 @@ import java.math.BigDecimal;
 public final class CsvImportValueNormalizer {
 
     private static final Map<String, Integer> MONTHS = monthNames();
+
+    /**
+     * Date patterns depend only on the configured delimiters, so they are compiled once instead of
+     * once per cell.
+     */
+    private static final Map<String, Pattern> DATE_PATTERNS = new ConcurrentHashMap<>();
     private static final Set<String> NUMERIC_TYPES = Set.of(
             "BIGINT", "DECIMAL", "DOUBLE", "DOUBLE PRECISION", "FLOAT", "INT", "INTEGER",
             "MEDIUMINT", "NUMBER", "NUMERIC", "REAL", "SMALLINT", "TINYINT");
@@ -54,6 +61,24 @@ public final class CsvImportValueNormalizer {
                     ? "import.csv.invalidValue" : "import.value.invalidValue",
                     new Object[]{sourceRow, column.getName(), displayValue}, e);
         }
+    }
+
+    /**
+     * Value of a normalized cell as a JDBC parameter, so imports can bind a prepared statement
+     * instead of embedding SQL literals. Keeps the same canonical forms {@link #normalize} produces.
+     */
+    public static Object jdbcParameter(String value, TableColumn column) {
+        if (value == null || column == null) {
+            return value;
+        }
+        return switch (valueKind(column)) {
+            case DATE -> LocalDate.parse(value);
+            case TIME -> LocalTime.parse(value);
+            case TIMESTAMP -> LocalDateTime.parse(value.replace(' ', 'T'));
+            case TIMESTAMP_WITH_TIMEZONE -> OffsetDateTime.parse(value.replace(' ', 'T'));
+            case NUMBER -> new BigDecimal(value);
+            case TEXT -> value;
+        };
     }
 
     public static String nativeValue(Object value, TableColumn column) {
@@ -191,8 +216,9 @@ public final class CsvImportValueNormalizer {
     private static String[] splitDate(String value, String order, ImportValueFormat options) {
         String firstSeparator = separator(order.charAt(0), order.charAt(1), options);
         String secondSeparator = separator(order.charAt(1), order.charAt(2), options);
-        Pattern pattern = Pattern.compile("^(.+?)" + Pattern.quote(firstSeparator) + "(.+?)"
-                + Pattern.quote(secondSeparator) + "(.+?)$");
+        Pattern pattern = DATE_PATTERNS.computeIfAbsent(firstSeparator + '\u0000' + secondSeparator,
+                key -> Pattern.compile("^(.+?)" + Pattern.quote(firstSeparator) + "(.+?)"
+                        + Pattern.quote(secondSeparator) + "(.+?)$"));
         Matcher matcher = pattern.matcher(value);
         if (!matcher.matches()) {
             throw new IllegalArgumentException("date does not match configured delimiters");

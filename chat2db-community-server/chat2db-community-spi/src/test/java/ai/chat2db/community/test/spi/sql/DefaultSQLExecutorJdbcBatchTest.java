@@ -43,7 +43,9 @@ class DefaultSQLExecutorJdbcBatchTest {
 
     @Test
     void cancellationAfterExecutionKeepsCommittedRows() throws Exception {
-        // The cancellation checker fires after the driver has executed the batch.
+        // The cancellation checker fires after the driver executed the first chunk. Chunking makes a
+        // chunk the unit of committed work, so the first 500 rows are kept and the last row is not
+        // attempted at all.
         List<String> sqls = new java.util.ArrayList<>();
         for (int value = 1; value <= 501; value++) {
             sqls.add("INSERT INTO records VALUES (" + value + ")");
@@ -61,7 +63,7 @@ class DefaultSQLExecutorJdbcBatchTest {
                                 }
                             }));
 
-            assertEquals(501, countRows(connection));
+            assertEquals(500, countRows(connection));
             assertEquals(1, listener.created.get());
             assertEquals(1, listener.closed.get());
         }

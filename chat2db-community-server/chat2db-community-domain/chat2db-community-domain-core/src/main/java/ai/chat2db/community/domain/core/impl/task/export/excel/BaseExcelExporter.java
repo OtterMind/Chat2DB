@@ -3,8 +3,11 @@ package ai.chat2db.community.domain.core.impl.task.export.excel;
 import ai.chat2db.community.domain.core.impl.task.export.BaseExporter;
 import ai.chat2db.community.domain.core.impl.task.export.ExportCellProcessorChain;
 import ai.chat2db.community.domain.core.impl.task.export.ExportProgressLogger;
+import ai.chat2db.community.domain.core.impl.task.export.ExportProgressReporter;
 import ai.chat2db.community.domain.core.impl.db.extension.SqlExecutionPolicyManager;
+import ai.chat2db.community.domain.api.model.task.ExportCsvOptions;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
+import ai.chat2db.community.domain.core.impl.task.export.csv.CsvWriter;
 import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
@@ -24,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.SpreadsheetVersion;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -68,11 +73,13 @@ public abstract class BaseExcelExporter extends BaseExporter {
     }
 
     @Override
-    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file) {
+    protected void singleExport(ExportTaskSpec spec, TaskExecutionContext context, String tableName, File file,
+            ExportProgressReporter progressReporter) {
         ExcelTypeEnum excelType = getExcelType();
         SqlExecutionPlan executionPlan = getQueryPlan(spec, tableName);
         Connection connection = Chat2DBContext.getConnection();
-        ExportProgressLogger progressLogger = new ExportProgressLogger(context, excelType.name(), tableName);
+        ExportProgressLogger progressLogger = new ExportProgressLogger(context, excelType.name(), tableName,
+                progressReporter);
         progressLogger.queryStarted("Reading table data from " + tableName);
         DefaultSQLExecutor.getInstance().execute(connection, executionPlan.getSql(), BATCH_SIZE, resultSet ->
                 writeExcelData(resultSet, excelType, file, tableName, spec, executionPlan, context, progressLogger),
@@ -84,6 +91,10 @@ public abstract class BaseExcelExporter extends BaseExporter {
     private void writeExcelData(ResultSet resultSet, ExcelTypeEnum excelType, File file, String sheetName,
             ExportTaskSpec spec, SqlExecutionPlan executionPlan, TaskExecutionContext context,
             ExportProgressLogger progressLogger) {
+        if (excelType == ExcelTypeEnum.CSV) {
+            writeCsvData(resultSet, file, sheetName, spec, executionPlan, context, progressLogger);
+            return;
+        }
         try (ExcelWriter excelWriter = EasyExcel.write(file).excelType(excelType).build()) {
             ResultSetMetaData metaData = resultSet.getMetaData();
             List<Integer> includedColumnIndexes = includedColumnIndexes(metaData, executionPlan);
@@ -140,6 +151,56 @@ public abstract class BaseExcelExporter extends BaseExporter {
         }
     }
 
+
+    /**
+     * CSV rows go through {@link CsvWriter}, which reproduces the byte layout of the EasyExcel CSV
+     * path it replaced (UTF-8 byte order mark, {@code \r\n} records, minimal quoting) while honouring
+     * the encoding and delimiter of the task spec.
+     */
+    private void writeCsvData(ResultSet resultSet, File file, String sheetName, ExportTaskSpec spec,
+            SqlExecutionPlan executionPlan, TaskExecutionContext context, ExportProgressLogger progressLogger) {
+        ExportCsvOptions csvOptions = ExportCsvOptions.of(spec.getEncoding(), spec.getDelimiter());
+        try (OutputStream outputStream = new FileOutputStream(file);
+                CsvWriter csvWriter = new CsvWriter(outputStream, csvOptions.charset(), csvOptions.delimiterChar())) {
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            List<Integer> includedColumnIndexes = includedColumnIndexes(metaData, executionPlan);
+            IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
+            if (Boolean.TRUE.equals(spec.getContainsHeader())) {
+                List<String> header = selectColumns(ResultSetUtils.getRsHeader(resultSet), includedColumnIndexes);
+                csvWriter.writeHeader(header, true);
+            }
+            int exportedRows = 0;
+            boolean hasNext = nextRow(resultSet, executionPlan, exportedRows);
+            while (hasNext) {
+                context.checkCancelled();
+                List<String> rowDataList = new ArrayList<>(includedColumnIndexes.size());
+                for (Integer columnIndex : includedColumnIndexes) {
+                    JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, columnIndex, false);
+                    Object value;
+                    if (hasExportCellProcessors()) {
+                        ExportCell cell = processJdbcCell(spec, metaData, columnIndex, sheetName, jdbcDataValue);
+                        value = cell.getValue();
+                    } else {
+                        value = valueProcessor.getJdbcValue(jdbcDataValue);
+                    }
+                    rowDataList.add(value == null ? null : String.valueOf(value));
+                }
+                csvWriter.writeRow(rowDataList);
+                progressLogger.recordExportedRow();
+                exportedRows++;
+                hasNext = nextRow(resultSet, executionPlan, exportedRows);
+            }
+            progressLogger.queryCompleted("Table data read completed");
+            progressLogger.fileFinalizing();
+            csvWriter.flush();
+        } catch (TaskCancelledException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error writing CSV data", e);
+            throw new TaskExecutionException(TaskErrorCode.FILE_WRITE_FAILED.name(),
+                    "Could not write CSV export", e);
+        }
+    }
 
     protected abstract ExcelTypeEnum getExcelType();
 }

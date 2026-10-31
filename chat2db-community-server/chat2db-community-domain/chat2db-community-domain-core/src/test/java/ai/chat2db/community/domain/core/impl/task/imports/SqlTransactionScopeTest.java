@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Covers the script transaction scope that stops insert batches from committing inside a
- * {@code BEGIN} ... {@code ROLLBACK} script (see the import path in {@link ImportSqlExecutor}).
+ * {@code BEGIN} ... {@code ROLLBACK} script (see the import path in {@link SqlScriptExecutor}).
  */
 class SqlTransactionScopeTest {
     @Test
@@ -117,7 +117,7 @@ class SqlTransactionScopeTest {
      */
     @Test
     void importExecutorStopsManagingTransactionsWhileTheScriptOwnsOne() {
-        ImportSqlExecutor executor = new ImportSqlExecutor(null);
+        SqlScriptExecutor executor = new SqlScriptExecutor(null);
         assertTrue(executor.managesOwnTransaction(), "a script without BEGIN keeps self-managed batches");
 
         executor.observeExecutedStatement("BEGIN");

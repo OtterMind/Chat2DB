@@ -193,9 +193,16 @@ public class Chat2DBContext {
 
 
     public static void removeContext() {
+        // The response of the announced execution is finished here, so a cursor of it that no reader leased is closed
+        // before the connection goes back
+        ResultCursorLeaseRegistry.finishAnnouncedCursor();
         ConnectInfo connectInfo = CONNECT_INFO_THREAD_LOCAL.get();
         if (connectInfo != null) {
             CONNECT_INFO_THREAD_LOCAL.remove();
+            if (ResultCursorLeaseRegistry.isHeld(connectInfo)) {
+                // A leased large value still reads from this connection: the last cursor hold gives it back instead
+                return;
+            }
             ConnectionPool.close(connectInfo);
         }
     }

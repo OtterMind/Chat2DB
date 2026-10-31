@@ -4,6 +4,7 @@ import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.model.PageResponse;
 import ai.chat2db.community.domain.api.model.task.ExportTaskSpec;
 import ai.chat2db.community.domain.api.model.task.Task;
+import ai.chat2db.community.domain.api.model.task.TaskCancelledException;
 import ai.chat2db.community.domain.api.model.task.TaskConstants;
 import ai.chat2db.community.domain.api.model.task.TaskErrorCode;
 import ai.chat2db.community.domain.api.model.task.TaskEvent;
@@ -12,6 +13,7 @@ import ai.chat2db.community.domain.api.model.task.TaskEventLevel;
 import ai.chat2db.community.domain.api.model.task.TaskExecutionException;
 import ai.chat2db.community.domain.api.model.task.TaskProgress;
 import ai.chat2db.community.domain.api.model.task.TaskQuery;
+import ai.chat2db.community.domain.api.model.task.TaskStage;
 import ai.chat2db.community.domain.api.model.task.TaskStatus;
 import ai.chat2db.community.domain.api.model.task.TaskStatusPatch;
 import ai.chat2db.community.domain.api.model.task.TaskTargetSnapshot;
@@ -502,6 +504,73 @@ class LocalTaskManagerTest {
         Files.deleteIfExists(Path.of(storage.get(task.getId()).orElseThrow().getArtifactId()));
     }
 
+    @Test
+    void cancelRunningTaskEndsCancelledAndCancelsRegisteredResources() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch resourceCancelled = new CountDownLatch(1);
+        taskManager = manager(storage, (spec, context) -> {
+            context.registerCancelable(resourceCancelled::countDown);
+            running.countDown();
+            try {
+                while (true) {
+                    context.checkCancelled();
+                    Thread.sleep(5L);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new TaskCancelledException();
+            }
+        });
+        Task task = newTask();
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(running.await(5, TimeUnit.SECONDS));
+
+        assertTrue(taskManager.cancelTask(task.getId()));
+        assertTrue(resourceCancelled.await(5, TimeUnit.SECONDS), "registered work must be cancelled");
+
+        Task cancelled = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals(TaskStage.CANCELLED.name(), cancelled.getStage());
+        assertNull(cancelled.getErrorCode());
+        assertNotNull(cancelled.getFinishedAt());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.TASK_CANCELLED.name().equals(event.getCode())));
+        assertFalse(taskManager.cancelTask(task.getId()), "a cancelled task is terminal");
+        assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void cancelTaskWithoutARunningTaskCancelsThePersistedTask() {
+        TestTaskStorage storage = new TestTaskStorage();
+        taskManager = manager(storage, (spec, context) -> {});
+        Task task = storage.create(newTask(), event(TaskEventCode.TASK_CREATED.name()));
+
+        assertTrue(taskManager.cancelTask(task.getId()));
+
+        Task cancelled = storage.get(task.getId()).orElseThrow();
+        assertEquals(TaskStatus.CANCELLED.name(), cancelled.getStatus());
+        assertEquals(TaskStage.CANCELLED.name(), cancelled.getStage());
+        assertNotNull(cancelled.getFinishedAt());
+        assertTrue(storage.listEvents(task.getId(), 0, 100).stream()
+                .anyMatch(event -> TaskEventCode.TASK_CANCELLED.name().equals(event.getCode())));
+        assertFalse(taskManager.cancelTask(task.getId()));
+        assertEquals(1, storage.terminalTransitionCount());
+    }
+
+    @Test
+    void cancelSucceededTaskIsANoOp() throws Exception {
+        TestTaskStorage storage = new TestTaskStorage();
+        taskManager = manager(storage, (spec, context) -> {});
+        Task task = newTask();
+        taskManager.submit(task, event(TaskEventCode.TASK_CREATED.name()), spec(), null, null);
+        assertTrue(storage.awaitTerminal());
+
+        assertFalse(taskManager.cancelTask(task.getId()));
+        assertEquals(TaskStatus.SUCCESS.name(), storage.get(task.getId()).orElseThrow().getStatus());
+        assertEquals(1, storage.terminalTransitionCount());
+    }
+
     private LocalTaskManager manager(TestTaskStorage storage, TestExecution execution) {
         return manager(storage, execution, emptyExtensionManager());
     }
@@ -703,6 +772,26 @@ class LocalTaskManagerTest {
             tasks.remove(taskId);
             events.remove(taskId);
             commitAction.run();
+            return true;
+        }
+
+        @Override
+        public synchronized boolean saveCheckpoint(Long taskId, String checkpointJson) {
+            Task task = tasks.get(taskId);
+            if (task == null || TaskStatus.isTerminal(task.getStatus()) || checkpointJson == null) {
+                return false;
+            }
+            task.setCheckpointJson(checkpointJson);
+            return true;
+        }
+
+        @Override
+        public synchronized boolean attachErrorArtifact(Long taskId, String errorArtifactId) {
+            Task task = tasks.get(taskId);
+            if (task == null) {
+                return false;
+            }
+            task.setErrorArtifactId(errorArtifactId);
             return true;
         }
 

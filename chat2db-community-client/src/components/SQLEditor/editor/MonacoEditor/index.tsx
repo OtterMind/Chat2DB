@@ -703,14 +703,14 @@ const MonacoSQLEditor = forwardRef<MonacoEditorRef, MonacoSQLEditorProps>(
       const editor = editorInstanceRef.current;
 
       const punctuationKeyDownDisposer = editor.onKeyDown((event) => {
+        const punctuation = sqlPunctuationFromKeyboardEvent(event.browserEvent);
+        if (!punctuation) return;
+
         const model = editor.getModel();
         const position = editor.getPosition();
         if (!model || !position || !shouldNormalizeSqlInputPunctuation(model.getValue(), model.getOffsetAt(position))) {
           return;
         }
-
-        const punctuation = sqlPunctuationFromKeyboardEvent(event.browserEvent);
-        if (!punctuation) return;
 
         event.preventDefault();
         event.stopPropagation();

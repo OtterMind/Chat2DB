@@ -1,5 +1,20 @@
 import { WorkspaceTabType } from '@/constants/workspace';
-import {
+import { createRequire } from 'node:module';
+
+const loadModule = createRequire(__filename);
+Object.assign(globalThis, {
+  __APP_NAME__: 'chat2db-community',
+  __APP_CAPITAL_NAME__: 'Chat2DB Community',
+  __APP_DISPLAY_NAME__: 'Chat2DB Community',
+  __APP_PROTOCOL_SCHEME__: 'chat2db-community',
+  __APP_VERSION__: '5.3.0',
+  __RUNTIME_ENV__: 'community',
+  __ENV__: 'test',
+  window: {},
+});
+Object.defineProperty(globalThis, 'navigator', { value: { userAgent: '' }, configurable: true });
+
+const {
   ContentDiffDenyReason,
   ContentDiffSourceKind,
   getContentDiffDecorationCount,
@@ -7,7 +22,7 @@ import {
   getContentDiffOpenBlockReason,
   guardContentDiffTexts,
   isContentDiffHunkBudgetExceeded,
-} from './contentDiffGuard';
+} = loadModule('./contentDiffGuard') as typeof import('./contentDiffGuard');
 
 function assertEqual(actual: any, expected: any, message: string) {
   const actualJson = JSON.stringify(actual);
@@ -141,6 +156,22 @@ assertEqual(
 );
 
 assert(guardContentDiffTexts('select 1', 'select 2').enabled, 'allow changed content');
+assert(guardContentDiffTexts('Aa', 'BB').enabled, 'equal hashes must not hide changed content');
+
+const originalCharCodeAt = String.prototype.charCodeAt;
+let scannedCharacters = 0;
+String.prototype.charCodeAt = function (index: number) {
+  scannedCharacters += 1;
+  return originalCharCodeAt.call(this, index);
+};
+try {
+  guardContentDiffTexts('select 1', 'select 1');
+  guardContentDiffTexts('a'.repeat(200001), 'b');
+  guardContentDiffTexts('a', 'b'.repeat(200001));
+} finally {
+  String.prototype.charCodeAt = originalCharCodeAt;
+}
+assertEqual(scannedCharacters, 0, 'unchanged and oversized files skip full-text hashing');
 
 assertEqual(
   guardContentDiffTexts('a'.repeat(200001), 'b').reason,
@@ -193,3 +224,5 @@ assert(
   !isContentDiffHunkBudgetExceeded({ hunkCount: 500, decorationCount: 1000 }),
   'allow budget boundary',
 );
+
+console.log('Content diff guard tests passed');

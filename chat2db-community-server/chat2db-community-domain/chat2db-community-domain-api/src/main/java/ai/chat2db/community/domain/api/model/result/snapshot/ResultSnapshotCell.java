@@ -20,8 +20,9 @@ public class ResultSnapshotCell {
     private volatile SnapshotCellStorage storage;
 
     /**
-     * In-memory content for {@link SnapshotCellStorage#MEMORY}: the encoded record bytes of a text value, or the raw
-     * bytes of a binary value.
+     * Content held in memory. For {@link SnapshotCellStorage#MEMORY} this is the encoded record bytes of a text value
+     * or the raw bytes of a binary value; for {@link SnapshotCellStorage#LAZY} it is the source object itself, so
+     * registering a value costs no copy.
      */
     private transient volatile Object memoryValue;
 

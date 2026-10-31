@@ -417,6 +417,9 @@ public class DbDlTemplateServiceImpl implements IDbDlTemplateService {
     }
 
     static Long getCountOfMongodb(String tableName, ICommandExecutor executor) {
+        if (StringUtils.isBlank(tableName)) {
+            throw new BusinessException("count.mongodbTableRequired");
+        }
         try {
             SqlExecuteRequest command = new SqlExecuteRequest();
             command.setTableName(tableName);

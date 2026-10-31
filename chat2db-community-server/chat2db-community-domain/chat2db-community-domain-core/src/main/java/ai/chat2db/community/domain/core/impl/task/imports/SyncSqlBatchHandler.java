@@ -10,11 +10,11 @@ import java.util.List;
 public class SyncSqlBatchHandler implements ISqlBatchHandler {
 
     private final TaskExecutionContext context;
-    private final ImportSqlExecutor sqlExecutor;
+    private final SqlScriptExecutor sqlExecutor;
     private static final int BATCH_SIZE = 1000;
     private final List<Statement> statements = new ArrayList<>(BATCH_SIZE);
 
-    public SyncSqlBatchHandler(TaskExecutionContext context, ImportSqlExecutor sqlExecutor) {
+    public SyncSqlBatchHandler(TaskExecutionContext context, SqlScriptExecutor sqlExecutor) {
         this.context = context;
         this.sqlExecutor = sqlExecutor;
 

@@ -54,6 +54,42 @@ class TaskWebConverterTest {
     }
 
     @Test
+    void exportCsvOptionsAreValidatedAndStoredInTheSpecification() {
+        var converter = new TaskWebConverter();
+        var request = new TaskExportRequest();
+        request.setFormat("CSV");
+        request.setTaskType(TaskType.TABLE_DATA_EXPORT.name());
+        request.setTableNames(List.of("param_types"));
+
+        // Nothing requested: the historical defaults are written into the spec.
+        ExportTaskSpec defaults = converter.exportRequest2spec(request);
+        assertEquals("UTF-8", defaults.getEncoding());
+        assertEquals(",", defaults.getDelimiter());
+
+        request.setEncoding("gbk");
+        request.setDelimiter(";");
+        ExportTaskSpec explicit = converter.exportRequest2spec(request);
+        assertEquals("GBK", explicit.getEncoding());
+        assertEquals(";", explicit.getDelimiter());
+
+        // A non CSV export must not claim CSV options it never uses.
+        request.setFormat("XLSX");
+        ExportTaskSpec excel = converter.exportRequest2spec(request);
+        assertNull(excel.getEncoding());
+        assertNull(excel.getDelimiter());
+
+        request.setFormat("CSV");
+        request.setEncoding("NO-SUCH-CHARSET");
+        assertEquals("task.export.encoding.invalid",
+                assertThrows(BusinessException.class, () -> converter.exportRequest2spec(request)).getCode());
+
+        request.setEncoding("UTF-8");
+        request.setDelimiter(";;");
+        assertEquals("task.export.delimiter.invalid",
+                assertThrows(BusinessException.class, () -> converter.exportRequest2spec(request)).getCode());
+    }
+
+    @Test
     void importPreservesStagedSourceAndExecutionMode() {
         var request = new TaskImportRequest();
         request.setFileId("staged-source");

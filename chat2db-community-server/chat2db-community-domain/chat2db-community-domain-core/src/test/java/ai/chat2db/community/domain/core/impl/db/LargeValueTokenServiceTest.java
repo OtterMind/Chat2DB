@@ -67,7 +67,8 @@ class LargeValueTokenServiceTest {
                 null));
 
         assertTrue(cell.getLargeValueId() == null || cell.getLargeValueId().isEmpty());
-        assertNotNull(cell.getUnsupportedReason());
+        assertEquals("largeCellValue.unsupportedNoSnapshot", cell.getUnsupportedReason(),
+                "the client must be able to tell that the whole result set has no storage");
     }
 
     @Test
@@ -225,7 +226,59 @@ class LargeValueTokenServiceTest {
 
         assertNotNull(good.getLargeValueId(), "a healthy cell in the same row must still get a handle");
         assertNull(bad.getLargeValueId(), "the uncapturable cell must not get a handle");
-        assertNotNull(bad.getUnsupportedReason(), "the uncapturable cell must be marked instead of failing the query");
+        assertEquals("largeCellValue.unsupportedUnstored", bad.getUnsupportedReason(),
+                "a cell that could not be stored is reported as such instead of failing the query");
+    }
+
+    @Test
+    void aValueAboveThePerCellLimitIsReportedWithItsReason(@TempDir Path tempDirectory) {
+        InMemoryResultSnapshotStore store = new InMemoryResultSnapshotStore(tempDirectory.resolve("snapshots"));
+        DbLargeValueTokenServiceImpl service = new DbLargeValueTokenServiceImpl(
+                InMemoryResultSnapshotStore.provider(store));
+        ResultCell huge = ResultCell.builder()
+                .value("[LONGTEXT] 300.00 MB")
+                .rawValue("complete content")
+                .largeValue(true)
+                .truncated(true)
+                .valueType("TEXT")
+                .columnType("LONGTEXT")
+                .sizeBytes(300L * 1024L * 1024L)
+                .build();
+        ResultSnapshot snapshot = store.register();
+
+        service.attachTokens(attachLargeValueTokensRequest("doc",
+                List.of(rowNumberHeader(), valueHeader()),
+                List.of(List.of(ResultCell.builder().value("1").build(), huge)),
+                snapshot.getSnapshotId()));
+
+        assertNull(huge.getLargeValueId(), "a value above the per cell limit is not captured");
+        assertEquals("largeCellValue.unsupportedTooLarge", huge.getUnsupportedReason(),
+                "the user must learn that the value itself is above the limit");
+    }
+
+    @Test
+    void aValueWithoutAHandleIsReportedAsUnstored(@TempDir Path tempDirectory) {
+        InMemoryResultSnapshotStore store = new InMemoryResultSnapshotStore(tempDirectory.resolve("snapshots"));
+        DbLargeValueTokenServiceImpl service = new DbLargeValueTokenServiceImpl(
+                InMemoryResultSnapshotStore.provider(store));
+        ResultCell cell = ResultCell.builder()
+                .value("[LONGTEXT] 20.00 MB")
+                .largeValue(true)
+                .truncated(true)
+                .valueType("TEXT")
+                .columnType("LONGTEXT")
+                .sizeBytes(20L * 1024L * 1024L)
+                .build();
+        ResultSnapshot snapshot = store.register();
+
+        service.attachTokens(attachLargeValueTokensRequest("doc",
+                List.of(rowNumberHeader(), valueHeader()),
+                List.of(List.of(ResultCell.builder().value("1").build(), cell)),
+                snapshot.getSnapshotId()));
+
+        assertNull(cell.getLargeValueId(), "a value the driver never handed over cannot be served");
+        assertEquals("largeCellValue.unsupportedUnstored", cell.getUnsupportedReason(),
+                "it shares the reason of a value that could not be stored");
     }
 
     @Test

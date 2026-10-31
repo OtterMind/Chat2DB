@@ -1,5 +1,6 @@
 package ai.chat2db.community.storage.snapshot;
 
+import ai.chat2db.community.domain.api.model.result.snapshot.ResultCursorHold;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshot;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshotCell;
 import ai.chat2db.community.domain.api.model.result.snapshot.SnapshotCellStorage;
@@ -15,20 +16,28 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.sql.Blob;
+import java.sql.Clob;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -59,16 +68,20 @@ class FileResultSnapshotStoreTest {
     void defaultRootDirectoryFollowsTheSharedStorageConvention() {
         TestHome.init();
         FileResultSnapshotStore defaultStore = new FileResultSnapshotStore();
-        String root = defaultStore.getRootDirectory().toString();
-        assertTrue(root.endsWith("/storage/" + FileResultSnapshotStore.SNAPSHOT_DIRECTORY),
+        Path root = defaultStore.getRootDirectory();
+        assertTrue(root.endsWith(Path.of("storage", FileResultSnapshotStore.SNAPSHOT_DIRECTORY)),
                 "unexpected snapshot root: " + root);
-        assertTrue(root.startsWith(System.getProperty("user.home")), "snapshot root must stay inside the state directory: " + root);
+        assertTrue(root.startsWith(Path.of(System.getProperty("user.home"))),
+                "snapshot root must stay inside the state directory: " + root);
     }
 
     @Test
     void smallTextStaysInMemoryAndRoundTrips() {
         ResultSnapshot snapshot = store.register();
         store.capture(snapshot.getSnapshotId(), 3, 4, "hello 世界");
+        // Registering costs nothing, so the cell keeps the source value until it is read
+        assertEquals(SnapshotCellStorage.LAZY,
+                snapshot.getCells().get(ResultSnapshot.cellKey(3, 4)).getStorage());
 
         SnapshotReadChunk chunk = store.read(snapshot.getSnapshotId(), 3, 4, 0, 1024);
 
@@ -79,7 +92,8 @@ class FileResultSnapshotStoreTest {
         assertEquals(chunk.getNextOffset(), chunk.getSizeBytes());
         assertEquals(8L, chunk.getSizeChars());
         assertEquals(SnapshotCellStorage.MEMORY,
-                snapshot.getCells().get(ResultSnapshot.cellKey(3, 4)).getStorage());
+                snapshot.getCells().get(ResultSnapshot.cellKey(3, 4)).getStorage(),
+                "a small value is encoded in memory on its first read");
     }
 
     @Test
@@ -138,19 +152,21 @@ class FileResultSnapshotStoreTest {
         store.capture(snapshot.getSnapshotId(), 7, 3, big);
 
         ResultSnapshotCell cell = snapshot.getCells().get(ResultSnapshot.cellKey(7, 3));
-        assertEquals(SnapshotCellStorage.FILE, cell.getStorage());
+        assertEquals(SnapshotCellStorage.LAZY, cell.getStorage(), "registering a value must not write it");
+        assertEquals(0L, snapshot.getDiskBytes().get(), "registering a value must not write anything");
+
+        SnapshotReadChunk head = store.read(snapshot.getSnapshotId(), 7, 3, 0, 32);
+        assertEquals(SnapshotCellStorage.FILE, cell.getStorage(), "a value above the cell limit is stored on first read");
         assertNotNull(cell.getFilePath());
         assertTrue(Files.exists(Path.of(cell.getFilePath())), "spilled file must exist");
         assertEquals(big.length, Files.size(Path.of(cell.getFilePath())));
         assertEquals(0L, snapshot.getMemoryBytes().get(), "spilled content must not stay accounted in memory");
-
-        SnapshotReadChunk head = store.read(snapshot.getSnapshotId(), 7, 3, 0, 32);
-        assertArrayEquals(java.util.Arrays.copyOf(big, 32), Base64.getDecoder().decode(head.getValue()));
+        assertArrayEquals(Arrays.copyOf(big, 32), Base64.getDecoder().decode(head.getValue()));
         assertFalse(head.isEof());
 
         long tailOffset = big.length - 10;
         SnapshotReadChunk tail = store.read(snapshot.getSnapshotId(), 7, 3, tailOffset, 64);
-        assertArrayEquals(java.util.Arrays.copyOfRange(big, (int) tailOffset, big.length),
+        assertArrayEquals(Arrays.copyOfRange(big, (int) tailOffset, big.length),
                 Base64.getDecoder().decode(tail.getValue()));
         assertTrue(tail.isEof());
         assertEquals(big.length, tail.getNextOffset());
@@ -163,7 +179,7 @@ class FileResultSnapshotStoreTest {
         localStore.prepareRootDirectory();
         ResultSnapshot snapshot = localStore.register();
         byte[] payload = "streamed-text-".repeat(2000).getBytes(StandardCharsets.UTF_8);
-        java.sql.Clob clob = new StringClob(new String(payload, StandardCharsets.UTF_8));
+        Clob clob = new StringClob(new String(payload, StandardCharsets.UTF_8));
 
         ResultSnapshotCell cell = localStore.capture(snapshot.getSnapshotId(), 2, 2, clob);
 
@@ -220,7 +236,7 @@ class FileResultSnapshotStoreTest {
         String text = "跨块中文-".repeat(200_000);
         store.capture(snapshot.getSnapshotId(), 3, 3, text);
         ResultSnapshotCell cell = snapshot.getCells().get(ResultSnapshot.cellKey(3, 3));
-        assertEquals(SnapshotCellStorage.FILE, cell.getStorage(), "large text must be spilled");
+        assertEquals(SnapshotCellStorage.LAZY, cell.getStorage(), "registering large text must not encode it");
         assertEquals((long) text.getBytes(StandardCharsets.UTF_8).length, cell.getSizeBytes());
 
         long offset = 0L;
@@ -246,6 +262,8 @@ class FileResultSnapshotStoreTest {
         assertEquals(text.length(), assembledText.length(), "assembled char count must match the source text");
         assertEquals(text, assembledText, "assembled content must match the source text");
         assertEquals((long) text.getBytes(StandardCharsets.UTF_8).length, offset);
+        assertEquals(SnapshotCellStorage.FILE, cell.getStorage(),
+                "the first read writes a value above the cell limit to a file");
     }
 
     @Test
@@ -253,6 +271,7 @@ class FileResultSnapshotStoreTest {
         ResultSnapshot snapshot = store.register();
         byte[] big = new byte[(int) FileResultSnapshotStore.CELL_SPILL_BYTES + 10];
         store.capture(snapshot.getSnapshotId(), 1, 1, big);
+        store.read(snapshot.getSnapshotId(), 1, 1, 0, 16);
         Path directory = Path.of(snapshot.getCells().get(ResultSnapshot.cellKey(1, 1)).getFilePath()).getParent();
         assertTrue(Files.exists(directory));
 
@@ -336,9 +355,9 @@ class FileResultSnapshotStoreTest {
         store.capture(snapshot.getSnapshotId(), 0, 0, smallText);
         String largeText = "跨块中文-".repeat(200_000);
         store.capture(snapshot.getSnapshotId(), 1, 0, largeText);
-        assertEquals(SnapshotCellStorage.MEMORY,
+        assertEquals(SnapshotCellStorage.LAZY,
                 snapshot.getCells().get(ResultSnapshot.cellKey(0, 0)).getStorage());
-        assertEquals(SnapshotCellStorage.FILE,
+        assertEquals(SnapshotCellStorage.LAZY,
                 snapshot.getCells().get(ResultSnapshot.cellKey(1, 0)).getStorage());
 
         for (int row : new int[]{0, 1}) {
@@ -370,6 +389,9 @@ class FileResultSnapshotStoreTest {
                 assertEquals(text, assembledText, "content: row=" + row + " limit=" + limit);
             }
         }
+        assertEquals(SnapshotCellStorage.FILE,
+                snapshot.getCells().get(ResultSnapshot.cellKey(1, 0)).getStorage(),
+                "the first read writes a value above the cell limit to a file");
     }
 
     @Test
@@ -379,13 +401,19 @@ class FileResultSnapshotStoreTest {
         store.capture(snapshot.getSnapshotId(), 5, 2, text);
 
         ResultSnapshotCell cell = snapshot.getCells().get(ResultSnapshot.cellKey(5, 2));
+        assertEquals(SnapshotCellStorage.LAZY, cell.getStorage(), "registering a value must not write it");
+        assertNull(cell.getFilePath());
+
+        // The first read writes the cell through a staging file, so a reader never sees a partial cell
+        store.read(snapshot.getSnapshotId(), 5, 2, 0, 16);
         assertEquals(SnapshotCellStorage.FILE, cell.getStorage());
         Path directory = Path.of(cell.getFilePath()).getParent();
         try (var files = Files.list(directory)) {
             List<String> names = files.map(path -> path.getFileName().toString()).sorted().toList();
             assertEquals(List.of("5-2.bin"), names, "no staging file may remain after a successful write");
         }
-        // The file stores padded records, so sizeBytes is the logical size and the content is verified by reading it
+        // sizeBytes is the logical UTF-8 size and the file holds the same bytes in records, so the two only differ by
+        // the record headers and the unused tail of the last record
         assertEquals((long) text.getBytes(StandardCharsets.UTF_8).length, cell.getSizeBytes());
         assertTrue(Files.size(Path.of(cell.getFilePath())) >= cell.getSizeBytes());
     }
@@ -428,6 +456,9 @@ class FileResultSnapshotStoreTest {
         String text = "leftover-".repeat(200_000);
         first.capture(dropped.getSnapshotId(), 0, 0, text);
         first.capture(kept.getSnapshotId(), 0, 0, text);
+        // Files only appear once a value is read, so the read is what makes the directory observable
+        first.read(dropped.getSnapshotId(), 0, 0, 0, 16);
+        first.read(kept.getSnapshotId(), 0, 0, 0, 16);
         Path droppedDirectory = root.resolve(dropped.getSnapshotId());
         Path keptDirectory = root.resolve(kept.getSnapshotId());
         assertTrue(Files.exists(droppedDirectory));
@@ -526,6 +557,7 @@ class FileResultSnapshotStoreTest {
         ResultSnapshot snapshot = first.register();
         String text = "shutdown-".repeat(200_000);
         first.capture(snapshot.getSnapshotId(), 0, 0, text);
+        first.read(snapshot.getSnapshotId(), 0, 0, 0, 16);
         Path directory = root.resolve(snapshot.getSnapshotId());
         assertTrue(Files.exists(directory));
 
@@ -618,8 +650,8 @@ class FileResultSnapshotStoreTest {
 
     @Test
     void contentWhoseCharacterStraddlesARecordBoundaryIsReadable() {
-        // 256 KiB records hold 262140 payload bytes; these lengths put a multi byte character on the seam
-        for (int filler : new int[]{262139, 262137, 262140, 524279}) {
+        // 4 KiB records hold 4092 payload bytes; these lengths put a multi byte character on the seam
+        for (int filler : new int[]{4091, 4089, 4092, 8183}) {
             ResultSnapshot snapshot = store.register();
             String text = "a".repeat(filler) + "\uD83D\uDE00" + "尾";
             store.capture(snapshot.getSnapshotId(), 0, 0, text);
@@ -627,7 +659,7 @@ class FileResultSnapshotStoreTest {
                     "content with a character on the record seam must round trip, filler=" + filler);
 
             ResultSnapshot wide = store.register();
-            String wideText = "中".repeat(87_381) + "文";
+            String wideText = "中".repeat(1_365) + "文";
             store.capture(wide.getSnapshotId(), 0, 0, wideText);
             assertEquals(wideText, readWholeText(wide.getSnapshotId(), 0, 0),
                     "wide characters on the seam must round trip");
@@ -673,13 +705,17 @@ class FileResultSnapshotStoreTest {
         ResultSnapshot snapshot = store.register();
         assertEquals(0L, snapshot.getDiskBytes().get());
         store.capture(snapshot.getSnapshotId(), 0, 0, "落盘记账-".repeat(200_000));
-        long afterCapture = snapshot.getDiskBytes().get();
-        assertTrue(afterCapture > FileResultSnapshotStore.CELL_SPILL_BYTES,
-                "a big value must be written to disk and counted, was " + afterCapture);
+        assertEquals(0L, snapshot.getDiskBytes().get(), "registering a value must not write anything");
+
+        store.read(snapshot.getSnapshotId(), 0, 0, 0, 16);
+        long afterRead = snapshot.getDiskBytes().get();
+        assertTrue(afterRead > FileResultSnapshotStore.CELL_SPILL_BYTES,
+                "a big value must be written to disk and counted when it is read, was " + afterRead);
 
         ResultSnapshotCell cell = snapshot.getCells().get(ResultSnapshot.cellKey(0, 0));
         assertEquals(SnapshotCellStorage.FILE, cell.getStorage());
-        assertEquals(afterCapture, snapshot.getDiskBytes().get(), "flushing an already stored cell must not double count");
+        store.flushToDisk(snapshot.getSnapshotId());
+        assertEquals(afterRead, snapshot.getDiskBytes().get(), "flushing an already stored cell must not double count");
     }
 
     @Test
@@ -689,11 +725,14 @@ class FileResultSnapshotStoreTest {
                 100L * 1024 * 1024);
         limited.prepareRootDirectory();
         ResultSnapshot snapshot = limited.register();
-        // The first cell fits under the cap, the second one would push the snapshot past it
+        // The first cell fits under the cap, the second one would push the snapshot past it. Both are registered
+        // first, so the cap is reached while reading, which is when the content is written.
         limited.capture(snapshot.getSnapshotId(), 0, 0, "上限校验-".repeat(90_000));
+        limited.capture(snapshot.getSnapshotId(), 1, 0, "上限校验-".repeat(90_000));
+        limited.read(snapshot.getSnapshotId(), 0, 0, 0, 16);
 
         BusinessException failure = assertThrows(BusinessException.class,
-                () -> limited.capture(snapshot.getSnapshotId(), 1, 0, "上限校验-".repeat(90_000)));
+                () -> limited.read(snapshot.getSnapshotId(), 1, 0, 0, 16));
         assertEquals("largeCellValue.snapshotWriteFailed", failure.getCode());
         assertTrue(snapshot.getDiskBytes().get() <= cap,
                 "the snapshot must stop at its cap instead of growing past it");
@@ -709,6 +748,8 @@ class FileResultSnapshotStoreTest {
         limited.capture(active.getSnapshotId(), 0, 0, "活跃快照-".repeat(90_000));
         ResultSnapshot idle = limited.register();
         limited.capture(idle.getSnapshotId(), 0, 0, "空闲快照-".repeat(90_000));
+        limited.read(active.getSnapshotId(), 0, 0, 0, 16);
+        limited.read(idle.getSnapshotId(), 0, 0, 0, 16);
         // The idle one has not been touched for two minutes, the active one was just written to
         idle.getLastActivityAt().set(System.currentTimeMillis() - 120_000L);
         long activeBytes = active.getDiskBytes().get();
@@ -725,7 +766,7 @@ class FileResultSnapshotStoreTest {
     void aReleaseDuringAnOpenReadIsDeferredInsteadOfTruncatingIt() throws Exception {
         ResultSnapshot snapshot = store.register();
         byte[] content = new byte[600_000];
-        new java.util.Random(7L).nextBytes(content);
+        new Random(7L).nextBytes(content);
         store.capture(snapshot.getSnapshotId(), 0, 0, content);
 
         store.hold(snapshot.getSnapshotId());
@@ -799,10 +840,143 @@ class FileResultSnapshotStoreTest {
         }
     }
 
+    @Test
+    void aLeasedValueIsOnlyReadFromItsCursorWhenItIsAskedFor() throws IOException {
+        CountingClob clob = new CountingClob("a".repeat(8191) + "\uD83D\uDE00" + "中文结尾");
+        TestCursorHold hold = new TestCursorHold();
+        ResultSnapshot snapshot = store.register(hold);
+        ResultSnapshotCell cell = store.lease(snapshot.getSnapshotId(), 2, 3, clob);
+
+        assertEquals(0, clob.reads, "leasing a value must not read it");
+        assertEquals((long) clob.length(), cell.getSizeBytes(),
+                "a leased text value is sized by its character count until its bytes have been read");
+        assertEquals(SnapshotCellStorage.CURSOR, cell.getStorage());
+
+        String expected = "a".repeat(8191) + "\uD83D\uDE00" + "中文结尾";
+        long offset = 0L;
+        int chunks = 0;
+        ByteArrayOutputStream assembled = new ByteArrayOutputStream();
+        while (true) {
+            SnapshotReadChunk chunk = store.read(snapshot.getSnapshotId(), 2, 3, offset, 4096);
+            byte[] bytes = Base64.getDecoder().decode(chunk.getValue());
+            assertEquals(offset, chunk.getOffset(), "the chunk echoes the requested offset");
+            assertEquals(offset + bytes.length, chunk.getNextOffset(), "nextOffset must equal offset + bytes");
+            assembled.write(bytes, 0, bytes.length);
+            offset = chunk.getNextOffset();
+            chunks++;
+            if (chunk.isEof()) {
+                break;
+            }
+            assertTrue(chunks < 100, "the read loop must terminate");
+        }
+
+        assertEquals(expected, assembled.toString(StandardCharsets.UTF_8),
+                "a leased value must round trip through the cursor");
+        assertEquals((long) expected.getBytes(StandardCharsets.UTF_8).length, cell.getSizeBytes(),
+                "the exact byte size is known once the whole value has been read");
+        assertTrue(clob.reads > 0, "the value really comes from the cursor");
+        assertFalse(hold.closed, "the cursor stays open while the snapshot lives");
+        try (var entries = Files.list(store.getRootDirectory())) {
+            assertEquals(0L, entries.filter(Files::isDirectory).count(),
+                    "a leased value must never be written to disk");
+        }
+    }
+
+    @Test
+    void aWideLeasedTextValueIsPagedWithoutHoldingAllOfIt() {
+        // Wide enough that the windows a reader keeps do not cover the whole value, and mixed content so a chunk
+        // boundary falls inside a multi byte character
+        StringBuilder source = new StringBuilder();
+        while (source.length() < 1024 * 1024) {
+            source.append("abcdefgh\u4e2d\u6587\uD83D\uDE00");
+        }
+        String text = source.toString();
+        CountingClob clob = new CountingClob(text);
+        ResultSnapshot snapshot = store.register(new TestCursorHold());
+        store.lease(snapshot.getSnapshotId(), 0, 0, clob);
+
+        byte[] whole = readWholeValue(snapshot.getSnapshotId(), 0, 0, 64 * 1024);
+
+        assertArrayEquals(text.getBytes(StandardCharsets.UTF_8), whole,
+                "a value has to reassemble across the windows a reader drops while it pages");
+        assertEquals(1, clob.reads, "a sequential read walks the cursor once");
+
+        // The windows handed out so far are gone, so the same range is read from the start of the value again
+        byte[] again = readWholeValue(snapshot.getSnapshotId(), 0, 0, 64 * 1024);
+
+        assertEquals(2, clob.reads, "an offset that is no longer buffered restarts the read");
+        assertArrayEquals(whole, again, "reading a window again returns the same bytes");
+        store.release(snapshot.getSnapshotId());
+    }
+
+    private byte[] readWholeValue(String snapshotId, int rowIndex, int columnIndex, int chunkSize) {
+        ByteArrayOutputStream assembled = new ByteArrayOutputStream();
+        long offset = 0L;
+        int loops = 0;
+        while (true) {
+            SnapshotReadChunk read = store.read(snapshotId, rowIndex, columnIndex, offset, chunkSize);
+            byte[] bytes = Base64.getDecoder().decode(read.getValue());
+            assembled.write(bytes, 0, bytes.length);
+            offset = read.getNextOffset();
+            if (read.isEof() || ++loops > 100000) {
+                return assembled.toByteArray();
+            }
+        }
+    }
+
+    @Test
+    void aLeasedBlobIsReadAtAnyOffset() {
+        byte[] content = new byte[5_000];
+        for (int index = 0; index < content.length; index++) {
+            content[index] = (byte) (index % 251);
+        }
+        ResultSnapshot snapshot = store.register(new TestCursorHold());
+        ResultSnapshotCell cell = store.lease(snapshot.getSnapshotId(), 0, 1, new ByteArrayBlob(content));
+        assertEquals(content.length, cell.getSizeBytes(), "a blob reports its exact size");
+
+        SnapshotReadChunk head = store.read(snapshot.getSnapshotId(), 0, 1, 0, 100);
+        assertArrayEquals(Arrays.copyOf(content, 100), Base64.getDecoder().decode(head.getValue()));
+        SnapshotReadChunk middle = store.read(snapshot.getSnapshotId(), 0, 1, 2_000, 50);
+        assertArrayEquals(Arrays.copyOfRange(content, 2_000, 2_050),
+                Base64.getDecoder().decode(middle.getValue()));
+        SnapshotReadChunk tail = store.read(snapshot.getSnapshotId(), 0, 1, content.length - 10L, 100);
+        assertArrayEquals(Arrays.copyOfRange(content, content.length - 10, content.length),
+                Base64.getDecoder().decode(tail.getValue()));
+        assertTrue(tail.isEof(), "the last window ends the value");
+        SnapshotReadChunk beyond = store.read(snapshot.getSnapshotId(), 0, 1, content.length + 5L, 100);
+        assertTrue(beyond.isEof(), "reading past the end is an empty final chunk");
+        assertEquals(0, Base64.getDecoder().decode(beyond.getValue()).length);
+    }
+
+    @Test
+    void releasingOrExpiringASnapshotClosesItsCursor() {
+        TestCursorHold released = new TestCursorHold();
+        ResultSnapshot first = store.register(released);
+        store.lease(first.getSnapshotId(), 0, 0, new StringClob("x".repeat(10)));
+        store.release(first.getSnapshotId());
+        assertTrue(released.closed, "releasing a snapshot must give its connection back");
+
+        TestCursorHold expired = new TestCursorHold();
+        ResultSnapshot second = store.register(expired);
+        store.lease(second.getSnapshotId(), 0, 0, new StringClob("y".repeat(10)));
+        second.setExpiresAt(Instant.now().minusSeconds(1));
+        store.evictExpired(Instant.now());
+        assertTrue(expired.closed, "an expired snapshot must give its connection back");
+        assertFalse(store.exists(second.getSnapshotId()));
+    }
+
+    @Test
+    void aLeasedValueRequiresAClobOrBlob() {
+        ResultSnapshot snapshot = store.register(new TestCursorHold());
+        BusinessException failure = assertThrows(BusinessException.class,
+                () -> store.lease(snapshot.getSnapshotId(), 0, 0, "not a handle"));
+        assertEquals("largeCellValue.snapshotWriteFailed", failure.getCode());
+    }
+
     /**
      * Minimal {@link java.sql.Clob} so the driver type path is covered without a database.
      */
-    private static final class StringClob implements java.sql.Clob {
+    private static class StringClob implements Clob {
 
         private final String value;
 
@@ -821,13 +995,13 @@ class FileResultSnapshotStoreTest {
         }
 
         @Override
-        public java.io.Reader getCharacterStream() {
-            return new java.io.StringReader(value);
+        public Reader getCharacterStream() {
+            return new StringReader(value);
         }
 
         @Override
-        public java.io.InputStream getAsciiStream() {
-            return new java.io.ByteArrayInputStream(value.getBytes(StandardCharsets.US_ASCII));
+        public InputStream getAsciiStream() {
+            return new ByteArrayInputStream(value.getBytes(StandardCharsets.US_ASCII));
         }
 
         @Override
@@ -836,7 +1010,7 @@ class FileResultSnapshotStoreTest {
         }
 
         @Override
-        public long position(java.sql.Clob searchstr, long start) {
+        public long position(Clob searchstr, long start) {
             throw new UnsupportedOperationException();
         }
 
@@ -851,12 +1025,12 @@ class FileResultSnapshotStoreTest {
         }
 
         @Override
-        public java.io.OutputStream setAsciiStream(long pos) {
+        public OutputStream setAsciiStream(long pos) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public java.io.Writer setCharacterStream(long pos) {
+        public Writer setCharacterStream(long pos) {
             throw new UnsupportedOperationException();
         }
 
@@ -870,8 +1044,106 @@ class FileResultSnapshotStoreTest {
         }
 
         @Override
-        public java.io.Reader getCharacterStream(long pos, long length) {
+        public Reader getCharacterStream(long pos, long length) {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    /**
+     * Records whether the store gave the cursor back.
+     */
+    private static final class TestCursorHold implements ResultCursorHold {
+
+        private boolean closed;
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+    }
+
+    /**
+     * Counts how often the character stream was opened, so a test can prove a leased value is not read before it is
+     * asked for.
+     */
+    private static final class CountingClob extends StringClob {
+
+        private int reads;
+
+        private CountingClob(String value) {
+            super(value);
+        }
+
+        @Override
+        public Reader getCharacterStream() {
+            reads++;
+            return super.getCharacterStream();
+        }
+    }
+
+    /**
+     * Minimal {@link java.sql.Blob} with random access reads.
+     */
+    private static final class ByteArrayBlob implements Blob {
+
+        private final byte[] content;
+
+        private ByteArrayBlob(byte[] content) {
+            this.content = content;
+        }
+
+        @Override
+        public long length() {
+            return content.length;
+        }
+
+        @Override
+        public byte[] getBytes(long pos, int length) {
+            return Arrays.copyOfRange(content, (int) pos - 1, (int) pos - 1 + length);
+        }
+
+        @Override
+        public InputStream getBinaryStream() {
+            return new ByteArrayInputStream(content);
+        }
+
+        @Override
+        public long position(byte[] pattern, long start) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long position(Blob pattern, long start) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int setBytes(long pos, byte[] bytes) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int setBytes(long pos, byte[] bytes, int offset, int len) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public OutputStream setBinaryStream(long pos) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void truncate(long len) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void free() {
+        }
+
+        @Override
+        public InputStream getBinaryStream(long pos, long length) {
+            return new ByteArrayInputStream(getBytes(pos, (int) length));
         }
     }
 }

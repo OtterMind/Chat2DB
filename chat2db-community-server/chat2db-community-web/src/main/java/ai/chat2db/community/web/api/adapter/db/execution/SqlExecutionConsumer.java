@@ -10,7 +10,6 @@ import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionResultConsumer;
 import ai.chat2db.community.domain.api.model.result.snapshot.ResultSnapshot;
 import ai.chat2db.community.domain.api.service.result.IResultSnapshotStore;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
 
     private final SqlExecutionRequest request;
@@ -55,19 +53,14 @@ public class SqlExecutionConsumer implements ISqlExecutionResultConsumer {
     }
 
     /**
-     * Called once the execution is done. The captured content is moved to disk and the heap it used is released, but
-     * the snapshot itself stays readable while the large-value read tokens are valid, so a copy that starts right
-     * after the query still gets the complete value. Expired snapshots are removed by the periodic store sweep.
+     * Called once the execution is done. The registered content stays where it is, so a value that is never opened is
+     * never encoded and never written to disk; it is only held by the budget of its snapshot. The snapshot itself stays
+     * readable while the large-value read tokens are valid, so a copy that starts right after the query still gets the
+     * complete value. Expired snapshots are removed by the periodic store sweep.
      */
     public void close() {
         for (ResultSnapshot snapshot : new ArrayList<>(snapshotsByResult.values())) {
             String snapshotId = snapshot.getSnapshotId();
-            try {
-                resultSnapshotStore.flushToDisk(snapshotId);
-            } catch (RuntimeException e) {
-                // Closing must never break the execution teardown: a failed flush only costs the in-memory copy.
-                log.warn("Failed to flush result snapshot {} on close: {}", snapshotId, e.getMessage());
-            }
             // Dropping the lease makes the snapshot releasable, so an unused capture goes away immediately instead of
             // waiting for the snapshot TTL.
             resultSnapshotStore.unhold(snapshotId);

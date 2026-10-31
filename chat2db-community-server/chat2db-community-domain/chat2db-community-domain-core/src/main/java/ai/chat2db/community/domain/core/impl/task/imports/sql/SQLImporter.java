@@ -54,7 +54,7 @@ public class SQLImporter implements IImportStrategy {
             // Failed task-owned scripts cannot return an open server transaction to the pool.
             // Caller-owned transactions retain their caller's commit/rollback decision.
             if (connection.getAutoCommit()) borrowedScriptConnection = connection;
-            ImportSqlExecutor sqlExecutor = new ImportSqlExecutor(context);
+            SqlScriptExecutor sqlExecutor = new SqlScriptExecutor(context);
             ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
             String databaseType = connectInfo.getDbType();
             context.logInfo(TaskEventCode.FILE_READ_STARTED.name(), "Reading SQL import file");
@@ -118,6 +118,7 @@ public class SQLImporter implements IImportStrategy {
             if (borrowedScriptConnection != null && context.taskId() != null) {
                 sqlExecutor.assertScriptCompleted();
             }
+            sqlExecutor.reportSummary();
         } catch (TaskCancelledException | TaskExecutionException e) {
             if (borrowedScriptConnection != null) discardConnection(borrowedScriptConnection, e);
             throw e;

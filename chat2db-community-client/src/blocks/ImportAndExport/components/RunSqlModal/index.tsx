@@ -1,12 +1,15 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { Modal } from '@chat2db/ui';
+import { Modal, staticMessage } from '@chat2db/ui';
 import { Button } from 'antd';
 import i18n from '@/i18n';
 import RunSql, { RunSqlRef } from '../RunSql';
 import { useImportExportStore } from '@/store/importExport';
 import ModalFooterButton from '@/components/Modal/ModalFooterButton';
 import importExportServices from '@/service/importExport';
+import sqlService from '@/service/sql';
 import Log from '@/blocks/ImportAndExport/components/Log';
+import { prepareWebImportParams } from '../ImportFileModal/submission';
+import { isDesktop } from '@/utils/env';
 
 interface IProps {
   className?: string;
@@ -14,6 +17,7 @@ interface IProps {
 
 export default memo<IProps>((_props) => {
   const [isReady, setIsReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const runSqlRef = useRef<RunSqlRef>(null);
   const [taskId, setTaskId] = useState<number>();
 
@@ -31,13 +35,30 @@ export default memo<IProps>((_props) => {
     }
   }, [runSqlBoundInfo]);
 
-  const handleRunSQl = () => {
+  const handleRunSQl = async () => {
     const params = runSqlRef.current?.getValues();
-    if (!params) return;
-    importExportServices.submitImport(params).then((res) => {
+    if (!params || submitting) return;
+    const selectedFile = runSqlRef.current?.getSelectedFile();
+    if (!isDesktop && !selectedFile && !params.sourceFile) {
+      staticMessage.error(i18n('workspace.importExport.wizard.selectFileFirst'));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // The browser has no local path to submit: upload the picked file first and send its id,
+      // exactly like the import wizard's SQL script path. The desktop bridge still sends the path.
+      const importParams = selectedFile
+        ? await prepareWebImportParams(params, selectedFile, sqlService.uploadImportFile)
+        : params;
+      const res = await importExportServices.submitImport(importParams);
       setTaskId(res.taskId);
       getTaskList();
-    });
+    } catch (error) {
+      const failure = error as { errorMessage?: string; message?: string };
+      staticMessage.error(failure?.errorMessage || failure?.message || i18n('common.text.failure'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderFooter = () => {
@@ -52,7 +73,7 @@ export default memo<IProps>((_props) => {
             >
               {i18n('common.button.cancel')}
             </Button>
-            <Button type="primary" disabled={!isReady} onClick={handleRunSQl}>
+            <Button type="primary" loading={submitting} disabled={!isReady || submitting} onClick={handleRunSQl}>
               {i18n('common.button.start')}
             </Button>
           </>

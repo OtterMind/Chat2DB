@@ -123,9 +123,20 @@ public class MysqlDBManager extends DefaultDBManager implements IDbManager {
     }
 
 
+    /**
+     * MySQL Connector/J ignores ordinary fetch sizes and keeps the whole result set in memory.
+     * {@link Integer#MIN_VALUE} switches it to row by row streaming, which requires the statement
+     * to be the only consumer of its connection; the export read path drains the result set before
+     * the connection is used again.
+     */
+    @Override
+    public int streamingFetchSize() {
+        return Integer.MIN_VALUE;
+    }
+
     @Override
     public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName, TaskExecutionContext context) {
-        exportTableData(connection, databaseName, schemaName, tableName, context, Integer.MIN_VALUE);
+        exportTableData(connection, databaseName, schemaName, tableName, context, streamingFetchSize());
     }
 
     private void exportViews(Connection connection, String databaseName, TaskExecutionContext context) throws SQLException {

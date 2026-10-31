@@ -30,6 +30,12 @@ public class TaskExportRequest extends DataSourceBaseRequest {
 
     private Boolean containsHeader;
 
+    /** CSV character set (UTF-8, GBK, ...); absent keeps UTF-8. */
+    private String encoding;
+
+    /** CSV field delimiter; absent keeps the comma. */
+    private String delimiter;
+
     private String exportPath;
 
     private String suggestedFileName;

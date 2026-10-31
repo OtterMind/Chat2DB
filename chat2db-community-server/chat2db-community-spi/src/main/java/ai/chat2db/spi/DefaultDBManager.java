@@ -8,7 +8,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import ai.chat2db.community.domain.api.config.DriverConfig;
 import ai.chat2db.community.domain.api.enums.parser.DatabaseTypeEnum;
@@ -42,6 +41,7 @@ import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.sql.JdbcDriverManager;
 import ai.chat2db.spi.DefaultSQLExecutor;
 import ai.chat2db.spi.ssh.SSHManager;
+import ai.chat2db.spi.util.JdbcUrlRewriter;
 import ai.chat2db.spi.util.JdbcUtils;
 import ai.chat2db.spi.util.ResultSetUtils;
 import cn.hutool.core.date.DateUtil;
@@ -52,9 +52,6 @@ import static cn.hutool.core.date.DatePattern.NORM_DATETIME_PATTERN;
 public class DefaultDBManager implements IDbManager {
 
     private static final int DEFAULT_EXPORT_BATCH_SIZE = 100000;
-    private static final int FIRST_PAGE = 1;
-    private static final int FIRST_OFFSET = 0;
-
     private static final String SQL_COPY_TABLE_DATA = "CREATE TABLE %s AS SELECT * FROM %s";
     private static final String SQL_COPY_TABLE_STRUCTURE = "CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0";
     private static final String SQL_SET_FOREIGN_KEY_CHECKS_DISABLED = "SET FOREIGN_KEY_CHECKS=0;";
@@ -145,6 +142,7 @@ public class DefaultDBManager implements IDbManager {
             if (driverConfig == null) {
                 driverConfig = Chat2DBContext.getDefaultDriverConfig(connectInfo.getDbType());
             }
+            url = JdbcUrlRewriter.withBatchRewrite(url);
             connection = JdbcDriverManager.getConnection(url, connectInfo.getUser(), connectInfo.getPassword(),
                     driverConfig, connectInfo.getExtendMap());
 
@@ -325,61 +323,8 @@ public class DefaultDBManager implements IDbManager {
     @Override
     public void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,
             TaskExecutionContext context) {
-        ISqlBuilder sqlBuilder = Chat2DBContext.getSqlBuilder();
-        String tableQuerySql = sqlBuilder.dql().buildSelectTable(databaseName, schemaName, tableName);
-        int batchSize = DEFAULT_EXPORT_BATCH_SIZE;
-        int page = FIRST_PAGE;
-        int offset = FIRST_OFFSET;
-        AtomicReference<Boolean> finish = new AtomicReference<>(false);
-        AtomicLong exportedRows = new AtomicLong();
-        context.write(String.format(RECORD_TITLE, tableName));
-        logTableQueryStarted(context, tableName);
-        while (!finish.get()) {
-            String pageSql = sqlBuilder.dql().buildPageLimit(PageLimitRequest.builder()
-                    .sql(tableQuerySql)
-                    .offset(offset)
-                    .pageNo(page)
-                    .pageSize(batchSize)
-                    .build());
-            DefaultSQLExecutor.getInstance().fetchAllTableRecords(FetchAllTableRecordsRequest.builder()
-                    .connection(connection)
-                    .sql(pageSql)
-                    .batchSize(batchSize)
-                    .statementListener(context)
-                    .cancellationChecker(context::checkCancelled)
-                    .consumer(resultSet -> {
-                ResultSetMetaData metaData = resultSet.getMetaData();
-                List<String> columnList = ResultSetUtils.getRsHeader(resultSet);
-                List<String> valueList = new ArrayList<>();
-                int n = 0;
-                while (resultSet.next()) {
-                    n++;
-                    long currentExportedRows = exportedRows.incrementAndGet();
-                    for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                        IValueProcessor valueProcessor = Chat2DBContext.getDbMetaData().getValueProcessor();
-                        JDBCDataValue jdbcDataValue = new JDBCDataValue(resultSet, metaData, i, false);
-                        String valueString = valueProcessor.getJdbcSqlValueString(jdbcDataValue);
-                        valueList.add(valueString);
-                    }
-                    String insertSql = sqlBuilder.dml().buildInsert(SingleInsertSqlRequest.builder()
-                            .tableName(tableName)
-                            .columnList(columnList)
-                            .valueList(valueList)
-                            .build());
-                    context.write(insertSql + SQLConstants.SEMICOLON);
-                    valueList.clear();
-                    if (currentExportedRows % TaskConstants.EXPORT_LOG_ROW_INTERVAL == 0) {
-                        logRowsExported(context, tableName, currentExportedRows);
-                    }
-                }
-                if (n < batchSize) {
-                    finish.set(true);
-                }
-            }).build());
-            page++;
-            offset = offset + batchSize;
-        }
-        logTableQueryCompleted(context, tableName, exportedRows.get());
+        // Read the table with a single streaming query; paging by OFFSET re-reads every skipped row.
+        exportTableData(connection, databaseName, schemaName, tableName, context, DEFAULT_EXPORT_BATCH_SIZE);
     }
 
     protected void exportTableData(Connection connection, String databaseName, String schemaName, String tableName,

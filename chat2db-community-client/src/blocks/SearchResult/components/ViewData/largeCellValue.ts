@@ -38,6 +38,9 @@ export const LARGE_CELL_ERROR_CODE = {
   TOKEN_EXPIRED: 'largeCellValue.tokenExpired',
   TOKEN_REQUIRED: 'largeCellValue.tokenRequired',
   FULL_VALUE_UNSUPPORTED: 'largeCellValue.fullValueUnsupported',
+  UNSUPPORTED_TOO_LARGE: 'largeCellValue.unsupportedTooLarge',
+  UNSUPPORTED_UNSTORED: 'largeCellValue.unsupportedUnstored',
+  UNSUPPORTED_NO_SNAPSHOT: 'largeCellValue.unsupportedNoSnapshot',
   READ_FAILED: 'largeCellValue.readFailed',
   DOWNLOAD_FAILED: 'largeCellValue.downloadFailed',
   PARTIAL_PREVIEW_EDIT_REJECTED: 'largeCellValue.partialPreviewEditRejected',
@@ -54,6 +57,9 @@ export const LARGE_CELL_ERROR_MESSAGE = {
   LOAD_FAILED: 'common.largeCellValue.error.loadFailed',
   DOWNLOAD_FAILED: 'common.largeCellValue.error.downloadFailed',
   FULL_VALUE_UNSUPPORTED: 'common.largeCellValue.error.fullValueUnsupported',
+  UNSUPPORTED_TOO_LARGE: 'common.largeCellValue.error.unsupportedTooLarge',
+  UNSUPPORTED_UNSTORED: 'common.largeCellValue.error.unsupportedUnstored',
+  UNSUPPORTED_NO_SNAPSHOT: 'common.largeCellValue.error.unsupportedNoSnapshot',
   PARTIAL_PREVIEW_EDIT_REJECTED: 'common.largeCellValue.error.partialPreviewEditRejected',
   UNSUPPORTED_FORMAT: 'common.largeCellValue.error.unsupportedFormat',
   SNAPSHOT_EXPIRED: 'common.largeCellValue.error.snapshotExpired',
@@ -64,7 +70,7 @@ export const LARGE_CELL_ERROR_MESSAGE = {
 
 export const LARGE_CELL_TEXT_EDITOR_LIMIT = 10 * 1024 * 1024;
 export const LARGE_CELL_BINARY_EDITOR_LIMIT = 50 * 1024 * 1024;
-export const LARGE_CELL_MAX_CHUNK_SIZE = 256 * 1024;
+export const LARGE_CELL_MAX_CHUNK_SIZE = 1024 * 1024;
 
 export function isBinaryDisplayMode(displayMode?: LargeValueType | string) {
   return displayMode === LARGE_VALUE_TYPE.BINARY || displayMode === LARGE_VALUE_TYPE.IMAGE;

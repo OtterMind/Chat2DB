@@ -1,6 +1,7 @@
+import { TreeNodeType } from '@/constants/tree';
 import assert from 'node:assert/strict';
 import type { DatabaseTypeCode } from '@/constants/common';
-import { createCachedDataSourceSelection } from './dataSourceSelection';
+import { createCachedDataSourceSelection, filterBoundInfoChildren } from './dataSourceSelection';
 
 assert.deepEqual(
   createCachedDataSourceSelection({
@@ -29,3 +30,10 @@ assert.deepEqual(
 assert.equal(createCachedDataSourceSelection({ dataSourceId: 18 }).label, '');
 
 console.log('Cached data source selection tests passed');
+
+const database = { treeNodeType: TreeNodeType.DATABASE, name: 'orders' };
+const schema = { treeNodeType: TreeNodeType.SCHEMA, name: 'public' };
+const utility = { treeNodeType: TreeNodeType.MONITOR, name: 'monitor' };
+assert.deepEqual(filterBoundInfoChildren([database, utility], TreeNodeType.DATABASE), [database]);
+assert.deepEqual(filterBoundInfoChildren([schema, utility], TreeNodeType.SCHEMA), [schema]);
+assert.deepEqual(filterBoundInfoChildren([utility], TreeNodeType.DATABASE), []);

@@ -120,8 +120,9 @@ class TaskExecutorRegistryTest {
                 });
         ArtifactService failingArtifactService = new ArtifactServiceImpl() {
             @Override
-            void copyArtifact(Path source, java.io.OutputStream output) throws IOException {
-                output.write('x');
+            void moveArtifact(Path source, Path target) throws IOException {
+                // Simulate a failed atomic rename that has already left bytes in the target name.
+                Files.writeString(target, "partial");
                 throw new IOException("Publish failed");
             }
         };
@@ -150,7 +151,9 @@ class TaskExecutorRegistryTest {
                 importExecutor(TaskType.DATA_FILE_IMPORT.name())));
         taskManager = new LocalTaskManager(storage, registry, new ArtifactServiceImpl(),
                 new ConnectionContextConverter(), emptyExtensionManager(), 1, 1);
-        return new TaskServiceImpl(storage, taskManager, new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl()));
+        return new TaskServiceImpl(storage, taskManager,
+                new TaskDeletionServiceImpl(storage, new ArtifactServiceImpl(), null), null,
+                new ConnectionContextConverter());
     }
 
     private TaskExtensionManager emptyExtensionManager() {
@@ -315,6 +318,26 @@ class TaskExecutorRegistryTest {
             tasks.remove(taskId);
             events.remove(taskId);
             commitAction.run();
+            return true;
+        }
+
+        @Override
+        public synchronized boolean saveCheckpoint(Long taskId, String checkpointJson) {
+            Task task = tasks.get(taskId);
+            if (task == null || TaskStatus.isTerminal(task.getStatus()) || checkpointJson == null) {
+                return false;
+            }
+            task.setCheckpointJson(checkpointJson);
+            return true;
+        }
+
+        @Override
+        public synchronized boolean attachErrorArtifact(Long taskId, String errorArtifactId) {
+            Task task = tasks.get(taskId);
+            if (task == null) {
+                return false;
+            }
+            task.setErrorArtifactId(errorArtifactId);
             return true;
         }
 

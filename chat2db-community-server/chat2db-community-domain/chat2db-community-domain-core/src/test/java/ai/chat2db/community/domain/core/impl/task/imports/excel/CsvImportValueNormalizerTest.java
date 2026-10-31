@@ -104,6 +104,21 @@ class CsvImportValueNormalizerTest {
         assertEquals("2023-08-24 00:00", normalize("2023-08-24", Types.TIMESTAMP, options));
     }
 
+    @Test
+    void manualDateDecimalFixtureRequiresBothDateSeparatorsAndTheTimeSeparator() {
+        CsvOptions correct = CsvOptions.builder().dateOrder("DMY").dateTimeOrder("DATE_TIME")
+                .dateDelimiter("/").yearDelimiter("/").timeDelimiter(":").decimalSymbol(",").build().validate();
+        assertEquals("2026-12-31 15:30:38", normalize("31/12/2026 15:30:38", Types.TIMESTAMP, correct));
+        assertEquals("2027-01-01 00:00", normalize("01/01/2027 00:00:00", Types.TIMESTAMP, correct));
+        assertEquals("123.45", normalize("123,45", Types.DECIMAL, correct));
+        assertEquals("0.50", normalize("0,50", Types.DECIMAL, correct));
+        correct.setYearDelimiter("-");
+        assertThrows(BusinessException.class, () -> normalize("31/12/2026 15:30:38", Types.TIMESTAMP, correct));
+        correct.setYearDelimiter("/");
+        correct.setTimeDelimiter(";");
+        assertThrows(BusinessException.class, () -> normalize("31/12/2026 15:30:38", Types.TIMESTAMP, correct));
+    }
+
     private static String normalize(String value, int type, CsvOptions options) {
         TableColumn column = TableColumn.builder().name("value").dataType(type).build();
         return CsvImportValueNormalizer.normalize(value, column, options, 2);

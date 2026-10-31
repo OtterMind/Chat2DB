@@ -296,7 +296,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
         editor.focus();
         // Use setTimeout so Monaco Editor can finish layout and rendering.
         // Avoid focusing during DOM updates, which may fail.
-        setTimeout(() => {
+        const focusTimer = window.setTimeout(() => {
           try {
             // Check editor again because it may have been disposed during the delay.
             if (sqlEditorRef.current?.getInstance()) {
@@ -310,6 +310,7 @@ const SQLEditorWithOperation = forwardRef<ISQLEditorWithOperationRef, ISQLEditor
             console.warn('Failed to focus editor:', error);
           }
         }, 0);
+        return () => window.clearTimeout(focusTimer);
       }
     } else {
       lastPositionRef.current = editor?.getPosition() ?? { lineNumber: 1, column: 1 };

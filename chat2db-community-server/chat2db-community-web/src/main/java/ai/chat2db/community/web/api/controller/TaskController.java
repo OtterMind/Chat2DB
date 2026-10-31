@@ -64,6 +64,15 @@ public class TaskController {
         return DataResult.of(new TaskSubmitResponse(taskId));
     }
 
+    /**
+     * Continues an owned import as a new task, reading the source task's stored parameters and
+     * checkpoint. The static path plus one request object is the desktop bridge contract.
+     */
+    @PostMapping("/resume")
+    public DataResult<TaskSubmitResponse> resume(@Valid @RequestBody TaskIdRequest request) {
+        return DataResult.of(new TaskSubmitResponse(taskService.resumeImport(request.getTaskId())));
+    }
+
     @GetMapping("/list")
     public WebPageResult<Task> list(TaskQuery query) {
         PageResponse<Task> page = taskService.list(query);
@@ -88,6 +97,11 @@ public class TaskController {
                 request.effectiveLimit()));
     }
 
+    @PostMapping("/cancel")
+    public DataResult<Boolean> cancel(@Valid @RequestBody TaskIdRequest request) {
+        return DataResult.of(taskService.cancel(request.getTaskId()));
+    }
+
     @DeleteMapping("/delete")
     public ActionResult delete(@Valid TaskIdRequest request) {
         taskService.delete(request.getTaskId());
@@ -97,6 +111,15 @@ public class TaskController {
     @GetMapping("/artifact")
     public ResponseEntity<Resource> artifact(@Valid TaskIdRequest request) {
         return taskDownloadWebConverter.toResponse(taskService.resolveArtifact(request.getTaskId()));
+    }
+
+    /**
+     * Downloads the rejected-rows file of a task. Unlike the main artifact it is served for failed
+     * and cancelled tasks as well, because that is when it is needed.
+     */
+    @GetMapping("/error-artifact")
+    public ResponseEntity<Resource> errorArtifact(@Valid TaskIdRequest request) {
+        return taskDownloadWebConverter.toResponse(taskService.resolveErrorArtifact(request.getTaskId()));
     }
 
     @GetMapping("/active-count")
