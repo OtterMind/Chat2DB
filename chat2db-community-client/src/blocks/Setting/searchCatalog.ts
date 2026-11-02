@@ -57,6 +57,12 @@ export function getSettingSearchItems(menuCode: string): SettingSearchItem[] {
           'row limit',
         ]),
         settingItem('editor.errorContinue', 'monaco.errorContinue', ['continue on error', 'execution']),
+        settingItem('editor.sqlParameters', 'monaco.sqlParameters', [
+          'sql parameters',
+          'query parameters',
+          'placeholder',
+          'bind variable',
+        ]),
       ];
     case 'terminal':
       return [

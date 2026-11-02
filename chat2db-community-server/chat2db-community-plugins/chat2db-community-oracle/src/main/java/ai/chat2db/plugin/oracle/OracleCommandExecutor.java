@@ -80,12 +80,6 @@ public final class OracleCommandExecutor extends DefaultSQLExecutor {
         return List.of(response);
     }
 
-    private void markStatementAsExplain(SimpleSqlStatement statement) {
-        // Outer execute/executeStreaming overwrite response.sqlType from statement.sqlType
-        // after setExplain() rewrote the SQL text without updating the type.
-        statement.setSqlType(ai.chat2db.community.domain.api.enums.parser.SqlTypeEnum.EXPLAIN.name());
-    }
-
     private void checkCanceled(ISqlExecutionCancellation cancellation) throws SQLException {
         if (cancellation != null && cancellation.isCanceled()) {
             throw new SQLException("SQL execution canceled");

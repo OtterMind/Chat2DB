@@ -59,6 +59,7 @@ for (const targetId of [
   'editor.completion',
   'editor.confirmBeforeClose',
   'editor.defaultPageSize',
+  'editor.sqlParameters',
   'terminal.position',
   'terminal.shell',
   'shortcut.global',

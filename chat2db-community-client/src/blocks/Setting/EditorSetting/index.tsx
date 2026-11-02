@@ -349,6 +349,16 @@ function EditorSettings() {
                 <Radio value={false}>{i18n('monaco.errorContinue.false')}</Radio>
               </Radio.Group>
             </Form.Item>
+            <Form.Item
+              name="sqlParameters"
+              label={
+                <SearchTargetLabel targetId="editor.sqlParameters">{i18n('monaco.sqlParameters')}</SearchTargetLabel>
+              }
+              tooltip={i18n('monaco.sqlParameters.tooltip')}
+              valuePropName="checked"
+            >
+              <Switch />
+            </Form.Item>
           </div>
         </section>
       </Form>

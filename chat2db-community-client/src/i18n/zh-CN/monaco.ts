@@ -74,6 +74,9 @@ export default {
   'monaco.defaultPageSize.tooltip': 'SQL 查询未指定分页大小时，默认返回的最大行数。修改后对后续查询生效。',
   'monaco.errorContinue': '错误继续执行',
   'monaco.errorContinue.tooltip': '一次执行多条 SQL 时，某条语句失败后是否继续执行后续语句。',
+  'monaco.sqlParameters': 'SQL 参数',
+  'monaco.sqlParameters.tooltip':
+    '执行 SQL 前询问 :name 和 ? 占位符的值。参数值由数据库驱动绑定，不会拼接到 SQL 文本中。在 PostgreSQL 中，请将 jsonb 的 ? 运算符写成 jsonb_exists()，或使用 :name 参数。',
   'monaco.errorContinue.true': '是',
   'monaco.errorContinue.false': '否',
   'monaco.confirmBeforeClose': '关闭编辑器前确认',

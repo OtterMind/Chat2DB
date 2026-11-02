@@ -1,5 +1,6 @@
 import { DatabaseTypeCode, TableDataType } from '@/constants';
 import { SqlTypeEnum } from './sqlParser';
+import type { ISqlParameterValues } from '@/service/dmlRequest';
 
 // Identify the database context used for SQL execution and metadata queries.
 export interface IDBContextInfo {
@@ -102,11 +103,13 @@ export interface ILargeCellDownloadRequest {
 }
 
 // The sql that needs to be executed exposed by the console
-export interface IConsoleReturnExecuteSql {
+export interface IConsoleReturnExecuteSql extends ISqlParameterValues {
   sql: string;
   single?: boolean;
   // Approval ID
   applyId?: number;
+  // The editor's SQL parameters switch when this SQL was run.
+  sqlParameters?: boolean;
 }
 
 // View all parameters from the table
