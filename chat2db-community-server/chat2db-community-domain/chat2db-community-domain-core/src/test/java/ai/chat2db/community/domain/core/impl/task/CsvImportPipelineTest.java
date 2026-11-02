@@ -166,7 +166,7 @@ class CsvImportPipelineTest {
     }
 
     @Test
-    void ordinaryModesFailTheTaskAndKeepTheAppliedBatchRows() throws Exception {
+    void ordinaryModesFailTheTaskAndKeepOnlyTheSuccessfulPrefix() throws Exception {
         for (String mode : java.util.Arrays.asList(null, "STANDARD", "unknown")) {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("DELETE FROM TARGET_ROWS");
@@ -176,10 +176,9 @@ class CsvImportPipelineTest {
 
             assertThrows(TaskExecutionException.class, () -> new CSVImporter().run(spec, contextFor(spec)));
 
-            // Writes are batch-granular since the import path uses JDBC batches: the driver applies
-            // the statements it can and reports the duplicate afterwards. The invariant under test is
-            // that the task still fails, so no row is skipped silently.
-            assertEquals(List.of(1, 2), importedIds(), "ordinary import keeps the applied batch rows: " + mode);
+            // STANDARD imports preserve the successful prefix and never submit rows after the
+            // first rejection, even when the JDBC driver normally continues a failed batch.
+            assertEquals(List.of(1), importedIds(), "ordinary import stops after the first rejected row: " + mode);
             assertTrue(connection.getAutoCommit());
         }
     }

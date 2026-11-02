@@ -48,6 +48,24 @@ import static ai.chat2db.spi.util.SortUtils.sortDatabase;
 import static ai.chat2db.plugin.sqlserver.constant.SqlServerMetaDataConstants.*;
 public class SqlServerMetaData extends DefaultMetaService implements IDbMetaData {
 
+    @Override
+    public Optional<Boolean> hasOpenTransaction(Connection connection,
+            ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener listener) throws SQLException {
+        // JDBC autoCommit does not reflect explicit/nested T-SQL transactions or named savepoint rollback.
+        try (java.sql.Statement statement = connection.createStatement()) {
+            statement.setQueryTimeout(5);
+            try {
+                if (listener != null) listener.onStatementCreated(statement);
+                try (ResultSet rows = statement.executeQuery("SELECT @@TRANCOUNT")) {
+                    if (!rows.next()) throw new SQLException("SQL Server transaction state was not returned");
+                    return Optional.of(rows.getInt(1) > 0);
+                }
+            } finally {
+                if (listener != null) listener.onStatementClosed(statement);
+            }
+        }
+    }
+
 
 
 
