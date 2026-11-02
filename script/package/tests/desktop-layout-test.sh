@@ -59,7 +59,9 @@ chat2db_validate_desktop_input "${WORK_DIR}/jpackage/input/win"
 
 # The launcher configuration is the only path that delivers the update signing key.
 APP_IMAGE="${WORK_DIR}/app image"
-mkdir -p "${APP_IMAGE}/lib/app"
+mkdir -p "${APP_IMAGE}/lib/runtime/lib" "${APP_IMAGE}/lib/app"
+printf 'java-options=-Dchat2db.update.key-id=test-key\njava-options=-Dchat2db.update.public-key=dGVzdC1rZXk=\n' \
+    > "${APP_IMAGE}/lib/runtime/lib/jvm.cfg"
 printf '[Application]\napp.classpath=$APPDIR/runtime/app.jar\n' > "${APP_IMAGE}/lib/app/Example App.cfg"
 chat2db_verify_launcher_update_options "${APP_IMAGE}"
 CHAT2DB_UPDATE_KEY_ID='test-key'
@@ -71,6 +73,16 @@ fi
 printf 'java-options=-Dchat2db.update.key-id=test-key\njava-options=-Dchat2db.update.public-key=dGVzdC1rZXk=\n' \
     >> "${APP_IMAGE}/lib/app/Example App.cfg"
 chat2db_verify_launcher_update_options "${APP_IMAGE}"
+mv "${APP_IMAGE}/lib/app/Example App.cfg" "${APP_IMAGE}/lib/app/Other App.cfg"
+if chat2db_verify_launcher_update_options "${APP_IMAGE}" 2>/dev/null; then
+    echo 'Missing named launcher configuration must fail validation' >&2
+    exit 1
+fi
+mv "${APP_IMAGE}/lib/app/Other App.cfg" "${APP_IMAGE}/lib/app/Example App.cfg"
+MAC_APP="${WORK_DIR}/Example App.app"
+mkdir -p "${MAC_APP}/Contents/app"
+cp "${APP_IMAGE}/lib/app/Example App.cfg" "${MAC_APP}/Contents/app/Example App.cfg"
+chat2db_verify_launcher_update_options "${MAC_APP}"
 unset CHAT2DB_UPDATE_KEY_ID CHAT2DB_UPDATE_PUBLIC_KEY_B64
 chat2db_verify_launcher_update_options "${APP_IMAGE}"
 

@@ -223,10 +223,12 @@ chat2db_verify_launcher_update_options() {
         echo "Error: CHAT2DB_UPDATE_KEY_ID and CHAT2DB_UPDATE_PUBLIC_KEY_B64 must be set together" >&2
         return 1
     fi
-    local configuration
-    configuration=$(find "${root}" -maxdepth 4 -name '*.cfg' -print -quit)
-    if [ -z "${configuration}" ]; then
-        echo "Error: launcher configuration is missing under ${root}" >&2
+    local configuration="${root}/lib/app/${APP_NAME}.cfg"
+    if [ -d "${root}/Contents/app" ]; then
+        configuration="${root}/Contents/app/${APP_NAME}.cfg"
+    fi
+    if [ ! -f "${configuration}" ]; then
+        echo "Error: launcher configuration is missing: ${configuration}" >&2
         return 1
     fi
     if ! grep -Fq -- "-Dchat2db.update.key-id=${CHAT2DB_UPDATE_KEY_ID}" "${configuration}" || \
