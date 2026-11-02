@@ -59,6 +59,20 @@ class AiModelConfigServiceImplBaseUrlTest {
                 testEndpoint("MINIMAX", "https://api.minimax.chat/v1"));
     }
 
+    @Test
+    void zhipuGlmBaseUrlKeepsItsOwnVersionSegment() {
+        assertEquals("https://open.bigmodel.cn/api/paas/v4",
+                resolveBaseUrl("OPENAI", "https://open.bigmodel.cn/api/paas/v4"));
+        assertEquals("https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                testEndpoint("OPENAI", "https://open.bigmodel.cn/api/paas/v4"));
+    }
+
+    @Test
+    void pastedFullChatCompletionsEndpointIsNotDoubled() {
+        assertEquals("https://example.com/v1/chat/completions",
+                testEndpoint("OPENAI", "https://example.com/v1/chat/completions"));
+    }
+
     private String resolveBaseUrl(String provider, String baseUrl) {
         AiChatRuntimeResolveRequest request = new AiChatRuntimeResolveRequest();
         request.setProvider(provider);
