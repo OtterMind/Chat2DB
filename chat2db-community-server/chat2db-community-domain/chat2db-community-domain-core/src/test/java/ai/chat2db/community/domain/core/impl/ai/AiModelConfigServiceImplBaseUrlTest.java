@@ -53,6 +53,25 @@ class AiModelConfigServiceImplBaseUrlTest {
         assertEquals(expectedEndpoint, testEndpoint(provider, null));
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "https://api.minimax.io/v1, https://api.minimax.io/v1/chat/completions",
+            "https://api.minimaxi.com/v1, https://api.minimaxi.com/v1/chat/completions",
+            "https://api.minimax.io/anthropic, https://api.minimax.io/anthropic/v1/messages",
+            "https://api.minimaxi.com/anthropic, https://api.minimaxi.com/anthropic/v1/messages"
+    })
+    void minimaxPresetsUseMatchingProtocol(String baseUrl, String endpoint) {
+        assertEquals(endpoint, testEndpoint("MINIMAX", baseUrl));
+        for (String model : java.util.List.of("MiniMax-M3.1-Flash", "MiniMax-M3")) {
+            AiChatRuntimeResolveRequest request = new AiChatRuntimeResolveRequest();
+            request.setProvider("MINIMAX");
+            request.setModel(model);
+            request.setApiKey("test-key");
+            request.setBaseUrl(baseUrl);
+            assertEquals(model, service().resolveRuntimeModel(request).getModel());
+        }
+    }
+
     @Test
     void minimaxConnectionTestKeepsCustomBaseUrl() {
         assertEquals("https://api.minimax.chat/v1/chat/completions",
