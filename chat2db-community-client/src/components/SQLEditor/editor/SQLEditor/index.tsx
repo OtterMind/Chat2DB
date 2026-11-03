@@ -59,6 +59,13 @@ import {
 } from '@/constants/shortcut';
 import { useStyles } from './style';
 import LocalFileEncodingSelect from '@/components/LocalFileEncodingSelect';
+import {
+  SqlParserRequestCoordinator,
+  runAfterCommittedSqlParser,
+  type SqlParserRequestContext,
+  type SqlParserRequestScope,
+  type SqlParserRequestStatus,
+} from '../../core/sqlParserRequestCoordinator';
 
 const INSERT_VALUE_HINT_ACTION_ID = 'chat2db-insert-value-hints';
 const EDITOR_ESCAPE_KEY_CODE = 'Escape';
@@ -94,11 +101,11 @@ export interface SQLEditorRef extends MonacoEditorRef {
   /** Get the SQL statement at the current cursor position. */
   getCursorSQL: () => string;
   /** Get the nearest SQL statement to the current cursor line. */
-  getCursorCurLineNearestSQL: () => string;
+  getCursorCurLineNearestSQL: (position?: monaco.IPosition | null) => string;
   /** Parse an SQL statement. */
-  handleSQLParser: (sql: string, dbInfo: IBoundInfo) => void;
+  handleSQLParser: (sql: string, dbInfo: IBoundInfo) => Promise<SqlParserRequestStatus>;
   /** Execute SQL through the quick action. */
-  handleQuickSQLParser: (sql: string, dbInfo: IBoundInfo) => void;
+  handleQuickSQLParser: (sql: string, dbInfo: IBoundInfo) => Promise<SqlParserRequestStatus>;
   /** Get the table name at the specified position. */
   getTableIdentifierAtPosition: (position: monaco.IPosition | null | undefined) => EditorTableIdentifier | null;
 }
@@ -118,6 +125,16 @@ const getTableDDLTriggerMode = (editorSettings?: EditorSettings) => editorSettin
 
 const toArray = <T,>(value: T[] | null | undefined): T[] => (Array.isArray(value) ? value : []);
 type EditorHintsListener = (editorHints: ISqlEditorHintVO[]) => void;
+
+const getSqlParserDatabaseKey = (boundInfo?: IBoundInfo) =>
+  JSON.stringify([
+    boundInfo?.consoleId ?? null,
+    boundInfo?.workspaceTabId ?? null,
+    boundInfo?.dataSourceId ?? null,
+    boundInfo?.databaseName ?? null,
+    boundInfo?.schemaName ?? null,
+    boundInfo?.databaseType ?? null,
+  ]);
 
 type BackendEditorHintsSource = 'completion' | 'content' | 'parser';
 
@@ -174,6 +191,22 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const backendEditorHintsListenerRef = useRef<EditorHintsListener | null>(null);
     const backendEditorHintsRequestRef = useRef(0);
     const backendEditorHintsEpochRef = useRef(0);
+    const sqlParserRequestCoordinatorRef = useRef<SqlParserRequestCoordinator>();
+    if (!sqlParserRequestCoordinatorRef.current) {
+      sqlParserRequestCoordinatorRef.current = new SqlParserRequestCoordinator();
+    }
+    const sqlParserRequestCoordinator = sqlParserRequestCoordinatorRef.current;
+    const latestDbInfoRef = useRef(dbInfo);
+    latestDbInfoRef.current = dbInfo;
+    const sqlParserDatabaseKey = getSqlParserDatabaseKey(dbInfo);
+    const sqlParserScopeRef = useRef<{ databaseKey: string; scope: SqlParserRequestScope }>();
+    if (!sqlParserScopeRef.current || sqlParserScopeRef.current.databaseKey !== sqlParserDatabaseKey) {
+      sqlParserScopeRef.current = {
+        databaseKey: sqlParserDatabaseKey,
+        scope: sqlParserRequestCoordinator.createScope(),
+      };
+    }
+    const sqlParserScope = sqlParserScopeRef.current.scope;
     const autoFillEditInProgressRef = useRef(false);
     const editorSurfaceRef = useRef<HTMLDivElement | null>(null);
     const cursorPositionRef = useRef<HTMLSpanElement | null>(null);
@@ -278,7 +311,9 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     }, [contextMenuInfo]);
 
     useEffect(() => {
+      sqlParserRequestCoordinator.activate();
       return () => {
+        sqlParserRequestCoordinator.dispose();
         safelyDisposeEditorResource(() => decorationCollectionRef.current?.clear());
         decorationCollectionRef.current = null;
         safelyDisposeEditorResource(() => sqlValueTypeHintCollectionRef.current?.clear());
@@ -300,6 +335,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         backendEditorHintsRef.current = backendEditorHintStoreRef.current.clear();
         refreshBackendParameterHints.cancel();
         handleSQLParser.cancel();
+        updateMarkMessage.cancel();
         completionProvider.current?.clearModelDBInfo(getInstance()?.getModel());
         setBackendCompletionModel(getInstance()?.getModel(), false);
         insertValueHintActionRef.current = null;
@@ -310,7 +346,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
         parameterHintWidgetRef.current = null;
         backendEditorHintsListenerRef.current = null;
       };
-    }, [getInstance]);
+    }, [getInstance, sqlParserRequestCoordinator]);
 
     useEffect(() => {
       syncBackendCompletionModel(getInstance());
@@ -362,57 +398,119 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       }
     }, [sqlTemp, dbInfo]);
 
-    const handleSQLParserRightNow = async (sql: string, _dbInfo: IBoundInfo, isQuick: boolean = false) => {
+    const createSqlParserRequestContext = (
+      sql: string,
+      boundInfo: IBoundInfo,
+      scope: SqlParserRequestScope,
+    ): SqlParserRequestContext => {
+      const model = getInstance()?.getModel() ?? null;
+      return {
+        scope,
+        databaseKey: getSqlParserDatabaseKey(boundInfo),
+        sql,
+        model,
+        modelVersion: model?.getVersionId() ?? null,
+      };
+    };
+
+    const getCurrentSqlParserRequestContext = (): SqlParserRequestContext => {
+      const model = getInstance()?.getModel() ?? null;
+      return {
+        scope: sqlParserScopeRef.current!.scope,
+        databaseKey: getSqlParserDatabaseKey(latestDbInfoRef.current),
+        sql: model?.getValue() ?? getValue(),
+        model,
+        modelVersion: model?.getVersionId() ?? null,
+      };
+    };
+
+    function invalidateSqlParserRequestWork() {
+      sqlParserRequestCoordinator.invalidate();
+      updateMarkMessage.cancel();
+      refreshBackendParameterHints.cancel();
+      backendEditorHintsRequestRef.current += 1;
+      backendEditorHintsEpochRef.current += 1;
+      sqlStatementListRef.current = [];
+      markMessageListRef.current = [];
+      completionProvider.current?.onParserChange([]);
+      const editor = getInstance();
+      const model = editor?.getModel();
+      if (editor && model) {
+        setModelMarkers(model, editor.getId(), []);
+      }
+      decorationCollectionRef.current?.clear();
+      hideParameterHint();
+    }
+
+    const handleSQLParserRightNow = async (
+      sql: string,
+      _dbInfo: IBoundInfo,
+      isQuick: boolean = false,
+    ): Promise<SqlParserRequestStatus> => {
       const { dataSourceId, databaseName, schemaName } = _dbInfo;
-      if (!dataSourceId) return;
+      if (!dataSourceId) {
+        invalidateSqlParserRequestWork();
+        return 'stale';
+      }
       if (!sql) {
-        sqlStatementListRef.current = [];
-        markMessageListRef.current = [];
+        invalidateSqlParserRequestWork();
         clearBackendEditorHints();
-        hideParameterHint();
-        return;
+        return 'stale';
       }
 
       // Skip parsing SQL statements longer than 50,000 characters.
       if (sql.length >= 50000) {
-        return;
+        invalidateSqlParserRequestWork();
+        return 'stale';
       }
 
+      if (isQuick) {
+        handleSQLParser.cancel();
+      }
+      invalidateSqlParserRequestWork();
+      const requestContext = createSqlParserRequestContext(sql, _dbInfo, sqlParserScope);
       const queryParser = isQuick ? SQLParserService.queryQuickSQLParser : SQLParserService.querySQLParser;
 
-      const parser = await queryParser({
-        consoleId: _dbInfo.consoleId!,
-        sql,
-        dataSourceId,
-        databaseName,
-        schemaName,
-      });
-      const { sqlStatementList, markMessageList } = parser || {};
-      const nextSqlStatementList = sqlStatementList || [];
-      const nextMarkMessageList = markMessageList || [];
-      sqlStatementListRef.current = nextSqlStatementList;
-      markMessageListRef.current = nextMarkMessageList;
+      return sqlParserRequestCoordinator.run(
+        requestContext,
+        getCurrentSqlParserRequestContext,
+        () =>
+          queryParser({
+            consoleId: _dbInfo.consoleId!,
+            sql,
+            dataSourceId,
+            databaseName,
+            schemaName,
+          }),
+        (parser) => {
+          const { sqlStatementList, markMessageList } = parser || {};
+          const nextSqlStatementList = sqlStatementList || [];
+          const nextMarkMessageList = markMessageList || [];
+          sqlStatementListRef.current = nextSqlStatementList;
+          markMessageListRef.current = nextMarkMessageList;
 
-      if (completionProvider.current) {
-        const editor = getInstance();
-        if (!editor) return '';
-        const position = editor.getPosition();
-        if (!position) return '';
-        const curStatement = findSqlStatement(position, nextSqlStatementList);
+          if (completionProvider.current) {
+            const editor = getInstance();
+            if (!editor) return;
+            const position = editor.getPosition();
+            if (!position) return;
+            const curStatement = findSqlStatement(position, nextSqlStatementList);
 
-        completionProvider.current.onParserChange(nextSqlStatementList, curStatement);
-      }
-      updateMarkMessage();
-      updateDecoration(getInstance(), decorationCollectionRef.current);
-      updateParameterHint(getInstance(), localInsertValueParameterHint(getInstance()));
-      refreshBackendParameterHints(getInstance(), 'parser');
+            completionProvider.current.onParserChange(nextSqlStatementList, curStatement);
+          }
+          updateMarkMessage();
+          updateDecoration(getInstance(), decorationCollectionRef.current);
+          updateParameterHint(getInstance(), localInsertValueParameterHint(getInstance()));
+          refreshBackendParameterHints(getInstance(), 'parser');
+        },
+      );
     };
 
     const handleSQLParser = useCallback(
       debounce((sql) => {
         handleSQLParserRightNow(sql, dbInfo);
       }, 500),
-      [dbInfo],
+      [dbInfo, sqlParserScope],
     );
 
     useEffect(() => {
@@ -424,6 +522,15 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     const closeHoverHelp = useCallback(() => {
       setHoverHelpInfo(hoverHelpDefaultConfig);
     }, []);
+
+    const handleImmediateContentChange = useCallback(
+      (sql: string) => {
+        invalidateSqlParserRequestWork();
+        clearBackendEditorHints();
+        onContentChange?.(sql);
+      },
+      [dbInfo, onContentChange, readOnly],
+    );
 
     const handleValueChange = useCallback(
       (
@@ -502,7 +609,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
         const target = e.target.element;
         if (target instanceof HTMLDivElement && target.classList.contains('execute-button-glyph')) {
-          handleClickExecuteButton();
+          void handleClickExecuteButton();
         }
         return;
       }
@@ -785,9 +892,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     }, [refreshBackendParameterHints]);
 
     useEffect(() => {
-      backendEditorHintsRequestRef.current += 1;
-      backendEditorHintsEpochRef.current += 1;
-      refreshBackendParameterHints.cancel();
+      invalidateSqlParserRequestWork();
       clearBackendEditorHints();
       hideParameterHint();
     }, [
@@ -916,16 +1021,17 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
       const position = editor.getPosition();
       if (!position) return;
 
-      await handleSQLParserRightNow(editor.getValue(), dbInfo, true);
-
-      // Find the current SQL statement.
-      const currentStatement = (sqlStatementListRef.current || []).find(
-        (stmt) => position?.lineNumber >= stmt.sqlStartRowNum && position?.lineNumber <= stmt.sqlEndRowNum,
+      await runAfterCommittedSqlParser(
+        () => handleSQLParserRightNow(editor.getValue(), dbInfo, true),
+        () => {
+          const currentStatement = (sqlStatementListRef.current || []).find(
+            (stmt) => position.lineNumber >= stmt.sqlStartRowNum && position.lineNumber <= stmt.sqlEndRowNum,
+          );
+          if (currentStatement) {
+            action(SQLOptType.EXECUTE_SINGLE_SQL, currentStatement.sql ?? '');
+          }
+        },
       );
-      if (!currentStatement) return;
-
-      // Execute the SQL statement.
-      action(SQLOptType.EXECUTE_SINGLE_SQL, currentStatement?.sql ?? '');
     };
 
     const handleHover = useCallback(
@@ -960,6 +1066,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
 
     const handleEditorMount = useCallback(
       (editor: monaco.editor.IStandaloneCodeEditor) => {
+        invalidateSqlParserRequestWork();
         safelyDisposeEditorResource(() => decorationCollectionRef.current?.clear());
         decorationCollectionRef.current = editor.createDecorationsCollection();
 
@@ -1009,12 +1116,12 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
     /**
      * Get the nearest SQL statement to the current cursor line
      */
-    const getCursorCurLineNearestSQL = useCallback(() => {
+    const getCursorCurLineNearestSQL = useCallback((position?: monaco.IPosition | null) => {
       const editor = getInstance();
       if (!editor) return '';
-      const position = editor.getPosition();
-      if (!position) return '';
-      const curStatement = findNearestSQL(position, sqlStatementListRef.current);
+      const targetPosition = position === undefined ? editor.getPosition() : position;
+      if (!targetPosition) return '';
+      const curStatement = findNearestSQL(targetPosition, sqlStatementListRef.current);
       return curStatement?.sql ?? '';
     }, []);
 
@@ -1033,7 +1140,7 @@ const SQLEditor = forwardRef<SQLEditorRef, SQLEditorProps>(
             defaultValue={defaultValue}
             onMount={handleEditorMount}
             onChange={handleValueChange}
-            onContentChange={onContentChange}
+            onContentChange={handleImmediateContentChange}
             onCursorChange={handleCursorChange}
             onMouseClick={handleMouseClick}
             onContextMenu={handleContextMenu}
