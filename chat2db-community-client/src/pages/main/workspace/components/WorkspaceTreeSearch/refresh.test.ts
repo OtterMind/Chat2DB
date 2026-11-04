@@ -22,7 +22,10 @@ async function testQueryChangeDuringRootRefresh() {
   });
   const state: IWorkspaceTreeRefreshState = {
     expandedKeys: ['old-root'],
+    searchRequiredExpandedKeys: [],
+    invalidatedTreeNodeKeys: [],
     searchBarValue: 'old_query',
+    searchRevision: 1,
     treeData: [node('old-root')],
     treeDataRevision: 1,
   };
@@ -37,7 +40,9 @@ async function testQueryChangeDuringRootRefresh() {
   });
 
   state.searchBarValue = 'new_query';
-  state.expandedKeys = ['dataSource_1', 'database_app', 'tables'];
+  state.searchRevision = 2;
+  state.expandedKeys = [];
+  state.searchRequiredExpandedKeys = ['dataSource_1', 'database_app', 'tables'];
   state.treeData = [node('dataSource_1', [node('database_app', [node('tables')])])];
   state.treeDataRevision = 2;
   resolveRoot(true);
@@ -49,7 +54,10 @@ async function testQueryChangeDuringRootRefresh() {
 async function testNewRootRevisionStopsOlderContinuation() {
   const state: IWorkspaceTreeRefreshState = {
     expandedKeys: ['dataSource_1', 'database_app'],
+    searchRequiredExpandedKeys: [],
+    invalidatedTreeNodeKeys: [],
     searchBarValue: 'orders',
+    searchRevision: 1,
     treeData: [node('dataSource_1', [node('database_app')])],
     treeDataRevision: 7,
   };
@@ -72,7 +80,10 @@ async function testNewRootRevisionStopsOlderContinuation() {
 async function testChildRefreshFailureIsReported() {
   const state: IWorkspaceTreeRefreshState = {
     expandedKeys: ['dataSource_1'],
+    searchRequiredExpandedKeys: [],
+    invalidatedTreeNodeKeys: [],
     searchBarValue: 'orders',
+    searchRevision: 1,
     treeData: [node('dataSource_1')],
     treeDataRevision: 1,
   };
@@ -90,10 +101,39 @@ async function testChildRefreshFailureIsReported() {
   );
 }
 
+async function testQueryChangeStopsTheOlderSearchContinuation() {
+  const state: IWorkspaceTreeRefreshState = {
+    expandedKeys: [],
+    searchRequiredExpandedKeys: ['dataSource_1', 'database_app'],
+    invalidatedTreeNodeKeys: [],
+    searchBarValue: 'old_query',
+    searchRevision: 3,
+    treeData: [node('dataSource_1', [node('database_app')])],
+    treeDataRevision: 5,
+  };
+  const refreshedKeys: Key[] = [];
+
+  const result = await refreshWorkspaceTreeData({
+    findNode,
+    getState: () => state,
+    refreshNode: async (current) => {
+      refreshedKeys.push(current.key);
+      state.searchBarValue = 'new_query';
+      state.searchRequiredExpandedKeys = [];
+      state.searchRevision += 1;
+    },
+    refreshRoot: async () => true,
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(refreshedKeys, ['dataSource_1']);
+}
+
 async function main() {
   await testQueryChangeDuringRootRefresh();
   await testNewRootRevisionStopsOlderContinuation();
   await testChildRefreshFailureIsReported();
+  await testQueryChangeStopsTheOlderSearchContinuation();
   console.log('Workspace tree refresh lifecycle tests passed');
 }
 

@@ -146,12 +146,46 @@ async function testMissingDescendantLeavesLoadedAncestorAvailableForFallback() {
   assert.deepEqual(expandedKeys, ['dataSource_1']);
 }
 
+async function testInvalidatedLoadedNodeReloadsBeforePathExpansion() {
+  const oldDatabase = node('database_old', []);
+  const newDatabase = node('database_new', []);
+  const dataSource = node('dataSource_1', [oldDatabase]);
+  let treeData = [dataSource];
+  let expandedKeys: Key[] = [];
+  let loadCount = 0;
+  const store = {
+    get treeData() {
+      return treeData;
+    },
+    get expandedKeys() {
+      return expandedKeys;
+    },
+    invalidatedTreeNodeKeys: ['dataSource_1'],
+    async handleLoadData() {
+      loadCount += 1;
+      dataSource.children = [newDatabase];
+      treeData = [dataSource];
+      return { children: [newDatabase], committed: true };
+    },
+    setExpandedKeys(keys: Key[]) {
+      expandedKeys = keys;
+    },
+  };
+
+  const loaded = await loadDatabaseTreePath(['dataSource_1', 'database_new'], () => store, () => true);
+
+  assert.equal(loaded, true);
+  assert.equal(loadCount, 1);
+  assert.deepEqual(expandedKeys, ['dataSource_1', 'database_new']);
+}
+
 Promise.all([
   testSuccessfulPathLoadsSilentlyAndExpandsEachCurrentStep(),
   testCancelledPathDoesNotExpandAfterPendingLoadSettles(),
   testClearedTreeDoesNotReceiveExpansionFromPendingLoad(),
   testSupersededLoadDoesNotExpandOrContinuePath(),
   testMissingDescendantLeavesLoadedAncestorAvailableForFallback(),
+  testInvalidatedLoadedNodeReloadsBeforePathExpansion(),
 ])
   .then(() => {
     console.log('Database tree path loading tests passed');
