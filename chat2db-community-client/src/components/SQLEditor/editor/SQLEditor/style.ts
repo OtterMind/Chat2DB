@@ -13,6 +13,7 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
   editorBody: css`
     position: relative;
+    cursor: text;
     flex: 1;
     min-height: 0;
   `,
