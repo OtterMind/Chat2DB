@@ -61,6 +61,20 @@ class TaskServiceImplResumeTest {
     }
 
     @Test
+    void resumeRejectsAnUncertainCommitEvenWithAReadableCheckpoint() throws Exception {
+        Path csv = writeCsv("ROW_ID,ROW_NAME\n1,ok\n");
+        Task source = task(1L, TaskStatus.FAILED.name(), TaskServiceImpl.specJson(spec(csv)), CHECKPOINT, null);
+        source.setErrorCode("IMPORT_TRANSACTION_UNSAFE");
+        ResumeStorage storage = new ResumeStorage(source);
+        AtomicReference<TaskSpec> submitted = new AtomicReference<>();
+        BusinessException failure = assertThrows(BusinessException.class,
+                () -> service(storage, submitted).resumeImport(1L));
+        assertEquals("task.resume.invalidCheckpoint", failure.getCode());
+        assertNull(submitted.get(), "a readable old checkpoint cannot prove whether the last batch committed");
+        assertTrue(storage.createdTaskIds().isEmpty());
+    }
+
+    @Test
     void resumeRebuildsTheStoredSpecAndContinuesAfterTheCheckpoint() throws Exception {
         Path csv = writeCsv("ROW_ID,ROW_NAME\n1,ok\n");
         ImportTaskSpec original = spec(csv);

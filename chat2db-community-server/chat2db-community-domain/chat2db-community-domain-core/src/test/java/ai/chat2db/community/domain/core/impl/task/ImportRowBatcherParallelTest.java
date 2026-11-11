@@ -228,7 +228,7 @@ class ImportRowBatcherParallelTest {
     }
 
     @Test
-    void excelFailsTheTaskAndKeepsTheAppliedBatchRowsEvenWithAFastModeField() throws Exception {
+    void excelFailsTheTaskAndKeepsOnlyTheSuccessfulPrefixEvenWithAFastModeField() throws Exception {
         Path workbook = tempDirectory.resolve("bulk.xlsx");
         com.alibaba.excel.EasyExcel.write(workbook.toFile())
                 .head(List.of(List.of("ID"), List.of("NAME")))
@@ -239,8 +239,8 @@ class ImportRowBatcherParallelTest {
         assertThrows(TaskExecutionException.class,
                 () -> new ai.chat2db.community.domain.core.impl.task.imports.excel.XLSXImporter().run(spec, contextFor(spec)));
 
-        // Batch-granular partial success, see CsvImportPipelineTest for the same expectation.
-        assertEquals(List.of(1, 2), importedIds());
+        // Excel keeps its sequential execution contract even if the shared spec carries FAST.
+        assertEquals(List.of(1), importedIds());
     }
 
     @Test

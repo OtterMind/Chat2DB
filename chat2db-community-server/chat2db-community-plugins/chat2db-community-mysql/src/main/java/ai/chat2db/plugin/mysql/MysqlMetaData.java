@@ -50,6 +50,26 @@ import static ai.chat2db.spi.util.SortUtils.sortDatabase;
 import static ai.chat2db.plugin.mysql.constant.MysqlMetaDataConstants.*;
 @Slf4j
 public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
+    @Override
+    public Optional<Boolean> hasOpenTransaction(Connection connection,
+            ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener listener) throws SQLException {
+        // SQL SET autocommit can leave JDBC's cached flag unchanged. A disabled server mode
+        // belongs to the script; enabled mode still needs the generic BEGIN/COMMIT tracker.
+        try (java.sql.Statement statement = connection.createStatement()) {
+            statement.setQueryTimeout(5);
+            try {
+                if (listener != null) listener.onStatementCreated(statement);
+                try (ResultSet rows = statement.executeQuery("SELECT @@session.autocommit")) {
+                    if (!rows.next()) throw new SQLException("MySQL session transaction mode was not returned");
+                    return rows.getInt(1) == 0 ? Optional.of(true) : Optional.empty();
+                }
+            } finally {
+                if (listener != null) listener.onStatementClosed(statement);
+            }
+        }
+    }
+
+
 
     public static final ISQLIdentifierProcessor MYSQL_IDENTIFIER_PROCESSOR = MysqlIdentifierProcessor.INSTANCE;
 

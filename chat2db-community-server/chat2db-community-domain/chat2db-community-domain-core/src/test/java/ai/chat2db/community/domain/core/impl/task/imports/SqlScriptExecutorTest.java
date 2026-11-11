@@ -89,7 +89,7 @@ class SqlScriptExecutorTest {
         assertEquals("IMPORT_BATCH_FAILED", context.last().code);
         assertEquals(2L, context.last().details.get("affectedRows"));
         assertEquals(1, context.last().details.get("failedStatements"));
-        assertEquals(502, rowCount());
+        assertEquals(500, rowCount(), "the failed current chunk is rolled back; prior committed chunks remain");
         assertFalse(context.events.stream().anyMatch(e -> e.code.equals("IMPORT_SUMMARY")));
     }
 
@@ -100,6 +100,15 @@ class SqlScriptExecutorTest {
         assertEquals(500, rowCount());
         assertEquals(1, context.events.size());
         assertEquals("BATCH_EXECUTED", context.last().code);
+    }
+
+    @Test void cancellationAfterExecutionBeforeCommitRollsBackWithoutSuccessEvent() throws Exception {
+        context.cancelOnStatementClose = true;
+        assertThrows(TaskCancelledException.class,
+                () -> executor.executeBatch(List.of("INSERT INTO test_rows VALUES (1)")));
+        assertEquals(0, rowCount());
+        assertTrue(connection.getAutoCommit());
+        assertTrue(context.events.isEmpty(), "an uncommitted batch must not be reported as successful");
     }
 
     @Test void missingPartialResultsRemainUnknownRatherThanCompleted() {
@@ -134,6 +143,8 @@ class SqlScriptExecutorTest {
     private static final class RecordingContext implements TaskExecutionContext {
         final List<Event> events = new ArrayList<>();
         boolean cancelAfterBatch;
+        boolean cancelOnStatementClose;
+        boolean statementClosed;
         Event last() { return events.get(events.size()-1); }
         public void reportProgress(int p, String s, String m) { }
         public void logInfo(String c, String m) { logInfo(c,m,Map.of()); }
@@ -141,6 +152,7 @@ class SqlScriptExecutorTest {
         public void logWarn(String c, String m, Map<String,Object> d) { logInfo(c,m,d); }
         public void logError(String c, String m, Map<String,Object> d) { logInfo(c,m,d); }
         public void checkCancelled() {
+            if (cancelOnStatementClose && statementClosed) throw new TaskCancelledException();
             if (cancelAfterBatch && events.stream().anyMatch(e -> e.code.equals("BATCH_EXECUTED")))
                 throw new TaskCancelledException();
         }
@@ -148,6 +160,6 @@ class SqlScriptExecutorTest {
         public ArtifactDraft createArtifact(String d,String f,String m) { throw new UnsupportedOperationException(); }
         public void write(String s) { throw new UnsupportedOperationException(); }
         public void onStatementCreated(Statement s) { }
-        public void onStatementClosed(Statement s) { }
+        public void onStatementClosed(Statement s) { statementClosed = true; }
     }
 }
