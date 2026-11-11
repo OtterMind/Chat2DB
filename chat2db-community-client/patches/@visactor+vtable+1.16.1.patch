@@ -1,0 +1,16 @@
+diff --git a/node_modules/@visactor/vtable/cjs/scenegraph/group-creater/progress/proxy.js b/node_modules/@visactor/vtable/cjs/scenegraph/group-creater/progress/proxy.js
+--- a/node_modules/@visactor/vtable/cjs/scenegraph/group-creater/progress/proxy.js
++++ b/node_modules/@visactor/vtable/cjs/scenegraph/group-creater/progress/proxy.js
+@@ -108,3 +108,3 @@
+         return __awaiter(this, void 0, void 0, (function*() {
+-            if (!this.isProgressing) return this.isProgressing = !0, new Promise(((resolve, reject) => {
++            if (!this.isProgressing && this.taskColCount > 0 && this.taskRowCount > 0) return this.isProgressing = !0, new Promise(((resolve, reject) => {
+                 setTimeout((() => __awaiter(this, void 0, void 0, (function*() {
+diff --git a/node_modules/@visactor/vtable/es/scenegraph/group-creater/progress/proxy.js b/node_modules/@visactor/vtable/es/scenegraph/group-creater/progress/proxy.js
+--- a/node_modules/@visactor/vtable/es/scenegraph/group-creater/progress/proxy.js
++++ b/node_modules/@visactor/vtable/es/scenegraph/group-creater/progress/proxy.js
+@@ -130,3 +130,3 @@
+         return __awaiter(this, void 0, void 0, (function*() {
+-            if (!this.isProgressing) return this.isProgressing = !0, new Promise(((resolve, reject) => {
++            if (!this.isProgressing && this.taskColCount > 0 && this.taskRowCount > 0) return this.isProgressing = !0, new Promise(((resolve, reject) => {
+                 setTimeout((() => __awaiter(this, void 0, void 0, (function*() {
