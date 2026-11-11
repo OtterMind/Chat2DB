@@ -23,6 +23,7 @@ import {
   isShortcutEventMatch,
 } from '@/constants/shortcut';
 import { useGlobalStore } from '@/store/global';
+import { useSize } from 'ahooks';
 
 export interface ICustomOptions {
   // Whether to display the left border
@@ -103,6 +104,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
   const { styles, theme, cx } = useStyles();
   const [tableInstance, setTableInstance] = useState<ITableInstance | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+  const tableSize = useSize(tableRef);
   const tableTheme = useTableTheme({ antdTheme: theme, options, customOptions });
   const contextMenuRef = useRef<ContextMenuRef>(null);
   const tooltipTongs = useTooltip({ tableInstance, tooltip });
@@ -180,7 +182,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
 
   // initialize table according to option
   useEffect(() => {
-    if (!tableRef.current || !tableOption) {
+    if (!tableRef.current || !tableOption || !tableSize?.width || !tableSize?.height) {
       return;
     }
 
@@ -196,7 +198,7 @@ const CanvasTable = forwardRef((props: IProps, ref: ForwardedRef<CanvasTableRef>
 
       onInit && onInit(_tableInstance);
     }
-  }, [tableOption]);
+  }, [tableOption, tableSize?.width, tableSize?.height]);
 
   // To update options, all options need to be passed in. This will not work.
   // useEffect(() => {
