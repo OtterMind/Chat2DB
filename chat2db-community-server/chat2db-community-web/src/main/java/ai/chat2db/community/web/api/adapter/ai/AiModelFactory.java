@@ -2,6 +2,7 @@ package ai.chat2db.community.web.api.adapter.ai;
 
 import ai.chat2db.community.domain.api.enums.ai.AiProviderEnum;
 import ai.chat2db.community.domain.api.model.ai.AiRuntimeModel;
+import ai.chat2db.community.tools.util.AiUrlUtils;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.alibaba.fastjson2.JSON;
 import com.google.cloud.vertexai.VertexAI;
@@ -82,12 +83,19 @@ public class AiModelFactory {
     }
 
     private AiChatClient openAiClient(AiRuntimeModel runtimeModel, RetryTemplate retryTemplate) {
+        // Base URLs that already carry a version segment ("/v1", Zhipu GLM's "/v4", ...)
+        // must get the bare operation path, otherwise OpenAiApi's default
+        // "/v1/chat/completions" produces ".../v4/v1/chat/completions" and fails with 404.
+        String baseUrl = AiUrlUtils.trimChatCompletionsPath(runtimeModel.getBaseUrl());
         logUpstreamTarget("openai",
-                StringUtils.defaultIfBlank(runtimeModel.getBaseUrl(), OpenAiApiConstants.DEFAULT_BASE_URL) + "/v1/chat/completions",
+                StringUtils.defaultIfBlank(baseUrl, OpenAiApiConstants.DEFAULT_BASE_URL)
+                        + AiUrlUtils.resolveCompletionsPath(baseUrl),
                 buildOpenAiHeaderView(runtimeModel, null));
         OpenAiApi.Builder apiBuilder = OpenAiApi.builder().apiKey(runtimeModel.getApiKey());
-        if (StringUtils.isNotBlank(runtimeModel.getBaseUrl())) {
-            apiBuilder.baseUrl(runtimeModel.getBaseUrl());
+        if (StringUtils.isNotBlank(baseUrl)) {
+            apiBuilder.baseUrl(baseUrl);
+            apiBuilder.completionsPath(AiUrlUtils.resolveCompletionsPath(baseUrl));
+            apiBuilder.embeddingsPath(AiUrlUtils.resolveEmbeddingsPath(baseUrl));
             apiBuilder.restClientBuilder(RestClient.builder().requestInterceptor(new ZoerClientHttpRequestInterceptor()));
             apiBuilder.webClientBuilder(WebClient.builder().filter(new WebClientParameterFilter("openai")));
 

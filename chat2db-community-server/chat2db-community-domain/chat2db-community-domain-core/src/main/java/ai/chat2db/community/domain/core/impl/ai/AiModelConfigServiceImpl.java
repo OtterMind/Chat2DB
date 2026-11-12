@@ -14,6 +14,7 @@ import ai.chat2db.community.domain.api.service.sys.IIdentityService;
 import ai.chat2db.community.domain.core.converter.AiModelConfigConverter;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.security.AesGcmUtil;
+import ai.chat2db.community.tools.util.AiUrlUtils;
 import ai.chat2db.community.tools.util.ConfigUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
@@ -505,7 +506,7 @@ public class AiModelConfigServiceImpl implements IAiModelConfigService {
 
     private ModelConfigTestResponse testOpenAiCompatibleConfig(AiModelConfigSaveRequest request, String defaultBaseUrl) {
         String baseUrl = StringUtils.defaultIfBlank(trimToNull(request.getBaseUrl()), defaultBaseUrl);
-        String endpoint = appendPath(stripTrailingV1(baseUrl), "/v1/chat/completions");
+        String endpoint = AiUrlUtils.buildChatCompletionsEndpoint(baseUrl);
         String apiKey = resolveTestApiKey(request);
         if (StringUtils.isBlank(apiKey)) {
             return ModelConfigTestResponse.failure(endpoint, null, "API Key is required for the connection test.");
