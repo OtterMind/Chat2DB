@@ -1,6 +1,9 @@
 package ai.chat2db.community.web.api.converter.db;
 
 import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
+import ai.chat2db.community.domain.api.model.request.db.DbDlCountRequest;
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
+import ai.chat2db.community.web.api.model.request.db.DdlCountRequest;
 import ai.chat2db.community.web.api.model.request.db.DdlExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.SqlEditorExecuteRequest;
 import ai.chat2db.community.web.api.model.request.db.TableBrowseRequest;
@@ -10,6 +13,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mapstruct.factory.Mappers;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,6 +55,9 @@ class DbWebConverterDmlRequestTest {
         request.setResultSetId(6);
         request.setErrorContinue(true);
         request.setExplain(true);
+        request.setSqlParameters(true);
+        request.setParameters(Map.of("id", SqlParameterValue.number("123")));
+        request.setPositionalParameters(List.of(SqlParameterValue.string("a")));
 
         DbDlExecuteRequest result = converter.request2param(request);
 
@@ -64,8 +73,38 @@ class DbWebConverterDmlRequestTest {
         assertEquals(request.getResultSetId(), result.getResultSetId());
         assertEquals(request.getErrorContinue(), result.getErrorContinue());
         assertEquals(request.isExplain(), result.isExplain());
+        assertEquals(request.getSqlParameters(), result.getSqlParameters());
+        assertEquals(request.getParameters(), result.getParameters());
+        assertEquals(request.getPositionalParameters(), result.getPositionalParameters());
         assertNull(result.getTableName());
         assertNull(result.getPageSizeAll());
+    }
+
+    @Test
+    void sqlEditorRequestWithoutParametersKeepsPlainExecution() {
+        SqlEditorExecuteRequest request = new SqlEditorExecuteRequest();
+        request.setDataSourceId(1L);
+        request.setSql("select ':id', '?'");
+
+        DbDlExecuteRequest result = converter.sqlEditorExecutionRequest(request).getExecuteRequest();
+
+        assertNull(result.getSqlParameters());
+        assertNull(result.getParameters());
+        assertNull(result.getPositionalParameters());
+    }
+
+    @Test
+    void countRequestCarriesTheValuesOfTheResultItCounts() {
+        DdlCountRequest request = new DdlCountRequest();
+        request.setDataSourceId(1L);
+        request.setSql("select * from t where id = ?");
+        request.setPositionalParameters(List.of(SqlParameterValue.number("7")));
+
+        DbDlCountRequest result = converter.request2param(request);
+
+        assertEquals(request.getSql(), result.getSql());
+        assertEquals(request.getPositionalParameters(), result.getPositionalParameters());
+        assertNull(result.getParameters());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package ai.chat2db.spi.model.request;
 
+import ai.chat2db.community.domain.api.model.sql.SqlParameterValue;
 import ai.chat2db.community.domain.api.service.db.ISqlExecutionStatementListener;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.sql.Connection;
+import java.util.Map;
 
 @Data
 @Builder
@@ -31,4 +33,9 @@ public class SqlStatementExecuteRequest {
     private ISqlExecutionStatementListener statementListener;
 
     private Runnable cancellationChecker;
+
+    /**
+     * Values for the {@code :name} placeholders in {@link #sql}; empty runs plain SQL.
+     */
+    private Map<String, SqlParameterValue> parameters;
 }

@@ -1,6 +1,7 @@
 package ai.chat2db.community.domain.core.impl.db;
 
 import ai.chat2db.community.domain.api.model.sql.SqlExecuteRequest;
+import ai.chat2db.spi.util.SqlParameterParser;
 import ai.chat2db.community.domain.api.model.request.db.DbStreamingExecuteRequest;
 import ai.chat2db.community.domain.api.model.request.db.DbDlExecuteRequest;
 import ai.chat2db.community.domain.api.model.sql.extension.SqlExecutionContext;
@@ -45,10 +46,14 @@ public class DbSqlExecutionServiceImpl implements IDbSqlExecutionService {
                 && executeStreamingRequest.getCancellation().isCanceled()) {
             throw new SQLException("SQL execution canceled");
         }
-        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(request),
+        SqlParameterParser.NormalizedSql parameterisedSql = SqlParameterRequests.normalize(request.getSql(),
+                request.getSqlParameters(), request.getParameters(), request.getPositionalParameters());
+        SqlExecutionPlan executionPlan = sqlExecutionPolicyManager.plan(executionContext(request,
+                        parameterisedSql == null ? request.getSql() : parameterisedSql.sql()),
                 executeStreamingRequest.getExecutionId());
         SqlExecuteRequest command = sqlSqlExecuteRequestService.toSqlExecuteRequest(request);
         command.setScript(executionPlan.getSql());
+        SqlParameterRequests.apply(command, parameterisedSql);
         sqlExecutionPolicyManager.applyMaxRows(command, executionPlan);
         sqlExecutionPolicyManager.beforeExecute(executionPlan);
         sqlExecutor.executeStreaming(command,
@@ -57,12 +62,12 @@ public class DbSqlExecutionServiceImpl implements IDbSqlExecutionService {
                 executeStreamingRequest.getStatementListener(), executeStreamingRequest.getCancellation());
     }
 
-    private SqlExecutionContext executionContext(DbDlExecuteRequest request) {
+    private SqlExecutionContext executionContext(DbDlExecuteRequest request, String sql) {
         ConnectInfo connectInfo = Chat2DBContext.getConnectInfo();
         return new SqlExecutionContext(
                 connectInfo == null ? request.getDataSourceId() : connectInfo.getDataSourceId(),
                 connectInfo == null ? null : connectInfo.getDbType(),
-                request.getDatabaseName(), request.getSchemaName(), request.getTableName(), request.getSql(),
+                request.getDatabaseName(), request.getSchemaName(), request.getTableName(), sql,
                 SqlExecutionOperation.EXECUTE, null, request.getApplyId());
     }
 }

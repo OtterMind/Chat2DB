@@ -44,6 +44,9 @@ import ai.chat2db.spi.ISQLIdentifierProcessor;
 import ai.chat2db.community.domain.api.config.DBConfig;
 import ai.chat2db.community.domain.api.model.metadata.*;
 import ai.chat2db.spi.sql.Chat2DBContext;
+import ai.chat2db.spi.util.SqlParameterParser;
+import ai.chat2db.spi.util.SqlParameterSyntax;
+import ai.chat2db.spi.util.SqlUtils;
 import ai.chat2db.spi.model.datasource.ConnectInfo;
 import ai.chat2db.spi.model.request.ColumnMetadataRequest;
 import ai.chat2db.spi.model.request.FunctionMetadataRequest;
@@ -483,7 +486,8 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
             sqlContextParser.setSqlStatementList(sqlStatements);
             sqlContextParser.setMarkMessageList(List.of());
             if (SUPPORT_SYNTAX_CHECK_DB.contains(dbType.toUpperCase())) {
-                List<SyntaxErrorMessage> syntaxErrors = sqlParserResult.getSyntaxErrors();
+                List<SyntaxErrorMessage> syntaxErrors =
+                        syntaxErrorsIgnoringParameters(sqlParser, sql, dbType, sqlParserResult.getSyntaxErrors());
                 List<MarkMessage> errorMessageVos = syntaxErrors.stream().map(MarkMessage::new).toList();
                 if (CollectionUtils.isNotEmpty(errorMessageVos)) {
                     sqlContextParser.setMarkMessageList(errorMessageVos);
@@ -499,6 +503,29 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
             fallback.setMarkMessageList(List.of());
             return fallback;
         }
+    }
+
+    /**
+     * The grammars do not know {@code :name} or {@code ?} parameters, so a statement
+     * that uses them is checked again with each placeholder replaced by a literal of
+     * the same length. Only the syntax errors come from that second parse; statement
+     * text and positions still come from the SQL the user wrote.
+     */
+    static List<SyntaxErrorMessage> syntaxErrorsIgnoringParameters(ISQLParser sqlParser, String sql, String dbType,
+                                                                   List<SyntaxErrorMessage> syntaxErrors) {
+        if (CollectionUtils.isEmpty(syntaxErrors)) {
+            return syntaxErrors;
+        }
+        SqlParameterSyntax syntax = SqlParameterSyntax.forDatabaseType(dbType);
+        if (syntax == null) {
+            return syntaxErrors;
+        }
+        String maskedSql = SqlParameterParser.maskPlaceholdersAsLiterals(sql, syntax);
+        if (maskedSql.equals(sql)) {
+            return syntaxErrors;
+        }
+        List<SyntaxErrorMessage> maskedErrors = sqlParser.parserStatements(maskedSql).getSyntaxErrors();
+        return maskedErrors == null ? List.of() : maskedErrors;
     }
 
     static String normalizeIdentifierToken(ISQLIdentifierProcessor processor, String tokenText) {
@@ -777,8 +804,8 @@ public class DbSqlParserServiceImpl implements IDbSqlParserService {
             if (Objects.isNull(sqlParser)) {
                 return null;
             }
-            SqlParserResponse sqlParserResult = sqlParser.simpleParserStatements(sql);
-            List<Statement> statements = sqlParserResult.getStatements();
+            // Statement ranges must survive :name and ? parameters, or "execute current SQL" finds nothing.
+            List<Statement> statements = SqlUtils.simpleParserStatementsAllowingParameters(sqlParser, sql, dbType);
 
             if (CollectionUtils.isEmpty(statements)) {
                 return null;
