@@ -7,6 +7,7 @@ export type RedisDetailLoadStatus = 'idle' | 'loading' | 'loaded' | 'failed';
 export function hasRedisDetailPayload(redisDataItem: RedisDataItem) {
   switch (redisDataItem.type) {
     case RedisFieldType.STRING:
+    case RedisFieldType.JSON:
       return redisDataItem.value !== null && redisDataItem.value !== undefined;
     case RedisFieldType.LIST:
       return redisDataItem.listValues !== null && redisDataItem.listValues !== undefined;
