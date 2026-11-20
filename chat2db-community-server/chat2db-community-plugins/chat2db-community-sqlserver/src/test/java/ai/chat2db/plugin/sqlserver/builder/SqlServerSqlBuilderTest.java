@@ -22,6 +22,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class SqlServerSqlBuilderTest {
 
     @Test
+    void shouldKeepNormalLegacyPaginationOutput() {
+        assertEquals("SELECT * FROM (SELECT TMP_PAGE.*, ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) "
+                        + "AS CAHT2DB_AUTO_ROW_ID FROM (\n"
+                        + "SELECT ID FROM EMPLOYEE\n"
+                        + ") TMP_PAGE) TMP_PAGE WHERE CAHT2DB_AUTO_ROW_ID BETWEEN 11 AND 20",
+                buildLegacyPageLimit(10, 10));
+    }
+
+    @Test
+    void shouldKeepLegacyPaginationBoundsBeyondIntegerRange() {
+        assertEquals("SELECT * FROM (SELECT TMP_PAGE.*, ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) "
+                        + "AS CAHT2DB_AUTO_ROW_ID FROM (\n"
+                        + "SELECT ID FROM EMPLOYEE\n"
+                        + ") TMP_PAGE) TMP_PAGE WHERE CAHT2DB_AUTO_ROW_ID BETWEEN 2147483601 AND 2147483700",
+                buildLegacyPageLimit(2_147_483_600, 100));
+    }
+
+    @Test
     void shouldKeepGoDelimiterForShowplanXmlBatch() {
         SqlServerSqlBuilder builder = new SqlServerSqlBuilder();
 
@@ -207,6 +225,24 @@ class SqlServerSqlBuilderTest {
             } else {
                 Chat2DBContext.PLUGIN_MAP.put("SQLSERVER", previousPlugin);
             }
+        }
+    }
+
+    private static String buildLegacyPageLimit(int offset, int pageSize) {
+        ConnectInfo connectInfo = new ConnectInfo();
+        connectInfo.setDriverConfig(new DriverConfig());
+        connectInfo.setDbVersion("10.0");
+        Chat2DBContext.putContext(connectInfo);
+
+        try {
+            return new SqlServerSqlBuilder().buildPageLimit(PageLimitRequest.builder()
+                    .sql("SELECT ID FROM EMPLOYEE")
+                    .offset(offset)
+                    .pageNo(2)
+                    .pageSize(pageSize)
+                    .build());
+        } finally {
+            Chat2DBContext.removeContext();
         }
     }
 
