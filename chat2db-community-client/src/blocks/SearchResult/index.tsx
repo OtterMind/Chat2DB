@@ -40,11 +40,14 @@ import {
   CONSOLE_TAB_ID,
   MESSAGES_TAB_ID,
   getConsoleResultTabLabel,
-  getPreferredActiveTabId,
+  getInitialActiveTabId,
+  getLatestExecutionSequence,
   getResultIdentity,
   hasLegacyResultTab,
   hasTabularResult,
   reduceActiveTabSelection,
+  resolveChangedResultsPreference,
+  type BatchResultTabPreference,
 } from './tabSelection';
 import { ShortcutAction } from '@/constants/shortcut';
 import { useGlobalStore } from '@/store/global';
@@ -159,11 +162,12 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     [consoleResultDataList, resultTabOrder],
   );
   const [tabSelection, dispatchTabSelection] = useReducer(reduceActiveTabSelection, {
-    activeTabId: getPreferredActiveTabId(props.resultDataList[props.resultDataList.length - 1], consoleMode),
+    activeTabId: getInitialActiveTabId(props.resultDataList, consoleMode),
     followPreferredTabs: true,
   });
   const activeTabId = tabSelection.activeTabId;
   const knownResultVersionMapRef = useRef<Map<string, string>>(new Map());
+  const batchResultTabRef = useRef<BatchResultTabPreference>();
   const latestTerminalLogVersion = getLatestTerminalLogVersion(props.executionLogRecords);
   const visibleHistoryResultDataList = useMemo(
     () => (consoleMode ? [] : historyResultDataList),
@@ -185,6 +189,7 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
   );
 
   useEffect(() => {
+    batchResultTabRef.current = undefined;
     if (consoleMode) {
       dispatchTabSelection({ type: 'startAutoFollow', tabId: CONSOLE_TAB_ID });
     } else {
@@ -210,7 +215,6 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
       }
       return previousResultVersions.get(resultKey) !== getResultVersion(item, consoleMode);
     });
-    const latestChangedResult = changedResults[changedResults.length - 1];
 
     // A re-run can replace the result of the same tab (same identity, new version) or publish a brand new result and
     // drop the old one. Both leave the previous handles dangling, so hand them back instead of letting the server keep
@@ -247,11 +251,18 @@ const SearchResult = forwardRef((props: IProps, ref: ForwardedRef<ISearchResultR
     );
     setResultDataList(nextResultDataList);
 
-    if (latestChangedResult) {
-      dispatchTabSelection({
-        type: 'prefer',
-        tabId: getPreferredActiveTabId(latestChangedResult, consoleMode, props.forceOutputTab),
-      });
+    const availableResults = [...nextResultDataList, ...incomingHistoryResultDataList];
+    const preference = resolveChangedResultsPreference(
+      changedResults,
+      consoleMode,
+      !!props.forceOutputTab,
+      batchResultTabRef.current,
+      availableResults,
+      getLatestExecutionSequence(availableResults),
+    );
+    batchResultTabRef.current = preference.batchResultTab;
+    if (preference.tabId !== undefined) {
+      dispatchTabSelection({ type: 'prefer', tabId: preference.tabId });
     }
   }, [props.resultDataList, props.historyResultDataList, consoleMode, props.forceOutputTab]);
 
