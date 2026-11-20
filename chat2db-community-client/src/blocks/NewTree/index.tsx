@@ -24,6 +24,10 @@ import connectionService from '@/service/connection';
 import { useSize } from 'ahooks';
 import { decorateDataSourceIdentityTree } from './dataSourceIdentity';
 import { measureTreeScrollWidth, resolveNextTreeScrollWidth } from './treeScrollWidth';
+import {
+  maskInvalidatedWorkspaceTreeChildren,
+  resolveWorkspaceTreeExpandedKeys,
+} from '@/pages/main/workspace/components/WorkspaceTreeSearch/lifecycle';
 import { TreePositionMutationCoordinator, TreePositionRefreshError } from './treePositionMutation';
 import i18n from '@/i18n';
 import { staticMessage } from '@chat2db/ui';
@@ -81,7 +85,9 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     selectedKeys,
     setSelectedKeys,
     setTreeRef,
-    expandedKeys,
+    persistentExpandedKeys,
+    searchRequiredExpandedKeys,
+    invalidatedTreeNodeKeys,
     scrollTargetKey,
     setScrollTargetKey,
     searchBarValue,
@@ -92,16 +98,34 @@ const NewTree = (props: IProps, ref: React.ForwardedRef<NewTreeRef>) => {
     selectedKeys: state.selectedKeys,
     setSelectedKeys: state.setSelectedKeys,
     setTreeRef: state.setTreeRef,
-    expandedKeys: state.expandedKeys,
+    persistentExpandedKeys: state.expandedKeys,
+    searchRequiredExpandedKeys: state.searchRequiredExpandedKeys,
+    invalidatedTreeNodeKeys: state.invalidatedTreeNodeKeys,
     scrollTargetKey: state.scrollTargetKey,
     setScrollTargetKey: state.setScrollTargetKey,
     searchBarValue: state.searchBarValue,
     dataSourceList: state.dataSourceList,
     getTreeData: state.getTreeData,
   }));
+  const expandedKeys = useMemo(
+    () =>
+      resolveWorkspaceTreeExpandedKeys(
+        persistentExpandedKeys,
+        searchRequiredExpandedKeys,
+        invalidatedTreeNodeKeys,
+      ),
+    [persistentExpandedKeys, searchRequiredExpandedKeys, invalidatedTreeNodeKeys],
+  );
+  const renderedTreeData = useMemo(
+    () =>
+      filteredTreeData
+        ? maskInvalidatedWorkspaceTreeChildren(filteredTreeData, invalidatedTreeNodeKeys)
+        : filteredTreeData,
+    [filteredTreeData, invalidatedTreeNodeKeys],
+  );
   const identityTreeData = useMemo(
-    () => decorateDataSourceIdentityTree(filteredTreeData, dataSourceList),
-    [filteredTreeData, dataSourceList],
+    () => decorateDataSourceIdentityTree(renderedTreeData, dataSourceList),
+    [renderedTreeData, dataSourceList],
   );
   const shortcutOverrides = useGlobalStore((state) => state.shortcutOverrides);
   const shortcutConfig = useMemo(
