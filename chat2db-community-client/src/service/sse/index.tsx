@@ -1,5 +1,7 @@
 import { useGlobalStore } from '@/store/global';
+import { JcefEventBus } from '@/jcef/eventBus';
 import { v4 as uuidv4 } from 'uuid';
+import { dispatchDesktopStreamRequest } from './requestFailure';
 
 export interface IJcefSseRequest {
   requestId: string;
@@ -35,10 +37,11 @@ const sendClientSSERequest = (baseURL, message) => {
     }),
   );
 
-  window.javaQuery({
-    request: JSON.stringify(res),
-    onSuccess: function () {},
-    onFailure: function () {},
+  dispatchDesktopStreamRequest({
+    requestId,
+    serializedRequest: JSON.stringify(res),
+    javaQuery: typeof window.javaQuery === 'function' ? (request) => window.javaQuery(request) : undefined,
+    publish: (eventName, output) => JcefEventBus.publish(eventName, output),
   });
 
   return {
