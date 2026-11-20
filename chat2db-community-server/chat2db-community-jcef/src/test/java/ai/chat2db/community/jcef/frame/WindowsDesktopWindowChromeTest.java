@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
+import java.awt.Dimension;
 import java.awt.Point;
 import java.util.function.Function;
 
@@ -74,6 +75,35 @@ class WindowsDesktopWindowChromeTest {
                         new Point(100, 200),
                         new Point(400, 300),
                         new Point(430, 275)
+                )
+        );
+    }
+
+    @Test
+    void shouldAnchorRestoredWindowUnderThePointer() {
+        // Maximized 1000x800 at (0,0); the drag started with the pointer a
+        // quarter across and 5% down. After restoring to 800x600 the window
+        // must jump so the pointer keeps that relative position.
+        assertEquals(
+                new Point(250 - 200, 40 - 30),
+                WindowsDesktopWindowChrome.restoredDragOrigin(
+                        new Dimension(1000, 800),
+                        new Dimension(800, 600),
+                        new Point(0, 0),
+                        new Point(250, 40)
+                )
+        );
+    }
+
+    @Test
+    void shouldFallBackToCenterAnchorsWhenMaximizedSizeIsUnknown() {
+        assertEquals(
+                new Point(600 - 400, 300 - 300),
+                WindowsDesktopWindowChrome.restoredDragOrigin(
+                        new Dimension(0, 0),
+                        new Dimension(800, 600),
+                        new Point(0, 0),
+                        new Point(600, 300)
                 )
         );
     }
