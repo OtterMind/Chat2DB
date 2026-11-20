@@ -6,6 +6,7 @@ import ai.chat2db.community.tools.console.ConsoleCodec;
 import ai.chat2db.community.tools.console.ConsoleMessage;
 import ai.chat2db.community.tools.console.ConsoleObjectConverter;
 import ai.chat2db.community.tools.console.ConsoleResult;
+import ai.chat2db.community.tools.enums.UiLanguageEnum;
 import ai.chat2db.community.tools.http.LocalCookie;
 import ai.chat2db.community.tools.exception.BusinessException;
 import ai.chat2db.community.tools.exception.SystemException;
@@ -349,11 +350,16 @@ public class ConsoleHelper {
 
 
     public static void setHeaders(ConsoleMessage message) {
+        String language = message.getHeaders() == null
+                ? null
+                : (String) message.getHeaders().get(CookieUtil.ACCEPT_LANGUAGE);
+        if (com.dtflys.forest.utils.StringUtils.isNotEmpty(language)) {
+            LocaleContextHolder.setLocale(resolveLocale(language));
+        } else {
+            // Worker threads are pooled, so a locale left by an earlier message must not carry over.
+            LocaleContextHolder.resetLocaleContext();
+        }
         if (message.getHeaders() != null) {
-            String language = (String) message.getHeaders().get(CookieUtil.ACCEPT_LANGUAGE);
-            if (com.dtflys.forest.utils.StringUtils.isNotEmpty(language)) {
-                LocaleContextHolder.setLocale(resolveLocale(language));
-            }
             for (Map.Entry<String, Object> entry : message.getHeaders().entrySet()) {
                 LocalCookie.setHeader(entry.getKey(), (String) entry.getValue());
             }
@@ -365,13 +371,7 @@ public class ConsoleHelper {
     }
 
     static Locale resolveLocale(String language) {
-        if (language.startsWith("zh")) {
-            return Locale.CHINA;
-        }
-        if (language.startsWith("ja")) {
-            return Locale.JAPAN;
-        }
-        return Locale.US;
+        return UiLanguageEnum.of(language).getLocale();
     }
 
 

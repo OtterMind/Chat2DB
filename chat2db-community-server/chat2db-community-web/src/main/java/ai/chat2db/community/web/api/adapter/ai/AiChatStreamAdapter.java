@@ -17,6 +17,7 @@ import ai.chat2db.community.domain.api.service.ai.IAiAttachmentService;
 import ai.chat2db.community.domain.api.service.ai.IAiChatHistoryService;
 import ai.chat2db.community.domain.api.service.ai.IAiModelConfigService;
 import ai.chat2db.community.domain.api.service.sys.IIdentityService;
+import ai.chat2db.community.tools.enums.UiLanguageEnum;
 import ai.chat2db.community.tools.model.Context;
 import ai.chat2db.community.tools.util.ContextUtils;
 import ai.chat2db.community.tools.util.ConfigUtils;
@@ -756,15 +757,12 @@ public class AiChatStreamAdapter implements IAiChatStreamService<ChatRequest, Ss
     }
 
     private String buildOutputLanguagePrompt() {
-        Locale locale = LocaleContextHolder.getLocale();
-        String language = locale != null ? locale.getLanguage() : "";
-        if ("zh".equalsIgnoreCase(language)) {
-            return "\n\n## Output Language\nRespond in Simplified Chinese for both the final answer and the reasoning content.";
-        }
-        if ("ja".equalsIgnoreCase(language)) {
-            return "\n\n## Output Language\nRespond in Japanese for both the final answer and the reasoning content.";
-        }
-        return "\n\n## Output Language\nRespond in English for both the final answer and the reasoning content.";
+        return buildOutputLanguagePrompt(LocaleContextHolder.getLocale());
+    }
+
+    static String buildOutputLanguagePrompt(Locale locale) {
+        return "\n\n## Output Language\nRespond in " + UiLanguageEnum.of(locale).getDescription()
+                + " for both the final answer and the reasoning content.";
     }
 
     private String buildSelectedDatabasePrompt(Map<String, Object> toolContext) {
