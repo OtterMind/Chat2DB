@@ -852,5 +852,113 @@
         "url": "jdbc:iotdb://localhost:6667/"
       }
     ]
+  },
+  {
+    "dbType": "INGRES",
+    "name": "Ingres",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/ingres/jdbc/iijdbc/12.0-4.4.4/iijdbc-12.0-4.4.4.jar"
+        ],
+        "jdbcDriver": "iijdbc-12.0-4.4.4.jar",
+        "jdbcDriverClass": "com.ingres.jdbc.IngresDriver",
+        "url": "jdbc:ingres://localhost:II7/demodb"
+      }
+    ]
+  },
+  {
+    "dbType": "FOUNDATIONDB",
+    "name": "FoundationDB SQL",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/foundationdb/fdb-sql-layer-jdbc/2.1-0-jdbc41/fdb-sql-layer-jdbc-2.1-0-jdbc41.jar"
+        ],
+        "jdbcDriver": "fdb-sql-layer-jdbc-2.1-0-jdbc41.jar",
+        "jdbcDriverClass": "com.foundationdb.sql.jdbc.Driver",
+        "url": "jdbc:fdbsql://localhost:15432/test"
+      }
+    ]
+  },
+  {
+    "dbType": "GEMFIREXD",
+    "name": "Gemfire XD",
+    "supportDatabase": true,
+    "supportSchema": false,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/io/snappydata/gemfirexd-client/1.5.0-BETA.4/gemfirexd-client-1.5.0-BETA.4.jar"
+        ],
+        "jdbcDriver": "gemfirexd-client-1.5.0-BETA.4.jar",
+        "jdbcDriverClass": "com.pivotal.gemfirexd.jdbc.ClientDriver",
+        "url": "jdbc:gemfirexd://localhost:1527/"
+      }
+    ]
+  },
+  {
+    "dbType": "TEIID",
+    "name": "Teiid",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/org/teiid/teiid/15.0.2/teiid-15.0.2-jdbc.jar"
+        ],
+        "jdbcDriver": "teiid-15.0.2-jdbc.jar",
+        "jdbcDriverClass": "org.teiid.jdbc.TeiidDriver",
+        "url": "jdbc:teiid:vdb@mms://localhost:31000"
+      }
+    ]
+  },
+  {
+    "dbType": "VIRTUOSO",
+    "name": "Virtuoso",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/com/openlinksw/virtjdbc4_3/3.123/virtjdbc4_3-3.123.jar"
+        ],
+        "jdbcDriver": "virtjdbc4_3-3.123.jar",
+        "jdbcDriverClass": "virtuoso.jdbc4.Driver",
+        "url": "jdbc:virtuoso://localhost:1111/DATABASE=DB"
+      }
+    ]
+  },
+  {
+    "dbType": "SYBASE",
+    "name": "Sybase ASE (jTDS)",
+    "supportDatabase": true,
+    "supportSchema": true,
+    "driverConfigList": [
+      {
+        "defaultDriver": true,
+        "custom": false,
+        "downloadJdbcDriverUrls": [
+          "https://repo1.maven.org/maven2/net/sourceforge/jtds/jtds/1.3.1/jtds-1.3.1.jar"
+        ],
+        "jdbcDriver": "jtds-1.3.1.jar",
+        "jdbcDriverClass": "net.sourceforge.jtds.jdbc.Driver",
+        "url": "jdbc:jtds:sybase://localhost:5000/master"
+      }
+    ]
   }
 ]
