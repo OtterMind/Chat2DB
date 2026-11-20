@@ -82,7 +82,10 @@ public class MysqlMetaData extends DefaultMetaService implements IDbMetaData {
                 String collationName = resultSet.getString(FIELD_TABLE_COLLATION);
                 table.setCollate(collationName);
                 table.setComment(resultSet.getString(FIELD_TABLE_COMMENT));
-                table.setIncrementValue(resultSet.getLong(FIELD_AUTO_INCREMENT));
+                long incrementValue = resultSet.getLong(FIELD_AUTO_INCREMENT);
+                if (!resultSet.wasNull()) {
+                    table.setIncrementValue(incrementValue);
+                }
                 if (StringUtils.isNotBlank(collationName)) {
                     table.setCharset(collationMap.get(collationName));
                 }
