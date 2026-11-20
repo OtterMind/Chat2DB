@@ -16,6 +16,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -409,26 +410,62 @@ public final class TerminalSessionManager {
     }
 
     private static String findCommand(String os, String... candidates) {
-        for (String candidate : candidates) {
-            Path directPath = Path.of(candidate);
-            if (directPath.isAbsolute() && Files.isRegularFile(directPath) && Files.isExecutable(directPath)) {
-                return directPath.toString();
+        return findCommandOnPath(os, System.getenv("PATH"), candidates);
+    }
+
+    static String findCommandOnPath(String os, String pathValue, String... candidates) {
+        boolean windows = isWindows(os);
+        for (String rawCandidate : candidates) {
+            String candidate = normalizePathToken(rawCandidate, windows);
+            if (candidate.isBlank()) {
+                continue;
             }
-            String pathValue = System.getenv("PATH");
+            try {
+                Path directPath = Path.of(candidate);
+                if (directPath.isAbsolute() && Files.isRegularFile(directPath) && Files.isExecutable(directPath)) {
+                    return directPath.toString();
+                }
+            } catch (InvalidPathException ignored) {
+                continue;
+            }
             if (pathValue == null || pathValue.isBlank()) {
                 continue;
             }
-            for (String pathEntry : pathValue.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+            for (String rawPathEntry : pathValue.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+                String pathEntry = normalizePathToken(rawPathEntry, windows);
                 if (pathEntry.isBlank()) {
                     continue;
                 }
-                Path executable = Path.of(pathEntry, candidate);
-                if (Files.isRegularFile(executable) && (isWindows(os) || Files.isExecutable(executable))) {
-                    return executable.toString();
+                try {
+                    Path executable = Path.of(pathEntry, candidate);
+                    if (Files.isRegularFile(executable) && (windows || Files.isExecutable(executable))) {
+                        return executable.toString();
+                    }
+                } catch (InvalidPathException ignored) {
+                    // Ignore a malformed PATH entry and continue checking the remaining directories.
                 }
             }
         }
         return null;
+    }
+
+    private static String normalizePathToken(String value, boolean trimBoundaryQuotes) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (!trimBoundaryQuotes) {
+            return normalized;
+        }
+        int start = 0;
+        int end = normalized.length();
+        while (start < end && normalized.charAt(start) == '"') {
+            start++;
+        }
+        while (end > start && normalized.charAt(end - 1) == '"') {
+            end--;
+        }
+        return normalized.substring(start, end).trim();
     }
 
     private static String normalizedOsName() {
