@@ -145,7 +145,8 @@ public class SUNDBSqlBuilder extends DefaultSqlBuilder {
 
                 if (StringUtils.isNotBlank(tableColumn.getComment())
                         && !Objects.equals(EditStatusEnum.DELETE.toString(), editStatus)
-                        && !tableColumn.getComment().equals(tableColumn.getOldColumn().getComment())) {
+                        && (tableColumn.getOldColumn() == null
+                        || !tableColumn.getComment().equals(tableColumn.getOldColumn().getComment()))) {
                     script.append(SQLConstants.LINE_SEPARATOR).append(buildComment(tableColumn)).append(SQLConstants.SEMICOLON_LINE_SEPARATOR);
                 }
             }
