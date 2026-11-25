@@ -3,6 +3,8 @@ package ai.chat2db.community.web.api.adapter.ai;
 import ai.chat2db.community.web.api.model.request.ai.ChatRequest;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +43,22 @@ class AiChatStreamAdapterScenarioTest {
 
         assertEquals(secretPrompt.length(), AiChatStreamAdapter.textLength(secretPrompt));
         assertEquals(0, AiChatStreamAdapter.textLength(null));
+    }
+
+    @Test
+    void outputLanguagePromptFollowsUiLocale() {
+        assertOutputLanguage(Locale.CHINA, "Simplified Chinese");
+        assertOutputLanguage(Locale.JAPAN, "Japanese");
+        assertOutputLanguage(Locale.KOREA, "Korean");
+        assertOutputLanguage(Locale.forLanguageTag("es-ES"), "Spanish");
+        assertOutputLanguage(Locale.US, "English");
+        assertOutputLanguage(Locale.ROOT, "English");
+        assertOutputLanguage(null, "English");
+    }
+
+    private void assertOutputLanguage(Locale locale, String language) {
+        assertTrue(AiChatStreamAdapter.buildOutputLanguagePrompt(locale)
+                .contains("Respond in " + language + " for both"));
     }
 
     private void assertPromptContains(String questionType, String expected) {

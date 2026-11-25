@@ -16,10 +16,15 @@ import ai.chat2db.community.domain.api.service.cli.ICliSqlService;
 import ai.chat2db.community.domain.api.service.db.IDbDlTemplateService;
 import ai.chat2db.community.domain.core.converter.CliSqlDomainConverter;
 import ai.chat2db.community.tools.exception.cli.CliDomainException;
+import ai.chat2db.community.tools.util.I18nUtils;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.context.support.StaticMessageSource;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -105,6 +110,46 @@ class CliSqlServiceTest {
         assertEquals("id", vo.getColumns().get(0).getName());
         assertEquals(List.of(List.of("42")), vo.getRows());
         assertEquals(1, vo.getRowCount());
+    }
+
+    @Test
+    void queryStripsRowNumberColumnLabelledInAnySupportedLanguage() throws Exception {
+        StaticMessageSource messages = new StaticMessageSource();
+        messages.addMessage("sqlResult.rowNumber", Locale.US, "Row Number");
+        messages.addMessage("sqlResult.rowNumber", Locale.CHINA, "行号");
+        messages.addMessage("sqlResult.rowNumber", Locale.JAPAN, "行番号");
+        messages.addMessage("sqlResult.rowNumber", Locale.KOREA, "행 번호");
+        messages.addMessage("sqlResult.rowNumber", Locale.forLanguageTag("es-ES"), "Número de fila");
+        Field field = I18nUtils.class.getDeclaredField("messageSourceStatic");
+        field.setAccessible(true);
+        Object previousMessages = field.get(null);
+        field.set(null, messages);
+        LocaleContextHolder.setLocale(Locale.US);
+        try {
+            for (String label : List.of("Row Number", "行号", "行番号", "행 번호", "Número de fila")) {
+                CapturingDlTemplateService dlTemplateService = new CapturingDlTemplateService();
+                ExecuteResponse executeResult = new ExecuteResponse();
+                executeResult.setSuccess(Boolean.TRUE);
+                executeResult.setHeaderList(List.of(
+                        Header.builder().name(label).dataType("BIGINT").build(),
+                        Header.builder().name("id").dataType("BIGINT").build()
+                ));
+                executeResult.setDataList(List.of(List.of(ResultCell.of("1"), ResultCell.of("42"))));
+                dlTemplateService.result = executeResult;
+                ICliSqlService cliSqlService = new CliSqlServiceImpl(dlTemplateService, new CliSqlDomainConverter());
+                CliSqlQueryRequest request = baseRequest();
+                request.setIncludeRowNumber(Boolean.FALSE);
+
+                CliSqlQueryResponse vo = cliSqlService.query(request);
+
+                assertEquals(1, vo.getColumns().size(), label);
+                assertEquals("id", vo.getColumns().get(0).getName(), label);
+                assertEquals(List.of(List.of("42")), vo.getRows(), label);
+            }
+        } finally {
+            LocaleContextHolder.resetLocaleContext();
+            field.set(null, previousMessages);
+        }
     }
 
     @Test

@@ -2,7 +2,6 @@ package ai.chat2db.community.domain.core.converter;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 
 import ai.chat2db.community.domain.api.enums.plugin.DataTypeEnum;
@@ -12,6 +11,7 @@ import ai.chat2db.community.domain.api.model.result.ExecuteResponse;
 import ai.chat2db.community.domain.api.model.result.Header;
 import ai.chat2db.community.domain.api.model.result.ResultCell;
 import ai.chat2db.community.domain.api.model.request.cli.CliSqlQueryRequest;
+import ai.chat2db.community.tools.enums.UiLanguageEnum;
 import ai.chat2db.community.tools.util.I18nUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
@@ -117,10 +117,17 @@ public class CliSqlDomainConverter {
     }
 
     private boolean isRowNumberHeaderName(String value) {
-        return StringUtils.isNotBlank(value)
-                && (value.equals(I18nUtils.getMessage("sqlResult.rowNumber"))
-                || value.equals(I18nUtils.getMessageByLang("sqlResult.rowNumber", Locale.US))
-                || value.equals(I18nUtils.getMessageByLang("sqlResult.rowNumber", Locale.CHINA))
-                || value.equals(I18nUtils.getMessageByLang("sqlResult.rowNumber", Locale.JAPAN)));
+        if (StringUtils.isBlank(value)) {
+            return false;
+        }
+        if (value.equals(I18nUtils.getMessage("sqlResult.rowNumber"))) {
+            return true;
+        }
+        for (UiLanguageEnum language : UiLanguageEnum.values()) {
+            if (value.equals(I18nUtils.getMessageByLang("sqlResult.rowNumber", language.getLocale()))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
