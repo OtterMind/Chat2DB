@@ -3,9 +3,14 @@ import {
   CONSOLE_TAB_ID,
   MESSAGES_TAB_ID,
   getConsoleResultTabLabel,
+  getInitialActiveTabId,
+  getLatestExecutionSequence,
   getPreferredActiveTabId,
+  pickPreferredChangedResult,
   reduceActiveTabSelection,
   resolveAvailableActiveTabId,
+  resolveChangedResultsPreference,
+  type BatchResultTabPreference,
 } from './tabSelection';
 import type { IManageResultData } from '@/typings';
 import { sortExecutionResults } from '@/service/sqlExecutionStream';
@@ -232,6 +237,289 @@ assertEqual(
   getPreferredActiveTabId(sortedWebBatchResults[sortedWebBatchResults.length - 1], true),
   'select-4',
   'a web batch ending in SELECT opens its final result tab after a USE statement',
+);
+
+const selectResult = result({
+  uuid: 'select-result',
+  headerList: [{ name: '#' }, { name: 'x' }] as any,
+  extra: { executionSequence: 1 },
+});
+const updateResult = result({ uuid: 'update-result', sqlType: 'UPDATE' as any, extra: { executionSequence: 1 } });
+const useResult = result({ uuid: 'use-result', sqlType: 'USE' as any, extra: { executionSequence: 1 } });
+const failedResult = result({ uuid: 'failed-result', success: false, extra: { executionSequence: 1 } });
+const printResult = result({
+  uuid: 'print-result',
+  sqlType: 'UNKNOWN' as any,
+  extra: { executionSequence: 1, messages: [{ level: 'INFO', message: 'done' }] } as any,
+});
+const selectTabInBatch: BatchResultTabPreference = { executionKey: '1', tabId: 'select-result' };
+const preferConsole = (changedResults: IManageResultData[], batchResultTab?: BatchResultTabPreference) =>
+  resolveChangedResultsPreference(changedResults, true, false, batchResultTab, [selectResult, ...changedResults]);
+
+assertEqual(
+  preferConsole([selectResult, updateResult]).tabId,
+  'select-result',
+  'a console batch ending with a statement without a table still opens the earlier result',
+);
+assertEqual(
+  preferConsole([selectResult, updateResult]).batchResultTab?.tabId,
+  'select-result',
+  'opening a result tab is remembered for the rest of the batch',
+);
+assertEqual(
+  resolveChangedResultsPreference([useResult], true, false, undefined, [useResult]).tabId,
+  CONSOLE_TAB_ID,
+  'a console batch without any table result opens Output',
+);
+assertEqual(
+  preferConsole([selectResult, failedResult]).tabId,
+  CONSOLE_TAB_ID,
+  'a failed statement after the last table result opens Output',
+);
+assertEqual(
+  preferConsole([failedResult, selectResult]).tabId,
+  'select-result',
+  'a batched failure before the last table result still opens that result',
+);
+assertEqual(preferConsole([failedResult]).tabId, CONSOLE_TAB_ID, 'a streamed failure opens Output');
+assertEqual(
+  preferConsole([selectResult]).tabId,
+  'select-result',
+  'a streamed table result after a failure opens that result, as in the batched order',
+);
+assertEqual(
+  preferConsole([updateResult], selectTabInBatch).tabId,
+  undefined,
+  'a streamed result without a table does not take focus back from the batch result tab',
+);
+assertEqual(
+  preferConsole([failedResult], selectTabInBatch).tabId,
+  CONSOLE_TAB_ID,
+  'a streamed failure after the table result opens Output, as in the batched order',
+);
+assertEqual(
+  resolveChangedResultsPreference([updateResult], true, true, selectTabInBatch, [selectResult, updateResult]).tabId,
+  CONSOLE_TAB_ID,
+  'an explicit failed or cancelled outcome keeps Output active',
+);
+assertEqual(
+  preferConsole([selectResult, printResult]).tabId,
+  'select-result',
+  'a batched statement with messages, such as a NOTICE, after the table result keeps that result',
+);
+assertEqual(
+  preferConsole([printResult], selectTabInBatch).tabId,
+  undefined,
+  'a streamed statement with messages after the table result keeps that result, as in the batched order',
+);
+assertEqual(
+  preferConsole([printResult], selectTabInBatch).batchResultTab?.tabId,
+  'select-result',
+  'a streamed statement with messages keeps the batch result tab remembered',
+);
+assertEqual(
+  resolveChangedResultsPreference([printResult], true, false, undefined, [printResult]).tabId,
+  CONSOLE_TAB_ID,
+  'a batched result with messages and no table opens Output',
+);
+assertEqual(
+  resolveChangedResultsPreference([printResult, useResult], true, false, undefined, [printResult, useResult]).tabId,
+  CONSOLE_TAB_ID,
+  'a batch of message results without any table opens Output',
+);
+assertEqual(
+  preferConsole([printResult, selectResult]).tabId,
+  'select-result',
+  'a statement with messages before the table result does not hide that result',
+);
+
+const nextExecutionUpdate = result({
+  uuid: 'next-update-result',
+  sqlType: 'UPDATE' as any,
+  extra: { executionSequence: 2 },
+});
+const nextExecutionPreference = preferConsole([nextExecutionUpdate], selectTabInBatch);
+assertEqual(
+  nextExecutionPreference.tabId,
+  CONSOLE_TAB_ID,
+  'a result of a new execution is not held back by the result tab of the previous one',
+);
+assertEqual(
+  nextExecutionPreference.batchResultTab,
+  undefined,
+  'a new execution forgets the result tab of the previous one',
+);
+const closedTabPreference = resolveChangedResultsPreference([updateResult], true, false, selectTabInBatch, [
+  updateResult,
+]);
+assertEqual(
+  closedTabPreference.tabId,
+  CONSOLE_TAB_ID,
+  'a later statement without a table opens Output once the batch result tab was closed',
+);
+assertEqual(closedTabPreference.batchResultTab, undefined, 'a closed batch result tab is forgotten');
+assertEqual(
+  preferConsole([], selectTabInBatch).batchResultTab,
+  selectTabInBatch,
+  'no changed result keeps the open batch result tab',
+);
+assertEqual(preferConsole([]).tabId, undefined, 'no changed result keeps the selection');
+assertEqual(
+  pickPreferredChangedResult([selectResult, updateResult], false),
+  updateResult,
+  'outside the console the latest changed result is still used',
+);
+assertEqual(
+  resolveChangedResultsPreference([selectResult, updateResult], false, false, selectTabInBatch, []).batchResultTab,
+  undefined,
+  'outside the console no batch result tab is tracked',
+);
+const legacySelectResult = result({ uuid: 'legacy-select-result', headerList: [{ name: '#' }, { name: 'x' }] as any });
+const legacyUpdateResult = result({ uuid: 'legacy-update-result', sqlType: 'UPDATE' as any });
+const legacyPreference = resolveChangedResultsPreference([legacySelectResult], true, false, undefined, [
+  legacySelectResult,
+]);
+assertEqual(
+  legacyPreference.batchResultTab?.tabId,
+  'legacy-select-result',
+  'a result without an execution key still remembers its tab',
+);
+assertEqual(
+  legacyPreference.batchResultTab?.executionKey,
+  undefined,
+  'a result without an execution key is remembered without a key',
+);
+assertEqual(
+  resolveChangedResultsPreference([legacyUpdateResult], true, false, legacyPreference.batchResultTab, [
+    legacySelectResult,
+    legacyUpdateResult,
+  ]).tabId,
+  undefined,
+  'results without an execution key are treated as one execution',
+);
+
+const selectResultWithoutTable = result({ uuid: 'select-result', extra: { executionSequence: 1 } });
+const noLongerTabularPreference = resolveChangedResultsPreference([updateResult], true, false, selectTabInBatch, [
+  selectResultWithoutTable,
+  updateResult,
+]);
+assertEqual(
+  noLongerTabularPreference.tabId,
+  CONSOLE_TAB_ID,
+  'a later statement without a table opens Output once the remembered result no longer has a table',
+);
+assertEqual(
+  noLongerTabularPreference.batchResultTab,
+  undefined,
+  'a remembered result that no longer has a table is forgotten',
+);
+
+const newerSelectResult = result({
+  uuid: 'newer-select-result',
+  headerList: [{ name: '#' }, { name: 'x' }] as any,
+  extra: { executionSequence: 2 },
+});
+const newerPrintResult = result({
+  uuid: 'newer-print-result',
+  sqlType: 'UNKNOWN' as any,
+  extra: { executionSequence: 2, messages: [{ level: 'INFO', message: 'done' }] } as any,
+});
+const newerSelectTab: BatchResultTabPreference = { executionKey: '2', tabId: 'newer-select-result' };
+const bothExecutions = [selectResult, updateResult, newerSelectResult, newerPrintResult];
+assertEqual(getLatestExecutionSequence(bothExecutions), 2, 'the latest execution is the highest execution sequence');
+assertEqual(
+  getLatestExecutionSequence([legacySelectResult, legacyUpdateResult]),
+  undefined,
+  'results without an execution sequence have no latest execution',
+);
+const lateOlderTablePreference = resolveChangedResultsPreference(
+  [selectResult],
+  true,
+  false,
+  newerSelectTab,
+  bothExecutions,
+  2,
+);
+assertEqual(
+  lateOlderTablePreference.batchResultTab,
+  newerSelectTab,
+  'a late table result of an older execution does not replace the result tab of the latest execution',
+);
+const lateOlderUpdatePreference = resolveChangedResultsPreference(
+  [updateResult],
+  true,
+  false,
+  newerSelectTab,
+  bothExecutions,
+  2,
+);
+assertEqual(
+  lateOlderUpdatePreference.batchResultTab,
+  newerSelectTab,
+  'a late result without a table of an older execution does not clear the result tab of the latest execution',
+);
+assertEqual(
+  lateOlderUpdatePreference.tabId,
+  undefined,
+  'a late result without a table of an older execution does not take focus from the latest result tab',
+);
+assertEqual(
+  resolveChangedResultsPreference(
+    [newerPrintResult],
+    true,
+    false,
+    lateOlderTablePreference.batchResultTab,
+    bothExecutions,
+    2,
+  ).tabId,
+  undefined,
+  'messages of the latest execution keep its result tab after a late result of an older execution',
+);
+assertEqual(
+  resolveChangedResultsPreference([newerSelectResult], true, false, selectTabInBatch, bothExecutions, 2).batchResultTab
+    ?.tabId,
+  'newer-select-result',
+  'a table result of the latest execution replaces the remembered result tab',
+);
+
+assertEqual(
+  getInitialActiveTabId([selectResult, updateResult], true),
+  'select-result',
+  'a console mounted with a batch ending in a statement without a table starts on the table result',
+);
+assertEqual(
+  getInitialActiveTabId([useResult], true),
+  CONSOLE_TAB_ID,
+  'a console mounted with a batch without any table result starts on Output',
+);
+assertEqual(getInitialActiveTabId([], true), CONSOLE_TAB_ID, 'an empty console starts on Output');
+assertEqual(getInitialActiveTabId([], false), '', 'an empty legacy result view starts without a tab');
+assertEqual(
+  getInitialActiveTabId([selectResult, updateResult], false),
+  ABSTRACT_TAB_ID,
+  'outside the console the latest result still decides the initial tab',
+);
+
+let streamedSelection = reduceActiveTabSelection(
+  { activeTabId: CONSOLE_TAB_ID, followPreferredTabs: true },
+  { type: 'prefer', tabId: preferConsole([selectResult]).tabId! },
+);
+streamedSelection = reduceActiveTabSelection(streamedSelection, {
+  type: 'tabsChanged',
+  availableTabIds: [CONSOLE_TAB_ID, 'select-result'],
+});
+const streamedUpdatePreference = preferConsole([updateResult], preferConsole([selectResult]).batchResultTab).tabId;
+if (streamedUpdatePreference) {
+  streamedSelection = reduceActiveTabSelection(streamedSelection, { type: 'prefer', tabId: streamedUpdatePreference });
+}
+streamedSelection = reduceActiveTabSelection(streamedSelection, {
+  type: 'tabsChanged',
+  availableTabIds: [CONSOLE_TAB_ID, 'select-result'],
+});
+assertEqual(
+  streamedSelection.activeTabId,
+  'select-result',
+  'the batch result tab stays active after a later statement without a table',
 );
 
 console.log('SearchResult tab selection tests passed');
